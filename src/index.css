@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@theme {
+  --font-pixel: "Pixelify Sans", ui-monospace, monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-night-950: #0e0b16;
+  --color-night-900: #16121f;
+  --color-night-800: #211b2e;
+  --color-night-700: #2e2640;
+  --color-night-600: #40355a;
+  --color-parchment: #efe6d2;
+  --color-muted: #a49cb8;
+  --color-gold: #f4c95d;
+  --color-xp: #7dd3a8;
+  --color-danger: #f0776a;
+  --color-strength: #f0776a;
+  --color-intellect: #7aa7f0;
+  --color-endurance: #7dd3a8;
+  --color-charisma: #d39bf0;
+  --color-rare: #5fb3f0;
+  --color-epic: #b57af0;
+  --color-legendary: #f59e42;
+}
+
+@layer base {
+  body {
+    @apply bg-night-950 text-parchment font-sans antialiased;
+    background-image: radial-gradient(circle at 50% -20%, #2a1f45 0%, transparent 60%);
+    min-height: 100dvh;
+  }
+  /* Pixel-Rahmen-Look für "Panels" */
+  .panel {
+    @apply bg-night-900 rounded-md border-2 border-night-700;
+    box-shadow: 0 4px 0 0 var(--color-night-950), inset 0 0 0 1px #ffffff08;
+  }
+  .pixelated {
+    image-rendering: pixelated;
+  }
+  /* Seltene Items leuchten, epische und legendäre funkeln zusätzlich (ItemIcon). */
+  .glow-rare {
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-rare) 70%, transparent));
+  }
+  .glow-epic {
+    filter: drop-shadow(0 0 3px var(--color-epic));
+  }
+  .glow-legendary {
+    animation: legendary-pulse 1.8s ease-in-out infinite;
+  }
+  .sparkle {
+    position: absolute;
+    width: 30%;
+    height: 30%;
+    pointer-events: none;
+    clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+    animation: sparkle 2.4s ease-in-out infinite both;
+  }
+  @keyframes sparkle {
+    0%, 55%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+    70% { transform: scale(1) rotate(45deg); opacity: 1; }
+    85% { transform: scale(0.4) rotate(90deg); opacity: 0.6; }
+  }
+  @keyframes legendary-pulse {
+    0%, 100% { filter: drop-shadow(0 0 2px var(--color-legendary)); }
+    50% { filter: drop-shadow(0 0 6px var(--color-legendary)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sparkle { display: none; }
+    .glow-legendary { animation: none; filter: drop-shadow(0 0 4px var(--color-legendary)); }
+  }
+  /* Zahlen immer gut lesbar – in der Pixelschrift sehen 5/S und 8/S gleich aus. */
+  .num {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -1,0 +1,261 @@
+import { motion } from "motion/react";
+import { useState } from "react";
+import { BOSS_SETS } from "../domain/bossSets";
+import { BOSS_ITEM_DROP_CHANCE, getHeroCombatProfile } from "../domain/combat";
+import { getCreature } from "../domain/creatures";
+import { BOSS_ITEMS, getBossItems, getItemStats } from "../domain/items";
+import { getCombatStats, getStatBonuses } from "../domain/equipment";
+import { getLevelProgress, getTitle, POINTS_PER_LEVEL, unspentPoints } from "../domain/leveling";
+import { STAT_LABELS } from "../domain/rewards";
+import type { StatKey } from "../domain/types";
+import { useGameStore } from "../store/gameStore";
+import { formatNumber } from "./Gold";
+import { ItemIcon } from "./ItemIcon";
+import { ItemTooltip } from "./ItemTooltip";
+import { PixelAvatar } from "./PixelAvatar";
+import { XpBar } from "./XpBar";
+
+const STAT_COLORS: Record<StatKey, string> = {
+  strength: "bg-strength",
+  intellect: "bg-intellect",
+  endurance: "bg-endurance",
+  charisma: "bg-charisma",
+};
+
+export function CharacterSheet() {
+  const character = useGameStore((s) => s.character);
+  const quests = useGameStore((s) => s.quests);
+  const renameCharacter = useGameStore((s) => s.renameCharacter);
+  const resetGame = useGameStore((s) => s.resetGame);
+  const allocatePoint = useGameStore((s) => s.allocatePoint);
+  const unspent = unspentPoints(character);
+  const equipment = useGameStore((s) => s.equipment);
+  const combat = getCombatStats(equipment);
+  const bonuses = getStatBonuses(equipment);
+  const { maxHp } = getHeroCombatProfile(character, equipment);
+
+  const [editing, setEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState(character.name);
+
+  const { level } = getLevelProgress(character.totalXp);
+  const doneCount = quests.filter((q) => q.status === "done").length;
+  const statEntries = Object.entries(character.stats) as [StatKey, number][];
+  const maxStat = Math.max(10, ...statEntries.map(([key, v]) => v + bonuses[key]));
+
+  function saveName() {
+    renameCharacter(nameDraft);
+    setEditing(false);
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+      {/* Porträt */}
+      <section className="panel flex flex-col items-center gap-3 p-5 text-center">
+        <motion.div
+          className="rounded-lg bg-night-800 p-4"
+          animate={{ y: [0, -4, 0] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <PixelAvatar size={144} />
+        </motion.div>
+
+        {editing ? (
+          <form
+            className="flex w-full gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveName();
+            }}
+          >
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              maxLength={24}
+              className="min-w-0 flex-1 rounded-md border-2 border-night-700 bg-night-950 px-2 py-1 outline-none focus:border-gold"
+            />
+            <button className="rounded-md bg-gold px-3 text-night-950">OK</button>
+          </form>
+        ) : (
+          <button
+            onClick={() => {
+              setNameDraft(character.name);
+              setEditing(true);
+            }}
+            className="font-pixel text-3xl hover:text-gold"
+            title="Namen ändern"
+          >
+            {character.name}
+          </button>
+        )}
+
+        <p className="font-pixel text-lg text-gold">
+          Level <span className="num">{level}</span> · {getTitle(level)}
+        </p>
+        <XpBar totalXp={character.totalXp} />
+      </section>
+
+      <div className="flex flex-col gap-4">
+        {/* Kennzahlen */}
+        <section className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+          <StatTile label="Gold" value={character.gold} icon="🪙" accent="text-gold" />
+          <StatTile label="Gesamt-XP" value={character.totalXp} icon="✨" accent="text-xp" />
+          <StatTile label="Quests" value={doneCount} icon="📜" accent="text-parchment" />
+          <StatTile label="Lebenspunkte" value={maxHp} icon="❤️" accent="text-xp" />
+          <StatTile label="Rüstung" value={combat.armor} icon="🛡️" accent="text-intellect" />
+          <StatTile label="Angriff" value={combat.attack} icon="⚔️" accent="text-strength" />
+        </section>
+
+        {/* Attribute – Basis für das spätere Kampfsystem */}
+        <section className="panel p-5">
+          <h2 className="font-pixel mb-1 text-2xl">Attribute</h2>
+          <p className="mb-4 text-sm text-muted">
+            Bestimmen deine Stärke im Kampf. Pro Level-up verteilst du {POINTS_PER_LEVEL} Punkte frei, epische
+            Quests trainieren zusätzlich das Attribut ihres Bereichs. Seltene Ausrüstung gibt weitere Boni (heller Teil
+            des Balkens).
+          </p>
+          {unspent > 0 && (
+            <motion.p
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="mb-4 rounded-md border-2 border-xp/60 bg-xp/10 px-3 py-2 text-sm text-xp"
+            >
+              Du hast <span className="num">{unspent}</span> {unspent === 1 ? "Punkt" : "Punkte"} zu verteilen – klicke
+              auf <span className="font-bold">+</span>.
+            </motion.p>
+          )}
+          <ul className="flex flex-col gap-3">
+            {statEntries.map(([key, value]) => (
+              <li key={key} className="grid grid-cols-[100px_1fr_64px_28px] items-center gap-3">
+                <span className="text-sm">{STAT_LABELS[key]}</span>
+                <div className="flex h-3 overflow-hidden rounded-sm bg-night-700">
+                  <motion.div
+                    className={`h-full ${STAT_COLORS[key]}`}
+                    initial={false}
+                    animate={{ width: `${(value / maxStat) * 100}%` }}
+                  />
+                  <motion.div
+                    className={`h-full ${STAT_COLORS[key]} opacity-45`}
+                    initial={false}
+                    animate={{ width: `${(bonuses[key] / maxStat) * 100}%` }}
+                  />
+                </div>
+                <span className="num text-right">
+                  {value + bonuses[key]}
+                  {bonuses[key] > 0 && <span className="ml-1 text-xs text-xp">(+{bonuses[key]})</span>}
+                </span>
+                {unspent > 0 ? (
+                  <motion.button
+                    whileTap={{ scale: 0.85 }}
+                    onClick={() => allocatePoint(key)}
+                    aria-label={`1 Punkt auf ${STAT_LABELS[key]} verteilen`}
+                    className="num h-7 w-7 rounded-md border-2 border-xp bg-xp/15 leading-none text-xp hover:bg-xp/25"
+                  >
+                    +
+                  </motion.button>
+                ) : (
+                  <span />
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <BossCollection />
+
+        <button
+          onClick={() => {
+            if (confirm("Spielstand wirklich zurücksetzen?")) resetGame();
+          }}
+          className="self-end text-xs text-muted hover:text-danger"
+        >
+          Spielstand zurücksetzen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Alle 24 Boss-Items nach Boss – gefundene in Farbe, unentdeckte als Schatten. */
+/** Ohne `collection` die eigene Sammlung, sonst die eines anderen Spielers (Profilseite). */
+export function BossCollection({ collection }: { collection?: string[] }) {
+  const own = useGameStore((s) => s.bossCollection);
+  const found = collection ?? own;
+
+  return (
+    <section className="panel p-5">
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <h2 className="font-pixel text-2xl">Boss-Sammlung</h2>
+        <span className="num text-legendary">
+          {found.length}/{BOSS_ITEMS.length}
+        </span>
+      </div>
+      <p className="mb-4 text-sm text-muted">
+        Einzigartige Stücke, die nur Gebietsbosse fallen lassen ({Math.round(BOSS_ITEM_DROP_CHANCE * 100)} % pro Sieg).
+        Mehrere Teile desselben Bosses geben einen Set-Bonus. Unentdeckte Stücke siehst du nur als Schatten.
+      </p>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {BOSS_SETS.map((set) => {
+          const items = getBossItems(set.bossId);
+          const count = items.filter((i) => found.includes(i.id)).length;
+          const complete = count === items.length;
+          return (
+            <li
+              key={set.bossId}
+              className={`rounded-md border-2 bg-night-800 p-2 ${complete ? "border-legendary/80" : "border-night-700"}`}
+            >
+              <p className="text-sm">
+                <span className="text-legendary">{set.name}</span>
+                {complete && " ✓"}
+              </p>
+              <p className="text-xs text-muted">
+                {getCreature(set.bossId).creature.name} · <span className="num">{count}/{items.length}</span>
+              </p>
+              <div className="mt-2 flex gap-2">
+                {items.map((def) =>
+                  found.includes(def.id) ? (
+                    <ItemTooltip
+                      key={def.id}
+                      stats={getItemStats({ uid: def.id, itemId: def.id, rarity: "legendary", bonuses: {} })}
+                      hint="Gefunden · Attributboni werden beim Drop ausgewürfelt"
+                    >
+                      <span className="rounded bg-night-950/70 p-0.5" tabIndex={0}>
+                        <ItemIcon def={def} rarity="legendary" size={36} />
+                      </span>
+                    </ItemTooltip>
+                  ) : (
+                    <span key={def.id} className="rounded bg-night-950/70 p-0.5" title="Noch nicht gefunden">
+                      <ItemIcon def={def} size={36} className="opacity-40 brightness-0" />
+                    </span>
+                  ),
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number;
+  icon: string;
+  accent: string;
+}) {
+  return (
+    <div className="panel p-3 text-center">
+      <div className="text-xl" aria-hidden>
+        {icon}
+      </div>
+      <div className={`num text-xl leading-8 ${accent}`}>{formatNumber(value)}</div>
+      <div className="text-xs text-muted">{label}</div>
+    </div>
+  );
+}

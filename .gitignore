@@ -1,0 +1,10 @@
+node_modules
+dist
+
+# lokale Zugangsdaten (Supabase)
+.env.local
+.env.*.local
+
+# lokale IDE-/Build-Dateien
+.vs
+*.tsbuildinfo
