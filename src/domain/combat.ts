@@ -15,6 +15,7 @@ import {
   getCreaturePotionDrop,
   getCreatureStats,
   getCreatureXp,
+  rollCreatureGold,
   type CreatureDef,
 } from "./creatures";
 import { createItem, getBossItems, getItem } from "./items";
@@ -415,7 +416,7 @@ export function attackRound(
 }
 
 /**
- * Fliehen kostet so viel Gold, wie ein Sieg gebracht hätte (höchstens das,
+ * Fliehen kostet die durchschnittliche Gold-Beute der Kreatur (höchstens das,
  * was der Held besitzt). Die Kreatur bekommt keinen Gegenangriff mehr.
  */
 export function fleeCost(creature: CreatureDef, gold: number): number {
@@ -471,10 +472,10 @@ export function rollBattleReward(
   const potionDrop = getCreaturePotionDrop(creature);
   return {
     xp: getCreatureXp(creature),
-    gold: Math.round(getCreatureGold(creature) * (1 + hero.goldBonus)),
     loot: rollDrop(dropChance, weights, creature.level, uid, rng),
     potions: rng() < potionDrop.chance ? { potionId: potionDrop.potionId, count: potionDrop.count } : null,
     bossLoot: rollBossLoot(creature, `${uid}-boss`, rng),
     buffPotion: rollBuffPotion(rng),
+    gold: Math.round(rollCreatureGold(creature, rng) * (1 + hero.goldBonus)),
   };
 }

@@ -13,7 +13,16 @@ import {
   type BattleState,
   type HeroCombatProfile,
 } from "./combat";
-import { AREAS, DUNGEONS, getCreature, getCreatureGold, getCreaturePotionDrop, type CreatureDef } from "./creatures";
+import {
+  AREAS,
+  DUNGEONS,
+  getCreature,
+  getCreatureGold,
+  getCreatureGoldDrop,
+  getCreaturePotionDrop,
+  rollCreatureGold,
+  type CreatureDef,
+} from "./creatures";
 import { CREATURE_SPRITES } from "../game/creatureSprites";
 import { SHARED_PALETTE } from "../game/sprites";
 import { EMPTY_EQUIPMENT } from "./equipment";
@@ -218,6 +227,19 @@ describe("Belohnung", () => {
     expect(bossReward.loot).not.toBeNull();
     expect(bossReward.gold).toBeGreaterThan(rollBattleReward(normal, hero, "y", fixedRng(0.99)).gold);
     expect(rollBattleReward(normal, hero, "z", fixedRng(0.99)).loot).toBeNull();
+  });
+
+  it("Gold fällt bei normalen Kreaturen nur manchmal, innerhalb der Spanne", () => {
+    const creature = getCreature("goblin-raider").creature;
+    const { chance, min, max } = getCreatureGoldDrop(creature);
+    expect(chance).toBeLessThan(1);
+    expect(rollCreatureGold(creature, fixedRng(0.99))).toBe(0);
+    expect(rollCreatureGold(creature, fixedRng(0))).toBe(min);
+    expect(rollCreatureGold(creature, fixedRng(chance - 0.001))).toBeLessThanOrEqual(max);
+    for (let i = 0; i < 200; i++) {
+      const gold = rollCreatureGold(creature);
+      expect(gold === 0 || (gold >= min && gold <= max)).toBe(true);
+    }
   });
 });
 

@@ -17,7 +17,7 @@ import {
   DUNGEONS,
   getCreature,
   getDungeon,
-  getCreatureGold,
+  getCreatureGoldDrop,
   getCreaturePotionDrop,
   getCreatureStats,
   getCreatureXp,
@@ -198,6 +198,7 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
   const bossAbility = getBossAbility(creature.id);
   const stats = getCreatureStats(creature);
   const potionDrop = getCreaturePotionDrop(creature);
+  const goldDrop = getCreatureGoldDrop(creature);
   const danger = creature.level - heroLevel;
   const dangerText = danger >= 5 ? "Sehr gefährlich" : danger >= 2 ? "Gefährlich" : danger <= -5 ? "Leicht" : null;
 
@@ -219,7 +220,10 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           <span className="text-xp">{stats.maxHp} LP</span>
           <span className="text-strength">~{Math.round(stats.damage)} Schaden</span>
           <span className="text-intellect">{stats.armor} Rüstung</span>
-          <Gold amount={getCreatureGold(creature)} className="text-gold" />
+          <span className="font-sans whitespace-nowrap tabular-nums text-gold">
+            {goldDrop.min}–{goldDrop.max} <span aria-label="Gold">🪙</span>{" "}
+            {creature.boss ? "garantiert" : `${Math.round(goldDrop.chance * 100)} %`}
+          </span>
           <span className="text-epic">🎁 {creature.boss ? "garantiert" : "35 %"}</span>
           <span className="text-xp">
             {getPotion(potionDrop.potionId).icon} {creature.boss ? `${potionDrop.count}× garantiert` : "25 %"}
@@ -576,8 +580,13 @@ function BattleResult({ battle }: { battle: BattleState }) {
             </motion.p>
           )}
           <p>
-            Du erhältst <span className="num text-xp">+{reward.xp} XP</span>,{" "}
-            <Gold amount={reward.gold} className="font-bold text-gold" />
+            Du erhältst <span className="num text-xp">+{reward.xp} XP</span>
+            {reward.gold > 0 && (
+              <>
+                ,{" "}
+                <Gold amount={reward.gold} className="font-bold text-gold" />
+              </>
+            )}
             {potionDrop && (
               <>
                 {" "}

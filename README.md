@@ -94,9 +94,10 @@ Maximallevel 60 nach insgesamt 48’675 XP.
 Rundenbasiert. Pro Runde: optional **ein Trank**, dann **ein Angriff**, danach schlägt die Kreatur zurück.
 Jeder Kampf beginnt mit vollen Lebenspunkten.
 
-- **Sieg:** Gold, 35 % Chance auf ein Item, 25 % auf einen Trank. Bosse geben immer ein Item und zwei Tränke.
+- **Sieg:** 40 % Chance auf Gold (50–150 % von `3 + Level`), 35 % auf ein Item, 25 % auf einen Trank.
+  Bosse geben immer Gold (×4), ein Item und zwei Tränke.
   Trank-Stufe nach Gebiet: bis Lv. 20 klein, bis Lv. 40 mittel, darüber gross.
-- **Flucht:** jederzeit möglich, kostet so viel Gold, wie ein Sieg gebracht hätte (höchstens das vorhandene).
+- **Flucht:** jederzeit möglich, kostet die durchschnittliche Gold-Beute der Kreatur (höchstens das vorhandene).
 
 | Wert | Formel (in `src/domain/combat.ts`) |
 |---|---|

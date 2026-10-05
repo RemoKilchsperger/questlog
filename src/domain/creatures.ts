@@ -258,9 +258,27 @@ export function getCreatureXp(creature: CreatureDef): number {
   return Math.round(xpForNextLevel(creature.level) * 0.08 * (creature.boss ? 3 : 1));
 }
 
-/** Gold für einen Sieg (vor dem Charisma-Bonus). */
+/**
+ * Gold-Beute: normale Kreaturen lassen nur manchmal Gold fallen, Bosse immer.
+ * Die Menge streut zwischen 50 % und 150 % des Grundwerts `3 + Level`
+ * (Bosse ×4). Lv. 1 → 2–6, Lv. 30 → 17–50, Boss Lv. 60 → 126–378.
+ */
+export function getCreatureGoldDrop(creature: CreatureDef): { chance: number; min: number; max: number } {
+  const base = (3 + creature.level) * (creature.boss ? 4 : 1);
+  return { chance: creature.boss ? 1 : 0.4, min: Math.round(base * 0.5), max: Math.round(base * 1.5) };
+}
+
+/** Gold für einen Sieg (vor dem Charisma-Bonus) – 0, wenn nichts fällt. */
+export function rollCreatureGold(creature: CreatureDef, rng: () => number = Math.random): number {
+  const { chance, min, max } = getCreatureGoldDrop(creature);
+  if (rng() >= chance) return 0;
+  return min + Math.floor(rng() * (max - min + 1));
+}
+
+/** Durchschnittliche Gold-Beute, wenn etwas fällt – Grundlage für die Fluchtkosten. */
 export function getCreatureGold(creature: CreatureDef): number {
-  return Math.round((5 + creature.level * 2) * (creature.boss ? 5 : 1));
+  const { min, max } = getCreatureGoldDrop(creature);
+  return Math.round((min + max) / 2);
 }
 
 /** Kreatur samt Gebiet bzw. Dungeon, in dem sie lebt. */
