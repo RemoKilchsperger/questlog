@@ -31,7 +31,7 @@ import {
   START_BATTLE_POINTS,
 } from "../domain/battlePoints";
 import { getDailyBonusQuests } from "../domain/bonusQuests";
-import { clampSkills, learnSkill, type SkillWeapon } from "../domain/skills";
+import { clampSkills, learnSkill, unlockAbility, type SkillWeapon } from "../domain/skills";
 import { dateKey } from "../domain/calendar";
 import { calculateReward } from "../domain/rewards";
 import { allocatePoint, getLevel } from "../domain/leveling";
@@ -94,6 +94,8 @@ interface GameState {
   tickBattlePoints: () => void;
   /** Steigert einen Waffen-Skill um einen Rang (kostet einen Skillpunkt). */
   learnSkill: (weapon: SkillWeapon) => void;
+  /** Schaltet die Fähigkeit eines gemeisterten Waffentyps frei (kostet einen Skillpunkt). */
+  unlockAbility: (weapon: SkillWeapon) => void;
   dismissReward: () => void;
   resetGame: () => void;
 
@@ -176,6 +178,7 @@ const createCharacter = (): Character => ({
   battlePoints: START_BATTLE_POINTS,
   battlePointSlot: regenSlot(),
   skills: {},
+  abilities: [],
 });
 
 const newId = () => crypto.randomUUID();
@@ -360,6 +363,8 @@ export const useGameStore = create<GameState>()(
       allocatePoint: (stat) => attempt(() => set((s) => ({ character: allocatePoint(s.character, stat) }))),
 
       learnSkill: (weapon) => attempt(() => set((s) => ({ character: learnSkill(s.character, weapon) }))),
+
+      unlockAbility: (weapon) => attempt(() => set((s) => ({ character: unlockAbility(s.character, weapon) }))),
 
       tickBattlePoints: () => {
         const { character } = get();
@@ -547,7 +552,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 12,
+      version: 13,
       partialize: (s) => ({
         character: s.character,
         quests: s.quests,
@@ -626,6 +631,10 @@ export const useGameStore = create<GameState>()(
         // v11 → v12: Skilltree – Skillpunkte bisheriger Level-ups sind sofort verfügbar.
         if (version < 12) {
           state = { ...state, character: { ...state.character, skills: {} } };
+        }
+        // v12 → v13: Fähigkeiten müssen nach dem Meistern einer Waffe freigeschaltet werden.
+        if (version < 13) {
+          state = { ...state, character: { ...state.character, abilities: [] } };
         }
         return state;
       },

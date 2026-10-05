@@ -1,6 +1,7 @@
 // Kampf-Fähigkeiten: Jeder Waffentyp (auch der Schild) bringt eine Fähigkeit
-// mit, die Mana kostet und den normalen Angriff einer Runde ersetzt. Verfügbar
-// sind die Fähigkeiten aller angelegten Waffen (bei zwei Waffen also zwei).
+// mit, die Mana kostet und den normalen Angriff einer Runde ersetzt. Sie muss
+// erst im Skilltree freigeschaltet werden (nach dem Meistern der Waffe). Verfügbar
+// sind die freigeschalteten Fähigkeiten aller angelegten Waffen.
 //
 // Mana: zu Kampfbeginn voll, +MANA_REGEN pro Runde. Das Maximum wächst mit
 // Level und Intelligenz (siehe `maxManaFor`).

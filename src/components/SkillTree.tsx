@@ -2,6 +2,9 @@ import { motion } from "motion/react";
 import { getAbility } from "../domain/abilities";
 import { getItem, getItemType } from "../domain/items";
 import {
+  ABILITY_COST,
+  abilityUnlockBlocker,
+  hasAbility,
   MAX_SKILL_RANK,
   PREREQUISITE_RANK,
   SKILL_BONUS_PER_RANK,
@@ -11,6 +14,7 @@ import {
   skillRank,
   unspentSkillPoints,
   type SkillNode,
+  type SkillWeapon,
 } from "../domain/skills";
 import { useGameStore } from "../store/gameStore";
 import { ItemIcon } from "./ItemIcon";
@@ -31,7 +35,8 @@ export function SkillTree() {
             Pro Level-up erhältst du {SKILL_POINTS_PER_LEVEL} Skillpunkt. Jeder Rang erhöht den Schaden aller Waffen
             dieses Typs um {percent(SKILL_BONUS_PER_RANK)} (höchstens {MAX_SKILL_RANK} Ränge), beim Schild dessen
             Rüstung. Zweihand- und Magierwaffen bauen auf ihrer Einhand-Variante auf und brauchen dort zuerst Rang{" "}
-            {PREREQUISITE_RANK}.
+            {PREREQUISITE_RANK}. Hast du eine Waffe gemeistert (Rang {MAX_SKILL_RANK}), kannst du für {ABILITY_COST}{" "}
+            Skillpunkt ihre Kampf-Fähigkeit freischalten.
           </p>
         </div>
         <div
@@ -58,6 +63,10 @@ export function SkillTree() {
                   </div>
                 )}
                 <SkillCard node={node} />
+                <div className="text-center text-xs text-muted" aria-hidden>
+                  │<br />▼ gemeistert
+                </div>
+                <AbilityCard weapon={node.weapon} />
               </div>
             ))}
           </section>
@@ -72,7 +81,6 @@ function SkillCard({ node }: { node: SkillNode }) {
   const equipment = useGameStore((s) => s.equipment);
   const learn = useGameStore((s) => s.learnSkill);
   const info = getItemType(node.weapon);
-  const ability = getAbility(node.weapon);
   // Schilde machen keinen Schaden – ihr Skill verstärkt die Rüstung.
   const isShield = node.weapon === "shield";
   const stat = isShield ? "Rüstung" : "Schaden";
@@ -121,13 +129,59 @@ function SkillCard({ node }: { node: SkillNode }) {
           <span key={i} className={`h-2 flex-1 rounded-sm ${i < rank ? "bg-strength" : "bg-night-700"}`} />
         ))}
       </div>
-      <p className="mt-2 text-xs text-intellect" title={ability.description}>
-        Fähigkeit: {ability.icon} {ability.name} <span className="text-muted">· {ability.manaCost} Mana</span>
-      </p>
       <p className="mt-1 text-right text-xs text-muted">
         {locked
           ? `🔒 Rang ${PREREQUISITE_RANK} in ${getItemType(node.requires!).label} nötig`
           : `Rang ${rank}/${MAX_SKILL_RANK}`}
+      </p>
+    </div>
+  );
+}
+
+/** Eigener Knoten unter jedem Waffen-Skill: die Kampf-Fähigkeit, freischaltbar nach dem Meistern. */
+function AbilityCard({ weapon }: { weapon: SkillWeapon }) {
+  const character = useGameStore((s) => s.character);
+  const unlock = useGameStore((s) => s.unlockAbility);
+  const ability = getAbility(weapon);
+  const learned = hasAbility(character, weapon);
+  const mastered = skillRank(character, weapon) >= MAX_SKILL_RANK;
+  const blocker = abilityUnlockBlocker(character, weapon);
+
+  return (
+    <div
+      className={`rounded-md border-2 border-dashed bg-night-800 p-3 ${
+        learned ? "border-intellect/70" : mastered ? "border-night-600" : "border-night-700 opacity-60"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <span aria-hidden className={`text-2xl ${learned || mastered ? "" : "grayscale"}`}>
+          {ability.icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-intellect">{ability.name}</p>
+          <p className="text-xs text-muted">
+            {ability.manaCost} Mana · {ability.description}
+          </p>
+        </div>
+        {!learned && (
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            disabled={blocker !== null}
+            onClick={() => unlock(weapon)}
+            title={blocker ?? `Für ${ABILITY_COST} Skillpunkt freischalten`}
+            aria-label={`${ability.name} freischalten`}
+            className="num h-8 w-8 shrink-0 rounded-md border-2 border-intellect bg-intellect/15 text-lg leading-none text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            +
+          </motion.button>
+        )}
+      </div>
+      <p className="mt-1 text-right text-xs text-muted">
+        {learned
+          ? "✨ Freigeschaltet"
+          : mastered
+            ? `Freischalten: ${ABILITY_COST} Skillpunkt`
+            : `🔒 ${getItemType(weapon).label} meistern (Rang ${MAX_SKILL_RANK})`}
       </p>
     </div>
   );

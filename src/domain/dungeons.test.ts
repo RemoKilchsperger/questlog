@@ -16,6 +16,7 @@ const hero: Character = {
   battlePoints: 10,
   battlePointSlot: 0,
   skills: {},
+  abilities: [],
 };
 
 describe("Dungeons", () => {

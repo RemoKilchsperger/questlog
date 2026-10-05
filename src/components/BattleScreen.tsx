@@ -437,7 +437,10 @@ function Battle({ battle }: { battle: BattleState }) {
           </div>
           <BossWarning battle={battle} />
           {battle.abilities.length === 0 && (
-            <p className="text-xs text-muted">Lege eine Waffe an, um ihre Fähigkeit im Kampf einzusetzen.</p>
+            <p className="text-xs text-muted">
+              Fähigkeiten schaltest du im Skilltree frei, sobald du eine Waffe gemeistert hast – im Kampf brauchst du
+              dann die passende Waffe.
+            </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
             <motion.button

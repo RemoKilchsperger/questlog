@@ -3,6 +3,8 @@
 // = +10 %), beim Schild stattdessen dessen Rüstung.
 // Zweihand- und Magierwaffen bauen auf ihrer Einhand-Variante auf:
 // Sie lassen sich erst lernen, wenn diese mindestens Rang 3 hat.
+// Wer einen Waffentyp gemeistert hat (Rang 5), kann für einen weiteren
+// Skillpunkt dessen Kampf-Fähigkeit freischalten.
 
 import { getSetGearMultiplier } from "./bossSets";
 import { getItem, getItemStats, getItemType } from "./items";
@@ -18,6 +20,8 @@ export const MAX_SKILL_RANK = 5;
 export const SKILL_BONUS_PER_RANK = 0.02;
 /** Nötiger Rang in der Voraussetzung, bevor ein aufbauender Skill gelernt werden kann. */
 export const PREREQUISITE_RANK = 3;
+/** Skillpunkte für das Freischalten einer Fähigkeit. */
+export const ABILITY_COST = 1;
 
 export interface SkillNode {
   weapon: SkillWeapon;
@@ -72,8 +76,30 @@ export function clampSkills(skills: SkillRanks): SkillRanks {
 /** Durch Level-ups verdiente minus bereits vergebene Skillpunkte. */
 export function unspentSkillPoints(character: Character): number {
   const earned = (getLevel(character.totalXp) - 1) * SKILL_POINTS_PER_LEVEL;
-  const spent = NODES.reduce((sum, node) => sum + skillRank(character, node.weapon), 0);
-  return Math.max(0, earned - spent);
+  const ranks = NODES.reduce((sum, node) => sum + skillRank(character, node.weapon), 0);
+  return Math.max(0, earned - ranks - character.abilities.length * ABILITY_COST);
+}
+
+export function hasAbility(character: Character, weapon: SkillWeapon): boolean {
+  return character.abilities.includes(weapon);
+}
+
+/** Warum diese Fähigkeit gerade nicht freigeschaltet werden kann – oder null. */
+export function abilityUnlockBlocker(character: Character, weapon: SkillWeapon): string | null {
+  if (!NODES.some((n) => n.weapon === weapon)) return "Unbekannter Skill.";
+  if (hasAbility(character, weapon)) return "Bereits freigeschaltet.";
+  if (skillRank(character, weapon) < MAX_SKILL_RANK) {
+    return `Erst ${getItemType(weapon).label} meistern (Rang ${MAX_SKILL_RANK}).`;
+  }
+  if (unspentSkillPoints(character) < ABILITY_COST) return "Keine Skillpunkte – steige ein Level auf.";
+  return null;
+}
+
+/** Schaltet die Kampf-Fähigkeit eines gemeisterten Waffentyps frei. */
+export function unlockAbility(character: Character, weapon: SkillWeapon): Character {
+  const blocker = abilityUnlockBlocker(character, weapon);
+  if (blocker) throw new Error(blocker);
+  return { ...character, abilities: [...character.abilities, weapon] };
 }
 
 /** Warum dieser Skill gerade nicht gelernt werden kann – oder null. */

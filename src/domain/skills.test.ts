@@ -4,12 +4,15 @@ import { EMPTY_EQUIPMENT } from "./equipment";
 import { createItem, getItemStats } from "./items";
 import { xpForNextLevel } from "./leveling";
 import {
+  ABILITY_COST,
+  abilityUnlockBlocker,
   learnSkill,
   MAX_SKILL_RANK,
   SKILL_BONUS_PER_RANK,
   skillBlocker,
   skillDamageBonus,
   skillRank,
+  unlockAbility,
   unspentSkillPoints,
 } from "./skills";
 import type { Character, Equipment } from "./types";
@@ -27,6 +30,7 @@ const heroAt = (level: number): Character => {
     battlePoints: 0,
     battlePointSlot: 0,
     skills: {},
+    abilities: [],
   };
 };
 
@@ -66,5 +70,29 @@ describe("Skilltree", () => {
     expect(getHeroCombatProfile(swordsman, equipment).damage).toBeCloseTo(
       plain + getItemStats(sword).attack * 5 * SKILL_BONUS_PER_RANK,
     );
+  });
+
+  it("Fähigkeiten gibt es erst nach dem Meistern – für einen weiteren Skillpunkt", () => {
+    const sword = createItem("sword-30", "common", "s");
+    const equipment: Equipment = { ...EMPTY_EQUIPMENT, weapon1: sword };
+    expect(getHeroCombatProfile(heroAt(20), equipment).abilities).toEqual([]);
+
+    const trained = learnTimes(heroAt(20), "sword", MAX_SKILL_RANK - 1);
+    expect(abilityUnlockBlocker(trained, "sword")).toMatch(/meistern/);
+
+    const master = learnSkill(trained, "sword");
+    expect(abilityUnlockBlocker(master, "sword")).toBeNull();
+    const unlocked = unlockAbility(master, "sword");
+    expect(unspentSkillPoints(unlocked)).toBe(unspentSkillPoints(master) - ABILITY_COST);
+    expect(getHeroCombatProfile(unlocked, equipment).abilities).toEqual(["sword"]);
+    expect(abilityUnlockBlocker(unlocked, "sword")).toMatch(/Bereits/);
+    // Ohne passende Waffe bleibt die Fähigkeit im Kampf weg.
+    expect(getHeroCombatProfile(unlocked, EMPTY_EQUIPMENT).abilities).toEqual([]);
+  });
+
+  it("ohne freie Skillpunkte lässt sich keine Fähigkeit freischalten", () => {
+    const master = learnTimes(heroAt(MAX_SKILL_RANK + 1), "dagger", MAX_SKILL_RANK);
+    expect(unspentSkillPoints(master)).toBe(0);
+    expect(abilityUnlockBlocker(master, "dagger")).toMatch(/Skillpunkte/);
   });
 });

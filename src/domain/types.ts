@@ -56,6 +56,8 @@ export interface Character {
   battlePointSlot: number;
   /** Ränge im Skilltree pro Waffentyp (src/domain/skills.ts). */
   skills: Partial<Record<WeaponType, number>>;
+  /** Freigeschaltete Kampf-Fähigkeiten – erst nach dem Meistern der Waffe (src/domain/skills.ts). */
+  abilities: WeaponType[];
 }
 
 /** Rüstungsplätze am Körper. */

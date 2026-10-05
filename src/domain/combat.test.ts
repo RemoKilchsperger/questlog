@@ -47,6 +47,7 @@ const heroAt = (level: number): Character => ({
   battlePoints: 5,
   battlePointSlot: 0,
   skills: {},
+  abilities: [],
 });
 
 /** Volle gewöhnliche Ausrüstung des passenden Levels, zwei Schwerter. */

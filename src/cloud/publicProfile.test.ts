@@ -21,6 +21,7 @@ const character: Character = {
   battlePoints: 5,
   battlePointSlot: 0,
   skills: { sword: 2 },
+  abilities: [],
 };
 
 const quest = (title: string, status: Quest["status"]): Quest => ({

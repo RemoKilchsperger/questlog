@@ -18,6 +18,8 @@ const hero: Character = {
   battlePoints: 5,
   battlePointSlot: 0,
   skills: {},
+  // Fähigkeiten-Tests: alle freigeschaltet (das Freischalten selbst testet skills.test.ts)
+  abilities: ABILITIES.map((a) => a.weapon),
 };
 
 const withWeapons = (...ids: string[]): Equipment => ({
@@ -207,7 +209,7 @@ describe("Schild-Skill", () => {
 describe("Skilltree-Grenze", () => {
   it("höchstens 5 Ränge à 2 % – zu hohe alte Ränge werden gekappt und die Punkte frei", () => {
     expect(MAX_SKILL_RANK * SKILL_BONUS_PER_RANK).toBeCloseTo(0.1);
-    const old = { ...hero, totalXp: xpForNextLevel(1) * 20, skills: { sword: 8 } };
+    const old = { ...hero, totalXp: xpForNextLevel(1) * 20, skills: { sword: 8 }, abilities: [] };
     const clamped = { ...old, skills: clampSkills(old.skills) };
     expect(clamped.skills.sword).toBe(MAX_SKILL_RANK);
     expect(unspentSkillPoints(clamped)).toBe(unspentSkillPoints({ ...old, skills: {} }) - MAX_SKILL_RANK);

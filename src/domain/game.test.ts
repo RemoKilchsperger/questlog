@@ -60,6 +60,7 @@ describe("Kampfpunkte", () => {
     battlePoints,
     battlePointSlot: regenSlot(new Date(2026, 9, 5, 7, 0)), // Abschnitt 6–12 Uhr
     skills: {},
+    abilities: [],
   });
 
   it("längere Quests füllen mehr Kampfpunkte auf", () => {
@@ -149,6 +150,7 @@ describe("Leveling", () => {
       battlePoints: 0,
       battlePointSlot: 0,
       skills: {},
+      abilities: [],
     };
     expect(POINTS_PER_LEVEL).toBe(2);
     expect(unspentPoints(hero)).toBe(4);
@@ -171,6 +173,7 @@ describe("Leveling", () => {
       battlePoints: 0,
       battlePointSlot: 0,
       skills: {},
+      abilities: [],
     };
     expect(unspentPoints(hero)).toBe(0);
   });

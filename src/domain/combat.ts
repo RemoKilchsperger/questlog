@@ -22,7 +22,7 @@ import { createItem, getBossItems, getItem } from "./items";
 import { getLevel } from "./leveling";
 import { rollDrop } from "./loot";
 import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potions";
-import { skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
+import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { getSetHpMultiplier } from "./bossSets";
 import { ABILITIES, getAbility, MANA_REGEN, maxManaFor } from "./abilities";
@@ -39,16 +39,16 @@ export interface HeroCombatProfile {
   /** Zusätzliches Gold nach einem Sieg (0.1 = +10 %). */
   goldBonus: number;
   maxMana: number;
-  /** Fähigkeiten der angelegten Waffen */
+  /** Freigeschaltete Fähigkeiten der angelegten Waffen */
   abilities: SkillWeapon[];
 }
 
-/** Fähigkeiten aller angelegten Waffen (Schilde haben keine), ohne Doppelte. */
-export function availableAbilities(equipment: Equipment): SkillWeapon[] {
+/** Freigeschaltete Fähigkeiten aller angelegten Waffen, ohne Doppelte. */
+export function availableAbilities(character: Character, equipment: Equipment): SkillWeapon[] {
   const types = [equipment.weapon1, equipment.weapon2]
     .filter((o) => o !== null)
     .map((o) => getItem(o.itemId).type)
-    .filter((t): t is SkillWeapon => ABILITIES.some((a) => a.weapon === t));
+    .filter((t): t is SkillWeapon => ABILITIES.some((a) => a.weapon === t) && hasAbility(character, t as SkillWeapon));
   return [...new Set(types)];
 }
 
@@ -73,7 +73,7 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
     critChance: Math.min(0.3, 0.05 + stats.intellect * 0.002),
     goldBonus: Math.min(1, stats.charisma * 0.005),
     maxMana: maxManaFor(level, stats.intellect),
-    abilities: availableAbilities(equipment),
+    abilities: availableAbilities(character, equipment),
   };
 }
 
@@ -279,7 +279,7 @@ function tickBuffs(buffs: BattleState["buffs"]): BattleState["buffs"] {
 /** Warum diese Fähigkeit gerade nicht geht – oder null. */
 export function abilityBlocker(state: BattleState, weapon: SkillWeapon): string | null {
   if (state.status !== "active") return "Der Kampf ist vorbei.";
-  if (!state.abilities.includes(weapon)) return "Dafür brauchst du die passende Waffe.";
+  if (!state.abilities.includes(weapon)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
   const { manaCost } = getAbility(weapon);
   if (state.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
