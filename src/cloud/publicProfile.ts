@@ -4,6 +4,7 @@
 // Sammlung). Quest-Titel und -Beschreibungen sind echte Aufgaben aus dem Leben
 // und bleiben privat: Sie stehen nur im privaten Spielstand (Tabelle "saves").
 
+import { totalTiers, type AchievementTiers } from "../domain/achievements";
 import { EMPTY_COOP_STATS, type CoopStats } from "../domain/coopCombat";
 import { getEffectiveStats } from "../domain/equipment";
 import { getLevel, getTitle } from "../domain/leveling";
@@ -19,6 +20,11 @@ export interface ProfileSnapshot {
   skills: Partial<Record<WeaponType, number>>;
   /** Koop-Erfolge – fehlt bei Profilen von vor Etappe 3 */
   coop?: CoopStats;
+  /** Gewählter Titel (Id des Erfolgs) und Avatar-Rahmen – fehlen bei älteren Profilen */
+  achievementTitle?: string | null;
+  frame?: string;
+  /** Freigeschaltete Erfolgsstufen */
+  achievementTiers?: number;
 }
 
 /** Eine Zeile der Tabelle public_profiles (ohne user_id/username). */
@@ -43,9 +49,11 @@ interface GameData {
   quests: Quest[];
   bossCollection: string[];
   coopStats?: CoopStats;
+  achievements?: AchievementTiers;
+  cosmetics?: { title: string | null; frame: string };
 }
 
-export function buildPublicProfile({ character, equipment, quests, bossCollection, coopStats }: GameData): PublicProfileRow {
+export function buildPublicProfile({ character, equipment, quests, bossCollection, coopStats, achievements, cosmetics }: GameData): PublicProfileRow {
   const level = getLevel(character.totalXp);
   return {
     hero_name: character.name,
@@ -60,6 +68,9 @@ export function buildPublicProfile({ character, equipment, quests, bossCollectio
       bossCollection,
       skills: character.skills,
       coop: coopStats ?? EMPTY_COOP_STATS,
+      achievementTitle: cosmetics?.title ?? null,
+      frame: cosmetics?.frame ?? "none",
+      achievementTiers: totalTiers(achievements ?? {}),
     },
   };
 }

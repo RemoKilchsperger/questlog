@@ -99,6 +99,43 @@
     0%, 100% { filter: drop-shadow(0 0 2px var(--color-legendary)); }
     50% { filter: drop-shadow(0 0 6px var(--color-legendary)); }
   }
+  /* Avatar-Rahmen aus Erfolgen (achievements.ts) */
+  .frame { border: 3px solid transparent; }
+  .frame-bronze { border-color: #b0703a; box-shadow: inset 0 0 0 2px #5a3418; }
+  .frame-silver { border-color: #c8d0dc; box-shadow: inset 0 0 0 2px #5d6575, 0 0 6px #c8d0dc55; }
+  .frame-gold { border-color: #f4c95d; box-shadow: inset 0 0 0 2px #8a6420, 0 0 10px #f4c95d77; }
+  .frame-royal { border-color: #b57af0; box-shadow: 0 0 0 2px #f4c95d, 0 0 12px #b57af088; }
+  .frame-flame { border-color: #f08a2c; animation: frame-flame 1.6s ease-in-out infinite; }
+  .frame-crystal { border-color: #6fe0e8; box-shadow: inset 0 0 0 2px #2a7a88, 0 0 12px #6fe0e899; }
+  .frame-dragon { border-color: #c23a3a; box-shadow: 0 0 0 2px #f4c95d, 0 0 14px #c23a3a99; }
+  .frame-void { border-color: #7a2a8a; animation: frame-void 2.4s ease-in-out infinite; }
+  /* Meisterschmiede: Stahl mit Nieten, darum glühendes Schmiedefeuer */
+  .frame-forged {
+    border-color: #9aa4b8;
+    background-image: radial-gradient(circle, #f4c95d 1.5px, transparent 2px), radial-gradient(circle, #f4c95d 1.5px, transparent 2px),
+      radial-gradient(circle, #f4c95d 1.5px, transparent 2px), radial-gradient(circle, #f4c95d 1.5px, transparent 2px);
+    background-size: 8px 8px;
+    background-position: 0 0, 100% 0, 0 100%, 100% 100%;
+    background-repeat: no-repeat;
+    animation: frame-forge 2s ease-in-out infinite;
+  }
+  @keyframes frame-forge {
+    0%, 100% { box-shadow: inset 0 0 0 2px #3a4150, 0 0 0 2px #2e3440, 0 0 8px #f59e4288; }
+    50% { box-shadow: inset 0 0 0 2px #3a4150, 0 0 0 2px #c2582a, 0 0 16px #f59e42cc; }
+  }
+  @keyframes frame-flame {
+    0%, 100% { box-shadow: 0 0 6px #f08a2c, 0 -2px 10px #c23a3a88; }
+    50% { box-shadow: 0 0 14px #ffc27a, 0 -4px 18px #f08a2ccc; }
+  }
+  @keyframes frame-void {
+    0%, 100% { box-shadow: 0 0 8px #4af0ff66, inset 0 0 6px #7a2a8a; }
+    50% { box-shadow: 0 0 16px #4af0ffcc, inset 0 0 10px #b57af0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .frame-flame { animation: none; box-shadow: 0 0 10px #f08a2c; }
+    .frame-void { animation: none; box-shadow: 0 0 10px #4af0ff88; }
+    .frame-forged { animation: none; box-shadow: inset 0 0 0 2px #3a4150, 0 0 0 2px #2e3440, 0 0 12px #f59e42aa; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .sparkle { display: none; }
     .glow-legendary { animation: none; filter: drop-shadow(0 0 4px var(--color-legendary)); }

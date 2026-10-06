@@ -6,12 +6,14 @@ import { useGameStore } from "../store/gameStore";
 import { Essence, Gold } from "./Gold";
 import { CloudButton } from "./CloudAccount";
 import { PixelAvatar } from "./PixelAvatar";
+import { AvatarFrame } from "./Achievements";
 import { useNow } from "./useNow";
 import { XpBar } from "./XpBar";
 
 /** Kompakte Statusleiste oben – immer sichtbar wie ein Spiel-HUD. */
 export function Hud({ onOpenCharacter }: { onOpenCharacter: () => void }) {
   const character = useGameStore((s) => s.character);
+  const frame = useGameStore((s) => s.cosmetics.frame);
   const { level } = getLevelProgress(character.totalXp);
   const unspent = unspentPoints(character);
   const tickBattlePoints = useGameStore((s) => s.tickBattlePoints);
@@ -30,7 +32,9 @@ export function Hud({ onOpenCharacter }: { onOpenCharacter: () => void }) {
         className="relative shrink-0 rounded-md bg-night-800 p-1 ring-gold/60 hover:ring-2"
         aria-label={unspent > 0 ? `Charakter öffnen – ${unspent} Attributpunkte zu verteilen` : "Charakter öffnen"}
       >
-        <PixelAvatar size={44} />
+        <AvatarFrame frame={frame} className="rounded">
+          <PixelAvatar size={44} />
+        </AvatarFrame>
         {unspent > 0 && (
           <span
             className="num absolute -right-2 -top-2 rounded-full border-2 border-night-900 bg-xp px-1.5 text-xs leading-4 text-night-950"

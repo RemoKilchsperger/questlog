@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BattleScreen } from "./components/BattleScreen";
 import { BonusQuests } from "./components/BonusQuests";
-import { CharacterSheet } from "./components/CharacterSheet";
+import { CharacterSheet, type CharacterView } from "./components/CharacterSheet";
 import { CloudDialogs } from "./components/CloudAccount";
 import { Leaderboard } from "./components/Leaderboard";
 import { EquipmentScreen } from "./components/EquipmentScreen";
@@ -9,6 +9,7 @@ import { Hud } from "./components/Hud";
 import { QuestBoard } from "./components/QuestBoard";
 import { QuestForm } from "./components/QuestForm";
 import { RewardToast } from "./components/RewardToast";
+import { AchievementToast } from "./components/Achievements";
 import { ShopScreen } from "./components/ShopScreen";
 import { SkillTree } from "./components/SkillTree";
 import { SmithScreen } from "./components/SmithScreen";
@@ -40,6 +41,8 @@ export default function App() {
   const [tab, setTabState] = useState<Tab>(() => (readCoopInvite() ? "battle" : (readRoute()?.tab ?? "quests")));
   const [profileName, setProfileName] = useState<string | null>(() => readRoute()?.username ?? null);
   const [villageView, setVillageView] = useState<VillageView>("merchant");
+  const [characterView, setCharacterView] = useState<CharacterView>("details");
+  const newAchievements = useGameStore((s) => s.achievementQueue.length);
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
 
   // Einladungslink: der Lobby beitreten und die Adresse wieder aufräumen
@@ -109,6 +112,20 @@ export default function App() {
         </TabButton>
       </nav>
 
+      {tab === "character" && (
+        <nav className="mt-3 flex flex-wrap gap-2 border-l-4 border-gold/40 pl-3" aria-label="Charakter">
+          <SubTabButton active={characterView === "details"} onClick={() => setCharacterView("details")}>
+            🧙 Details
+          </SubTabButton>
+          <SubTabButton active={characterView === "achievements"} onClick={() => setCharacterView("achievements")}>
+            🏆 Erfolge{newAchievements > 0 && <span className="ml-1 text-legendary">●</span>}
+          </SubTabButton>
+          <SubTabButton active={characterView === "collection"} onClick={() => setCharacterView("collection")}>
+            👑 Boss-Sammlung
+          </SubTabButton>
+        </nav>
+      )}
+
       {tab === "village" && (
         <nav className="mt-3 flex flex-wrap gap-2 border-l-4 border-gold/40 pl-3" aria-label="Dorf">
           <SubTabButton active={villageView === "merchant"} onClick={() => setVillageView("merchant")}>
@@ -130,7 +147,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {tab === "character" && <CharacterSheet />}
+        {tab === "character" && <CharacterSheet view={characterView} />}
         {tab === "skills" && <SkillTree />}
         {tab === "equipment" && <EquipmentScreen />}
         {tab === "village" && (villageView === "merchant" ? <ShopScreen /> : <SmithScreen />)}
@@ -139,6 +156,7 @@ export default function App() {
       </main>
 
       <RewardToast />
+      <AchievementToast />
       <CloudDialogs />
     </div>
   );

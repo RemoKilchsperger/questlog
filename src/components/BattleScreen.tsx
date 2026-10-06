@@ -48,6 +48,7 @@ import { ItemTooltip } from "./ItemTooltip";
 import { CreatureSprite } from "./CreatureSprite";
 import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { PixelAvatar } from "./PixelAvatar";
+import { AvatarFrame } from "./Achievements";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
 import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
 import { useNow } from "./useNow";
@@ -274,12 +275,13 @@ function HeroPanel() {
   const potions = useGameStore((s) => s.potions);
   const hero = getHeroCombatProfile(character, equipment);
   const now = useNow();
+  const frame = useGameStore((s) => s.cosmetics.frame);
 
   return (
     <section className="panel flex flex-col items-center gap-3 self-start p-5 text-center">
-      <div className="rounded-lg bg-night-800 p-3">
+      <AvatarFrame frame={frame} className="rounded-lg bg-night-800 p-3">
         <PixelAvatar size={96} />
-      </div>
+      </AvatarFrame>
       <p className="font-pixel text-2xl">{character.name}</p>
       <p className="text-sm text-muted">Level {hero.level}</p>
       <div

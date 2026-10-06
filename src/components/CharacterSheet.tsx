@@ -3,7 +3,6 @@ import { useState } from "react";
 import { BOSS_SETS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, getHeroCombatProfile } from "../domain/combat";
 import { bossName } from "../domain/bosses";
-import { CoopRecord } from "./CoopRecord";
 import { BOSS_ITEMS, getBossItems, getItemStats } from "../domain/items";
 import { getCombatStats, getStatBonuses } from "../domain/equipment";
 import { getLevelProgress, getTitle, POINTS_PER_LEVEL, unspentPoints } from "../domain/leveling";
@@ -14,6 +13,7 @@ import { formatNumber } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { PixelAvatar } from "./PixelAvatar";
+import { AchievementsPanel, AvatarFrame, CosmeticsPicker, TitleBadge } from "./Achievements";
 import { XpBar } from "./XpBar";
 import { HeroClassBadge } from "./HeroClassInfo";
 
@@ -24,8 +24,10 @@ const STAT_COLORS: Record<StatKey, string> = {
   charisma: "bg-charisma",
 };
 
-export function CharacterSheet() {
-  const coopStats = useGameStore((s) => s.coopStats);
+export type CharacterView = "details" | "achievements" | "collection";
+
+/** Charakter-Tab: `details` (Porträt, Kennzahlen, Attribute), `achievements` (Erfolge) oder `collection` (Boss-Sammlung). */
+export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
   const character = useGameStore((s) => s.character);
   const quests = useGameStore((s) => s.quests);
   const renameCharacter = useGameStore((s) => s.renameCharacter);
@@ -37,6 +39,7 @@ export function CharacterSheet() {
   const bonuses = getStatBonuses(equipment);
   const { maxHp } = getHeroCombatProfile(character, equipment);
 
+  const cosmetics = useGameStore((s) => s.cosmetics);
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(character.name);
 
@@ -50,16 +53,17 @@ export function CharacterSheet() {
     setEditing(false);
   }
 
+  if (view === "achievements") return <AchievementsPanel />;
+  if (view === "collection") return <BossCollection />;
+
   return (
     <div className="grid gap-4 md:grid-cols-[280px_1fr]">
       {/* Porträt */}
       <section className="panel flex flex-col items-center gap-3 p-5 text-center">
-        <motion.div
-          className="rounded-lg bg-night-800 p-4"
-          animate={{ y: [0, -4, 0] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <PixelAvatar size={144} />
+        <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}>
+          <AvatarFrame frame={cosmetics.frame} className="rounded-lg bg-night-800 p-4">
+            <PixelAvatar size={144} />
+          </AvatarFrame>
         </motion.div>
 
         {editing ? (
@@ -92,6 +96,7 @@ export function CharacterSheet() {
           </button>
         )}
 
+        <TitleBadge achievementId={cosmetics.title} className="-mt-2 text-sm" />
         <p className="font-pixel text-lg text-gold">
           Level <span className="num">{level}</span> · {getTitle(level)}
           <span className="mt-1 block">
@@ -99,6 +104,7 @@ export function CharacterSheet() {
           </span>
         </p>
         <XpBar totalXp={character.totalXp} />
+        <CosmeticsPicker />
       </section>
 
       <div className="flex flex-col gap-4">
@@ -166,9 +172,6 @@ export function CharacterSheet() {
             ))}
           </ul>
         </section>
-
-        <BossCollection />
-        <CoopRecord stats={coopStats} />
 
         <button
           onClick={() => {

@@ -24,7 +24,7 @@ import {
 import { getCreature, getDungeon } from "../domain/creatures";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
-import { createItem, getItem, migrateLegacyItemId, STARTER_ITEM_IDS } from "../domain/items";
+import { createItem, getItem, MAX_UPGRADE, migrateLegacyItemId, STARTER_ITEM_IDS } from "../domain/items";
 import { rollLoot } from "../domain/loot";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
 import {
@@ -36,6 +36,16 @@ import {
   START_BATTLE_POINTS,
 } from "../domain/battlePoints";
 import { getDailyBonusQuests } from "../domain/bonusQuests";
+import {
+  EMPTY_RECORDS,
+  evaluateAchievements,
+  getFrame,
+  unlockedTitles,
+  type AchievementTiers,
+  type Records,
+} from "../domain/achievements";
+import { detectHeroClass } from "../domain/heroClasses";
+import { gearScore } from "../domain/gearScore";
 import { advanceRecurring, firstDue, isValidRecurrence, type Recurrence } from "../domain/recurrence";
 import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon } from "../domain/skills";
 import type { AbilityId } from "../domain/abilities";
@@ -66,6 +76,15 @@ export interface NewQuestInput {
   /** Wiederkehrend – dann ist `dueDate` der erste Termin (wird hier berechnet) */
   recurrence?: Recurrence;
 }
+
+export interface Cosmetics {
+  title: string | null;
+  frame: string;
+}
+export const DEFAULT_COSMETICS: Cosmetics = { title: null, frame: "none" };
+
+/** Einblendung: eine neue Stufe – oder eine Zusammenfassung, was rückwirkend freigeschaltet wurde. */
+export type AchievementNotice = { id: string; tier: number } | { retroactive: number };
 
 /** Wird von der UI für Belohnungs-/Level-up-Animationen genutzt. */
 export interface RewardEvent {
@@ -134,6 +153,20 @@ interface GameState {
 
   /** IDs aller Boss-Items, die der Held je erbeutet hat – auch wenn sie inzwischen verkauft sind. */
   bossCollection: string[];
+
+  /** Zähler für Erfolge (achievements.ts) */
+  records: Records;
+  /** Freigeschaltete Erfolgsstufen (Id → Stufe) */
+  achievements: AchievementTiers;
+  /** Gewählter Titel (Id des Erfolgs) und Avatar-Rahmen */
+  cosmetics: Cosmetics;
+  /** Neu freigeschaltete Stufen für die Einblendung (nicht gespeichert) */
+  achievementQueue: AchievementNotice[];
+  setTitle: (achievementId: string | null) => void;
+  setFrame: (frameId: string) => void;
+  dismissAchievement: () => void;
+  /** Gleicht Zähler und Erfolge mit dem aktuellen Stand ab (läuft nach jeder Änderung). */
+  syncAchievements: () => void;
 
   /** Laufender Kampf (wird nicht gespeichert – ein Neuladen bricht ihn ab). */
   battle: BattleState | null;
@@ -210,6 +243,9 @@ type SaveState = Pick<
   | "shopRerolls"
   | "bossCollection"
   | "coopStats"
+  | "records"
+  | "achievements"
+  | "cosmetics"
 >;
 
 /** Neuer Held – die Gratis-Kampfpunkte zählen ab dem aktuellen 6-Stunden-Abschnitt. */
@@ -267,6 +303,9 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     shopRerolls: saved.shopRerolls ?? (saved.lastShopReroll ? 1 : 0),
     bossCollection: saved.bossCollection ?? [],
     coopStats: saved.coopStats ?? EMPTY_COOP_STATS,
+    records: { ...EMPTY_RECORDS, ...saved.records },
+    achievements: saved.achievements ?? {},
+    cosmetics: { ...DEFAULT_COSMETICS, ...saved.cosmetics },
   };
 }
 
@@ -326,7 +365,14 @@ export const useGameStore = create<GameState>()(
         if (!dungeon || dungeon.claimed) return;
         const { chest } = dungeon;
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
-        set({ dungeon: { ...dungeon, claimed: { ...chest, ...levels, completed } } });
+        const { records } = get();
+        set({
+          dungeon: { ...dungeon, claimed: { ...chest, ...levels, completed } },
+          ...(completed &&
+            !records.dungeonsCleared.includes(dungeon.dungeonId) && {
+              records: { ...records, dungeonsCleared: [...records.dungeonsCleared, dungeon.dungeonId] },
+            }),
+        });
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
@@ -403,10 +449,56 @@ export const useGameStore = create<GameState>()(
       shopRerolls: 0,
       bossCollection: [],
       coopStats: EMPTY_COOP_STATS,
+      records: EMPTY_RECORDS,
+      achievements: {},
+      cosmetics: DEFAULT_COSMETICS,
+      achievementQueue: [],
       battle: null,
       battleReward: null,
       dungeon: null,
       lastReward: null,
+
+      setTitle: (achievementId) =>
+        set((s) => {
+          const allowed = achievementId === null || unlockedTitles(s.achievements).some((t) => t.id === achievementId);
+          return allowed ? { cosmetics: { ...s.cosmetics, title: achievementId } } : {};
+        }),
+      setFrame: (frameId) =>
+        set((s) => (getFrame(frameId).unlocked(s.achievements) ? { cosmetics: { ...s.cosmetics, frame: frameId } } : {})),
+      dismissAchievement: () => set((s) => ({ achievementQueue: s.achievementQueue.slice(1) })),
+
+      syncAchievements: () => {
+        const s = get();
+        // Abgeleitete Zähler: Klassen, legendäre und voll verbesserte Items, Goldrekord
+        const owned = [...s.inventory, ...Object.values(s.equipment).filter((o) => o !== null)];
+        const heroClass = detectHeroClass(s.equipment);
+        const legendary = owned.filter((o) => o.rarity === "legendary").map((o) => o.uid);
+        const maxed = owned.filter((o) => (o.upgrade ?? 0) >= MAX_UPGRADE).map((o) => o.uid);
+        const r = s.records;
+        const records: Records = {
+          ...r,
+          classesWorn: heroClass && !r.classesWorn.includes(heroClass) ? [...r.classesWorn, heroClass] : r.classesWorn,
+          legendarySeen: legendary.some((u) => !r.legendarySeen.includes(u)) ? [...new Set([...r.legendarySeen, ...legendary])] : r.legendarySeen,
+          maxedSeen: maxed.some((u) => !r.maxedSeen.includes(u)) ? [...new Set([...r.maxedSeen, ...maxed])] : r.maxedSeen,
+          maxGold: Math.max(r.maxGold, s.character.gold),
+          maxGearScore: Math.max(r.maxGearScore, gearScore(s.equipment)),
+        };
+        const changedRecords = Object.keys(records).some((k) => records[k as keyof Records] !== r[k as keyof Records]);
+        const { tiers, unlocked } = evaluateAchievements(
+          { character: s.character, quests: s.quests, bossCollection: s.bossCollection, coopStats: s.coopStats, records, today: dateKey() },
+          s.achievements,
+        );
+        if (!changedRecords && unlocked.length === 0) return;
+        // Erster Abgleich eines bestehenden Spielstands: rückwirkend Freigeschaltetes nur zusammengefasst zeigen
+        const firstRun = Object.keys(s.achievements).length === 0 && unlocked.length > 3;
+        set({
+          records,
+          achievements: tiers,
+          achievementQueue: firstRun
+            ? [...s.achievementQueue, { retroactive: unlocked.length }]
+            : [...s.achievementQueue, ...unlocked],
+        });
+      },
 
       addQuest: (input) =>
         set((s) => {
@@ -456,7 +548,13 @@ export const useGameStore = create<GameState>()(
             createdAt: new Date().toISOString(),
             bonus: true,
           },
-          { bonusDone: { date: today, ids: [...doneToday, bonusId] } },
+          {
+            bonusDone: { date: today, ids: [...doneToday, bonusId] },
+            // Alle Bonusquests des Tages erledigt
+            ...(doneToday.length + 1 === getDailyBonusQuests(today).length && {
+              records: { ...get().records, perfectBonusDays: get().records.perfectBonusDays + 1 },
+            }),
+          },
         );
       },
 
@@ -494,6 +592,10 @@ export const useGameStore = create<GameState>()(
           shopRerolls: 0,
           bossCollection: [],
       coopStats: EMPTY_COOP_STATS,
+          records: EMPTY_RECORDS,
+          achievements: {},
+          cosmetics: DEFAULT_COSMETICS,
+          achievementQueue: [],
           battle: null,
           battleReward: null,
           dungeon: null,
@@ -650,6 +752,18 @@ export const useGameStore = create<GameState>()(
           if (result.state.status !== "won") return;
 
           const { creature } = getCreature(battle.creatureId);
+          const { records } = get();
+          set({
+            records: {
+              ...records,
+              battlesWon: records.battlesWon + 1,
+              bossesDefeated:
+                creature.boss && !records.bossesDefeated.includes(creature.id)
+                  ? [...records.bossesDefeated, creature.id]
+                  : records.bossesDefeated,
+              closeCall: records.closeCall || result.state.hero.hp < result.state.hero.maxHp * 0.05,
+            },
+          });
           const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId());
           if (dungeon) {
             // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende.
@@ -719,6 +833,9 @@ export const useGameStore = create<GameState>()(
         shopRerolls: s.shopRerolls,
         bossCollection: s.bossCollection,
         coopStats: s.coopStats,
+        records: s.records,
+        achievements: s.achievements,
+        cosmetics: s.cosmetics,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),
@@ -797,3 +914,15 @@ export const useGameStore = create<GameState>()(
     },
   ),
 );
+
+// Erfolge: nach jeder Änderung (auch nach dem Laden des Spielstands) abgleichen.
+let syncing = false;
+useGameStore.subscribe(() => {
+  if (syncing) return;
+  syncing = true;
+  try {
+    useGameStore.getState().syncAchievements();
+  } finally {
+    syncing = false;
+  }
+});
