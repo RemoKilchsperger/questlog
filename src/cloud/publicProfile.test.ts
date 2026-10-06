@@ -43,7 +43,7 @@ describe("Öffentliches Profil", () => {
 
   it("enthält die Spielwerte", () => {
     expect(profile).toMatchObject({ hero_name: "Remo", level: 3, total_xp: character.totalXp, quests_done: 2, boss_items: 1 });
-    expect(profile.snapshot.title).toBe("Abenteurer");
+    expect(profile.snapshot.title).toBeUndefined();
     expect(profile.snapshot.equipment.weapon1?.itemId).toBe("sword-0");
     expect(profile.snapshot.skills).toEqual({ sword: 2 });
     // Attribute inkl. Ausrüstungsbonus

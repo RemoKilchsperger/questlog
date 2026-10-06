@@ -5,7 +5,7 @@ import { BOSS_ITEM_DROP_CHANCE, getHeroCombatProfile } from "../domain/combat";
 import { bossName } from "../domain/bosses";
 import { BOSS_ITEMS, getBossItems, getItemStats } from "../domain/items";
 import { getCombatStats, getStatBonuses } from "../domain/equipment";
-import { getLevelProgress, getTitle, POINTS_PER_LEVEL, unspentPoints } from "../domain/leveling";
+import { getLevelProgress, POINTS_PER_LEVEL, unspentPoints } from "../domain/leveling";
 import { STAT_LABELS } from "../domain/rewards";
 import type { StatKey } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
@@ -98,7 +98,7 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
 
         <TitleBadge achievementId={cosmetics.title} className="-mt-2 text-sm" />
         <p className="font-pixel text-lg text-gold">
-          Level <span className="num">{level}</span> · {getTitle(level)}
+          Level <span className="num">{level}</span>
           <span className="mt-1 block">
             <HeroClassBadge equipment={equipment} />
           </span>

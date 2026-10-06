@@ -80,10 +80,7 @@ function Ranking() {
                 <span className="block truncate font-semibold">
                   {p.hero_name} <span className="text-xs font-normal text-muted">@{p.username}</span>
                 </span>
-                <span className="block text-xs text-muted">
-                  {p.snapshot.title}
-                  <TitleBadge achievementId={p.snapshot.achievementTitle} className="ml-1" />
-                </span>
+                <TitleBadge achievementId={p.snapshot.achievementTitle} className="block text-xs" />
               </span>
               <span className="text-right text-xs text-muted">
                 <span className="block text-base text-gold">
@@ -163,7 +160,7 @@ function ProfilePage({ username }: { username: string }) {
           <p className="font-pixel text-3xl">{profile.hero_name}</p>
           <p className="text-xs text-muted">@{profile.username}</p>
           <p className="font-pixel text-lg text-gold">
-            Level <span className="num">{profile.level}</span> · {snapshot.title}
+            Level <span className="num">{profile.level}</span>
           </p>
           <TitleBadge achievementId={snapshot.achievementTitle} className="text-sm" />
           <HeroClassBadge equipment={snapshot.equipment} />

@@ -7,12 +7,13 @@
 import { totalTiers, type AchievementTiers } from "../domain/achievements";
 import { EMPTY_COOP_STATS, type CoopStats } from "../domain/coopCombat";
 import { getEffectiveStats } from "../domain/equipment";
-import { getLevel, getTitle } from "../domain/leveling";
+import { getLevel } from "../domain/leveling";
 import type { Character, Equipment, Quest, Stats, WeaponType } from "../domain/types";
 
 /** Was ein öffentliches Profil zeigt – ohne Quest-Inhalte. */
 export interface ProfileSnapshot {
-  title: string;
+  /** Früherer Level-Titel – wird nicht mehr geschrieben und nicht mehr angezeigt */
+  title?: string;
   /** Attribute inkl. Ausrüstungs- und Set-Boni */
   stats: Stats;
   equipment: Equipment;
@@ -62,7 +63,6 @@ export function buildPublicProfile({ character, equipment, quests, bossCollectio
     quests_done: quests.filter((q) => q.status === "done").length,
     boss_items: bossCollection.length,
     snapshot: {
-      title: getTitle(level),
       stats: getEffectiveStats(character.stats, equipment),
       equipment,
       bossCollection,

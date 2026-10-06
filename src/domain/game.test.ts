@@ -3,7 +3,6 @@ import { calculateReward, EFFORT_TIERS } from "./rewards";
 import {
   allocatePoint,
   getLevelProgress,
-  getTitle,
   MAX_LEVEL,
   POINTS_PER_LEVEL,
   unspentPoints,
@@ -181,9 +180,4 @@ describe("Leveling", () => {
     expect(unspentPoints(hero)).toBe(0);
   });
 
-  it("vergibt Titel nach Level", () => {
-    expect(getTitle(1)).toBe("Novize");
-    expect(getTitle(4)).toBe("Abenteurer");
-    expect(getTitle(30)).toBe("Legende");
-  });
 });

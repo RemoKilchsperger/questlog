@@ -57,19 +57,3 @@ export function allocatePoint(character: Character, stat: StatKey): Character {
     stats: { ...character.stats, [stat]: character.stats[stat] + 1 },
   };
 }
-
-/** Ein paar Titel für Flair – leicht erweiterbar. */
-const TITLES: [minLevel: number, title: string][] = [
-  [1, "Novize"],
-  [3, "Abenteurer"],
-  [6, "Veteran"],
-  [10, "Held"],
-  [15, "Champion"],
-  [25, "Legende"],
-];
-
-export function getTitle(level: number): string {
-  let title = TITLES[0][1];
-  for (const [min, t] of TITLES) if (level >= min) title = t;
-  return title;
-}
