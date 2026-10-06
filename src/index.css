@@ -73,6 +73,15 @@
     0%, 100% { opacity: 0; }
     50% { opacity: 0.35; }
   }
+  /* Lichtschein aus der geöffneten Dungeon-Truhe */
+  .chest-light {
+    background: radial-gradient(closest-side at 50% 60%, #fff1a8cc 0%, #f4c95d55 45%, transparent 100%);
+    animation: chest-light 2.4s ease-in-out infinite;
+  }
+  @keyframes chest-light {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.35); }
+  }
   .sparkle {
     position: absolute;
     width: 30%;
@@ -91,36 +100,12 @@
     50% { filter: drop-shadow(0 0 6px var(--color-legendary)); }
   }
   @media (prefers-reduced-motion: reduce) {
-    /* Boss-Items leuchten in ihren eigenen Rüstungsfarben (--glow, siehe bossGlowColor). */
-  .glow-boss {
-    animation: boss-pulse 2.2s ease-in-out infinite;
-  }
-  @keyframes boss-pulse {
-    0%, 100% { filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 1px var(--glow)); }
-    50% { filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 2px var(--glow)); }
-  }
-  /* Leuchtschicht am Helden (GlowSprite): Schein dahinter, Schimmer darüber. */
-  .boss-halo {
-    animation: boss-halo 2.2s ease-in-out infinite;
-  }
-  .boss-shimmer {
-    z-index: 1;
-    mix-blend-mode: screen;
-    animation: boss-shimmer 2.2s ease-in-out infinite;
-  }
-  @keyframes boss-halo {
-    0%, 100% { opacity: 0.55; }
-    50% { opacity: 1; }
-  }
-  @keyframes boss-shimmer {
-    0%, 100% { opacity: 0; }
-    50% { opacity: 0.35; }
-  }
-  .sparkle { display: none; }
+    .sparkle { display: none; }
     .glow-legendary { animation: none; filter: drop-shadow(0 0 4px var(--color-legendary)); }
     .glow-boss { animation: none; filter: drop-shadow(0 0 4px var(--glow)); }
     .boss-halo { animation: none; opacity: 0.8; }
     .boss-shimmer { animation: none; opacity: 0.15; }
+    .chest-light { animation: none; }
   }
   /* Zahlen immer gut lesbar – in der Pixelschrift sehen 5/S und 8/S gleich aus. */
   .num {

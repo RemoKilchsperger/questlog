@@ -26,7 +26,7 @@ import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from 
 import { bossAbilityDue } from "./bossAbilities";
 import { getSetHpMultiplier } from "./bossSets";
 import { ABILITIES, getAbility, MANA_REGEN, maxManaFor } from "./abilities";
-import type { Character, Equipment, Loot } from "./types";
+import type { Character, Equipment, Loot, OwnedItem } from "./types";
 
 /** Kampfwerte des Helden, abgeleitet aus Level, Attributen und Ausrüstung. */
 export interface HeroCombatProfile {
@@ -467,6 +467,42 @@ export interface BattleReward {
   potions: { potionId: string; count: number } | null;
   /** Seltener Angriffs- oder Rüstungstrank (ID), zusätzlich zu den Heiltränken */
   buffPotion: string | null;
+}
+
+/**
+ * Dungeon-Truhe: Im Dungeon wird die Beute aller Kämpfe gesammelt und erst
+ * am Ende (oder beim freiwilligen Verlassen) auf einmal gutgeschrieben.
+ * Bei einer Niederlage ist die Truhe verloren.
+ */
+export interface DungeonChest {
+  xp: number;
+  gold: number;
+  /** Boss-Items zuerst, dann die übrige Beute in Fundreihenfolge */
+  items: OwnedItem[];
+  /** Trank-ID → Anzahl */
+  potions: Record<string, number>;
+}
+
+export const EMPTY_CHEST: DungeonChest = { xp: 0, gold: 0, items: [], potions: {} };
+
+/** Legt die Belohnung eines Kampfes in die Truhe. */
+export function addToChest(chest: DungeonChest, reward: BattleReward): DungeonChest {
+  const potions = { ...chest.potions };
+  if (reward.potions) potions[reward.potions.potionId] = (potions[reward.potions.potionId] ?? 0) + reward.potions.count;
+  if (reward.buffPotion) potions[reward.buffPotion] = (potions[reward.buffPotion] ?? 0) + 1;
+  const bossItems = [...chest.items.filter((i) => getItem(i.itemId).bossId), reward.bossLoot];
+  const otherItems = [...chest.items.filter((i) => !getItem(i.itemId).bossId), reward.loot];
+  return {
+    xp: chest.xp + reward.xp,
+    gold: chest.gold + reward.gold,
+    items: [...bossItems, ...otherItems].filter((i) => i !== null),
+    potions,
+  };
+}
+
+/** Anzahl der Dinge in der Truhe (Items und Tränke) – für Hinweise wie „5 Beutestücke“. */
+export function chestCount(chest: DungeonChest): number {
+  return chest.items.length + Object.values(chest.potions).reduce((sum, n) => sum + n, 0);
 }
 
 /** Chance pro Sieg auf einen Angriffs- oder Rüstungstrank – bei jedem Gegner gleich. */

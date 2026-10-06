@@ -7,6 +7,7 @@ import { getAbility } from "../domain/abilities";
 import { getBossAbility } from "../domain/bossAbilities";
 import type { BattleEvent, BattleState, Side } from "../domain/combat";
 import type { SkillWeapon } from "../domain/skills";
+import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
 import { getCreatureSprite } from "./creatureSprites";
 import { EventBus } from "./EventBus";
@@ -32,6 +33,8 @@ export interface BattleSceneData {
   enemySprite: string;
   boss: boolean;
   colors: { sky: number; ground: number };
+  /** Gebiet bzw. Dungeon – bestimmt den gemalten Hintergrund (backgrounds.ts) */
+  areaId: string;
 }
 
 const FONT = '"Pixelify Sans", monospace';
@@ -75,7 +78,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     const { battle, colors } = this.setup;
-    this.drawBackground(colors);
+    this.drawBackground(colors, this.setup.areaId);
 
     const hero = this.addBody(HERO_X, "hero", this.setup.heroSprite, 9, this.setup.heroWeapon);
     const enemy = this.addBody(
@@ -123,16 +126,21 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private drawBackground(colors: BattleSceneData["colors"]) {
+  /** Gemalter Pixel-Hintergrund des Gebiets – ohne einen nur Himmel- und Bodenfarbe. */
+  private drawBackground(colors: BattleSceneData["colors"], areaId: string) {
     const g = this.add.graphics();
-    g.fillStyle(colors.sky).fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
-    g.fillStyle(colors.ground).fillRect(0, GROUND_Y - 10, SCENE_WIDTH, SCENE_HEIGHT - GROUND_Y + 10);
-    // Pixel-Sprenkel für etwas Struktur (fest, nicht zufällig pro Bild).
-    const rnd = new Phaser.Math.RandomDataGenerator(["questlog"]);
-    g.fillStyle(0xffffff, 0.06);
-    for (let i = 0; i < 40; i++) g.fillRect(rnd.between(0, SCENE_WIDTH), rnd.between(0, GROUND_Y - 30), 3, 3);
-    g.fillStyle(0x000000, 0.15);
-    for (let i = 0; i < 60; i++) g.fillRect(rnd.between(0, SCENE_WIDTH), rnd.between(GROUND_Y, SCENE_HEIGHT), 4, 4);
+    if (hasBackground(areaId)) {
+      const key = `bg-${areaId}`;
+      if (!this.textures.exists(key)) {
+        const canvas = this.textures.createCanvas(key, BG_WIDTH, BG_HEIGHT)!;
+        paintBackground(canvas.getContext(), areaId);
+        canvas.refresh();
+      }
+      this.add.image(0, 0, key).setOrigin(0).setScale(BG_SCALE).setDepth(-1);
+    } else {
+      g.fillStyle(colors.sky).fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
+      g.fillStyle(colors.ground).fillRect(0, GROUND_Y - 10, SCENE_WIDTH, SCENE_HEIGHT - GROUND_Y + 10);
+    }
     // Schatten unter den Kämpfern
     g.fillStyle(0x000000, 0.3);
     g.fillEllipse(HERO_X, GROUND_Y + 2, 90, 16);

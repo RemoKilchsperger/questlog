@@ -6,10 +6,12 @@ import {
   abilityBlocker,
   BOSS_ITEM_DROP_CHANCE,
   BUFF_POTION_DROP_CHANCE,
+  chestCount,
   fleeCost,
   getHeroCombatProfile,
   potionBlocker,
   type ActiveBuff,
+  type BattleReward,
   type BattleState,
 } from "../domain/combat";
 import {
@@ -39,6 +41,7 @@ import { unlockAudio } from "../game/sfx";
 import { useGameStore } from "../store/gameStore";
 import { useSoundStore } from "../store/soundStore";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DungeonChest } from "./DungeonChest";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
@@ -125,6 +128,10 @@ function DungeonPanel({ heroLevel }: { heroLevel: number }) {
         Mehrere Gegner hintereinander und ein Boss am Ende. Die Gegner sind stärker als draussen, und zwischen den
         Kämpfen heilst du nicht – nur dein Mana füllt sich wieder auf. Tränke helfen. Der Boss lässt mit{" "}
         {Math.round(BOSS_ITEM_DROP_CHANCE * 100)} % ein Teil seines einzigartigen Sets fallen.
+      </p>
+      <p className="mb-4 text-sm text-muted">
+        🧰 Alle Beute landet in einer Truhe, die du am Ende öffnest. Nach einem Sieg kannst du auch mit der Truhe
+        umkehren – wer verliert, verliert sie.
       </p>
       <ul className="flex flex-col gap-3">
         {DUNGEONS.map((dungeon) => (
@@ -627,6 +634,8 @@ function BattleResult({ battle }: { battle: BattleState }) {
   const battlePoints = useGameStore((s) => s.character.battlePoints);
   const dungeon = useGameStore((s) => s.dungeon);
   const won = battle.status === "won";
+  // Im Dungeon geht die Beute in die Truhe – hier nur ein kurzer Hinweis, was dazukam.
+  const toChest = dungeon !== null;
   const levelUp = reward !== null && reward.levelAfter > reward.levelBefore;
   const fled = battle.status === "fled";
   const loot = reward?.loot ? getItemStats(reward.loot) : null;
@@ -647,7 +656,9 @@ function BattleResult({ battle }: { battle: BattleState }) {
       <h2 className={`font-pixel text-3xl ${won ? "text-gold" : fled ? "text-muted" : "text-danger"}`}>
         {won ? "Sieg!" : fled ? "Geflohen" : "Niederlage"}
       </h2>
-      {won && reward ? (
+      {won && reward && toChest ? (
+        dungeon.claimed ? null : <ChestDeposit reward={reward} />
+      ) : won && reward ? (
         <>
           {levelUp && (
             <motion.p
@@ -744,14 +755,62 @@ function BattleResult({ battle }: { battle: BattleState }) {
   );
 }
 
-/** Nach einem Dungeon-Kampf: weiter zum nächsten Gegner, Abschluss oder Scheitern. */
+/** Kurzer Hinweis nach einem Dungeon-Sieg: Was in die Truhe gewandert ist. */
+function ChestDeposit({ reward }: { reward: BattleReward }) {
+  const things = [reward.bossLoot, reward.loot].filter((i) => i !== null).length;
+  const potions = (reward.potions?.count ?? 0) + (reward.buffPotion ? 1 : 0);
+  return (
+    <motion.p
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-md bg-night-800 px-3 py-1.5 text-sm"
+    >
+      🧰 In die Truhe: <span className="num text-xp">+{reward.xp} XP</span>
+      {reward.gold > 0 && (
+        <>
+          {" · "}
+          <Gold amount={reward.gold} className="font-bold text-gold" />
+        </>
+      )}
+      {potions > 0 && <span className="text-xp"> · {potions}× Trank</span>}
+      {things > 0 && (
+        <span className={reward.bossLoot ? "text-legendary" : "text-epic"}>
+          {" · "}
+          {things} {things === 1 ? "Item" : "Items"}
+          {reward.bossLoot && " 👑"}
+        </span>
+      )}
+    </motion.p>
+  );
+}
+
+/** Nach einem Dungeon-Kampf: weiter, Truhe öffnen (Abschluss/Verlassen) oder Scheitern. */
 function DungeonResultActions({ battle, won }: { battle: BattleState; won: boolean }) {
   const dungeon = useGameStore((s) => s.dungeon)!;
   const next = useGameStore((s) => s.nextDungeonFight);
   const leave = useGameStore((s) => s.leaveBattle);
+  const leaveWithChest = useGameStore((s) => s.leaveDungeonWithChest);
   const { name, creatures } = getDungeon(dungeon.dungeonId);
   const finished = won && dungeon.stage === creatures.length - 1;
   const following = creatures[dungeon.stage + 1];
+  const collected = chestCount(dungeon.chest);
+
+  if (dungeon.claimed) {
+    return (
+      <div className="flex w-full flex-col items-center gap-3">
+        <p className="font-pixel text-xl text-legendary">
+          {dungeon.claimed.completed ? `🏆 ${name} abgeschlossen!` : `🧰 Du verlässt ${name} mit deiner Truhe.`}
+        </p>
+        <DungeonChest chest={dungeon.claimed} />
+        <button
+          onClick={leave}
+          className="rounded-md border-2 border-night-700 px-4 py-1.5 text-muted hover:text-parchment"
+        >
+          Zurück zur Gebietskarte
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -767,14 +826,22 @@ function DungeonResultActions({ battle, won }: { battle: BattleState; won: boole
           weiter – keine Heilung im Dungeon.
         </p>
       ) : (
-        <p className="text-sm text-danger">Der Dungeon ist gescheitert. Die Kampfpunkte sind verbraucht.</p>
+        <p className="text-sm text-danger">
+          Der Dungeon ist gescheitert. Die Kampfpunkte sind verbraucht
+          {collected > 0 ? ` und die Truhe mit ${collected} Beutestück${collected === 1 ? "" : "en"} ist verloren.` : "."}
+        </p>
+      )}
+      {won && !finished && collected > 0 && (
+        <p className="text-xs text-muted">
+          🧰 In der Truhe: {collected} Beutestück{collected === 1 ? "" : "e"} – bei einer Niederlage ist sie verloren.
+        </p>
       )}
       <div className="flex gap-2">
         <button
-          onClick={leave}
+          onClick={won && !finished ? leaveWithChest : leave}
           className="rounded-md border-2 border-night-700 px-4 py-1.5 text-muted hover:text-parchment"
         >
-          {won && !finished ? "Dungeon verlassen" : "Zurück zur Gebietskarte"}
+          {won && !finished ? "Verlassen & Truhe öffnen" : "Zurück zur Gebietskarte"}
         </button>
         {won && !finished && (
           <motion.button

@@ -283,6 +283,15 @@ export const sfx = {
     hiss({ filter: "bandpass", from: 700, to: 250, duration: 0.6, volume: 0.25, q: 1.2, attack: 0.06 });
   },
 
+  /** Truhe öffnen: knarzender Deckel, dann ein funkelnder Akkord */
+  chest() {
+    tone({ wave: "sawtooth", from: 140, to: 220, duration: 0.25, volume: 0.08, attack: 0.03 });
+    hiss({ filter: "bandpass", from: 500, to: 900, duration: 0.2, volume: 0.12, q: 4, attack: 0.03 });
+    tone({ wave: "sine", from: 110, to: 55, duration: 0.2, volume: 0.35, delay: 0.22 });
+    arpeggio([784, 988, 1175, 1568, 1976], 0.07, "triangle", 0.14, 0.3);
+    hiss({ filter: "highpass", from: 5000, duration: 0.5, volume: 0.06, delay: 0.3, attack: 0.1 });
+  },
+
   victory() {
     arpeggio([523, 659, 784], 0.11, "square", 0.16, 0.14);
     tone({ wave: "square", from: 1046, duration: 0.45, volume: 0.16, delay: 0.33 });

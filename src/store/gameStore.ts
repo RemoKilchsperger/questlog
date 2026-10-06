@@ -8,8 +8,10 @@ import {
   unequipItem,
 } from "../domain/equipment";
 import {
+  addToChest,
   attackRound,
   drinkPotion,
+  EMPTY_CHEST,
   flee,
   fleeCost,
   getHeroCombatProfile,
@@ -17,6 +19,7 @@ import {
   startBattle,
   type BattleReward,
   type BattleState,
+  type DungeonChest,
 } from "../domain/combat";
 import { getCreature, getDungeon } from "../domain/creatures";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
@@ -143,13 +146,26 @@ interface GameState {
   startDungeon: (dungeonId: string) => void;
   /** Nach einem Sieg: nächster Gegner, mit den übrig gebliebenen Lebenspunkten. */
   nextDungeonFight: () => void;
+  /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
+  leaveDungeonWithChest: () => void;
 }
 
 export interface DungeonRun {
   dungeonId: string;
   /** Index des aktuellen Gegners in `creatures` */
   stage: number;
+  /** Gesammelte Beute – erst am Ende gutgeschrieben, bei einer Niederlage verloren. */
+  chest: DungeonChest;
+  /** Gutgeschriebene Truhe (Abschluss oder Verlassen) – die UI zeigt sie mit Animation. */
+  claimed: ClaimedChest | null;
 }
+
+export type ClaimedChest = DungeonChest & {
+  levelBefore: number;
+  levelAfter: number;
+  /** Endboss besiegt (sonst vorzeitig verlassen) */
+  completed: boolean;
+};
 
 export interface BonusProgress {
   date: string;
@@ -263,6 +279,35 @@ export const useGameStore = create<GameState>()(
        * Schreibt die Belohnung einer Quest gut und markiert sie als erledigt.
        * Steht die Quest noch nicht im Questlog (Bonusquest), wird sie vorne eingefügt.
        */
+      /**
+       * Schreibt Kampfbeute gut: XP, Gold, Items (inkl. Boss-Sammlung) und Tränke.
+       * Ein Level-up meldet der Aufrufer über den EventBus.
+       */
+      const grantRewards = (xp: number, gold: number, items: OwnedItem[], potionDrops: Record<string, number>) => {
+        const { character, inventory, potions, bossCollection } = get();
+        const levelBefore = getLevel(character.totalXp);
+        const levelAfter = getLevel(character.totalXp + xp);
+        set({
+          character: { ...character, totalXp: character.totalXp + xp, gold: character.gold + gold },
+          inventory: [...inventory, ...items],
+          bossCollection: addToCollection(bossCollection, ...items),
+          potions: addPotions(potions, ...Object.entries(potionDrops)),
+        });
+        return { levelBefore, levelAfter };
+      };
+
+      /** Schreibt die Dungeon-Truhe gut und merkt sie sich für die Truhen-Animation. */
+      const claimChest = (completed: boolean) => {
+        const { dungeon } = get();
+        if (!dungeon || dungeon.claimed) return;
+        const { chest } = dungeon;
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        set({ dungeon: { ...dungeon, claimed: { ...chest, ...levels, completed } } });
+        if (levels.levelAfter > levels.levelBefore) {
+          EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
+        }
+      };
+
       const finishQuest = (quest: Quest, extra: Partial<GameState> = {}) => {
         const { quests, inventory } = get();
         const character = regenerateBattlePoints(get().character);
@@ -500,7 +545,12 @@ export const useGameStore = create<GameState>()(
           }
           const paid = spendBattlePoint(regenerateBattlePoints(character), dungeonCost(dungeon.creatures.length));
           const battle = startBattle(newId(), character.name, hero, dungeon.creatures[0]);
-          set({ battle, battleReward: null, character: paid, dungeon: { dungeonId, stage: 0 } });
+          set({
+            battle,
+            battleReward: null,
+            character: paid,
+            dungeon: { dungeonId, stage: 0, chest: EMPTY_CHEST, claimed: null },
+          });
           EventBus.emit("battle:started", { battle });
         }),
 
@@ -518,6 +568,13 @@ export const useGameStore = create<GameState>()(
           EventBus.emit("battle:started", { battle: next });
         }),
 
+      leaveDungeonWithChest: () =>
+        attempt(() => {
+          const { battle, dungeon } = get();
+          if (!dungeon || !battle || battle.status !== "won") throw new Error("Nur nach einem Sieg möglich.");
+          claimChest(false);
+        }),
+
       battleDrinkPotion: (potionId) =>
         attempt(() => {
           const { battle, potions } = get();
@@ -530,38 +587,33 @@ export const useGameStore = create<GameState>()(
 
       battleAttack: (ability) =>
         attempt(() => {
-          const { battle, character, equipment, inventory, potions, bossCollection } = get();
+          const { battle, character, equipment, dungeon } = get();
           if (!battle) return;
           const result = attackRound(battle, Math.random, ability);
-          let battleReward: BattleRewardEvent | null = null;
-          if (result.state.status === "won") {
-            const { creature } = getCreature(battle.creatureId);
-            const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId());
-            const levelBefore = getLevel(character.totalXp);
-            battleReward = { ...reward, levelBefore, levelAfter: getLevel(character.totalXp + reward.xp) };
-          }
-          const potionDrop = battleReward?.potions;
-          set({
-            battle: result.state,
-            battleReward,
-            ...(battleReward && {
-              character: {
-                ...character,
-                totalXp: character.totalXp + battleReward.xp,
-                gold: character.gold + battleReward.gold,
-              },
-              inventory: [...inventory, battleReward.loot, battleReward.bossLoot].filter((i) => i !== null),
-              bossCollection: addToCollection(bossCollection, battleReward.bossLoot),
-              potions: addPotions(
-                potions,
-                ...(potionDrop ? [[potionDrop.potionId, potionDrop.count] as const] : []),
-                ...(battleReward.buffPotion ? [[battleReward.buffPotion, 1] as const] : []),
-              ),
-            }),
-          });
+          set({ battle: result.state, battleReward: null });
           EventBus.emit("battle:events", { battle: result.state, events: result.events });
-          if (battleReward && battleReward.levelAfter > battleReward.levelBefore) {
-            EventBus.emit("character:levelup", { from: battleReward.levelBefore, to: battleReward.levelAfter });
+          if (result.state.status !== "won") return;
+
+          const { creature } = getCreature(battle.creatureId);
+          const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId());
+          if (dungeon) {
+            // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende.
+            const level = getLevel(character.totalXp);
+            set({
+              battleReward: { ...reward, levelBefore: level, levelAfter: level },
+              dungeon: { ...dungeon, chest: addToChest(dungeon.chest, reward) },
+            });
+            if (dungeon.stage === getDungeon(dungeon.dungeonId).creatures.length - 1) claimChest(true);
+            return;
+          }
+          const potionDrops: Record<string, number> = {};
+          if (reward.potions) potionDrops[reward.potions.potionId] = reward.potions.count;
+          if (reward.buffPotion) potionDrops[reward.buffPotion] = (potionDrops[reward.buffPotion] ?? 0) + 1;
+          const items = [reward.loot, reward.bossLoot].filter((i) => i !== null);
+          const levels = grantRewards(reward.xp, reward.gold, items, potionDrops);
+          set({ battleReward: { ...reward, ...levels } });
+          if (levels.levelAfter > levels.levelBefore) {
+            EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
           }
         }),
 
@@ -573,6 +625,8 @@ export const useGameStore = create<GameState>()(
           const result = flee(battle, goldLost);
           set({ battle: result.state, character: { ...character, gold: character.gold - goldLost } });
           EventBus.emit("battle:events", { battle: result.state, events: result.events });
+          // Flucht ist kein Scheitern: Die Truhe mit der Beute der gewonnenen Kämpfe bleibt.
+          claimChest(false);
         }),
 
       leaveBattle: () => set({ battle: null, battleReward: null, dungeon: null }),

@@ -26,6 +26,7 @@ export default function PhaserBattle({ battleId }: { battleId: string }) {
       enemySprite: creature.sprite,
       boss: creature.boss,
       colors: area.colors,
+      areaId: area.id,
     };
 
     const game = new Phaser.Game({
