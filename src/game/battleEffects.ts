@@ -54,9 +54,17 @@ export function projectile(
   from: Point,
   to: Point,
   object: Phaser.GameObjects.Components.Transform & Phaser.GameObjects.GameObject,
-  options: { duration?: number; spin?: number; arc?: number; trail?: number; onArrive: () => void },
+  options: {
+    duration?: number;
+    spin?: number;
+    arc?: number;
+    trail?: number;
+    /** Spitze zeigt in Flugrichtung (Pfeile) – statt `spin` */
+    face?: boolean;
+    onArrive: () => void;
+  },
 ) {
-  const { duration = 320, spin = 0, arc = 0, trail, onArrive } = options;
+  const { duration = 320, spin = 0, arc = 0, trail, face = false, onArrive } = options;
   const progress = { t: 0 };
   (object as unknown as Phaser.GameObjects.Components.Depth).setDepth?.(20);
   scene.tweens.add({
@@ -69,7 +77,10 @@ export function projectile(
       object.x = from.x + (to.x - from.x) * t;
       // Bogenflug: Parabel nach oben
       object.y = from.y + (to.y - from.y) * t - arc * Math.sin(Math.PI * t);
-      object.angle = spin * t;
+      if (face) {
+        const vy = to.y - from.y - arc * Math.PI * Math.cos(Math.PI * t);
+        object.angle = Phaser.Math.RadToDeg(Math.atan2(vy, to.x - from.x));
+      } else object.angle = spin * t;
       if (trail !== undefined && Math.random() < 0.7) {
         const p = scene.add.rectangle(object.x, object.y + rnd(-6, 6), 6, 6, trail).setDepth(19);
         scene.tweens.add({ targets: p, alpha: 0, scale: 0.2, duration: 300, onComplete: () => p.destroy() });

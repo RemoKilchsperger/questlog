@@ -1,7 +1,8 @@
 // Boss-Sets: Wer mehrere Boss-Items desselben Bosses trägt, bekommt einen
 // Set-Bonus in Stufen.
-// - Gebietsbosse (4 Teile): ab 2 Teilen Attributpunkte, ab 3 Teilen mehr Angriff
-//   und Rüstung (mehr als 3 gleichzeitig geht wegen der Zweihänder oft nicht).
+// - Gebietsbosse (5 Teile: 3 Waffen, Helm, Brust): ab 2 Teilen Attributpunkte, ab
+//   3 Teilen mehr Angriff und Rüstung (mehr als 4 gleichzeitig geht nie, wegen der
+//   Zweihänder oft nur 3).
 // - Dungeon-Bosse (7 Teile, komplettes Rüstungsset): ab 2 Teilen Attributpunkte,
 //   ab 4 Teilen mehr Angriff und Rüstung, ab 6 Teilen mehr Lebenspunkte.
 

@@ -78,7 +78,8 @@ export type WeaponType =
   | "staff"
   | "scepter"
   | "mace"
-  | "greathammer";
+  | "greathammer"
+  | "bow";
 
 /** Item-Typ: ein Rüstungsplatz oder eine Waffenart. Pro Typ gibt es 200 Items. */
 export type ItemType = ArmorSlot | WeaponType;

@@ -48,9 +48,9 @@ const sequence = (...values: number[]) => {
 };
 
 describe("Katalog", () => {
-  it("hat 15 Typen mit je 200 Items und eindeutigen IDs und Namen", () => {
-    expect(ITEM_TYPES).toHaveLength(15);
-    expect(ITEMS).toHaveLength(15 * ITEMS_PER_TYPE);
+  it("hat 16 Typen mit je 200 Items und eindeutigen IDs und Namen", () => {
+    expect(ITEM_TYPES).toHaveLength(16);
+    expect(ITEMS).toHaveLength(16 * ITEMS_PER_TYPE);
     expect(new Set(ITEMS.map((i) => i.id)).size).toBe(ITEMS.length);
     for (const { type } of ITEM_TYPES) {
       const names = ITEMS.filter((i) => i.type === type).map((i) => i.name);
@@ -307,6 +307,6 @@ describe("Beute", () => {
     expect(lootPool(1).every((i) => i.requiredLevel === 1)).toBe(true);
     const pool = lootPool(60);
     expect(pool.every((i) => i.requiredLevel <= 60 && i.requiredLevel > 54)).toBe(true);
-    expect(new Set(pool.map((i) => i.type)).size).toBe(15);
+    expect(new Set(pool.map((i) => i.type)).size).toBe(16);
   });
 });

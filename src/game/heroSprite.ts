@@ -2,7 +2,7 @@
 // der Phaser-Kampfszene.
 
 import { getItem } from "../domain/items";
-import type { ArmorSlot, Equipment, ItemDef } from "../domain/types";
+import type { ArmorSlot, Equipment, ItemDef, ItemType } from "../domain/types";
 import { bossGlowColor, getWornHelmet, getWornWeapon, itemPalette } from "./itemSprites";
 import { composeSprites, type SpriteDef, type SpriteLayer } from "./sprites";
 
@@ -98,6 +98,8 @@ export interface HeldWeapon {
   grip: { x: number; y: number };
   /** Lage der Hand im Raster von `getHeroSprite` */
   hand: { x: number; y: number };
+  /** Waffentyp – Bögen schiessen statt zuzuschlagen */
+  type: ItemType;
 }
 
 /** Die Waffe in der rechten Hand – die Kampfszene animiert sie separat. */
@@ -105,7 +107,7 @@ export function getMainWeapon(equipment: Equipment): HeldWeapon | null {
   const { main } = heldItems(equipment);
   if (!main) return null;
   const worn = getWornWeapon(main);
-  return { ...worn, hand: { x: RIGHT_HAND.x + SIDE_MARGIN, y: RIGHT_HAND.y + TOP_MARGIN } };
+  return { ...worn, hand: { x: RIGHT_HAND.x + SIDE_MARGIN, y: RIGHT_HAND.y + TOP_MARGIN }, type: main.type };
 }
 
 /** Leuchtfarbe der Waffe in der rechten Hand (nur Boss-Waffen) – die Kampfszene lässt sie separat leuchten. */
@@ -146,9 +148,11 @@ function heroLayers(equipment: Equipment, withoutMainWeapon: boolean, glow: bool
   };
   const { main, shield, offHand } = heldItems(equipment);
 
-  // Waffen liegen hinter dem Körper (die Hand umschliesst den Griff), Helm und Schild davor.
+  // Waffen liegen hinter dem Körper (die Hand umschliesst den Griff), Helm, Schild und Bogen davor –
+  // ein Bogen liegt fast ganz neben dem Griff und wäre hinter dem Körper verdeckt.
   const behind: SpriteLayer[] = [];
-  if (main && !withoutMainWeapon) behind.push(inHand(main, RIGHT_HAND, false));
+  const mainInFront = main?.type === "bow";
+  if (main && !withoutMainWeapon && !mainInFront) behind.push(inHand(main, RIGHT_HAND, false));
   if (offHand) behind.push(inHand(offHand, LEFT_HAND, true));
   const front: SpriteLayer[] = [];
   if (equipment.head) {
@@ -156,6 +160,7 @@ function heroLayers(equipment: Equipment, withoutMainWeapon: boolean, glow: bool
     front.push(at(paint(getWornHelmet(helmet), helmet), 0, -TOP_MARGIN));
   }
   if (shield) front.push(inHand(shield, LEFT_HAND, false));
+  if (main && !withoutMainWeapon && mainInFront) front.push(inHand(main, RIGHT_HAND, false));
 
   return [...behind, at(armoredBody(equipment, glow), 0, 0), ...front];
 }

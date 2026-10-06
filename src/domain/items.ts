@@ -83,6 +83,7 @@ export const ITEM_TYPES: readonly ItemTypeInfo[] = [
   weapon("scepter", "Zepter", "🔱", ["zepter"], 2.8),
   weapon("mace", "Streitkolben", "⚒️", ["streitkolben", "morgenstern", "keule"], 3.1),
   weapon("greathammer", "Grosshammer", "🔨", ["grosshammer", "kriegshammer"], 7.2, true),
+  weapon("bow", "Bogen", "🏹", ["bogen", "langbogen", "kurzbogen"], 6.4, true),
 ];
 
 /** 20 Materialstufen für den Namensanfang – je eine pro 3 Level. */
@@ -156,7 +157,7 @@ function buildItem(info: ItemTypeInfo, index: number): ItemDef {
   };
 }
 
-/** Gesamter Katalog: 15 Typen × 200 Items, sortiert nach Level. */
+/** Gesamter Katalog: 16 Typen × 200 Items, sortiert nach Level. */
 export const ITEMS: readonly ItemDef[] = ITEM_TYPES.flatMap((info) =>
   Array.from({ length: ITEMS_PER_TYPE }, (_, i) => buildItem(info, i)),
 ).sort((a, b) => a.requiredLevel - b.requiredLevel);
@@ -171,30 +172,39 @@ interface BossItemSpec {
   dungeon?: boolean;
 }
 
-/** Pro Gebietsboss zwei Waffen, ein Helm und eine Brustrüstung – passend zum Boss. */
+/**
+ * Pro Gebietsboss drei Waffen, ein Helm und eine Brustrüstung – passend zum Boss.
+ * Über alle Bosse (inkl. Dungeons) hat jeder Waffentyp zwei bis drei Boss-Waffen.
+ */
 const BOSS_ITEM_SPECS: readonly BossItemSpec[] = [
   { bossId: "goblin-chief", level: 10, type: "axe", name: "Krummzahns Hackbeil" },
   { bossId: "goblin-chief", level: 10, type: "mace", name: "Häuptlingskeule" },
+  { bossId: "goblin-chief", level: 10, type: "bow", name: "Krummzahns Knochenbogen" },
   { bossId: "goblin-chief", level: 10, type: "head", name: "Knochenkrone des Krummzahn" },
   { bossId: "goblin-chief", level: 10, type: "chest", name: "Fellharnisch des Häuptlings" },
   { bossId: "ancient-lizard", level: 20, type: "sword", name: "Echsenzahn" },
   { bossId: "ancient-lizard", level: 20, type: "greataxe", name: "Schuppenspalter" },
+  { bossId: "ancient-lizard", level: 20, type: "dagger", name: "Giftzahn der Uralten" },
   { bossId: "ancient-lizard", level: 20, type: "head", name: "Schädel der Uralten Echse" },
   { bossId: "ancient-lizard", level: 20, type: "chest", name: "Schuppenpanzer der Uralten" },
   { bossId: "cave-eye", level: 30, type: "staff", name: "Blick des Höhlenauges" },
   { bossId: "cave-eye", level: 30, type: "sword", name: "Prismaklinge" },
+  { bossId: "cave-eye", level: 30, type: "shield", name: "Spiegel des Höhlenauges" },
   { bossId: "cave-eye", level: 30, type: "head", name: "Krone des Allsehenden" },
   { bossId: "cave-eye", level: 30, type: "chest", name: "Kristallharnisch der Tiefe" },
   { bossId: "primal-mammoth", level: 40, type: "greatsword", name: "Stosszahn von Graufrost" },
   { bossId: "primal-mammoth", level: 40, type: "greathammer", name: "Gletscherhammer" },
+  { bossId: "primal-mammoth", level: 40, type: "bow", name: "Elfenbeinbogen von Graufrost" },
   { bossId: "primal-mammoth", level: 40, type: "head", name: "Mammuthaupt" },
   { bossId: "primal-mammoth", level: 40, type: "chest", name: "Graufrostpelz" },
   { bossId: "lich-king", level: 50, type: "sword", name: "Seelenklinge des Lichkönigs" },
   { bossId: "lich-king", level: 50, type: "scepter", name: "Zepter der Verdammnis" },
+  { bossId: "lich-king", level: 50, type: "greathammer", name: "Grabhammer des Lichkönigs" },
   { bossId: "lich-king", level: 50, type: "head", name: "Krone des Lichkönigs" },
   { bossId: "lich-king", level: 50, type: "chest", name: "Gewand des Totenkönigs" },
   { bossId: "ignaroth", level: 60, type: "greatsword", name: "Flammenzunge Ignaroths" },
   { bossId: "ignaroth", level: 60, type: "greataxe", name: "Ignaroths Klaue" },
+  { bossId: "ignaroth", level: 60, type: "mace", name: "Glutstern Ignaroths" },
   { bossId: "ignaroth", level: 60, type: "head", name: "Drachenkopfhelm" },
   { bossId: "ignaroth", level: 60, type: "chest", name: "Schuppenpanzer Ignaroths" },
 
@@ -275,7 +285,7 @@ function buildBossItem(spec: BossItemSpec): ItemDef {
 /** Einzigartige Boss-Items – nicht Teil von ITEMS, damit Händler und Quests sie nie anbieten. */
 export const BOSS_ITEMS: readonly ItemDef[] = BOSS_ITEM_SPECS.map(buildBossItem);
 
-/** Die Boss-Items eines Bosses: 4 bei Gebietsbossen, 7 bei Dungeon-Bossen, leer bei normalen Kreaturen. */
+/** Die Boss-Items eines Bosses: 5 bei Gebietsbossen, 7 bei Dungeon-Bossen, leer bei normalen Kreaturen. */
 export function getBossItems(bossId: string): ItemDef[] {
   return BOSS_ITEMS.filter((i) => i.bossId === bossId);
 }

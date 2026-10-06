@@ -45,6 +45,12 @@ const HERO_X = 190;
 const ENEMY_X = 530;
 const BAR_WIDTH = 160;
 
+/** Pfeil für Bogenschüsse: Federn links, Spitze rechts. */
+const ARROW_SPRITE: SpriteDef = {
+  grid: ["tt....L.", ".hhhhhLL", "tt....L."],
+  palette: { t: "#e8e1d4", h: "#8a5a2b", L: "#d0d4db" },
+};
+
 interface Fighter {
   /** Figur samt Waffe – wird bewegt, gedreht und ausgeblendet */
   body: Phaser.GameObjects.Container;
@@ -186,7 +192,8 @@ export class BattleScene extends Phaser.Scene {
         .setOrigin((held.grip.x + 1.5) / weaponImage.width, (held.grip.y + 1.5) / weaponImage.height);
     }
 
-    const images = weapon ? [weapon, figure] : [figure];
+    // Bögen vor dem Körper, alle anderen Waffen dahinter (wie in heroSprite.ts)
+    const images = weapon ? (held?.type === "bow" ? [figure, weapon] : [weapon, figure]) : [figure];
     const body = this.add.container(x, GROUND_Y + 4, images).setScale(scale);
     return { body, images, weapon };
   }
@@ -203,7 +210,7 @@ export class BattleScene extends Phaser.Scene {
       hero.weapon.preFX.addGlow(Phaser.Display.Color.HexStringToColor(heroWeaponGlow).color, 3, 0, false, 0.1, 10);
     }
     if (!heroGlow) return;
-    const figure = hero.images[hero.images.length - 1];
+    const figure = hero.images.find((image) => image !== hero.weapon)!;
     const image = renderSprite(heroGlow, false, 1);
     if (!this.textures.exists("hero-glow")) {
       const canvas = this.textures.createCanvas("hero-glow", image.width, image.height)!;
@@ -503,7 +510,41 @@ export class BattleScene extends Phaser.Scene {
         this.bulwark = fx.dome(this, at);
         sfx.magic();
         break;
+      case "bow": // Pfeile zum Himmel richten
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -35, duration: 220, yoyo: true, hold: 120 });
+        fx.rise(this, this.front("hero"), 0xf4c95d, 8, 30);
+        sfx.whoosh(0.25);
+        break;
     }
+  }
+
+  /**
+   * Bogenschuss: Sehne spannen, Pfeil fliegt zum Gegner. Beim Pfeilhagel
+   * steigt er steil auf und fällt von oben auf das Ziel.
+   */
+  private shootArrow(target: fx.Point, onHit: () => void, volley = false) {
+    const hero = this.fighters.hero;
+    if (hero.weapon) {
+      // Sehne spannen: Bogen kurz zurückziehen und leicht stauchen
+      this.tweens.killTweensOf(hero.weapon);
+      this.tweens.add({ targets: hero.weapon, x: hero.weapon.x - 1.2, scaleX: 0.85, duration: 110, yoyo: true, ease: "Quad.easeOut" });
+    }
+    this.makeTexture("arrow", ARROW_SPRITE);
+    const arrow = this.add.image(0, 0, "arrow").setScale(5);
+    // Leichte Streuung, damit beim Pfeilhagel nicht alle Pfeile gleich einschlagen
+    const aim = volley ? { x: target.x + Phaser.Math.Between(-25, 25), y: target.y + Phaser.Math.Between(-15, 10) } : target;
+    this.time.delayedCall(90, () => {
+      sfx.bowShot();
+      fx.projectile(this, this.front("hero"), aim, arrow, {
+        duration: volley ? 460 : 240,
+        arc: volley ? 170 : 16,
+        face: true,
+        onArrive: () => {
+          onHit();
+          fx.burst(this, aim, 0xd0d4db, 6, 30, 4);
+        },
+      });
+    });
   }
 
   private heroHit(event: Extract<BattleEvent, { type: "hit" }>, weapon: SkillWeapon | null) {
@@ -625,8 +666,13 @@ export class BattleScene extends Phaser.Scene {
         });
         break;
       }
+      case "bow":
+        this.shootArrow(target, () => hit(), true);
+        break;
       default:
-        this.lunge("hero", () => hit());
+        // Mit dem Bogen wird auch normal geschossen statt zugeschlagen.
+        if (this.setup.heroWeapon?.type === "bow") this.shootArrow(target, () => hit());
+        else this.lunge("hero", () => hit());
     }
   }
 

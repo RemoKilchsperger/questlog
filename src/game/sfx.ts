@@ -156,6 +156,14 @@ export const sfx = {
     }
   },
 
+  /** Bogensehne schnellt nach vorn, der Pfeil zischt los */
+  bowShot() {
+    const v = vary(0.08);
+    tone({ wave: "triangle", from: 260 * v, to: 140 * v, duration: 0.12, volume: 0.28 });
+    tone({ wave: "square", from: 520 * v, to: 300 * v, duration: 0.05, volume: 0.06 });
+    hiss({ filter: "bandpass", from: 2400 * v, to: 900 * v, duration: 0.18, volume: 0.14, q: 2, delay: 0.03, attack: 0.02 });
+  },
+
   /** Klingenschnitt */
   slash() {
     const v = vary(0.12);

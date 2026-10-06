@@ -128,6 +128,15 @@ export const ABILITIES: readonly AbilityDef[] = [
     description: "Ein Feuerball mit 1,7-fachem Schaden, der Rüstung ignoriert und den Gegner 2 Runden lang in Brand setzt.",
   },
   {
+    weapon: "bow",
+    name: "Pfeilhagel",
+    icon: "🏹",
+    manaCost: 35,
+    multiplier: 0.5,
+    hits: 4,
+    description: "Vier Pfeile regnen auf den Gegner herab – jeder kann kritisch treffen.",
+  },
+  {
     weapon: "shield",
     name: "Bollwerk",
     icon: "🛡️",

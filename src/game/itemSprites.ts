@@ -628,6 +628,57 @@ const ICONS: Record<ItemType, readonly IconShape[]> = {
       "...t...",
     ]),
   ],
+  // Bögen: Sehne (w) links, Wurfarme gekrümmt nach rechts, Griff in der Mitte
+  bow: [
+    { // Bogen
+      grid: [
+        "....wLm.....",
+        "....w.mD....",
+        "....w..mD...",
+        "....w...mD..",
+        "....w...hH..",
+        "....w...jH..",
+        "....w...hH..",
+        "....w...mD..",
+        "....w..mD...",
+        "....w.mD....",
+        "....wLm.....",
+        "............",
+      ],
+    },
+    { // Langbogen
+      grid: [
+        "....wL......",
+        "....w.mD....",
+        "....w..mD...",
+        "....w..mD...",
+        "....w...hH..",
+        "....w...jH..",
+        "....w...hH..",
+        "....w..mD...",
+        "....w..mD...",
+        "....w..mD...",
+        "....w.mD....",
+        "....wL......",
+      ],
+    },
+    { // Kurzbogen (Reflexbogen mit zurückgebogenen Enden)
+      grid: [
+        "............",
+        "...Lw.......",
+        "....wm......",
+        "....w.mD....",
+        "....w..hH...",
+        "....w..jH...",
+        "....w..hH...",
+        "....w.mD....",
+        "....wm......",
+        "...Lw.......",
+        "............",
+        "............",
+      ],
+    },
+  ],
 };
 
 // --- Boss-Items --------------------------------------------------------------
@@ -1180,6 +1231,116 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       ],
     },
   },
+
+  // Je eine dritte Waffe pro Gebietsboss
+  "boss-goblin-chief-bow": {
+    // Knochenbogen mit grünen Wicklungen
+    palette: bossPalette("#e8dcc0", "#a89a78", "#6b5a40", "#7fbf4a", "#e04848", "#8d6e4a", "#4b3524"),
+    icon: {
+      grid: [
+        "...tL.......",
+        "...w.mm.....",
+        "...w..mD....",
+        "...w..tD....",
+        "...w...hH...",
+        "...w...jH...",
+        "...w...hH...",
+        "...w..tD....",
+        "...w..mD....",
+        "...w.mm.....",
+        "...tL.......",
+        "............",
+      ],
+    },
+    worn: ["tL..", "w.m.", "w.mD", "w.tD", "w..h", "w..j", "G..h", "w.tD", "w.mD", "w.m.", "tL.."],
+  },
+  "boss-ancient-lizard-dagger": {
+    // Ein Giftzahn als Klinge
+    palette: bossPalette("#a8d08a", "#5f8f45", "#2f4f2a", "#f5f2ea", "#7dd3a8", "#5c3a1c", "#3e2612"),
+    icon: weaponShape(2, ["..w..", "..wL.", ".wwL.", ".wLm.", ".LmD.", "tLjDt", ".ttt.", "..h..", "..H..", "..t.."]),
+    worn: ["..w", ".wL", "wLm", "LmD", "tjt", ".G.", ".h.", ".t."],
+  },
+  "boss-cave-eye-shield": {
+    // Kristallspiegel mit dem Auge in der Mitte
+    palette: bossPalette("#e6d9ff", "#a07ae0", "#5a3d8c", "#6ff2ff", "#ff4d6d", "#3d3a5c", "#25223d"),
+    icon: {
+      grid: [
+        "............",
+        "....tttt....",
+        "..ttLmmDtt..",
+        ".tLmmmmmmDt.",
+        ".tLmwjjwmDt.",
+        ".tLmjkkjmDt.",
+        ".tLmjkkjmDt.",
+        ".tLmwjjwmDt.",
+        ".tLmmmmmmDt.",
+        "..ttLmmDtt..",
+        "....tttt....",
+        "............",
+      ],
+    },
+    worn: [".ttt.", "tLjDt", "tjkjt", "tLjDt", ".ttt."],
+  },
+  "boss-primal-mammoth-bow": {
+    // Elfenbein mit Frostkristallen an den Enden
+    palette: bossPalette("#fffaf0", "#efe6d2", "#b8a98a", "#9ad9f0", "#4fb0e8", "#6b5a4a", "#4a3e33"),
+    icon: {
+      grid: [
+        "..jL........",
+        "...wLm......",
+        "...w.mD.....",
+        "...w..mD....",
+        "...w...hH...",
+        "...w...jH...",
+        "...w...hH...",
+        "...w..mD....",
+        "...w.mD.....",
+        "...wLm......",
+        "..jL........",
+        "............",
+      ],
+    },
+    worn: ["jL...", ".wLm.", ".w.mD", ".w..m", ".w..h", ".w..j", ".G..h", ".w..m", ".w.mD", ".wLm.", "jL..."],
+  },
+  "boss-lich-king-greathammer": {
+    // Grabstein als Hammerkopf, Totenkopf-Zierde
+    palette: bossPalette("#8f7cad", "#4f4266", "#251d33", "#b4f5c8", "#7dd3a8", "#4f4266", "#251d33"),
+    icon: weaponShape(3, [
+      "...j...",
+      ".LmmmD.",
+      "LmktkmD",
+      "LmmmmmD",
+      ".DDhDD.",
+      "...h...",
+      "...t...",
+      "...h...",
+      "...H...",
+      "...h...",
+      "...t...",
+      "...h...",
+      "...j...",
+    ]),
+    worn: ["LmmmD", "LktkD", "LmmmD", ".DhD.", "..h..", "..t..", "..h..", "..G..", "..h..", "..t..", "..j.."],
+  },
+  "boss-ignaroth-mace": {
+    // Glühender Morgenstern
+    palette: bossPalette("#ffe28f", "#f08a2c", "#a3361e", "#f4c95d", "#ff5a3c", "#621a22", "#3a0f14"),
+    icon: weaponShape(3, [
+      "...j...",
+      ".t.t.t.",
+      "..LmD..",
+      "tLmjmDt",
+      "..LmD..",
+      ".t.t.t.",
+      "...D...",
+      "...h...",
+      "...H...",
+      "...h...",
+      "...H...",
+      "...t...",
+    ]),
+    worn: ["t.t.t", ".LmD.", "tLjDt", ".LmD.", "t.t.t", "..h..", "..G..", "..h..", "..t.."],
+  },
 };
 
 // --- Dungeon-Sets ------------------------------------------------------------
@@ -1487,7 +1648,10 @@ export function getItemSprite(def: ItemDef): SpriteDef {
 
 // --- Am Helden getragene Ausrüstung -----------------------------------------
 
-/** Waffen in der Hand des Helden, aufrecht. `G` liegt unter der Hand. */
+/**
+ * Waffen in der Hand des Helden, aufrecht. `G` liegt unter der Hand.
+ * Bei Bögen hält die Hand die Sehne (wie beim Spannen); die Wölbung zeigt nach vorn zum Gegner.
+ */
 const WORN_WEAPONS: Record<Exclude<WeaponType, "shield">, readonly string[]> = {
   dagger: [".L.", ".Lm", ".Lm", "tjt", ".G.", ".h.", ".t."],
   sword: [".L.", ".Lm", ".Lm", ".Lm", ".Lm", ".LD", "tjt", ".G.", ".h.", ".t."],
@@ -1498,6 +1662,7 @@ const WORN_WEAPONS: Record<Exclude<WeaponType, "shield">, readonly string[]> = {
   scepter: [".j.", "tmt", ".m.", ".m.", ".G.", ".m.", ".t."],
   mace: [".t.", "LmD", "LjD", "LmD", ".h.", ".h.", ".G.", ".h.", ".t."],
   greathammer: ["LmmmD", "LmjmD", "LmmmD", "..h..", "..h..", "..h..", "..h..", "..G..", "..h..", "..h..", "..t.."],
+  bow: ["wL..", "w.m.", "w.mD", "w..m", "w..m", "w..h", "G..j", "w..h", "w.mD", "w.m.", "wL.."],
 };
 
 /** Schilde vor der Hand, eine Form pro Namensform. */

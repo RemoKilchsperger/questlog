@@ -248,15 +248,24 @@ describe("Belohnung", () => {
 describe("Boss-Items", () => {
   const bosses = AREAS.map((a) => a.creatures.find((c) => c.boss)!);
 
-  it("jeder Boss hat 2 Waffen, einen Helm und eine Brustrüstung", () => {
+  it("jeder Gebietsboss hat 3 Waffen, einen Helm und eine Brustrüstung", () => {
     for (const boss of bosses) {
       const items = getBossItems(boss.id);
-      expect(items.filter((i) => i.kind === "weapon" && i.type !== "shield"), boss.id).toHaveLength(2);
+      expect(items.filter((i) => i.kind === "weapon"), boss.id).toHaveLength(3);
       expect(items.filter((i) => i.type === "head"), boss.id).toHaveLength(1);
       expect(items.filter((i) => i.type === "chest"), boss.id).toHaveLength(1);
       expect(items.every((i) => i.requiredLevel === boss.level)).toBe(true);
     }
-    expect(BOSS_ITEMS).toHaveLength(24 + 4 * 7);
+    expect(BOSS_ITEMS).toHaveLength(6 * 5 + 4 * 7);
+  });
+
+  it("Boss-Waffen verteilen sich gleichmässig: jeder Waffentyp zwei- bis dreimal", () => {
+    const counts = new Map<string, number>();
+    for (const item of BOSS_ITEMS.filter((i) => i.kind === "weapon")) counts.set(item.type, (counts.get(item.type) ?? 0) + 1);
+    for (const { type } of ITEM_TYPES.filter((t) => t.kind === "weapon")) {
+      expect(counts.get(type) ?? 0, type).toBeGreaterThanOrEqual(2);
+      expect(counts.get(type) ?? 0, type).toBeLessThanOrEqual(3);
+    }
   });
 
   it("Dungeon-Bosse haben 2 Waffen und ein komplettes Rüstungsset; Dolch und Schild sind abgedeckt", () => {

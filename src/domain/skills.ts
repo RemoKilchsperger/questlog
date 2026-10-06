@@ -36,6 +36,7 @@ export const SKILL_TREE: readonly SkillNode[] = [
   { weapon: "greathammer" },
   { weapon: "scepter" },
   { weapon: "staff" },
+  { weapon: "bow" },
   { weapon: "shield" },
 ];
 

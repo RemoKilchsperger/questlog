@@ -60,7 +60,7 @@ describe("Skilltree", () => {
   });
 
   it("Zweihandwaffen sind unabhängig von ihrer Einhand-Variante", () => {
-    for (const weapon of ["greatsword", "greataxe", "greathammer", "staff"] as const) {
+    for (const weapon of ["greatsword", "greataxe", "greathammer", "staff", "bow"] as const) {
       expect(skillBlocker(heroAt(20), weapon), weapon).toBeNull();
       expect(skillRank(learnTimes(heroAt(20), weapon, MAX_SKILL_RANK), weapon)).toBe(MAX_SKILL_RANK);
     }

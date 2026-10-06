@@ -39,7 +39,7 @@ const rng = (value: number) => () => value;
 describe("Fähigkeiten", () => {
   it("jede Waffe inklusive Schild hat genau eine Fähigkeit", () => {
     expect(ABILITIES.map((a) => a.weapon).sort()).toEqual(
-      ["axe", "dagger", "greataxe", "greathammer", "greatsword", "mace", "scepter", "shield", "staff", "sword"].sort(),
+      ["axe", "bow", "dagger", "greataxe", "greathammer", "greatsword", "mace", "scepter", "shield", "staff", "sword"].sort(),
     );
   });
 
@@ -89,6 +89,11 @@ describe("Fähigkeiten", () => {
       };
       expect(damage(weapon), weapon).toBeGreaterThan(damage() * 1.7);
     }
+  });
+
+  it("Pfeilhagel schiesst vier Pfeile", () => {
+    const { events } = attackRound(battleWith(withWeapons("bow-30")), rng(0.5), "bow");
+    expect(events.filter((e) => e.type === "hit" && e.attacker === "hero")).toHaveLength(4);
   });
 
   it("Betäubender Schlag verhindert den Gegenangriff", () => {

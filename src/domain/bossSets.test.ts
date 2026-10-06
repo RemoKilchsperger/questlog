@@ -59,7 +59,7 @@ describe("Boss-Sets", () => {
       attack: Math.round(sum("attack") * (1 + SET_GEAR_BONUS)),
       armor: Math.round(sum("armor") * (1 + SET_GEAR_BONUS)),
     });
-    expect(getActiveSets(equipment)[0]).toMatchObject({ pieces: 3, total: 4, statBonus: true, gearBonus: true });
+    expect(getActiveSets(equipment)[0]).toMatchObject({ pieces: 3, total: 5, statBonus: true, gearBonus: true });
   });
 
   it("Teile verschiedener Bosse zählen nicht zusammen", () => {
