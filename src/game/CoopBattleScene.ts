@@ -243,7 +243,9 @@ export class CoopBattleScene extends Phaser.Scene {
     for (const event of events) {
       if (event.type === "bossAbility") aoe = getCoopBoss(next.bossId).ability.aoe === true;
       this.time.delayedCall(delay, () => this.animate(event));
-      const quick = aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked");
+      const quick =
+        (aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked" || event.type === "manaBurn")) ||
+        event.type === "drain";
       delay +=
         event.type === "victory" || event.type === "wipe"
           ? 900
@@ -333,6 +335,33 @@ export class CoopBattleScene extends Phaser.Scene {
         this.tweens.add({ targets: this.boss.body, alpha: 0, scale: this.boss.body.scale * 0.6, y: this.boss.body.y + 20, duration: 600 });
         this.time.delayedCall(250, () => sfx.victory());
         this.showBanner("SIEG!", "#f4c95d", false);
+        break;
+      case "frozen": {
+        const hero = this.unit(event.heroId);
+        this.float(hero, "EINGEFROREN", "#9ad9f0", 16, 30);
+        this.tint(hero, 0x9ad9f0, 900);
+        fx.burst(this, this.center(hero), 0xe8fbff, 14, 40);
+        sfx.block();
+        break;
+      }
+      case "skipped": {
+        const hero = this.unit(event.heroId);
+        this.float(hero, "❄️ setzt aus", "#9ad9f0", 14, 30);
+        fx.burst(this, this.center(hero), 0x9ad9f0, 8, 30);
+        break;
+      }
+      case "manaBurn": {
+        const hero = this.unit(event.heroId);
+        fx.siphon(this, this.center(hero), this.center(this.boss), 0x7aa7f0, 8);
+        this.float(hero, `-${event.amount} Mana`, "#7aa7f0", 14, 15);
+        sfx.manaBurn();
+        break;
+      }
+      case "drain":
+        this.setHp(this.boss, this.boss.hp + event.heal);
+        this.float(this.boss, `+${event.heal}`, "#b07cff", 20, 40);
+        this.tint(this.boss, 0xd39bf0, 300);
+        sfx.drain();
         break;
       case "wipe":
         music.stop(this, 0.3);

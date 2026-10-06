@@ -170,6 +170,8 @@ interface BossItemSpec {
   name: string;
   /** Dungeon-Beute (stärker als die der Gebietsbosse) */
   dungeon?: boolean;
+  /** Raid-Beute der Koop-Bosse (noch etwas stärker als Dungeon-Beute) */
+  raid?: boolean;
 }
 
 /**
@@ -246,10 +248,43 @@ const BOSS_ITEM_SPECS: readonly BossItemSpec[] = [
     ["legs", "Beinschienen der Leere"],
     ["feet", "Schreiter der Leere"],
   ]),
+
+  // Raid-Sets der Koop-Bosse (coopCombat.ts): je 2 Waffen und ein komplettes Rüstungsset
+  ...raidSet("swamp-hydra", 20, [
+    ["scepter", "Giftzahnzepter"],
+    ["axe", "Hydrabeil"],
+    ["head", "Dreikopfhelm"],
+    ["chest", "Hydraschuppenpanzer"],
+    ["arms", "Schuppenhandschuhe der Hydra"],
+    ["legs", "Sumpfbeinschienen"],
+    ["feet", "Sumpfstiefel der Hydra"],
+  ]),
+  ...raidSet("frost-giant", 40, [
+    ["greataxe", "Frostspalter"],
+    ["bow", "Eiszapfenbogen"],
+    ["head", "Krone des Frostriesen"],
+    ["chest", "Gletscherharnisch"],
+    ["arms", "Frostfäuste"],
+    ["legs", "Eisbeinschienen"],
+    ["feet", "Gletscherstiefel"],
+  ]),
+  ...raidSet("world-eater", 60, [
+    ["greatsword", "Klinge des Weltenendes"],
+    ["staff", "Stab des Verschlingers"],
+    ["head", "Krone des Verschlingers"],
+    ["chest", "Panzer des Weltenendes"],
+    ["arms", "Klauen des Verschlingers"],
+    ["legs", "Beinschienen des Weltenendes"],
+    ["feet", "Schreiter des Weltenendes"],
+  ]),
 ];
 
 function dungeonSet(bossId: string, level: number, items: [ItemType, string][]): BossItemSpec[] {
   return items.map(([type, name]) => ({ bossId, level, type, name, dungeon: true }));
+}
+
+function raidSet(bossId: string, level: number, items: [ItemType, string][]): BossItemSpec[] {
+  return items.map(([type, name]) => ({ bossId, level, type, name, raid: true }));
 }
 
 /** Boss-Waffen übertreffen das stärkste Katalog-Item gleichen Typs und Levels deutlich, Rüstung etwas. */
@@ -258,13 +293,16 @@ export const BOSS_ARMOR_FACTOR = 1.2;
 /** Dungeon-Beute ist noch etwas stärker – Dungeons sind schwerer. */
 export const DUNGEON_WEAPON_FACTOR = 1.45;
 export const DUNGEON_ARMOR_FACTOR = 1.3;
+/** Raid-Beute der Koop-Bosse – die stärkste Beute im Spiel. */
+export const RAID_WEAPON_FACTOR = 1.55;
+export const RAID_ARMOR_FACTOR = 1.4;
 
 function buildBossItem(spec: BossItemSpec): ItemDef {
   const info = getItemType(spec.type);
   const peers = ITEMS.filter((i) => i.type === spec.type && i.requiredLevel === spec.level);
   const best = (key: "attack" | "armor") => Math.max(...peers.map((i) => i[key]));
-  const weaponFactor = spec.dungeon ? DUNGEON_WEAPON_FACTOR : BOSS_WEAPON_FACTOR;
-  const armorFactor = spec.dungeon ? DUNGEON_ARMOR_FACTOR : BOSS_ARMOR_FACTOR;
+  const weaponFactor = spec.raid ? RAID_WEAPON_FACTOR : spec.dungeon ? DUNGEON_WEAPON_FACTOR : BOSS_WEAPON_FACTOR;
+  const armorFactor = spec.raid ? RAID_ARMOR_FACTOR : spec.dungeon ? DUNGEON_ARMOR_FACTOR : BOSS_ARMOR_FACTOR;
   const attack = info.baseAttack > 0 ? Math.round(best("attack") * weaponFactor) : 0;
   const armorValue = info.baseArmor > 0 ? Math.round(best("armor") * armorFactor) : 0;
   return {
@@ -285,7 +323,7 @@ function buildBossItem(spec: BossItemSpec): ItemDef {
 /** Einzigartige Boss-Items – nicht Teil von ITEMS, damit Händler und Quests sie nie anbieten. */
 export const BOSS_ITEMS: readonly ItemDef[] = BOSS_ITEM_SPECS.map(buildBossItem);
 
-/** Die Boss-Items eines Bosses: 5 bei Gebietsbossen, 7 bei Dungeon-Bossen, leer bei normalen Kreaturen. */
+/** Die Boss-Items eines Bosses: 5 bei Gebietsbossen, 7 bei Dungeon- und Koop-Bossen, leer bei normalen Kreaturen. */
 export function getBossItems(bossId: string): ItemDef[] {
   return BOSS_ITEMS.filter((i) => i.bossId === bossId);
 }

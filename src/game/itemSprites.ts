@@ -1586,6 +1586,158 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
 
 Object.assign(BOSS_LOOKS, DUNGEON_LOOKS);
 
+// --- Raid-Sets der Koop-Bosse ------------------------------------------------
+// Aufbau wie die Dungeon-Sets: Waffen und Helm mit eigener Form, die übrigen
+// Rüstungsteile in Standardform und Set-Farben.
+
+const HYDRA_SET = bossPalette("#b4e0a0", "#3f7a52", "#1f3a28", "#c9b458", "#7dd3a8", "#5c3a1c", "#3e2612");
+const FROST_SET = bossPalette("#f2fdff", "#8ac8e8", "#3a6a98", "#ffffff", "#4af0ff", "#5a6a7a", "#3a4452");
+const WORLD_SET = bossPalette("#e0a0ff", "#7a2a8a", "#2a0e3a", "#ffd27a", "#ff4d6d", "#2a0e3a", "#140818");
+
+const RAID_LOOKS: Record<string, BossLook> = {
+  // Sumpfhydra: Schuppengrün, Giftzähne
+  "boss-swamp-hydra-scepter": {
+    palette: HYDRA_SET,
+    icon: weaponShape(2, [".j.j.", "jmjmj", ".LmD.", "..m..", "..t..", "..m..", "..m..", "..H..", "..m..", "..t..", "..j.."]),
+    worn: [".jmj.", "jLmDj", "..m..", "..t..", "..G..", "..m..", "..j.."],
+  },
+  "boss-swamp-hydra-axe": {
+    palette: HYDRA_SET,
+    icon: weaponShape(1, [
+      ".t.....",
+      ".hmmL..",
+      ".hmjmL.",
+      ".hmmmmL",
+      ".hmjmL.",
+      ".hmmL..",
+      ".h.....",
+      ".h.....",
+      ".H.....",
+      ".h.....",
+      ".t.....",
+    ]),
+    worn: [".t...", ".hmmL", ".hjmL", ".hmmD", ".h...", ".G...", ".h...", ".t..."],
+  },
+  "boss-swamp-hydra-head": {
+    palette: HYDRA_SET,
+    icon: {
+      grid: [
+        "............",
+        ".j...j...j..",
+        ".m...m...m..",
+        ".mm.mmm.mm..",
+        "..LmmmmmmD..",
+        "..LmmmmmmD..",
+        "..tttttttt..",
+        "..LkkmmkkD..",
+        "..LmmmmmmD..",
+        "...DDDDDD...",
+        "............",
+        "............",
+      ],
+    },
+    worn: [".j...j...j..", ".mm.mmm.mm..", "..LmmmmmmD..", "..LmmmmmmD..", "..tttttttt..", "..mm....mm.."],
+  },
+  ...dungeonArmor("swamp-hydra", HYDRA_SET, { chest: 2, arms: 0, legs: 1, feet: 1 }),
+
+  // Frostriese: Gletschereis, Eiszapfen
+  "boss-frost-giant-greataxe": {
+    palette: FROST_SET,
+    icon: weaponShape(4, [
+      "....j....",
+      "..LmhmL..",
+      ".LmmhmmL.",
+      "LmmmhmmmL",
+      "wLmmhmmLw",
+      ".LmmhmmL.",
+      "..LmhmL..",
+      "....h....",
+      "....h....",
+      "....H....",
+      "....h....",
+      "....h....",
+      "....t....",
+    ]),
+    worn: ["..j..", "LmhmL", "wmhmw", "LmhmL", "..h..", "..h..", "..h..", "..G..", "..h..", "..t.."],
+  },
+  "boss-frost-giant-bow": {
+    palette: FROST_SET,
+    icon: {
+      grid: [
+        "...wL.......",
+        "...w.mj.....",
+        "...w..mD....",
+        "...w..mD....",
+        "...w...hH...",
+        "...w...jH...",
+        "...w...hH...",
+        "...w..mD....",
+        "...w..mD....",
+        "...w.mj.....",
+        "...wL.......",
+        "............",
+      ],
+    },
+    worn: ["wL..", "w.mj", "w.mD", "w.mD", "w..h", "w..j", "G..h", "w.mD", "w.mD", "w.mj", "wL.."],
+  },
+  "boss-frost-giant-head": {
+    palette: FROST_SET,
+    icon: {
+      grid: [
+        "............",
+        "..j.j..j.j..",
+        "..L.LmmD.D..",
+        "..LmLmmDmD..",
+        "..LmmmmmmD..",
+        "..tttttttt..",
+        "..LmmmmmmD..",
+        "..LkmmmmkD..",
+        "...DDDDDD...",
+        "............",
+        "............",
+        "............",
+      ],
+    },
+    worn: ["..j.j..j.j..", "..LmLmmDmD..", "..LmmmmmmD..", "..tttttttt..", "..mm....mm.."],
+  },
+  ...dungeonArmor("frost-giant", FROST_SET, { chest: 0, arms: 2, legs: 1, feet: 0 }),
+
+  // Weltenverschlinger: Leerenviolett mit Gold und rotem Schlund
+  "boss-world-eater-greatsword": {
+    palette: WORLD_SET,
+    icon: weaponShape(2, ["..j..", ".LmD.", ".LkD.", ".LmD.", ".LkD.", ".LmD.", ".LkD.", "ttjtt", "..h..", "..H..", "..j.."]),
+    worn: ["..j..", ".LmD.", ".LkD.", ".LmD.", ".LkD.", "ttjtt", "..G..", "..h..", "..j.."],
+  },
+  "boss-world-eater-staff": {
+    palette: WORLD_SET,
+    icon: weaponShape(2, [".j.j.", "j.k.j", ".jkj.", "..m..", "..D..", "..m..", "..D..", "..m..", "..D..", "..m..", "..j.."]),
+    worn: [".j.j.", "j.k.j", ".jkj.", "..m..", "..D..", "..m..", "..G..", "..m..", "..j.."],
+  },
+  "boss-world-eater-head": {
+    palette: WORLD_SET,
+    icon: {
+      grid: [
+        "............",
+        ".t..t..t..t.",
+        ".tt.tttt.tt.",
+        "..LmmmmmmD..",
+        "..LmjmmjmD..",
+        "..LmmmmmmD..",
+        "..tttttttt..",
+        "..LkkmmkkD..",
+        "..LmmmmmmD..",
+        "...DDDDDD...",
+        "............",
+        "............",
+      ],
+    },
+    worn: [".t..t..t..t.", ".tt.tttt.tt.", "..LmjmmjmD..", "..LmmmmmmD..", "..tttttttt..", "..mm....mm.."],
+  },
+  ...dungeonArmor("world-eater", WORLD_SET, { chest: 2, arms: 1, legs: 0, feet: 1 }),
+};
+
+Object.assign(BOSS_LOOKS, RAID_LOOKS);
+
 /** Kleinste Kantenlänge eines Symbols – kleine Items (Dolch, Schuhe) wirken dadurch auch kleiner. */
 const ICON_SIZE = 12;
 

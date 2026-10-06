@@ -50,6 +50,18 @@ describe("Öffentliches Profil", () => {
     expect(Object.values(profile.snapshot.stats).reduce((a, b) => a + b, 0)).toBeGreaterThan(10);
   });
 
+  it("zeigt Koop-Erfolge – auch ohne bisherige Siege", () => {
+    expect(profile.snapshot.coop).toEqual({ wins: 0, bosses: [] });
+    const raider = buildPublicProfile({
+      character,
+      equipment,
+      quests,
+      bossCollection: [],
+      coopStats: { wins: 3, bosses: ["swamp-hydra"] },
+    });
+    expect(raider.snapshot.coop).toEqual({ wins: 3, bosses: ["swamp-hydra"] });
+  });
+
   it("verrät nichts über die Quests ausser ihrer Anzahl", () => {
     const json = JSON.stringify(profile);
     for (const q of quests) expect(json).not.toContain(q.title);

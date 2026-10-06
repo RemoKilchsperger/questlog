@@ -11,6 +11,7 @@ import {
   COOP_MAX_PLAYERS,
   COOP_MIN_PLAYERS,
   COOP_REWARD_FACTOR,
+  coopBossCreature,
   coopAbilityBlocker,
   coopAbilityDue,
   coopPotionBlocker,
@@ -23,6 +24,7 @@ import { getPotion, POTIONS, potionHeal } from "../domain/potions";
 import { getCreatureSprite } from "../game/creatureSprites";
 import { EventBus } from "../game/EventBus";
 import { useGameStore } from "../store/gameStore";
+import { BossDrops } from "./BattleScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DungeonChest } from "./DungeonChest";
 import { PixelAvatar } from "./PixelAvatar";
@@ -103,6 +105,7 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
                     <p className="text-xs text-danger">
                       {boss.ability.icon} {boss.ability.name}: {boss.ability.description}
                     </p>
+                    <BossDrops creature={coopBossCreature(boss)} />
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.92 }}
@@ -401,7 +404,7 @@ function TeamStatus({
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className={`num rounded-md px-2 py-0.5 ${seconds <= 5 ? "bg-danger/20 text-danger" : "bg-night-800 text-gold"}`}>⏱ {seconds}s</span>
       {battle.heroes.map((h) => {
-        const status = h.down ? "💀" : away.includes(h.id) ? "🚪" : chosen.includes(h.id) ? "✓" : "⏳";
+        const status = h.down ? "💀" : h.effects.frozen ? "❄️" : away.includes(h.id) ? "🚪" : chosen.includes(h.id) ? "✓" : "⏳";
         return (
           <span
             key={h.id}
@@ -433,6 +436,13 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
     return (
       <p className="rounded-md bg-night-800 p-3 text-sm text-muted">
         💀 Du bist gefallen{me.revived ? "" : " – ein Mitspieler kann dich mit einem Heiltrank wiederbeleben"}.
+      </p>
+    );
+  }
+  if (me.effects.frozen) {
+    return (
+      <p className="rounded-md bg-intellect/15 p-3 text-sm text-intellect">
+        ❄️ Du bist eingefroren und setzt diese Runde aus. Danach taust du wieder auf.
       </p>
     );
   }
@@ -591,6 +601,14 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${bossName} ist besiegt!`;
     case "wipe":
       return "Die ganze Gruppe ist gefallen.";
+    case "frozen":
+      return `${name(e.heroId)} ist eingefroren und setzt eine Runde aus.`;
+    case "skipped":
+      return `${name(e.heroId)} ist eingefroren und kann nicht handeln.`;
+    case "manaBurn":
+      return `${bossName} raubt ${name(e.heroId)} ${e.amount} Mana.`;
+    case "drain":
+      return `${bossName} heilt sich um ${e.heal} LP.`;
   }
 }
 

@@ -162,3 +162,36 @@ describe("Koop-Kampf: Beute", () => {
     expect(reward.xp).toBe(Math.round(solo * 1.5));
   });
 });
+
+describe("Koop-Kampf: Frostriese und Weltenverschlinger", () => {
+  const battleAgainst = (bossId: string, players = [player("a"), player("b")]) => {
+    const battle = startCoopBattle("k", bossId, players, 0);
+    return { ...battle, round: getCoopBoss(bossId).ability.every, boss: { ...battle.boss, hp: 999_999, maxHp: 999_999 } };
+  };
+
+  it("Gletscherstampfer friert einen Helden ein – er setzt die nächste Runde aus und taut dann auf", () => {
+    const { state, events } = resolveRound(battleAgainst("frost-giant"), {}, rng(0.5), 0);
+    const frozen = events.find((e) => e.type === "frozen");
+    expect(frozen).toBeDefined();
+    const id = frozen!.type === "frozen" ? frozen!.heroId : "";
+    expect(state.heroes.find((h) => h.id === id)!.effects.frozen).toBe(true);
+
+    const next = resolveRound(state, {}, rng(0.5), 0);
+    expect(next.events).toContainEqual({ type: "skipped", heroId: id });
+    expect(next.events.some((e) => e.type === "hit" && e.attacker === id)).toBe(false);
+    expect(next.state.heroes.find((h) => h.id === id)!.effects.frozen).toBeUndefined();
+  });
+
+  it("Leerenstrudel raubt allen Mana, normale Bisse heilen den Weltenverschlinger", () => {
+    const { state, events } = resolveRound(battleAgainst("world-eater"), {}, rng(0.5), 0);
+    expect(events.filter((e) => e.type === "manaBurn")).toHaveLength(2);
+    expect(state.heroes.every((h) => h.mana < h.maxMana)).toBe(true);
+
+    const hurt = { ...state, round: 1, boss: { ...state.boss, hp: 500_000 } };
+    const bite = resolveRound(hurt, {}, rng(0.5), 0);
+    const drain = bite.events.find((e) => e.type === "drain");
+    expect(drain).toBeDefined();
+    const bossHit = bite.events.find((e) => e.type === "hit" && e.attacker === BOSS);
+    expect(drain!.type === "drain" && bossHit!.type === "hit" && drain!.heal).toBe(Math.round((bossHit as { damage: number }).damage * 0.5));
+  });
+});

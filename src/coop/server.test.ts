@@ -138,3 +138,16 @@ describe("Koop-Server: Runden", () => {
     expect(getCoopBoss(next.boss_id).id).toBe("swamp-hydra");
   });
 });
+
+describe("Koop-Server: Eingefrorene", () => {
+  it("auf eingefrorene Helden wird nicht gewartet", () => {
+    const row = started();
+    const frozen = {
+      ...row,
+      state: { ...row.state!, heroes: row.state!.heroes.map((h) => (h.id === "b" ? { ...h, effects: { ...h.effects, frozen: true } } : h)) },
+    };
+    const next = run(frozen, { type: "act", round: 1, action: {} }, "a")!;
+    expect(next.state!.round).toBe(2);
+    expect(next.last_events).toContainEqual({ type: "skipped", heroId: "b" });
+  });
+});

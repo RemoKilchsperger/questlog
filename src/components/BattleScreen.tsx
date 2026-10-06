@@ -935,7 +935,7 @@ function LootCard({ loot, heading }: { loot: ItemStats; heading: string }) {
  * Mögliche Boss-Beute als kleine Symbole – wie in der Boss-Sammlung:
  * schon gefundene Stücke in Farbe mit Werten, unentdeckte nur als Schatten.
  */
-function BossDrops({ creature }: { creature: CreatureDef }) {
+export function BossDrops({ creature }: { creature: CreatureDef }) {
   const found = useGameStore((s) => s.bossCollection);
   const items = getBossItems(creature.id);
   if (items.length === 0) return null;

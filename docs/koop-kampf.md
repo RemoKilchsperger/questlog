@@ -3,7 +3,7 @@
 Mehrere Spieler kämpfen gemeinsam gegen einen Koop-Boss. Pro Runde handeln
 zuerst alle Spieler, danach greift der Boss an.
 
-Status: **Etappe 1 und 2 live.** Als Nächstes: Etappe 3.
+Status: **Etappe 1 und 2 live, Etappe 3 umgesetzt** (Branch `feature/koop-etappe-3`).
 Zahlen sind Startwerte und werden beim Testen abgestimmt.
 
 ---
@@ -247,10 +247,13 @@ Gegenüber dem Plan: Statt drei Functions gibt es eine (`coop`) mit Befehlen
    Nach jeder Änderung an der Spiellogik wiederholen.
 
 ### Etappe 3: Inhalt und Feinschliff
-- [ ] Weitere Koop-Bosse (Frostriese, Weltenverschlinger)
-- [ ] Raid-Sets als Koop-Beute
-- [ ] Feinabstimmung der Zahlen nach Testspielen
-- [ ] Koop-Erfolge in der Rangliste (optional)
+- [x] Weitere Koop-Bosse: Frostriese Hrimgar (Lv. 40, friert einen Helden ein), Weltenverschlinger
+      (Lv. 60, Manaraub, Lebensraub durch Bisse)
+- [x] Raid-Sets als Koop-Beute: je 7 Teile pro Koop-Boss, Werte ×1,55 (Waffen) bzw. ×1,4 (Rüstung),
+      Set-Boni wie bei Dungeons; jeder Waffentyp hat weiterhin 2–3 Boss-Waffen
+- [x] Koop-Erfolge im Profil (Siege, besiegte Koop-Bosse) – im Charakterbogen und auf der Profilseite
+- [ ] Edge Function neu deployen (`npm run functions:deploy`), dann mit zwei Konten testen
+- [ ] Feinabstimmung der Zahlen nach Testspielen („fordernd“: mit Teamwork gut machbar)
 
 ---
 

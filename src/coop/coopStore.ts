@@ -124,7 +124,7 @@ export const useCoopStore = create<CoopState>()((set, get) => {
       rewarded.add(next.state.id);
       if (next.state.status === "won") {
         const me = next.members.find((m) => m.id === myId);
-        const chest = me ? useGameStore.getState().grantCoopReward(rollCoopReward(next.boss_id, me.profile, crypto.randomUUID())) : null;
+        const chest = me ? useGameStore.getState().grantCoopReward(rollCoopReward(next.boss_id, me.profile, crypto.randomUUID()), next.boss_id) : null;
         result = { won: true, chest };
       } else {
         result = { won: false, chest: null };

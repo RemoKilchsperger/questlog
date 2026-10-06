@@ -8,6 +8,7 @@ import {
   setStatBonus,
 } from "./bossSets";
 import { EMPTY_EQUIPMENT, getCombatStats, getStatBonuses } from "./equipment";
+import { COOP_BOSSES } from "./coopCombat";
 import { AREAS, DUNGEONS } from "./creatures";
 import { createItem, getItemStats } from "./items";
 import type { Equipment } from "./types";
@@ -16,8 +17,8 @@ const own = (itemId: string) => createItem(itemId, "common", itemId);
 const goblin = (...types: string[]) => types.map((t) => own(`boss-goblin-chief-${t}`));
 
 describe("Boss-Sets", () => {
-  it("jeder Gebiets- und Dungeon-Boss hat ein Set", () => {
-    const bosses = [...AREAS, ...DUNGEONS].map((a) => a.creatures.find((c) => c.boss)!.id);
+  it("jeder Gebiets-, Dungeon- und Koop-Boss hat ein Set", () => {
+    const bosses = [...[...AREAS, ...DUNGEONS].map((a) => a.creatures.find((c) => c.boss)!.id), ...COOP_BOSSES.map((b) => b.id)];
     expect(BOSS_SETS.map((s) => s.bossId)).toEqual(bosses);
     expect(setStatBonus("goblin-chief")).toBe(5);
     expect(setStatBonus("ignaroth")).toBe(30);

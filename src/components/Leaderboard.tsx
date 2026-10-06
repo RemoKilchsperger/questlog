@@ -8,6 +8,7 @@ import { BOSS_ITEMS, getItemStats, SLOT_ICONS, SLOT_LABELS } from "../domain/ite
 import { STAT_LABELS } from "../domain/rewards";
 import type { EquipSlot, StatKey } from "../domain/types";
 import { BossCollection } from "./CharacterSheet";
+import { CoopRecord } from "./CoopRecord";
 import { ItemIcon } from "./ItemIcon";
 import { itemName } from "./itemUi";
 import { ItemTooltip } from "./ItemTooltip";
@@ -209,6 +210,7 @@ function ProfilePage({ username }: { username: string }) {
             </p>
             <BossCollection collection={snapshot.bossCollection} />
           </div>
+          <CoopRecord stats={snapshot.coop} />
         </div>
       </div>
     </div>

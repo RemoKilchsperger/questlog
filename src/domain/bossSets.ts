@@ -3,7 +3,7 @@
 // - Gebietsbosse (5 Teile: 3 Waffen, Helm, Brust): ab 2 Teilen Attributpunkte, ab
 //   3 Teilen mehr Angriff und Rüstung (mehr als 4 gleichzeitig geht nie, wegen der
 //   Zweihänder oft nur 3).
-// - Dungeon-Bosse (7 Teile, komplettes Rüstungsset): ab 2 Teilen Attributpunkte,
+// - Dungeon- und Koop-Bosse (7 Teile, komplettes Rüstungsset): ab 2 Teilen Attributpunkte,
 //   ab 4 Teilen mehr Angriff und Rüstung, ab 6 Teilen mehr Lebenspunkte.
 
 import { getBossItems, getItem } from "./items";
@@ -54,6 +54,10 @@ export const BOSS_SETS: readonly BossSet[] = [
   { bossId: "high-priestess", name: "Segen der Sonnenpriesterin", stat: "intellect", tiers: DUNGEON_TIERS },
   { bossId: "storm-lord", name: "Zorn des Sturmfürsten", stat: "strength", tiers: DUNGEON_TIERS },
   { bossId: "void-lord", name: "Vermächtnis des Abgrunds", stat: "endurance", tiers: DUNGEON_TIERS },
+  // Raid-Sets der Koop-Bosse
+  { bossId: "swamp-hydra", name: "Panzer der Sumpfhydra", stat: "endurance", tiers: DUNGEON_TIERS },
+  { bossId: "frost-giant", name: "Rüstung des Frostriesen", stat: "strength", tiers: DUNGEON_TIERS },
+  { bossId: "world-eater", name: "Erbe des Weltenendes", stat: "intellect", tiers: DUNGEON_TIERS },
 ];
 
 export function getBossSet(bossId: string): BossSet {

@@ -764,6 +764,46 @@ const HYDRA = [
   "................",
 ];
 
+/** Koop-Boss Frostriese Hrimgar: Eiskrone, Frostbart, gewaltige Fäuste */
+const FROST_GIANT = [
+  "....4.4.4.......",
+  "....44444.......",
+  "...1111111......",
+  "...1e11e11......",
+  "...1111111......",
+  "...3333333......",
+  "..113333311.....",
+  ".1111111111.....",
+  "11.1111111.11...",
+  "22.1122211.22...",
+  "22.1111111.22...",
+  "...1111111......",
+  "...11...11......",
+  "...11...11......",
+  "..222...222.....",
+  "................",
+];
+
+/** Koop-Boss Weltenverschlinger: aufgerissener Schlund mit Zähnen, Augen und Tentakeln */
+const WORLD_EATER = [
+  "..2..........2..",
+  "...2..1111..2...",
+  "....21111112....",
+  "...1e111111e1...",
+  "..111111111111..",
+  ".11wkwkwkwkw11..",
+  ".11k3333333k11..",
+  ".11k3333333k11..",
+  ".11wkwkwkwkw11..",
+  "..111111111111..",
+  "...1111111111...",
+  "..2.11111111.2..",
+  ".2...2.11.2...2.",
+  "2...2..22..2...2",
+  "...2...2.2..2...",
+  "................",
+];
+
 /** Erzkönig Grimmbart: Zwergenkönig mit Krone, rotem Bart und Spitzhacke */
 const ORE_KING = [
   "....5.5.5.......",
@@ -991,6 +1031,8 @@ export const CREATURE_SPRITES: Readonly<Record<string, SpriteDef>> = {
   "void-lord": { grid: VOID_LORD, palette: { "1": "#2a1a40", "2": "#5a2a8a", "3": "#7a1a5a", e: "#4af0ff" } },
   // Koop-Bosse
   hydra: { grid: HYDRA, palette: { "1": "#3f6b4a", "2": "#2a4632", "3": "#a8b45a", e: "#f4e27a" } },
+  "frost-giant": { grid: FROST_GIANT, palette: { "1": "#9ad9f0", "2": "#3a7aa8", "3": "#f2fdff", "4": "#4af0ff", e: "#1b3a5a" } },
+  "world-eater": { grid: WORLD_EATER, palette: { "1": "#4a2a6a", "2": "#7a2a8a", "3": "#ff4d6d", e: "#4af0ff" } },
 };
 
 export function getCreatureSprite(key: string): SpriteDef {

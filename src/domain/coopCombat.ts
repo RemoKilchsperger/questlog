@@ -54,6 +54,10 @@ export interface CoopBossAbility {
   aoe?: boolean;
   ignoreArmor?: boolean;
   poison?: { percent: number; rounds: number };
+  /** Raubt jedem getroffenen Helden so viel Mana */
+  manaBurn?: number;
+  /** Friert einen Helden ein (meist den mit der höchsten Bedrohung): Er setzt die nächste Runde aus. */
+  freeze?: boolean;
 }
 
 export interface CoopBossDef {
@@ -68,8 +72,11 @@ export interface CoopBossDef {
   /** Stärke für 2 Spieler – mehr Spieler skalieren nach oben (siehe `coopBossStats`) */
   power: number;
   ability: CoopBossAbility;
+  /** Normale Angriffe heilen den Boss um diesen Anteil des Schadens */
+  lifesteal?: number;
 }
 
+/** Koop-Bosse, aufsteigend nach Level – jeder mit eigenem Raid-Set (items.ts). */
 export const COOP_BOSSES: readonly CoopBossDef[] = [
   {
     id: "swamp-hydra",
@@ -87,6 +94,44 @@ export const COOP_BOSSES: readonly CoopBossDef[] = [
       multiplier: 0.7,
       aoe: true,
       poison: { percent: 0.25, rounds: 3 },
+    },
+  },
+  {
+    id: "frost-giant",
+    name: "Frostriese Hrimgar",
+    description: "Ein Riese aus Gletschereis. Wer ihm zu nahe kommt, erstarrt.",
+    level: 40,
+    sprite: "frost-giant",
+    areaId: "frost-peaks",
+    power: 2,
+    ability: {
+      name: "Gletscherstampfer",
+      icon: "❄️",
+      description: "Alle 3 Runden: Erschütterung auf alle Helden – einer friert ein und setzt eine Runde aus.",
+      every: 3,
+      multiplier: 0.8,
+      aoe: true,
+      freeze: true,
+    },
+  },
+  {
+    id: "world-eater",
+    name: "Weltenverschlinger",
+    description: "Ein Schlund aus der Leere. Jeder Biss nährt ihn.",
+    level: 60,
+    sprite: "world-eater",
+    areaId: "void-abyss",
+    power: 2.1,
+    lifesteal: 0.5,
+    ability: {
+      name: "Leerenstrudel",
+      icon: "🌀",
+      description: "Alle 3 Runden: zieht alle Helden in den Strudel (ignoriert Rüstung) und raubt je 30 Mana. Seine Bisse heilen ihn.",
+      every: 3,
+      multiplier: 0.9,
+      aoe: true,
+      ignoreArmor: true,
+      manaBurn: 30,
     },
   },
 ];
@@ -137,7 +182,11 @@ export interface CoopHero {
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
   /** Sorten, die in diesem Kampf schon getrunken wurden – jede nur einmal pro Kampf. */
   potionsUsed: string[];
-  effects: Partial<Record<OverTimeKind, DamageOverTime>> & { bulwark?: boolean };
+  effects: Partial<Record<OverTimeKind, DamageOverTime>> & {
+    bulwark?: boolean;
+    /** Eingefroren: setzt die nächste Runde aus */
+    frozen?: boolean;
+  };
   threat: number;
   /** Auf 0 LP gefallen – handelt nicht und wird nicht angegriffen */
   down: boolean;
@@ -156,7 +205,13 @@ export type CoopEvent =
   | { type: "blocked"; heroId: string }
   | { type: "down"; heroId: string }
   | { type: "victory" }
-  | { type: "wipe" };
+  | { type: "wipe" }
+  /** Ein Held wurde eingefroren bzw. setzt eingefroren aus */
+  | { type: "frozen"; heroId: string }
+  | { type: "skipped"; heroId: string }
+  /** Der Boss raubt einem Helden Mana bzw. heilt sich durch seinen Biss */
+  | { type: "manaBurn"; heroId: string; amount: number }
+  | { type: "drain"; heal: number };
 
 export type CoopStatus = "active" | "won" | "lost";
 
@@ -309,6 +364,12 @@ export function resolveRound(
   // 1. Die Helden handeln der Reihe nach.
   for (const hero of heroes) {
     if (hero.down || boss.hp <= 0) continue;
+    if (hero.effects.frozen) {
+      // Eingefroren: diese Runde keine Aktion, danach taut der Held auf
+      hero.effects.frozen = undefined;
+      events.push({ type: "skipped", heroId: hero.id });
+      continue;
+    }
     const action = actions[hero.id] ?? {};
 
     if (action.potion && !coopPotionBlocker({ ...state, heroes }, hero.id, action.potion.potionId, action.potion.targetId)) {
@@ -427,7 +488,25 @@ export function resolveRound(
           const damage = Math.max(1, Math.round(boss.damage * special.poison.percent));
           target.effects.poison = { damage, roundsLeft: special.poison.rounds };
         }
+        if (special?.manaBurn && target.combatant.hp > 0) {
+          const amount = Math.min(target.mana, special.manaBurn);
+          target.mana -= amount;
+          if (amount > 0) events.push({ type: "manaBurn", heroId: target.id, amount });
+        }
+        if (!special && def.lifesteal) {
+          // Lebensraub: normale Bisse heilen den Boss
+          const heal = Math.min(boss.maxHp - boss.hp, Math.round(hit.damage * def.lifesteal));
+          boss.hp += heal;
+          if (heal > 0) events.push({ type: "drain", heal });
+        }
         knockDown(target);
+      }
+      if (special?.freeze) {
+        const frozen = pickBossTarget(heroes, rng);
+        if (frozen) {
+          frozen.effects.frozen = true;
+          events.push({ type: "frozen", heroId: frozen.id });
+        }
       }
       if (heroes.every((h) => h.down)) {
         status = "lost";
@@ -461,6 +540,19 @@ export function resolveRound(
     },
     events,
   };
+}
+
+/** Koop-Erfolge eines Helden – im Spielstand und im öffentlichen Profil. */
+export interface CoopStats {
+  wins: number;
+  /** Ids der Koop-Bosse, die der Held mindestens einmal besiegt hat */
+  bosses: string[];
+}
+
+export const EMPTY_COOP_STATS: CoopStats = { wins: 0, bosses: [] };
+
+export function recordCoopWin(stats: CoopStats, bossId: string): CoopStats {
+  return { wins: stats.wins + 1, bosses: stats.bosses.includes(bossId) ? stats.bosses : [...stats.bosses, bossId] };
 }
 
 /** Wird der Boss in dieser Runde seine Fähigkeit einsetzen? (für die Ankündigung) */

@@ -22,6 +22,7 @@ import {
   type DungeonChest,
 } from "../domain/combat";
 import { getCreature, getDungeon } from "../domain/creatures";
+import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, getItem, migrateLegacyItemId, STARTER_ITEM_IDS } from "../domain/items";
 import { rollLoot } from "../domain/loot";
@@ -157,7 +158,9 @@ interface GameState {
   /** Ein im Koop-Kampf getrunkener (oder verabreichter) Trank verlässt den Vorrat. */
   consumePotion: (potionId: string) => void;
   /** Schreibt die eigene Koop-Beute gut und gibt die Truhe für die Anzeige zurück. */
-  grantCoopReward: (reward: BattleReward) => ClaimedChest;
+  grantCoopReward: (reward: BattleReward, bossId: string) => ClaimedChest;
+  /** Koop-Siege und besiegte Koop-Bosse (für Charakterbogen und Profil) */
+  coopStats: CoopStats;
 }
 
 export interface DungeonRun {
@@ -199,6 +202,7 @@ type SaveState = Pick<
   | "shop"
   | "lastShopReroll"
   | "bossCollection"
+  | "coopStats"
 >;
 
 /** Neuer Held – die Gratis-Kampfpunkte zählen ab dem aktuellen 6-Stunden-Abschnitt. */
@@ -253,6 +257,7 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     shop: saved.shop ?? EMPTY_SHOP,
     lastShopReroll: saved.lastShopReroll ?? "",
     bossCollection: saved.bossCollection ?? [],
+    coopStats: saved.coopStats ?? EMPTY_COOP_STATS,
   };
 }
 
@@ -370,6 +375,7 @@ export const useGameStore = create<GameState>()(
       shop: EMPTY_SHOP,
       lastShopReroll: "",
       bossCollection: [],
+      coopStats: EMPTY_COOP_STATS,
       battle: null,
       battleReward: null,
       dungeon: null,
@@ -450,6 +456,7 @@ export const useGameStore = create<GameState>()(
           shop: EMPTY_SHOP,
           lastShopReroll: "",
           bossCollection: [],
+      coopStats: EMPTY_COOP_STATS,
           battle: null,
           battleReward: null,
           dungeon: null,
@@ -648,9 +655,10 @@ export const useGameStore = create<GameState>()(
       consumePotion: (potionId) =>
         set((s) => ({ potions: { ...s.potions, [potionId]: Math.max(0, (s.potions[potionId] ?? 0) - 1) } })),
 
-      grantCoopReward: (reward) => {
+      grantCoopReward: (reward, bossId) => {
         const chest = addToChest(EMPTY_CHEST, reward);
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        set((s) => ({ coopStats: recordCoopWin(s.coopStats, bossId) }));
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
@@ -671,6 +679,7 @@ export const useGameStore = create<GameState>()(
         shop: s.shop,
         lastShopReroll: s.lastShopReroll,
         bossCollection: s.bossCollection,
+        coopStats: s.coopStats,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),

@@ -256,7 +256,7 @@ describe("Boss-Items", () => {
       expect(items.filter((i) => i.type === "chest"), boss.id).toHaveLength(1);
       expect(items.every((i) => i.requiredLevel === boss.level)).toBe(true);
     }
-    expect(BOSS_ITEMS).toHaveLength(6 * 5 + 4 * 7);
+    expect(BOSS_ITEMS).toHaveLength(6 * 5 + 4 * 7 + 3 * 7); // Gebiete, Dungeons, Raid-Sets
   });
 
   it("Boss-Waffen verteilen sich gleichmässig: jeder Waffentyp zwei- bis dreimal", () => {

@@ -209,7 +209,8 @@ function maybeResolve(row: CoopRow, ctx: ServerContext): CoopRow {
   const state = row.state;
   if (row.phase !== "battle" || !state || state.status !== "active") return row;
   const away = new Set(row.members.filter((m) => m.left).map((m) => m.id));
-  const waiting = state.heroes.filter((h) => !h.down && !away.has(h.id) && !(h.id in row.actions));
+  // Eingefrorene setzen ohnehin aus – auf sie wird nicht gewartet
+  const waiting = state.heroes.filter((h) => !h.down && !h.effects.frozen && !away.has(h.id) && !(h.id in row.actions));
   return waiting.length === 0 ? resolve(row, ctx) : row;
 }
 

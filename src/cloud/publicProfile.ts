@@ -4,6 +4,7 @@
 // Sammlung). Quest-Titel und -Beschreibungen sind echte Aufgaben aus dem Leben
 // und bleiben privat: Sie stehen nur im privaten Spielstand (Tabelle "saves").
 
+import { EMPTY_COOP_STATS, type CoopStats } from "../domain/coopCombat";
 import { getEffectiveStats } from "../domain/equipment";
 import { getLevel, getTitle } from "../domain/leveling";
 import type { Character, Equipment, Quest, Stats, WeaponType } from "../domain/types";
@@ -16,6 +17,8 @@ export interface ProfileSnapshot {
   equipment: Equipment;
   bossCollection: string[];
   skills: Partial<Record<WeaponType, number>>;
+  /** Koop-Erfolge – fehlt bei Profilen von vor Etappe 3 */
+  coop?: CoopStats;
 }
 
 /** Eine Zeile der Tabelle public_profiles (ohne user_id/username). */
@@ -39,9 +42,10 @@ interface GameData {
   equipment: Equipment;
   quests: Quest[];
   bossCollection: string[];
+  coopStats?: CoopStats;
 }
 
-export function buildPublicProfile({ character, equipment, quests, bossCollection }: GameData): PublicProfileRow {
+export function buildPublicProfile({ character, equipment, quests, bossCollection, coopStats }: GameData): PublicProfileRow {
   const level = getLevel(character.totalXp);
   return {
     hero_name: character.name,
@@ -55,6 +59,7 @@ export function buildPublicProfile({ character, equipment, quests, bossCollectio
       equipment,
       bossCollection,
       skills: character.skills,
+      coop: coopStats ?? EMPTY_COOP_STATS,
     },
   };
 }

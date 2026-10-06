@@ -2,7 +2,8 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { BOSS_SETS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, getHeroCombatProfile } from "../domain/combat";
-import { getCreature } from "../domain/creatures";
+import { bossName } from "../domain/bosses";
+import { CoopRecord } from "./CoopRecord";
 import { BOSS_ITEMS, getBossItems, getItemStats } from "../domain/items";
 import { getCombatStats, getStatBonuses } from "../domain/equipment";
 import { getLevelProgress, getTitle, POINTS_PER_LEVEL, unspentPoints } from "../domain/leveling";
@@ -23,6 +24,7 @@ const STAT_COLORS: Record<StatKey, string> = {
 };
 
 export function CharacterSheet() {
+  const coopStats = useGameStore((s) => s.coopStats);
   const character = useGameStore((s) => s.character);
   const quests = useGameStore((s) => s.quests);
   const renameCharacter = useGameStore((s) => s.renameCharacter);
@@ -162,6 +164,7 @@ export function CharacterSheet() {
         </section>
 
         <BossCollection />
+        <CoopRecord stats={coopStats} />
 
         <button
           onClick={() => {
@@ -191,7 +194,7 @@ export function BossCollection({ collection }: { collection?: string[] }) {
         </span>
       </div>
       <p className="mb-4 text-sm text-muted">
-        Einzigartige Stücke, die nur Gebietsbosse fallen lassen ({Math.round(BOSS_ITEM_DROP_CHANCE * 100)} % pro Sieg).
+        Einzigartige Stücke, die nur Bosse fallen lassen – Gebiets-, Dungeon- und Koop-Bosse ({Math.round(BOSS_ITEM_DROP_CHANCE * 100)} % pro Sieg).
         Mehrere Teile desselben Bosses geben einen Set-Bonus. Unentdeckte Stücke siehst du nur als Schatten.
       </p>
       <ul className="grid gap-3 sm:grid-cols-2">
@@ -209,9 +212,9 @@ export function BossCollection({ collection }: { collection?: string[] }) {
                 {complete && " ✓"}
               </p>
               <p className="text-xs text-muted">
-                {getCreature(set.bossId).creature.name} · <span className="num">{count}/{items.length}</span>
+                {bossName(set.bossId)} · <span className="num">{count}/{items.length}</span>
               </p>
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {items.map((def) =>
                   found.includes(def.id) ? (
                     <ItemTooltip

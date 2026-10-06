@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getActiveSets } from "../domain/bossSets";
-import { getCreature } from "../domain/creatures";
+import { bossName, isCoopBoss } from "../domain/bosses";
 import type { ItemStats } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { BossSetInfo } from "./BossSetInfo";
@@ -93,7 +93,7 @@ function TooltipCard({ stats, hint, anchor }: { stats: ItemStats; hint?: string;
       {bonuses && <p className="text-sm text-xp">{bonuses}</p>}
       {def.bossId && (
         <>
-          <p className="text-xs text-legendary">👑 Einzigartig – Beute von {getCreature(def.bossId).creature.name}</p>
+          <p className="text-xs text-legendary">👑 Einzigartig – {isCoopBoss(def.bossId) ? "Raid-Beute" : "Beute"} von {bossName(def.bossId)}</p>
           <div className="mt-1 w-full rounded-md bg-night-950/60 p-1.5 text-left">
             <BossSetInfo bossId={def.bossId} pieces={setPieces} />
           </div>
