@@ -8,6 +8,9 @@ import {
   abilityUnlockBlocker,
   learnSkill,
   MAX_SKILL_RANK,
+  resetSkills,
+  skillResetBlocker,
+  skillResetCost,
   SKILL_BONUS_PER_RANK,
   skillBlocker,
   skillDamageBonus,
@@ -48,15 +51,19 @@ describe("Skilltree", () => {
     expect(unspentSkillPoints(learnTimes(heroAt(8), "sword", 3))).toBe(4);
   });
 
-  it("ohne Punkte, über dem Maximum oder ohne Voraussetzung geht nichts", () => {
+  it("ohne Punkte oder über dem Maximum geht nichts", () => {
     expect(skillBlocker(heroAt(1), "sword")).toMatch(/Skillpunkte/);
-    expect(skillBlocker(heroAt(20), "greatsword")).toMatch(/Rang 3 in Schwert/);
-    const swordsman = learnTimes(heroAt(20), "sword", 3);
-    expect(skillBlocker(swordsman, "greatsword")).toBeNull();
     const master = learnTimes(heroAt(20), "dagger", MAX_SKILL_RANK);
     expect(skillRank(master, "dagger")).toBe(MAX_SKILL_RANK);
     expect(skillBlocker(master, "dagger")).toMatch(/Höchster Rang/);
     expect(() => learnSkill(master, "dagger")).toThrow();
+  });
+
+  it("Zweihandwaffen sind unabhängig von ihrer Einhand-Variante", () => {
+    for (const weapon of ["greatsword", "greataxe", "greathammer", "staff"] as const) {
+      expect(skillBlocker(heroAt(20), weapon), weapon).toBeNull();
+      expect(skillRank(learnTimes(heroAt(20), weapon, MAX_SKILL_RANK), weapon)).toBe(MAX_SKILL_RANK);
+    }
   });
 
   it("erhöht nur den Schaden des passenden Waffentyps", () => {
@@ -95,5 +102,33 @@ describe("Skilltree", () => {
     const master = learnTimes(heroAt(MAX_SKILL_RANK + 1), "dagger", MAX_SKILL_RANK);
     expect(unspentSkillPoints(master)).toBe(0);
     expect(abilityUnlockBlocker(master, "dagger")).toMatch(/Skillpunkte/);
+  });
+});
+
+describe("Skills zurücksetzen", () => {
+  const rich = (character: Character, gold: number): Character => ({ ...character, gold });
+
+  it("kostet viel Gold, mehr auf höherem Level", () => {
+    expect(skillResetCost(20)).toBe(1500);
+    expect(skillResetCost(40)).toBeGreaterThan(skillResetCost(20));
+  });
+
+  it("gibt alle Ränge und Fähigkeiten als freie Skillpunkte zurück", () => {
+    const hero = unlockAbility(learnTimes(heroAt(20), "sword", MAX_SKILL_RANK), "sword");
+    const trained = learnTimes(hero, "greataxe", 2);
+    expect(unspentSkillPoints(trained)).toBe(19 - MAX_SKILL_RANK - ABILITY_COST - 2);
+
+    const reset = resetSkills(rich(trained, 5000));
+    expect(reset.skills).toEqual({});
+    expect(reset.abilities).toEqual([]);
+    expect(unspentSkillPoints(reset)).toBe(19);
+    expect(reset.gold).toBe(5000 - skillResetCost(20));
+  });
+
+  it("nicht ohne genug Gold oder ohne vergebene Punkte", () => {
+    const trained = learnTimes(heroAt(20), "sword", 1);
+    expect(skillResetBlocker(rich(trained, skillResetCost(20) - 1))).toMatch(/Gold/);
+    expect(() => resetSkills(rich(trained, 0))).toThrow();
+    expect(skillResetBlocker(rich(heroAt(20), 99_999))).toMatch(/noch keine/);
   });
 });

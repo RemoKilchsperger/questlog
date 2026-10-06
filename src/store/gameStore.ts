@@ -32,7 +32,7 @@ import {
   START_BATTLE_POINTS,
 } from "../domain/battlePoints";
 import { getDailyBonusQuests } from "../domain/bonusQuests";
-import { clampSkills, learnSkill, unlockAbility, type SkillWeapon } from "../domain/skills";
+import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon } from "../domain/skills";
 import { dateKey } from "../domain/calendar";
 import { calculateReward } from "../domain/rewards";
 import { allocatePoint, getLevel } from "../domain/leveling";
@@ -97,6 +97,8 @@ interface GameState {
   learnSkill: (weapon: SkillWeapon) => void;
   /** Schaltet die Fähigkeit eines gemeisterten Waffentyps frei (kostet einen Skillpunkt). */
   unlockAbility: (weapon: SkillWeapon) => void;
+  /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`). */
+  resetSkills: () => void;
   dismissReward: () => void;
   resetGame: () => void;
 
@@ -371,6 +373,8 @@ export const useGameStore = create<GameState>()(
       learnSkill: (weapon) => attempt(() => set((s) => ({ character: learnSkill(s.character, weapon) }))),
 
       unlockAbility: (weapon) => attempt(() => set((s) => ({ character: unlockAbility(s.character, weapon) }))),
+
+      resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character) }))),
 
       tickBattlePoints: () => {
         const { character } = get();

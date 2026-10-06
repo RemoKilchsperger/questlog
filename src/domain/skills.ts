@@ -1,10 +1,10 @@
 // Skilltree: Pro Level-up gibt es einen Skillpunkt. Jeder Rang in einem
 // Waffentyp erhöht den Schaden aller Waffen dieses Typs um 2 % (max. 5 Ränge
-// = +10 %), beim Schild stattdessen dessen Rüstung.
-// Zweihand- und Magierwaffen bauen auf ihrer Einhand-Variante auf:
-// Sie lassen sich erst lernen, wenn diese mindestens Rang 3 hat.
+// = +10 %), beim Schild stattdessen dessen Rüstung. Alle Waffentypen sind
+// unabhängig voneinander lernbar – auch Zweihandwaffen.
 // Wer einen Waffentyp gemeistert hat (Rang 5), kann für einen weiteren
 // Skillpunkt dessen Kampf-Fähigkeit freischalten.
+// Gegen viel Gold lassen sich alle Skillpunkte zurücksetzen.
 
 import { getSetGearMultiplier } from "./bossSets";
 import { getItem, getItemStats, getItemType } from "./items";
@@ -18,48 +18,27 @@ export type SkillRanks = Partial<Record<SkillWeapon, number>>;
 export const SKILL_POINTS_PER_LEVEL = 1;
 export const MAX_SKILL_RANK = 5;
 export const SKILL_BONUS_PER_RANK = 0.02;
-/** Nötiger Rang in der Voraussetzung, bevor ein aufbauender Skill gelernt werden kann. */
-export const PREREQUISITE_RANK = 3;
 /** Skillpunkte für das Freischalten einer Fähigkeit. */
 export const ABILITY_COST = 1;
 
 export interface SkillNode {
   weapon: SkillWeapon;
-  /** Muss zuerst auf PREREQUISITE_RANK gebracht werden */
-  requires?: SkillWeapon;
 }
 
-export interface SkillBranch {
-  id: string;
-  name: string;
-  icon: string;
-  nodes: readonly SkillNode[];
-}
-
-export const SKILL_TREE: readonly SkillBranch[] = [
-  {
-    id: "blades",
-    name: "Klingen",
-    icon: "🗡️",
-    nodes: [{ weapon: "dagger" }, { weapon: "sword" }, { weapon: "greatsword", requires: "sword" }],
-  },
-  { id: "axes", name: "Äxte", icon: "🪓", nodes: [{ weapon: "axe" }, { weapon: "greataxe", requires: "axe" }] },
-  {
-    id: "blunt",
-    name: "Wuchtwaffen",
-    icon: "🔨",
-    nodes: [{ weapon: "mace" }, { weapon: "greathammer", requires: "mace" }],
-  },
-  {
-    id: "arcane",
-    name: "Arkane Waffen",
-    icon: "🔱",
-    nodes: [{ weapon: "scepter" }, { weapon: "staff", requires: "scepter" }],
-  },
-  { id: "defense", name: "Verteidigung", icon: "🛡️", nodes: [{ weapon: "shield" }] },
+/** Ein eigener Skill pro Waffentyp – Einhand, Zweihand und Schild, alle unabhängig. */
+export const SKILL_TREE: readonly SkillNode[] = [
+  { weapon: "dagger" },
+  { weapon: "sword" },
+  { weapon: "greatsword" },
+  { weapon: "axe" },
+  { weapon: "greataxe" },
+  { weapon: "mace" },
+  { weapon: "greathammer" },
+  { weapon: "scepter" },
+  { weapon: "staff" },
+  { weapon: "shield" },
 ];
 
-const NODES = SKILL_TREE.flatMap((b) => b.nodes);
 
 /** Rang eines Skills – höchstens MAX_SKILL_RANK (ältere Stände konnten höher sein). */
 export function skillRank(character: Character, weapon: SkillWeapon): number {
@@ -76,7 +55,7 @@ export function clampSkills(skills: SkillRanks): SkillRanks {
 /** Durch Level-ups verdiente minus bereits vergebene Skillpunkte. */
 export function unspentSkillPoints(character: Character): number {
   const earned = (getLevel(character.totalXp) - 1) * SKILL_POINTS_PER_LEVEL;
-  const ranks = NODES.reduce((sum, node) => sum + skillRank(character, node.weapon), 0);
+  const ranks = SKILL_TREE.reduce((sum, node) => sum + skillRank(character, node.weapon), 0);
   return Math.max(0, earned - ranks - character.abilities.length * ABILITY_COST);
 }
 
@@ -86,7 +65,7 @@ export function hasAbility(character: Character, weapon: SkillWeapon): boolean {
 
 /** Warum diese Fähigkeit gerade nicht freigeschaltet werden kann – oder null. */
 export function abilityUnlockBlocker(character: Character, weapon: SkillWeapon): string | null {
-  if (!NODES.some((n) => n.weapon === weapon)) return "Unbekannter Skill.";
+  if (!SKILL_TREE.some((n) => n.weapon === weapon)) return "Unbekannter Skill.";
   if (hasAbility(character, weapon)) return "Bereits freigeschaltet.";
   if (skillRank(character, weapon) < MAX_SKILL_RANK) {
     return `Erst ${getItemType(weapon).label} meistern (Rang ${MAX_SKILL_RANK}).`;
@@ -104,12 +83,9 @@ export function unlockAbility(character: Character, weapon: SkillWeapon): Charac
 
 /** Warum dieser Skill gerade nicht gelernt werden kann – oder null. */
 export function skillBlocker(character: Character, weapon: SkillWeapon): string | null {
-  const node = NODES.find((n) => n.weapon === weapon);
+  const node = SKILL_TREE.find((n) => n.weapon === weapon);
   if (!node) return "Unbekannter Skill.";
   if (skillRank(character, weapon) >= MAX_SKILL_RANK) return "Höchster Rang erreicht.";
-  if (node.requires && skillRank(character, node.requires) < PREREQUISITE_RANK) {
-    return `Benötigt Rang ${PREREQUISITE_RANK} in ${getItemType(node.requires).label}.`;
-  }
   if (unspentSkillPoints(character) <= 0) return "Keine Skillpunkte – steige ein Level auf.";
   return null;
 }
@@ -121,9 +97,34 @@ export function learnSkill(character: Character, weapon: SkillWeapon): Character
   return { ...character, skills: { ...character.skills, [weapon]: skillRank(character, weapon) + 1 } };
 }
 
+/** Gold für das Zurücksetzen aller Skillpunkte: 25 × Level × (1 + Level/10). Lv. 20 → 1500. */
+export function skillResetCost(level: number): number {
+  return Math.round(25 * level * (1 + level / 10));
+}
+
+/** Warum die Skillpunkte gerade nicht zurückgesetzt werden können – oder null. */
+export function skillResetBlocker(character: Character): string | null {
+  const spent = SKILL_TREE.some((n) => skillRank(character, n.weapon) > 0) || character.abilities.length > 0;
+  if (!spent) return "Du hast noch keine Skillpunkte vergeben.";
+  if (character.gold < skillResetCost(getLevel(character.totalXp))) return "Nicht genug Gold.";
+  return null;
+}
+
+/** Setzt alle Ränge und Fähigkeiten zurück – die Skillpunkte sind wieder frei. */
+export function resetSkills(character: Character): Character {
+  const blocker = skillResetBlocker(character);
+  if (blocker) throw new Error(blocker);
+  return {
+    ...character,
+    gold: character.gold - skillResetCost(getLevel(character.totalXp)),
+    skills: {},
+    abilities: [],
+  };
+}
+
 /** Bonus eines Item-Typs durch Skills (0.1 = +10 %) – Schaden bei Waffen, Rüstung bei Schilden. */
 export function skillPercent(character: Character, type: ItemType): number {
-  const node = NODES.find((n) => n.weapon === type);
+  const node = SKILL_TREE.find((n) => n.weapon === type);
   return node ? skillRank(character, node.weapon) * SKILL_BONUS_PER_RANK : 0;
 }
 

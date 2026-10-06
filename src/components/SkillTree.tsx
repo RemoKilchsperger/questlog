@@ -1,22 +1,27 @@
 import { motion } from "motion/react";
+import { useCallback, useState } from "react";
 import { getAbility } from "../domain/abilities";
 import { getItem, getItemType } from "../domain/items";
+import { getLevel } from "../domain/leveling";
 import {
   ABILITY_COST,
   abilityUnlockBlocker,
   hasAbility,
   MAX_SKILL_RANK,
-  PREREQUISITE_RANK,
   SKILL_BONUS_PER_RANK,
   SKILL_POINTS_PER_LEVEL,
   SKILL_TREE,
   skillBlocker,
   skillRank,
+  skillResetBlocker,
+  skillResetCost,
   unspentSkillPoints,
   type SkillNode,
   type SkillWeapon,
 } from "../domain/skills";
 import { useGameStore } from "../store/gameStore";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 
 const percent = (value: number) => `${Math.round(value * 100)} %`;
@@ -34,45 +39,74 @@ export function SkillTree() {
           <p className="text-sm text-muted">
             Pro Level-up erhältst du {SKILL_POINTS_PER_LEVEL} Skillpunkt. Jeder Rang erhöht den Schaden aller Waffen
             dieses Typs um {percent(SKILL_BONUS_PER_RANK)} (höchstens {MAX_SKILL_RANK} Ränge), beim Schild dessen
-            Rüstung. Zweihand- und Magierwaffen bauen auf ihrer Einhand-Variante auf und brauchen dort zuerst Rang{" "}
-            {PREREQUISITE_RANK}. Hast du eine Waffe gemeistert (Rang {MAX_SKILL_RANK}), kannst du für {ABILITY_COST}{" "}
+            Rüstung. Jeder Waffentyp – auch Zweihandwaffen – lässt sich unabhängig lernen. Hast du eine Waffe gemeistert (Rang {MAX_SKILL_RANK}), kannst du für {ABILITY_COST}{" "}
             Skillpunkt ihre Kampf-Fähigkeit freischalten.
           </p>
         </div>
-        <div
-          className={`rounded-md border-2 px-4 py-2 text-center ${
-            unspent > 0 ? "border-xp bg-xp/10 text-xp" : "border-night-700 text-muted"
-          }`}
-        >
-          <div className="num text-3xl">{unspent}</div>
-          <div className="text-xs">{unspent === 1 ? "Skillpunkt" : "Skillpunkte"} frei</div>
+        <div className="flex flex-col items-center gap-2">
+          <div
+            className={`w-full rounded-md border-2 px-4 py-2 text-center ${
+              unspent > 0 ? "border-xp bg-xp/10 text-xp" : "border-night-700 text-muted"
+            }`}
+          >
+            <div className="num text-3xl">{unspent}</div>
+            <div className="text-xs">{unspent === 1 ? "Skillpunkt" : "Skillpunkte"} frei</div>
+          </div>
+          <SkillReset />
         </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {SKILL_TREE.map((branch) => (
-          <section key={branch.id} className="panel flex flex-col gap-2 p-4">
-            <h3 className="font-pixel text-xl">
-              <span aria-hidden>{branch.icon}</span> {branch.name}
-            </h3>
-            {branch.nodes.map((node) => (
-              <div key={node.weapon} className="flex flex-col items-stretch gap-2">
-                {node.requires && (
-                  <div className="text-center text-xs text-muted" aria-hidden>
-                    │<br />▼ ab Rang {PREREQUISITE_RANK}
-                  </div>
-                )}
-                <SkillCard node={node} />
-                <div className="text-center text-xs text-muted" aria-hidden>
-                  │<br />▼ gemeistert
-                </div>
-                <AbilityCard weapon={node.weapon} />
-              </div>
-            ))}
+        {SKILL_TREE.map((node) => (
+          <section key={node.weapon} className="panel flex flex-col items-stretch gap-2 p-4">
+            <SkillCard node={node} />
+            <div className="text-center text-xs text-muted" aria-hidden>
+              │<br />▼ gemeistert
+            </div>
+            <AbilityCard weapon={node.weapon} />
           </section>
         ))}
       </div>
     </div>
+  );
+}
+
+/** Alle Skillpunkte gegen viel Gold zurücksetzen – mit Rückfrage. */
+function SkillReset() {
+  const character = useGameStore((s) => s.character);
+  const reset = useGameStore((s) => s.resetSkills);
+  const [confirm, setConfirm] = useState(false);
+  const close = useCallback(() => setConfirm(false), []);
+  const cost = skillResetCost(getLevel(character.totalXp));
+  const blocker = skillResetBlocker(character);
+
+  return (
+    <>
+      <motion.button
+        whileTap={{ scale: 0.95 }}
+        disabled={blocker !== null}
+        onClick={() => setConfirm(true)}
+        title={blocker ?? "Alle Ränge und Fähigkeiten zurücksetzen"}
+        className="rounded-md border-2 border-danger/70 bg-danger/10 px-3 py-2 text-sm text-danger hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        ↺ Zurücksetzen <Gold amount={cost} className="font-bold" />
+      </motion.button>
+      <ConfirmDialog
+        open={confirm}
+        title="Skillpunkte zurücksetzen?"
+        confirmLabel="Zurücksetzen"
+        onCancel={close}
+        onConfirm={() => {
+          reset();
+          setConfirm(false);
+        }}
+      >
+        <p>
+          Für <Gold amount={cost} className="font-bold text-gold" /> vergisst du alle Ränge und freigeschalteten
+          Fähigkeiten. Alle Skillpunkte sind danach wieder frei und du kannst sie neu verteilen.
+        </p>
+      </ConfirmDialog>
+    </>
   );
 }
 
@@ -86,7 +120,6 @@ function SkillCard({ node }: { node: SkillNode }) {
   const stat = isShield ? "Rüstung" : "Schaden";
   const rank = skillRank(character, node.weapon);
   const blocker = skillBlocker(character, node.weapon);
-  const locked = node.requires !== undefined && skillRank(character, node.requires) < PREREQUISITE_RANK;
   const equipped = [equipment.weapon1, equipment.weapon2].some(
     (owned) => owned && getItem(owned.itemId).type === node.weapon,
   );
@@ -96,11 +129,11 @@ function SkillCard({ node }: { node: SkillNode }) {
   return (
     <div
       className={`rounded-md border-2 bg-night-800 p-3 ${
-        locked ? "border-night-700 opacity-60" : rank === MAX_SKILL_RANK ? "border-legendary/70" : "border-night-600"
+        rank === MAX_SKILL_RANK ? "border-legendary/70" : "border-night-600"
       }`}
     >
       <div className="flex items-center gap-3">
-        <ItemIcon def={sample} size={36} className={locked ? "grayscale" : ""} />
+        <ItemIcon def={sample} size={36} />
         <div className="min-w-0 flex-1">
           <p className="font-semibold">
             {info.label}
@@ -130,9 +163,7 @@ function SkillCard({ node }: { node: SkillNode }) {
         ))}
       </div>
       <p className="mt-1 text-right text-xs text-muted">
-        {locked
-          ? `🔒 Rang ${PREREQUISITE_RANK} in ${getItemType(node.requires!).label} nötig`
-          : `Rang ${rank}/${MAX_SKILL_RANK}`}
+        Rang {rank}/{MAX_SKILL_RANK}
       </p>
     </div>
   );
