@@ -11,7 +11,7 @@
 //      höchsten Bedrohung (mit etwas Zufall). Betäubung lässt sie ausfallen.
 //   4. Mana-Regeneration, Verstärkungen laufen ab.
 
-import { MANA_REGEN } from "./abilities";
+import { MANA_REGEN, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   CLERIC_POTION_FACTOR,
@@ -191,7 +191,7 @@ export interface CoopHero {
   combatant: Combatant;
   mana: number;
   maxMana: number;
-  abilities: SkillWeapon[];
+  abilities: AbilityId[];
   /** Aktive Klasse (heroClasses.ts) – fehlt bei älteren Kämpfen */
   heroClass?: HeroClassId | null;
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
@@ -201,6 +201,10 @@ export interface CoopHero {
     bulwark?: boolean;
     /** Eingefroren: setzt die nächste Runde aus */
     frozen?: boolean;
+    /** Parade/Vergeltung gegen den nächsten Angriff des Bosses */
+    guard?: Guard;
+    /** Kriegsschrei: mehr Schaden */
+    empower?: ActiveBuff;
   };
   threat: number;
   /** Auf 0 LP gefallen – handelt nicht und wird nicht angegriffen */
@@ -211,8 +215,13 @@ export interface CoopHero {
 
 export type CoopEvent =
   | { type: "potion"; heroId: string; targetId: string; potionId: string; heal: number; buff?: BuffKind; revive?: boolean }
-  | { type: "ability"; heroId: string; weapon: SkillWeapon; manaCost: number }
-  | { type: "hit"; attacker: string; target: string; damage: number; crit: boolean; weapon?: SkillWeapon }
+  | { type: "ability"; heroId: string; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
+  /** Ein Held heilt sich durch eine Fähigkeit */
+  | { type: "selfHeal"; heroId: string; heal: number }
+  /** Parade/Vergeltung fängt Schaden ab und trifft den Boss */
+  | { type: "guarded"; heroId: string; prevented: number }
+  | { type: "counter"; heroId: string; damage: number }
+  | { type: "hit"; attacker: string; target: string; damage: number; crit: boolean; weapon?: SkillWeapon; ability?: AbilityId }
   | { type: OverTimeKind; target: string; damage: number }
   | { type: "bossAbility"; bossId: string; name: string }
   | { type: "stunned" }
@@ -240,7 +249,13 @@ export interface CoopBattleState {
   deadline: number;
   heroes: CoopHero[];
   boss: Combatant;
-  bossEffects: Partial<Record<OverTimeKind, SourcedDot>> & { armorBreak?: number };
+  bossEffects: Partial<Record<OverTimeKind, SourcedDot>> & {
+    armorBreak?: number;
+    /** Geschwächt: macht `percent` weniger Schaden */
+    weaken?: ActiveBuff;
+    /** Verwundbar: erleidet `percent` mehr Schaden */
+    vulnerable?: ActiveBuff;
+  };
   /** Bisher versuchte Betäubungen – ab der zweiten nur noch mit Chance */
   stunsUsed: number;
   status: CoopStatus;
@@ -253,7 +268,7 @@ export interface CoopBattleState {
  */
 export interface CoopAction {
   potion?: { potionId: string; targetId: string };
-  ability?: SkillWeapon;
+  ability?: AbilityId;
 }
 
 export interface CoopPlayer {
@@ -335,9 +350,9 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
 }
 
 /** Warum diese Fähigkeit nicht geht – oder null. */
-export function coopAbilityBlocker(hero: CoopHero, weapon: SkillWeapon): string | null {
-  if (!hero.abilities.includes(weapon)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
-  const { manaCost } = classAbility(weapon, hero.heroClass);
+export function coopAbilityBlocker(hero: CoopHero, id: AbilityId): string | null {
+  if (!hero.abilities.includes(id)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
+  const { manaCost } = classAbility(id, hero.heroClass);
   if (hero.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
 }
@@ -425,12 +440,30 @@ export function resolveRound(
 
     const ability = action.ability && !coopAbilityBlocker(hero, action.ability) ? classAbility(action.ability, hero.heroClass) : null;
     const plain = buffed(hero);
-    // Berserker: bei wenig Lebenspunkten mehr Schaden
-    const strong = { ...plain, damage: plain.damage * rageFactor(hero.heroClass, hero.combatant.hp, hero.combatant.maxHp) };
+    // Berserker: bei wenig Lebenspunkten mehr Schaden; Kriegsschrei: Verstärkung
+    const strong = {
+      ...plain,
+      damage:
+        plain.damage *
+        rageFactor(hero.heroClass, hero.combatant.hp, hero.combatant.maxHp) *
+        (1 + (hero.effects.empower?.percent ?? 0)),
+    };
     const threatFactor = hero.heroClass === "paladin" ? PALADIN_THREAT : 1;
     if (ability) {
       hero.mana -= ability.manaCost;
-      events.push({ type: "ability", heroId: hero.id, weapon: ability.weapon, manaCost: ability.manaCost });
+      events.push({ type: "ability", heroId: hero.id, ability: ability.id, weapon: ability.weapon, manaCost: ability.manaCost });
+      if (ability.guard) hero.effects.guard = ability.guard;
+      // +1, weil die Verstärkung erst ab der nächsten Runde zählt
+      if (ability.empower) hero.effects.empower = { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 };
+      if (ability.weaken) bossEffects = { ...bossEffects, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
+      if (ability.vulnerable) {
+        bossEffects = { ...bossEffects, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
+      }
+      if (ability.heal) {
+        const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(hero.combatant.maxHp * ability.heal));
+        hero.combatant.hp += heal;
+        if (heal > 0) events.push({ type: "selfHeal", heroId: hero.id, heal });
+      }
       if (ability.armorBreak) bossEffects = { ...bossEffects, armorBreak: ability.armorBreak };
       if (ability.stun) stunAttempt = true;
       for (const kind of OVER_TIME) {
@@ -444,15 +477,24 @@ export function resolveRound(
         taunts.push(hero);
       }
     }
+    // Finisher (Meucheln) und Verwundbarkeit des Bosses
+    const execute = ability?.execute && boss.hp < boss.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
+    const vulnerable = 1 + (bossEffects.vulnerable?.percent ?? 0);
     const attacker: Combatant = ability
-      ? { ...strong, damage: strong.damage * ability.multiplier, critChance: ability.guaranteedCrit ? 1 : strong.critChance }
-      : strong;
+      ? {
+          ...strong,
+          damage: strong.damage * ability.multiplier * execute * vulnerable,
+          critChance: ability.guaranteedCrit ? 1 : strong.critChance,
+        }
+      : { ...strong, damage: strong.damage * vulnerable };
     const armor = ability?.ignoreArmor ? 0 : Math.round(boss.armor * (1 - (bossEffects.armorBreak ?? 0)));
+    let dealt = 0;
     const strike = () => {
       const hit = rollHit(attacker, { ...boss, armor }, rng);
+      dealt += Math.min(boss.hp, hit.damage);
       boss.hp = Math.max(0, boss.hp - hit.damage);
       hero.threat += hit.damage * threatFactor;
-      events.push({ type: "hit", attacker: hero.id, target: BOSS, ...hit, ...(ability && { weapon: ability.weapon }) });
+      events.push({ type: "hit", attacker: hero.id, target: BOSS, ...hit, ...(ability && { weapon: ability.weapon, ability: ability.id }) });
       // Plünderer: kritische Treffer lassen bluten
       if (hit.crit && hero.heroClass === "plunderer" && boss.hp > 0) {
         const damage = Math.max(1, Math.round(strong.damage * PLUNDERER_BLEED.percent));
@@ -464,6 +506,12 @@ export function resolveRound(
     for (let i = 0; i < (ability?.hits ?? 1) && boss.hp > 0; i++) strike();
     // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
     if (!ability && hero.heroClass === "duelist" && boss.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike();
+    // Blutrausch: Lebensraub
+    if (ability?.lifesteal && dealt > 0) {
+      const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(dealt * ability.lifesteal));
+      hero.combatant.hp += heal;
+      if (heal > 0) events.push({ type: "selfHeal", heroId: hero.id, heal });
+    }
   }
 
   // Bollwerk: erst jetzt, wenn alle Helden gehandelt haben – der Schildträger bekommt so viel
@@ -477,10 +525,11 @@ export function resolveRound(
   for (const kind of OVER_TIME) {
     const effect = bossEffects[kind];
     if (!effect || boss.hp <= 0) continue;
-    boss.hp = Math.max(0, boss.hp - effect.damage);
+    const damage = Math.round(effect.damage * (1 + (bossEffects.vulnerable?.percent ?? 0)));
+    boss.hp = Math.max(0, boss.hp - damage);
     const source = heroes.find((h) => h.id === effect.sourceId && !h.down);
-    if (source) source.threat += effect.damage * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
-    events.push({ type: kind, target: BOSS, damage: effect.damage });
+    if (source) source.threat += damage * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
+    events.push({ type: kind, target: BOSS, damage });
     bossEffects = { ...bossEffects, [kind]: effect.roundsLeft > 1 ? { ...effect, roundsLeft: effect.roundsLeft - 1 } : undefined };
   }
   if (boss.hp > 0) {
@@ -515,7 +564,8 @@ export function resolveRound(
       const def = getCoopBoss(state.bossId);
       const special = state.round % def.ability.every === 0 ? def.ability : null;
       if (special) events.push({ type: "bossAbility", bossId: def.id, name: special.name });
-      const attacker = special ? { ...boss, damage: boss.damage * special.multiplier } : boss;
+      // Geschwächt (Erdbeben, Fluch): weniger Schaden
+      const attacker = { ...boss, damage: boss.damage * (special?.multiplier ?? 1) * (1 - (bossEffects.weaken?.percent ?? 0)) };
       const targets = special?.aoe ? heroes.filter((h) => !h.down) : [pickBossTarget(heroes, rng)!];
       for (const target of targets) {
         if (target.effects.bulwark) {
@@ -525,9 +575,27 @@ export function resolveRound(
           continue;
         }
         const defender = special?.ignoreArmor ? { ...buffed(target), armor: 0 } : buffed(target);
-        const hit = rollHit(attacker, defender, rng);
+        const rolled = rollHit(attacker, defender, rng);
+        // Parade/Vergeltung: nur ein Teil kommt durch, dann Konter bzw. Rückwurf
+        const guard = target.effects.guard;
+        const hit = guard ? { ...rolled, damage: Math.max(1, Math.round(rolled.damage * guard.reduce)) } : rolled;
         target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
         events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
+        if (guard) {
+          target.effects.guard = undefined;
+          events.push({ type: "guarded", heroId: target.id, prevented: rolled.damage - hit.damage });
+          let counter = guard.reflect ? Math.round(rolled.damage * guard.reflect) : 0;
+          if (guard.counter && target.combatant.hp > 0) {
+            const own = buffed(target);
+            const armor = Math.round(boss.armor * (1 - (bossEffects.armorBreak ?? 0)));
+            counter += rollHit({ ...own, damage: own.damage * guard.counter }, { ...boss, armor }, rng).damage;
+          }
+          if (counter > 0 && boss.hp > 0) {
+            boss.hp = Math.max(0, boss.hp - counter);
+            target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
+            events.push({ type: "counter", heroId: target.id, damage: counter });
+          }
+        }
         if (special?.poison && target.combatant.hp > 0) {
           const damage = Math.max(1, Math.round(boss.damage * special.poison.percent));
           target.effects.poison = { damage, roundsLeft: special.poison.rounds };
@@ -552,7 +620,11 @@ export function resolveRound(
           events.push({ type: "frozen", heroId: frozen.id });
         }
       }
-      if (heroes.every((h) => h.down)) {
+      if (boss.hp <= 0) {
+        // Konter oder Rückwurf hat den Boss erledigt
+        status = "won";
+        events.push({ type: "victory" });
+      } else if (heroes.every((h) => h.down)) {
         status = "lost";
         events.push({ type: "wipe" });
       }
@@ -572,8 +644,11 @@ export function resolveRound(
   }
 
   // 4. Mana, Verstärkungen und abklingende Bedrohung
+  const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
+  bossEffects = { ...bossEffects, weaken: tick(bossEffects.weaken), vulnerable: tick(bossEffects.vulnerable) };
   heroes = heroes.map((h) => ({
     ...h,
+    effects: { ...h.effects, empower: tick(h.effects.empower) },
     threat: Math.round(h.threat * (1 - THREAT_DECAY)),
     mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + MANA_REGEN),
     buffs: Object.fromEntries(

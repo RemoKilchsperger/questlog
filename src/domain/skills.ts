@@ -3,9 +3,11 @@
 // = +10 %), beim Schild stattdessen dessen Rüstung. Alle Waffentypen sind
 // unabhängig voneinander lernbar – auch Zweihandwaffen.
 // Wer einen Waffentyp gemeistert hat (Rang 5), kann für einen weiteren
-// Skillpunkt dessen Kampf-Fähigkeit freischalten.
+// Skillpunkt dessen erste Kampf-Fähigkeit freischalten – ab Level 25 für zwei
+// Skillpunkte auch die zweite.
 // Gegen viel Gold lassen sich alle Skillpunkte zurücksetzen.
 
+import { getAbility, type AbilityId } from "./abilities";
 import { getSetGearMultiplier } from "./bossSets";
 import { getItem, getItemStats, getItemType } from "./items";
 import { getLevel } from "./leveling";
@@ -18,8 +20,15 @@ export type SkillRanks = Partial<Record<SkillWeapon, number>>;
 export const SKILL_POINTS_PER_LEVEL = 1;
 export const MAX_SKILL_RANK = 5;
 export const SKILL_BONUS_PER_RANK = 0.02;
-/** Skillpunkte für das Freischalten einer Fähigkeit. */
+/** Skillpunkte für das Freischalten der ersten bzw. zweiten Fähigkeit einer Waffe. */
 export const ABILITY_COST = 1;
+export const SECOND_ABILITY_COST = 2;
+/** Ab diesem Level lässt sich die zweite Fähigkeit freischalten. */
+export const SECOND_ABILITY_LEVEL = 25;
+
+export function abilityCost(id: AbilityId): number {
+  return getAbility(id).tier === 2 ? SECOND_ABILITY_COST : ABILITY_COST;
+}
 
 export interface SkillNode {
   weapon: SkillWeapon;
@@ -57,29 +66,37 @@ export function clampSkills(skills: SkillRanks): SkillRanks {
 export function unspentSkillPoints(character: Character): number {
   const earned = (getLevel(character.totalXp) - 1) * SKILL_POINTS_PER_LEVEL;
   const ranks = SKILL_TREE.reduce((sum, node) => sum + skillRank(character, node.weapon), 0);
-  return Math.max(0, earned - ranks - character.abilities.length * ABILITY_COST);
+  const abilities = character.abilities.reduce((sum, id) => sum + abilityCost(id), 0);
+  return Math.max(0, earned - ranks - abilities);
 }
 
-export function hasAbility(character: Character, weapon: SkillWeapon): boolean {
-  return character.abilities.includes(weapon);
+export function hasAbility(character: Character, id: AbilityId): boolean {
+  return character.abilities.includes(id);
 }
 
 /** Warum diese Fähigkeit gerade nicht freigeschaltet werden kann – oder null. */
-export function abilityUnlockBlocker(character: Character, weapon: SkillWeapon): string | null {
-  if (!SKILL_TREE.some((n) => n.weapon === weapon)) return "Unbekannter Skill.";
-  if (hasAbility(character, weapon)) return "Bereits freigeschaltet.";
-  if (skillRank(character, weapon) < MAX_SKILL_RANK) {
-    return `Erst ${getItemType(weapon).label} meistern (Rang ${MAX_SKILL_RANK}).`;
+export function abilityUnlockBlocker(character: Character, id: AbilityId): string | null {
+  const ability = getAbility(id);
+  if (hasAbility(character, id)) return "Bereits freigeschaltet.";
+  if (skillRank(character, ability.weapon) < MAX_SKILL_RANK) {
+    return `Erst ${getItemType(ability.weapon).label} meistern (Rang ${MAX_SKILL_RANK}).`;
   }
-  if (unspentSkillPoints(character) < ABILITY_COST) return "Keine Skillpunkte – steige ein Level auf.";
+  if (ability.tier === 2) {
+    if (!hasAbility(character, ability.weapon)) return `Erst ${getAbility(ability.weapon).name} freischalten.`;
+    if (getLevel(character.totalXp) < SECOND_ABILITY_LEVEL) return `Ab Level ${SECOND_ABILITY_LEVEL}.`;
+  }
+  const cost = abilityCost(id);
+  if (unspentSkillPoints(character) < cost) {
+    return cost > 1 ? `Braucht ${cost} Skillpunkte.` : "Keine Skillpunkte – steige ein Level auf.";
+  }
   return null;
 }
 
-/** Schaltet die Kampf-Fähigkeit eines gemeisterten Waffentyps frei. */
-export function unlockAbility(character: Character, weapon: SkillWeapon): Character {
-  const blocker = abilityUnlockBlocker(character, weapon);
+/** Schaltet eine Kampf-Fähigkeit frei. */
+export function unlockAbility(character: Character, id: AbilityId): Character {
+  const blocker = abilityUnlockBlocker(character, id);
   if (blocker) throw new Error(blocker);
-  return { ...character, abilities: [...character.abilities, weapon] };
+  return { ...character, abilities: [...character.abilities, id] };
 }
 
 /** Warum dieser Skill gerade nicht gelernt werden kann – oder null. */

@@ -20,7 +20,7 @@ const hero: Character = {
   battlePointSlot: 0,
   skills: {},
   // Fähigkeiten-Tests: alle freigeschaltet (das Freischalten selbst testet skills.test.ts)
-  abilities: ABILITIES.map((a) => a.weapon),
+  abilities: ABILITIES.filter((a) => a.tier === 1).map((a) => a.id),
 };
 
 const withWeapons = (...ids: string[]): Equipment => ({
@@ -37,10 +37,11 @@ const battleWith = (equipment: Equipment): BattleState => {
 const rng = (value: number) => () => value;
 
 describe("Fähigkeiten", () => {
-  it("jede Waffe inklusive Schild hat genau eine Fähigkeit", () => {
-    expect(ABILITIES.map((a) => a.weapon).sort()).toEqual(
-      ["axe", "bow", "dagger", "greataxe", "greathammer", "greatsword", "mace", "scepter", "shield", "staff", "sword"].sort(),
-    );
+  it("jede Waffe inklusive Schild hat genau zwei Fähigkeiten (Id = Waffe bzw. Waffe-2)", () => {
+    const weapons = ["axe", "bow", "dagger", "greataxe", "greathammer", "greatsword", "mace", "scepter", "shield", "staff", "sword"];
+    expect(ABILITIES.filter((a) => a.tier === 1).map((a) => a.id).sort()).toEqual([...weapons].sort());
+    expect(ABILITIES.filter((a) => a.tier === 2).map((a) => a.id).sort()).toEqual(weapons.map((w) => `${w}-2`).sort());
+    for (const a of ABILITIES) expect(a.id.startsWith(a.weapon), a.id).toBe(true);
   });
 
   it("verfügbar sind die Fähigkeiten der angelegten Waffen", () => {

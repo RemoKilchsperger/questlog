@@ -25,7 +25,7 @@ import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potio
 import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { getSetHpMultiplier } from "./bossSets";
-import { ABILITIES, MANA_REGEN, maxManaFor } from "./abilities";
+import { abilitiesOf, MANA_REGEN, maxManaFor, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   classStatBonus,
@@ -51,20 +51,19 @@ export interface HeroCombatProfile {
   goldBonus: number;
   maxMana: number;
   /** Freigeschaltete Fähigkeiten der angelegten Waffen */
-  abilities: SkillWeapon[];
+  abilities: AbilityId[];
   /** Aktive Klasse (heroClasses.ts) – oder null */
   heroClass: HeroClassId | null;
   /** Schadensfaktor kritischer Treffer (1,5, Assassine 2) */
   critMultiplier: number;
 }
 
-/** Freigeschaltete Fähigkeiten aller angelegten Waffen, ohne Doppelte. */
-export function availableAbilities(character: Character, equipment: Equipment): SkillWeapon[] {
-  const types = [equipment.weapon1, equipment.weapon2]
-    .filter((o) => o !== null)
-    .map((o) => getItem(o.itemId).type)
-    .filter((t): t is SkillWeapon => ABILITIES.some((a) => a.weapon === t) && hasAbility(character, t as SkillWeapon));
-  return [...new Set(types)];
+/** Freigeschaltete Fähigkeiten aller angelegten Waffen (je Waffe erste, dann zweite), ohne Doppelte. */
+export function availableAbilities(character: Character, equipment: Equipment): AbilityId[] {
+  const types = new Set(
+    [equipment.weapon1, equipment.weapon2].filter((o) => o !== null).map((o) => getItem(o.itemId).type as SkillWeapon),
+  );
+  return [...types].flatMap((type) => abilitiesOf(type).filter((a) => hasAbility(character, a.id)).map((a) => a.id));
 }
 
 /**
@@ -118,7 +117,13 @@ export type BattleEvent =
   | { type: "potion"; potionId: string; heal: number; buff?: BuffKind }
   | { type: "hit"; attacker: Side; damage: number; crit: boolean }
   /** Der Held setzt eine Fähigkeit ein – die Treffer folgen als "hit" */
-  | { type: "ability"; weapon: SkillWeapon; manaCost: number }
+  | { type: "ability"; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
+  /** Der Held heilt sich durch eine Fähigkeit (Heiliges Licht, Blutrausch) */
+  | { type: "selfHeal"; heal: number }
+  /** Parade/Vergeltung fängt einen Teil des gegnerischen Angriffs ab … */
+  | { type: "guarded"; prevented: number }
+  /** … und der Gegner erleidet Konter- bzw. Rückwurfschaden */
+  | { type: "counter"; damage: number }
   /** Giftschaden – `target` ist, wer vergiftet ist */
   | { type: "poison"; target: Side; damage: number }
   /** Feuerschaden – `target` ist, wer brennt */
@@ -170,7 +175,7 @@ export interface BattleState {
   mana: number;
   maxMana: number;
   /** Fähigkeiten, die der Held in diesem Kampf einsetzen kann */
-  abilities: SkillWeapon[];
+  abilities: AbilityId[];
   /** Aktive Klasse des Helden (fehlt bei älteren Kämpfen) */
   heroClass?: HeroClassId | null;
   /** Wirkungen der Fähigkeiten auf den Gegner */
@@ -180,6 +185,10 @@ export interface BattleState {
     bleed?: DamageOverTime;
     /** Rüstungsminderung für den Rest des Kampfes (0.3 = −30 %) */
     armorBreak?: number;
+    /** Geschwächt: macht `percent` weniger Schaden */
+    weaken?: ActiveBuff;
+    /** Verwundbar: erleidet `percent` mehr Schaden */
+    vulnerable?: ActiveBuff;
   };
   /** Wirkungen auf den Helden */
   heroEffects: {
@@ -189,6 +198,10 @@ export interface BattleState {
     bleed?: DamageOverTime;
     /** Bollwerk: der nächste gegnerische Angriff wird geblockt */
     bulwark?: boolean;
+    /** Parade/Vergeltung gegen den nächsten gegnerischen Angriff */
+    guard?: Guard;
+    /** Kriegsschrei: mehr Schaden */
+    empower?: ActiveBuff;
   };
   status: BattleStatus;
   /** Alle Ereignisse mit Rundennummer – für das Kampfprotokoll. */
@@ -316,6 +329,11 @@ function tickOverTime(effect: DamageOverTime): DamageOverTime | undefined {
 /** Gift, Feuer und Bluten – in dieser Reihenfolge wirken sie pro Runde. */
 const OVER_TIME = ["poison", "burn", "bleed"] as const;
 
+/** Eine Runde einer zeitlich begrenzten Wirkung ist vorbei. */
+function tickBuff(buff: ActiveBuff | undefined): ActiveBuff | undefined {
+  return buff && buff.roundsLeft > 1 ? { ...buff, roundsLeft: buff.roundsLeft - 1 } : undefined;
+}
+
 /** Nach jeder Runde läuft eine Runde der Verstärkungen ab. */
 function tickBuffs(buffs: BattleState["buffs"]): BattleState["buffs"] {
   const next: BattleState["buffs"] = {};
@@ -326,10 +344,10 @@ function tickBuffs(buffs: BattleState["buffs"]): BattleState["buffs"] {
 }
 
 /** Warum diese Fähigkeit gerade nicht geht – oder null. */
-export function abilityBlocker(state: BattleState, weapon: SkillWeapon): string | null {
+export function abilityBlocker(state: BattleState, id: AbilityId): string | null {
   if (state.status !== "active") return "Der Kampf ist vorbei.";
-  if (!state.abilities.includes(weapon)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
-  const { manaCost } = classAbility(weapon, state.heroClass);
+  if (!state.abilities.includes(id)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
+  const { manaCost } = classAbility(id, state.heroClass);
   if (state.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
 }
@@ -342,12 +360,12 @@ export function abilityBlocker(state: BattleState, weapon: SkillWeapon): string 
 export function attackRound(
   state: BattleState,
   rng: () => number = Math.random,
-  abilityWeapon?: SkillWeapon,
+  abilityId?: AbilityId,
 ): RoundResult {
   assertActive(state);
-  const ability = abilityWeapon ? classAbility(abilityWeapon, state.heroClass) : null;
-  if (abilityWeapon) {
-    const blocker = abilityBlocker(state, abilityWeapon);
+  const ability = abilityId ? classAbility(abilityId, state.heroClass) : null;
+  if (abilityId) {
+    const blocker = abilityBlocker(state, abilityId);
     if (blocker) throw new Error(blocker);
   }
   const events: BattleEvent[] = [];
@@ -359,14 +377,30 @@ export function attackRound(
   let status: BattleStatus = "active";
   // Verstärkungen wirken auf Schaden und Rüstung, die Lebenspunkte bleiben die echten.
   const strongBase = buffedHero(state);
-  // Berserker: bei wenig Lebenspunkten mehr Schaden
-  const strong = { ...strongBase, damage: strongBase.damage * rageFactor(state.heroClass, hero.hp, hero.maxHp) };
+  // Berserker: bei wenig Lebenspunkten mehr Schaden; Kriegsschrei: Verstärkung
+  const strong = {
+    ...strongBase,
+    damage:
+      strongBase.damage * rageFactor(state.heroClass, hero.hp, hero.maxHp) * (1 + (heroEffects.empower?.percent ?? 0)),
+  };
 
   // 1. Aktion des Helden
   if (ability) {
     mana -= ability.manaCost;
-    events.push({ type: "ability", weapon: ability.weapon, manaCost: ability.manaCost });
+    events.push({ type: "ability", ability: ability.id, weapon: ability.weapon, manaCost: ability.manaCost });
     if (ability.bulwark) heroEffects = { ...heroEffects, bulwark: true };
+    if (ability.guard) heroEffects = { ...heroEffects, guard: ability.guard };
+    // +1, weil die Verstärkung erst ab der nächsten Runde zählt (am Rundenende läuft eine ab)
+    if (ability.empower) heroEffects = { ...heroEffects, empower: { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 } };
+    if (ability.weaken) enemyEffects = { ...enemyEffects, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
+    if (ability.vulnerable) {
+      enemyEffects = { ...enemyEffects, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
+    }
+    if (ability.heal) {
+      const heal = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * ability.heal));
+      hero = { ...hero, hp: hero.hp + heal };
+      if (heal > 0) events.push({ type: "selfHeal", heal });
+    }
     if (ability.armorBreak) enemyEffects = { ...enemyEffects, armorBreak: ability.armorBreak };
     for (const kind of OVER_TIME) {
       const effect = ability[kind];
@@ -375,16 +409,21 @@ export function attackRound(
       enemyEffects = { ...enemyEffects, [kind]: { damage, roundsLeft: effect.rounds } };
     }
   }
+  // Finisher (Meucheln): mehr Schaden gegen angeschlagene Gegner
+  const execute = ability?.execute && enemy.hp < enemy.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
+  const vulnerable = 1 + (enemyEffects.vulnerable?.percent ?? 0);
   const attacker: Combatant = ability
     ? {
         ...strong,
-        damage: strong.damage * ability.multiplier,
+        damage: strong.damage * ability.multiplier * execute * vulnerable,
         critChance: ability.guaranteedCrit ? 1 : strong.critChance,
       }
-    : strong;
+    : { ...strong, damage: strong.damage * vulnerable };
   const targetArmor = ability?.ignoreArmor ? 0 : Math.round(enemy.armor * (1 - (enemyEffects.armorBreak ?? 0)));
+  let dealtByHero = 0;
   const strike = () => {
     const heroHit = rollHit(attacker, { ...enemy, armor: targetArmor }, rng);
+    dealtByHero += Math.min(enemy.hp, heroHit.damage);
     enemy = { ...enemy, hp: Math.max(0, enemy.hp - heroHit.damage) };
     events.push({ type: "hit", attacker: "hero", ...heroHit });
     // Plünderer: kritische Treffer lassen bluten
@@ -398,13 +437,20 @@ export function attackRound(
   for (let i = 0; i < (ability?.hits ?? 1) && enemy.hp > 0; i++) strike();
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
   if (!ability && state.heroClass === "duelist" && enemy.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike();
+  // Blutrausch: Lebensraub
+  if (ability?.lifesteal && dealtByHero > 0) {
+    const heal = Math.min(hero.maxHp - hero.hp, Math.round(dealtByHero * ability.lifesteal));
+    hero = { ...hero, hp: hero.hp + heal };
+    if (heal > 0) events.push({ type: "selfHeal", heal });
+  }
 
   // 2. Gift, Feuer und Bluten wirken nach der Aktion des Helden – erst beim Gegner, dann beim Helden
   for (const kind of OVER_TIME) {
     const effect = enemyEffects[kind];
     if (effect && enemy.hp > 0) {
-      enemy = { ...enemy, hp: Math.max(0, enemy.hp - effect.damage) };
-      events.push({ type: kind, target: "enemy", damage: effect.damage });
+      const damage = Math.round(effect.damage * vulnerable);
+      enemy = { ...enemy, hp: Math.max(0, enemy.hp - damage) };
+      events.push({ type: kind, target: "enemy", damage });
       enemyEffects = { ...enemyEffects, [kind]: tickOverTime(effect) };
     }
   }
@@ -434,14 +480,33 @@ export function attackRound(
       events.push({ type: "blocked" });
       heroEffects = { ...heroEffects, bulwark: undefined };
     } else {
-      const attacker = special ? { ...enemy, damage: enemy.damage * special.multiplier } : enemy;
+      // Geschwächte Gegner machen weniger Schaden
+      const weakened = 1 - (enemyEffects.weaken?.percent ?? 0);
+      const attacker = { ...enemy, damage: enemy.damage * (special?.multiplier ?? 1) * weakened };
       const defender = special?.ignoreArmor ? { ...strong, armor: 0 } : strong;
+      const guard = heroEffects.guard;
       let dealt = 0;
+      let raw = 0;
       for (let i = 0; i < (special?.hits ?? 1) && hero.hp > 0; i++) {
         const enemyHit = rollHit(attacker, defender, rng);
-        hero = { ...hero, hp: Math.max(0, hero.hp - enemyHit.damage) };
-        dealt += enemyHit.damage;
-        events.push({ type: "hit", attacker: "enemy", ...enemyHit });
+        // Parade/Vergeltung: nur ein Teil des Schadens kommt durch
+        const damage = guard ? Math.max(1, Math.round(enemyHit.damage * guard.reduce)) : enemyHit.damage;
+        raw += enemyHit.damage;
+        hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
+        dealt += damage;
+        events.push({ type: "hit", attacker: "enemy", ...enemyHit, damage });
+      }
+      if (guard) {
+        heroEffects = { ...heroEffects, guard: undefined };
+        events.push({ type: "guarded", prevented: raw - dealt });
+        let counter = guard.reflect ? Math.round(raw * guard.reflect) : 0;
+        if (guard.counter && hero.hp > 0) {
+          counter += rollHit({ ...strong, damage: strong.damage * guard.counter }, { ...enemy, armor: targetArmor }, rng).damage;
+        }
+        if (counter > 0) {
+          enemy = { ...enemy, hp: Math.max(0, enemy.hp - counter) };
+          events.push({ type: "counter", damage: counter });
+        }
       }
       if (special?.drain) {
         const heal = Math.min(enemy.maxHp - enemy.hp, Math.round(dealt * special.drain));
@@ -460,7 +525,10 @@ export function attackRound(
         heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: effect.rounds } };
       }
     }
-    if (hero.hp === 0) {
+    if (enemy.hp === 0) {
+      status = "won";
+      events.push({ type: "defeated", side: "enemy" });
+    } else if (hero.hp === 0) {
       status = "lost";
       events.push({ type: "defeated", side: "hero" });
     }
@@ -480,8 +548,8 @@ export function attackRound(
       ...state,
       hero,
       enemy,
-      enemyEffects,
-      heroEffects,
+      enemyEffects: { ...enemyEffects, weaken: tickBuff(enemyEffects.weaken), vulnerable: tickBuff(enemyEffects.vulnerable) },
+      heroEffects: { ...heroEffects, empower: tickBuff(heroEffects.empower) },
       mana: Math.min(state.maxMana, mana + MANA_REGEN),
       status,
       round: status === "active" ? state.round + 1 : state.round,

@@ -9,10 +9,9 @@
 // - Kampfmechanik (combat.ts, coopCombat.ts): Doppelschlag, Blutung bei Krit,
 //   Regeneration, Raserei, Bedrohung im Koop
 
-import { getAbility, type AbilityDef } from "./abilities";
+import { getAbility, type AbilityDef, type AbilityId } from "./abilities";
 import { getArmorClassSummary } from "./equipment";
 import { getItem } from "./items";
-import type { SkillWeapon } from "./skills";
 import type { ArmorClass, Equipment, WeaponType } from "./types";
 
 export type HeroClassId =
@@ -99,12 +98,13 @@ export function classStatBonus(id: HeroClassId | null): ClassStatBonus {
 }
 
 /**
- * Fähigkeit so, wie die Klasse sie verändert: Magier (günstiger, stärker),
- * Hexer (stärkere, längere Zustände), Waldläufer (5 Pfeile), Paladin
- * (halbes Bollwerk), Wächter (Wuchtiger Schlag betäubt).
+ * Fähigkeit so, wie die Klasse sie verändert: Magier (alle Fähigkeiten
+ * günstiger und stärker), Hexer (stärkere, längere Zustände), Waldläufer
+ * (Pfeilhagel mit 5 Pfeilen), Paladin (halbes Bollwerk), Wächter (Wuchtiger
+ * Schlag betäubt).
  */
-export function classAbility(weapon: SkillWeapon, heroClass: HeroClassId | null | undefined): AbilityDef {
-  const base = getAbility(weapon);
+export function classAbility(id: AbilityId, heroClass: HeroClassId | null | undefined): AbilityDef {
+  const base = getAbility(id);
   switch (heroClass) {
     case "mage":
       return { ...base, manaCost: Math.round(base.manaCost * 0.75), multiplier: base.multiplier * 1.15 };
@@ -114,11 +114,11 @@ export function classAbility(weapon: SkillWeapon, heroClass: HeroClassId | null 
       return { ...base, poison: boost(base.poison), burn: boost(base.burn), bleed: boost(base.bleed) };
     }
     case "ranger":
-      return weapon === "bow" ? { ...base, hits: 5 } : base;
+      return id === "bow" ? { ...base, hits: 5 } : base;
     case "paladin":
-      return weapon === "shield" ? { ...base, manaCost: Math.round(base.manaCost / 2) } : base;
+      return id === "shield" ? { ...base, manaCost: Math.round(base.manaCost / 2) } : base;
     case "warden":
-      return weapon === "greathammer" ? { ...base, stun: true } : base;
+      return id === "greathammer" ? { ...base, stun: true } : base;
     default:
       return base;
   }

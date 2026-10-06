@@ -477,15 +477,15 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         >
           ⚔️ Angreifen
         </motion.button>
-        {me.abilities.map((weapon) => {
-          const ability = classAbility(weapon, me.heroClass);
-          const blocker = coopAbilityBlocker(me, weapon);
+        {me.abilities.map((id) => {
+          const ability = classAbility(id, me.heroClass);
+          const blocker = coopAbilityBlocker(me, id);
           return (
             <motion.button
-              key={weapon}
+              key={id}
               whileTap={{ scale: 0.92 }}
               disabled={locked || blocker !== null}
-              onClick={() => send(weapon)}
+              onClick={() => send(id)}
               title={blocker ? `${ability.description}\n${blocker}` : ability.description}
               className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-3 py-2 text-lg text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -578,7 +578,13 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
         ? `${name(e.heroId)} belebt ${name(e.targetId)} mit ${getPotion(e.potionId).name} wieder.`
         : `${name(e.heroId)} trinkt ${getPotion(e.potionId).name}${e.heal > 0 ? ` (+${e.heal} LP)` : ""}.`;
     case "ability":
-      return `${name(e.heroId)} setzt ${getAbility(e.weapon).name} ein.`;
+      return `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
+    case "selfHeal":
+      return `${name(e.heroId)} heilt sich um ${e.heal} LP.`;
+    case "guarded":
+      return `${name(e.heroId)} wehrt ${e.prevented} Schaden ab.`;
+    case "counter":
+      return `${name(e.heroId)} schlägt zurück: ${bossName} −${e.damage}.`;
     case "hit":
       return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden.`;
     case "poison":

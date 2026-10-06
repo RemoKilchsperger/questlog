@@ -1,3 +1,4 @@
+import type { AbilityId } from "./abilities";
 // Zentrale Datentypen. Bewusst frei von React/Zustand, damit dieselben
 // Typen später im Backend (Supabase Edge Function) und im Kampfsystem
 // (Phaser) wiederverwendet werden können.
@@ -59,7 +60,7 @@ export interface Character {
   /** Ränge im Skilltree pro Waffentyp (src/domain/skills.ts). */
   skills: Partial<Record<WeaponType, number>>;
   /** Freigeschaltete Kampf-Fähigkeiten – erst nach dem Meistern der Waffe (src/domain/skills.ts). */
-  abilities: WeaponType[];
+  abilities: AbilityId[];
 }
 
 /** Rüstungsplätze am Körper. */

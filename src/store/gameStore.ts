@@ -37,6 +37,7 @@ import {
 } from "../domain/battlePoints";
 import { getDailyBonusQuests } from "../domain/bonusQuests";
 import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon } from "../domain/skills";
+import type { AbilityId } from "../domain/abilities";
 import { dateKey } from "../domain/calendar";
 import { calculateReward } from "../domain/rewards";
 import { allocatePoint, getLevel } from "../domain/leveling";
@@ -100,7 +101,7 @@ interface GameState {
   /** Steigert einen Waffen-Skill um einen Rang (kostet einen Skillpunkt). */
   learnSkill: (weapon: SkillWeapon) => void;
   /** Schaltet die Fähigkeit eines gemeisterten Waffentyps frei (kostet einen Skillpunkt). */
-  unlockAbility: (weapon: SkillWeapon) => void;
+  unlockAbility: (id: AbilityId) => void;
   /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`). */
   resetSkills: () => void;
   dismissReward: () => void;
@@ -138,7 +139,7 @@ interface GameState {
   startBattle: (creatureId: string) => void;
   battleDrinkPotion: (potionId: string) => void;
   /** Angriff der Runde – ohne Argument normal, sonst mit der Fähigkeit dieses Waffentyps. */
-  battleAttack: (ability?: SkillWeapon) => void;
+  battleAttack: (ability?: AbilityId) => void;
   /** Flucht: kostet Gold (siehe `fleeCost`), beendet den Kampf ohne Gegenangriff. */
   battleFlee: () => void;
   leaveBattle: () => void;
@@ -439,7 +440,7 @@ export const useGameStore = create<GameState>()(
 
       learnSkill: (weapon) => attempt(() => set((s) => ({ character: learnSkill(s.character, weapon) }))),
 
-      unlockAbility: (weapon) => attempt(() => set((s) => ({ character: unlockAbility(s.character, weapon) }))),
+      unlockAbility: (id) => attempt(() => set((s) => ({ character: unlockAbility(s.character, id) }))),
 
       resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character) }))),
 

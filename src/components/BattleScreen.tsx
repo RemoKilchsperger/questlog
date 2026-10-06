@@ -497,15 +497,15 @@ function Battle({ battle }: { battle: BattleState }) {
             >
               ⚔️ Angreifen
             </motion.button>
-            {battle.abilities.map((weapon) => {
-              const ability = classAbility(weapon, battle.heroClass);
-              const blocker = abilityBlocker(battle, weapon);
+            {battle.abilities.map((id) => {
+              const ability = classAbility(id, battle.heroClass);
+              const blocker = abilityBlocker(battle, id);
               return (
                 <motion.button
-                  key={weapon}
+                  key={id}
                   whileTap={{ scale: 0.92 }}
                   disabled={busy || blocker !== null}
-                  onClick={() => act(() => attack(weapon))}
+                  onClick={() => act(() => attack(id))}
                   title={blocker ? `${ability.description}\n${blocker}` : ability.description}
                   className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-3 py-2 text-lg text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -1000,7 +1000,13 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "fled":
       return e.goldLost > 0 ? `Du fliehst und verlierst ${e.goldLost} Gold.` : "Du fliehst.";
     case "ability":
-      return `Du setzt ${getAbility(e.weapon).name} ein (−${e.manaCost} Mana).`;
+      return `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
+    case "selfHeal":
+      return `Du heilst dich um ${e.heal} LP.`;
+    case "guarded":
+      return `Du wehrst ${e.prevented} Schaden ab.`;
+    case "counter":
+      return `Dein Gegenschlag trifft ${enemy} für ${e.damage} Schaden.`;
     case "poison":
       return e.target === "enemy" ? `Gift fügt ${enemy} ${e.damage} Schaden zu.` : `Gift fügt dir ${e.damage} Schaden zu.`;
     case "bleed":

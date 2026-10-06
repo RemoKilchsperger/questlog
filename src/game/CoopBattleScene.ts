@@ -3,7 +3,7 @@
 // Ereignisse ab, die der Koop-Zustand über den EventBus schickt.
 
 import Phaser from "phaser";
-import { getAbility } from "../domain/abilities";
+import { getAbility, type AbilityId } from "../domain/abilities";
 import { BOSS, getCoopBoss, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
@@ -299,10 +299,10 @@ export class CoopBattleScene extends Phaser.Scene {
       }
       case "ability": {
         const hero = this.unit(event.heroId);
-        this.float(hero, `${getAbility(event.weapon).name}!`, "#f4c95d", 15, 40);
+        this.float(hero, `${getAbility(event.ability).name}!`, "#f4c95d", 15, 40);
         this.tint(hero, 0xffe28f, 300);
         sfx.ability();
-        if (event.weapon === "shield") fx.ring(this, this.center(hero), 0xa9c6ff, 50);
+        this.announceAbility(hero, event.ability);
         break;
       }
       case "hit":
@@ -376,6 +376,27 @@ export class CoopBattleScene extends Phaser.Scene {
         sfx.manaBurn();
         break;
       }
+      case "selfHeal": {
+        const hero = this.unit(event.heroId);
+        this.setHp(hero, hero.hp + event.heal);
+        this.float(hero, `+${event.heal}`, "#9dffc8", 16, 20);
+        fx.rise(this, this.center(hero), 0x9dffc8, 8, 30);
+        sfx.heal();
+        break;
+      }
+      case "guarded": {
+        const hero = this.unit(event.heroId);
+        this.float(hero, "ABGEWEHRT", "#a9c6ff", 14, 30);
+        fx.ring(this, this.center(hero), 0xa9c6ff, 45);
+        sfx.block();
+        break;
+      }
+      case "counter":
+        this.setHp(this.boss, Math.max(0, this.boss.hp - event.damage));
+        this.float(this.boss, `↺ -${event.damage}`, "#f4c95d", 22);
+        fx.slashes(this, this.center(this.boss), 0xf4c95d, 2);
+        sfx.hit(true);
+        break;
       case "regen": {
         const hero = this.unit(event.heroId);
         this.setHp(hero, hero.hp + event.heal);
@@ -398,11 +419,166 @@ export class CoopBattleScene extends Phaser.Scene {
   }
 
   /** Angriff eines Helden – Form nach Waffe: Pfeil, Feuerball, Strahl oder Nahkampf. */
+  /** Vorbereitung einer Fähigkeit – bei den zweiten Fähigkeiten jeweils eigene. */
+  private announceAbility(hero: Unit, id: AbilityId) {
+    const at = this.center(hero);
+    switch (id) {
+      case "shield":
+        fx.ring(this, at, 0xa9c6ff, 50);
+        break;
+      case "dagger-2":
+        fx.burst(this, { x: at.x + 8, y: at.y - 20 }, 0xff3a3a, 6, 16, 3);
+        break;
+      case "sword-2":
+        fx.ring(this, at, 0xdde6ff, 35, 300);
+        sfx.block();
+        break;
+      case "greatsword-2":
+        for (let i = 0; i < 3; i++) this.time.delayedCall(i * 110, () => fx.ring(this, at, 0xf08a2c, 50 + i * 22, 400));
+        this.cameras.main.shake(220, 0.005);
+        sfx.roar();
+        break;
+      case "axe-2":
+        fx.rise(this, at, 0xc23a3a, 6, 36);
+        break;
+      case "greataxe-2":
+        this.tint(hero, 0xff4a4a, 600);
+        fx.ring(this, at, 0xc23a3a, 45, 380);
+        break;
+      case "mace-2":
+        fx.pillar(this, at, 0xffe9a0, 55);
+        sfx.heal();
+        break;
+      case "greathammer-2":
+        this.tweens.add({ targets: hero.body, y: hero.body.y - 14, duration: 180, yoyo: true });
+        break;
+      case "scepter-2":
+        fx.curseRing(this, at, 0x8a4ad0, () => {});
+        sfx.curse();
+        break;
+      case "staff-2":
+        fx.flash(this, 0x5a1408, 0.4, 450);
+        sfx.magic();
+        break;
+      case "bow-2":
+        fx.ring(this, this.center(this.boss), 0xff5a5a, 40, 500);
+        break;
+      case "shield-2":
+        fx.ring(this, at, 0xf4c95d, 45);
+        this.tint(hero, 0xffe28f, 500);
+        sfx.block();
+        break;
+    }
+  }
+
+  /** Eigene Treffer-Animation der zweiten Fähigkeiten – false, wenn es keine gibt. */
+  private abilityHit(hero: Unit, id: AbilityId, from: fx.Point, target: fx.Point, hit: () => void, crit: boolean): boolean {
+    const dash = (onHit: () => void) => {
+      sfx.swing();
+      if (hero.weapon) this.swing(hero.weapon);
+      this.tweens.add({ targets: hero.body, x: hero.homeX + 70, duration: 120, ease: "Quad.easeIn", yoyo: true, onYoyo: onHit });
+    };
+    switch (id) {
+      case "dagger-2":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xff3a3a, 1);
+          fx.slashes(this, target, 0xff3a3a, 1, true);
+          fx.burst(this, target, 0xc23a3a, 14, 60, 5);
+        });
+        return true;
+      case "sword-2":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xdde6ff, 1, true);
+          this.time.delayedCall(150, () => this.tint(hero, 0xa9c6ff, 450));
+        });
+        return true;
+      case "greatsword-2":
+        dash(() => {
+          hit();
+          fx.ring(this, target, 0xf08a2c, 70, 360);
+        });
+        return true;
+      case "axe-2":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xc23a3a, 3, crit);
+        });
+        return true;
+      case "greataxe-2":
+        dash(() => {
+          hit();
+          fx.siphon(this, target, this.center(hero), 0xc23a3a, 10);
+          sfx.drain();
+        });
+        return true;
+      case "mace-2":
+        dash(() => {
+          hit();
+          fx.burst(this, target, 0xffe9a0, 10, 45);
+        });
+        return true;
+      case "greathammer-2":
+        this.cameras.main.shake(450, 0.01);
+        sfx.quake(0.5);
+        fx.groundWave(this, { x: hero.homeX + 30, y: GROUND_Y }, { x: target.x, y: GROUND_Y }, 0x8a7a60, 380, () => {
+          hit();
+          fx.cracks(this, target);
+        });
+        return true;
+      case "scepter-2":
+        sfx.curse();
+        fx.beam(this, from, target, 0x8a4ad0, 9, 400);
+        this.time.delayedCall(160, () => {
+          hit();
+          fx.ring(this, target, 0x8a4ad0, 55, 480);
+        });
+        return true;
+      case "staff-2": {
+        sfx.fire(0.5);
+        const meteor = this.add.circle(0, 0, 22, 0xc23a3a).setStrokeStyle(5, 0xf08a2c);
+        fx.projectile(this, { x: target.x + 140, y: -40 }, target, meteor, {
+          duration: 500,
+          arc: 0,
+          trail: 0xf08a2c,
+          onArrive: () => {
+            hit();
+            fx.burst(this, target, 0xf08a2c, 26, 110, 8);
+            fx.ring(this, { x: target.x, y: GROUND_Y }, 0xffe28f, 130, 480, true);
+            this.cameras.main.shake(300, 0.012);
+            sfx.explosion();
+          },
+        });
+        return true;
+      }
+      case "bow-2": {
+        this.texture("arrow", ARROW);
+        sfx.bowShot();
+        fx.beam(this, from, target, 0xffe28f, 3, 240);
+        const arrow = this.add.image(0, 0, "arrow").setScale(4);
+        fx.projectile(this, from, target, arrow, {
+          duration: 180,
+          arc: 0,
+          face: true,
+          onArrive: () => {
+            hit();
+            fx.burst(this, target, 0xc23a3a, 10, 50);
+          },
+        });
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
   private heroHits(event: Extract<CoopEvent, { type: "hit" }>) {
     const hero = this.unit(event.attacker);
     const target = this.center(this.boss);
     const hit = () => this.impact(this.boss, event.damage, event.crit);
     const from = { x: hero.homeX + 30, y: GROUND_Y - 50 };
+    if (event.ability && this.abilityHit(hero, event.ability, from, target, hit, event.crit)) return;
     const kind = event.weapon ?? hero.weaponType;
     if (kind === "bow") {
       this.texture("arrow", ARROW);
