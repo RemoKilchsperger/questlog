@@ -236,8 +236,8 @@ export function getCreatureStats(creature: CreatureDef): CreatureStats {
 /** Beute: normale Kreaturen droppen manchmal, Bosse immer und eher Seltenes. */
 export function getCreatureLoot(creature: CreatureDef): { dropChance: number; weights: Record<Rarity, number> } {
   return creature.boss
-    ? { dropChance: 1, weights: { common: 10, rare: 40, epic: 35, legendary: 15 } }
-    : { dropChance: 0.35, weights: { common: 58, rare: 30, epic: 10, legendary: 2 } };
+    ? { dropChance: 1, weights: { common: 25, rare: 50, epic: 20, legendary: 5 } }
+    : { dropChance: 0.35, weights: { common: 65, rare: 30, epic: 4.5, legendary: 0.5 } };
 }
 
 /**

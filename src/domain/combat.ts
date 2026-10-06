@@ -477,8 +477,8 @@ export function rollBuffPotion(rng: () => number = Math.random): string | null {
   return BUFF_POTIONS[Math.floor(rng() * BUFF_POTIONS.length)].id;
 }
 
-/** Chance pro Bosssieg auf eines seiner vier legendären Boss-Items. */
-export const BOSS_ITEM_DROP_CHANCE = 0.05;
+/** Chance pro Bosssieg (Gebiets- und Dungeon-Bosse) auf eines seiner legendären Boss-Items. */
+export const BOSS_ITEM_DROP_CHANCE = 0.1;
 
 /** Boss-Items gibt es nur von ihrem Boss – immer legendär. */
 export function rollBossLoot(creature: CreatureDef, uid: string, rng: () => number = Math.random): Loot {

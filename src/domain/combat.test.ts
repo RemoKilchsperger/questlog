@@ -281,14 +281,14 @@ describe("Boss-Items", () => {
     }
   });
 
-  it("gibt es nur beim eigenen Boss, mit 5 % Chance und immer legendär", () => {
+  it("gibt es nur beim eigenen Boss, mit 10 % Chance und immer legendär", () => {
     const boss = getCreature("lich-king").creature;
-    const drop = rollBossLoot(boss, "x", fixedRng(0.04));
+    const drop = rollBossLoot(boss, "x", fixedRng(0.09));
     expect(drop?.rarity).toBe("legendary");
     expect(getBossItems("lich-king").map((i) => i.id)).toContain(drop?.itemId);
-    expect(rollBossLoot(boss, "x", fixedRng(0.06))).toBeNull();
+    expect(rollBossLoot(boss, "x", fixedRng(0.11))).toBeNull();
     expect(rollBossLoot(getCreature("grey-wolf").creature, "x", fixedRng(0))).toBeNull();
-    expect(BOSS_ITEM_DROP_CHANCE).toBe(0.05);
+    expect(BOSS_ITEM_DROP_CHANCE).toBe(0.1);
   });
 
   it("Angriffs- und Rüstungstränke fallen selten bei jedem Gegner – kaufen kann man sie nicht", () => {

@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { getCreature } from "../domain/creatures";
 import { useGameStore } from "../store/gameStore";
 import { BattleScene, SCENE_HEIGHT, SCENE_WIDTH, type BattleSceneData } from "./BattleScene";
-import { getHeroSprite, getMainWeapon } from "./heroSprite";
+import { getHeroGlowSprite, getHeroSprite, getMainWeapon, getMainWeaponGlow } from "./heroSprite";
 
 /**
  * Bettet die Phaser-Kampfszene in React ein. Pro Kampf wird ein Spiel
@@ -21,6 +21,8 @@ export default function PhaserBattle({ battleId }: { battleId: string }) {
       battle,
       heroSprite: getHeroSprite(equipment, { withoutMainWeapon: true }),
       heroWeapon: getMainWeapon(equipment),
+      heroGlow: getHeroGlowSprite(equipment, { withoutMainWeapon: true }),
+      heroWeaponGlow: getMainWeaponGlow(equipment),
       enemySprite: creature.sprite,
       boss: creature.boss,
       colors: area.colors,

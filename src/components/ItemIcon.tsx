@@ -1,5 +1,6 @@
 import type { ItemDef, Rarity } from "../domain/types";
-import { getItemSprite } from "../game/itemSprites";
+import type { CSSProperties } from "react";
+import { bossGlowColor, getItemSprite } from "../game/itemSprites";
 import { PixelSprite } from "./PixelSprite";
 
 const GLOW: Record<Rarity, string> = {
@@ -31,7 +32,10 @@ const SPARKLE_COLOR: Record<Rarity, string> = {
   legendary: "#fff3c4",
 };
 
-/** Pixel-Symbol eines Items – Form nach Typ, Farbe nach Material, Leuchten nach Seltenheit. */
+/**
+ * Pixel-Symbol eines Items – Form nach Typ, Farbe nach Material, Leuchten nach
+ * Seltenheit. Boss-Items leuchten stattdessen in ihren eigenen Rüstungsfarben.
+ */
 export function ItemIcon({
   def,
   rarity = "common",
@@ -43,17 +47,18 @@ export function ItemIcon({
   size?: number;
   className?: string;
 }) {
+  const bossGlow = bossGlowColor(def);
   return (
     <span
       className={`relative inline-block shrink-0 align-middle ${className}`}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, ...(bossGlow && ({ "--glow": bossGlow } as CSSProperties)) }}
     >
-      <PixelSprite sprite={getItemSprite(def)} size={size} className={`block ${GLOW[rarity]}`} />
+      <PixelSprite sprite={getItemSprite(def)} size={size} className={`block ${bossGlow ? "glow-boss" : GLOW[rarity]}`} />
       {SPARKLES[rarity].map((s) => (
         <span
           key={s.delay}
           className="sparkle"
-          style={{ left: s.left, top: s.top, animationDelay: s.delay, background: SPARKLE_COLOR[rarity] }}
+          style={{ left: s.left, top: s.top, animationDelay: s.delay, background: bossGlow ?? SPARKLE_COLOR[rarity] }}
         />
       ))}
     </span>

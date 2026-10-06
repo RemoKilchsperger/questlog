@@ -24,6 +24,10 @@ export interface BattleSceneData {
   heroSprite: SpriteDef;
   /** Hauptwaffe – eigenes Bild, damit sie beim Angriff schwingen kann */
   heroWeapon: HeldWeapon | null;
+  /** Leuchtschicht der Boss-Items am Helden (ohne Hauptwaffe) – null, wenn nichts leuchtet */
+  heroGlow: SpriteDef | null;
+  /** Leuchtfarbe der Hauptwaffe, falls sie ein Boss-Item ist */
+  heroWeaponGlow: string | null;
   /** Schlüssel der Kreaturen-Grafik (creatureSprites.ts) */
   enemySprite: string;
   boss: boolean;
@@ -80,6 +84,8 @@ export class BattleScene extends Phaser.Scene {
       getCreatureSprite(this.setup.enemySprite),
       this.setup.boss ? 9.5 : 8,
     );
+
+    this.addHeroGlow(hero);
 
     this.fighters = {
       hero: this.createFighter(hero, battle.hero.name, battle.hero.level, battle.hero.hp, battle.hero.maxHp),
@@ -175,6 +181,41 @@ export class BattleScene extends Phaser.Scene {
     const images = weapon ? [weapon, figure] : [figure];
     const body = this.add.container(x, GROUND_Y + 4, images).setScale(scale);
     return { body, images, weapon };
+  }
+
+  /**
+   * Boss-Items leuchten in ihren Rüstungsfarben: ein weicher Schein hinter dem
+   * Helden, ein pulsierender Schimmer darüber und ein Glühen um die Hauptwaffe.
+   * Die Effekte (preFX) gibt es nur mit WebGL – im Canvas-Modus bleibt der Schimmer.
+   */
+  private addHeroGlow(hero: Pick<Fighter, "body" | "images" | "weapon">) {
+    const { heroGlow, heroWeaponGlow } = this.setup;
+    if (heroWeaponGlow && hero.weapon?.preFX) {
+      hero.weapon.preFX.padding = 4;
+      hero.weapon.preFX.addGlow(Phaser.Display.Color.HexStringToColor(heroWeaponGlow).color, 3, 0, false, 0.1, 10);
+    }
+    if (!heroGlow) return;
+    const figure = hero.images[hero.images.length - 1];
+    const image = renderSprite(heroGlow, false, 1);
+    if (!this.textures.exists("hero-glow")) {
+      const canvas = this.textures.createCanvas("hero-glow", image.width, image.height)!;
+      paintSprite(canvas.getContext(), image);
+      canvas.refresh();
+    }
+    const halo = this.add.image(0, 0, "hero-glow").setOrigin(figure.originX, figure.originY).setAlpha(0.6);
+    if (halo.preFX) {
+      halo.preFX.padding = 12;
+      halo.preFX.addBlur(2, 2, 2, 2, 0xffffff, 8);
+    }
+    const shimmer = this.add
+      .image(0, 0, "hero-glow")
+      .setOrigin(figure.originX, figure.originY)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0);
+    hero.body.addAt(halo, 0);
+    hero.body.add(shimmer);
+    this.tweens.add({ targets: halo, alpha: 1, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    this.tweens.add({ targets: shimmer, alpha: 0.4, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
   }
 
   private createFighter(

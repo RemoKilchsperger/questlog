@@ -53,6 +53,42 @@ export function itemPalette(def: ItemDef): Record<string, string> {
   return { L, m, D, t, j: GEMS[suffix], ...HANDLE };
 }
 
+/** "#rrggbb" → [Farbton 0–360, Sättigung 0–1, Helligkeit 0–1] */
+function toHsl(hex: string): [number, number, number] {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+
+/** Farbton 0–360, Sättigung/Helligkeit 0–1 → "#rrggbb" */
+function fromHsl(h: number, s: number, l: number): string {
+  const a = s * Math.min(l, 1 - l);
+  const channel = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const value = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(value * 255).toString(16).padStart(2, "0");
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
+
+/**
+ * Leuchtfarbe eines Boss-Items – abgeleitet aus seinen Rüstungsfarben: die
+ * kräftigere der beiden Hauptfarben, aufgehellt, damit sie auf dunklem
+ * Grund leuchtet. Normale Items leuchten nicht (null).
+ */
+export function bossGlowColor(def: ItemDef): string | null {
+  if (!def.bossId) return null;
+  const { L, m } = itemPalette(def);
+  const [h, s] = [toHsl(L), toHsl(m)].reduce((a, b) => (b[1] > a[1] ? b : a));
+  return fromHsl(h, Math.max(s, 0.3), 0.65);
+}
+
 /**
  * Symbol-Form. Mit `axis` ist das Raster eine aufrecht gezeichnete Waffe
  * (Spitze oben, `axis` = Spalte der Mittelachse), die schräg gekippt wird.

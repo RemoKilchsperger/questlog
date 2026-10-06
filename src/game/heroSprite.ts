@@ -3,7 +3,7 @@
 
 import { getItem } from "../domain/items";
 import type { ArmorSlot, Equipment, ItemDef } from "../domain/types";
-import { getWornHelmet, getWornWeapon, itemPalette } from "./itemSprites";
+import { bossGlowColor, getWornHelmet, getWornWeapon, itemPalette } from "./itemSprites";
 import { composeSprites, type SpriteDef, type SpriteLayer } from "./sprites";
 
 export const HERO_SPRITE: SpriteDef = {
@@ -61,14 +61,33 @@ function heldItems(equipment: Equipment) {
   return { main, shield, offHand: shield ? undefined : offHand };
 }
 
-/** Grundgrafik mit den Farben der angelegten Rüstung (Brust, Arme, Beine, Schuhe). */
-function armoredBody(equipment: Equipment): SpriteDef {
-  const palette = { ...HERO_SPRITE.palette };
+/**
+ * Platzhalter in der Leuchtschicht: verdeckt, was dahinter liegt (z. B. eine
+ * Boss-Waffe hinter dem Körper), leuchtet aber selbst nicht.
+ */
+const NO_GLOW = "none";
+
+/** Färbt eine Grafik für die Leuchtschicht ein: ganz in der Leuchtfarbe des Items oder unsichtbar. */
+function glowLayer(sprite: SpriteDef, def: ItemDef): SpriteDef {
+  const color = bossGlowColor(def) ?? NO_GLOW;
+  const chars = new Set(sprite.grid.join("").replaceAll(".", ""));
+  return { grid: sprite.grid, palette: Object.fromEntries([...chars].map((ch) => [ch, color])) };
+}
+
+/**
+ * Grundgrafik mit den Farben der angelegten Rüstung (Brust, Arme, Beine, Schuhe).
+ * Mit `glow` stattdessen die Leuchtschicht: nur Teile von Boss-Rüstungen leuchten.
+ */
+function armoredBody(equipment: Equipment, glow = false): SpriteDef {
+  const palette: Record<string, string> = glow
+    ? Object.fromEntries(Object.keys(HERO_SPRITE.palette).map((ch) => [ch, NO_GLOW]))
+    : { ...HERO_SPRITE.palette };
   for (const [slot, mapping] of Object.entries(ARMOR_COLORS) as [keyof typeof ARMOR_COLORS, Record<string, string>][]) {
     const owned = equipment[slot];
     if (!owned) continue;
-    const colors = itemPalette(getItem(owned.itemId));
-    for (const [ch, shade] of Object.entries(mapping)) palette[ch] = colors[shade];
+    const def = getItem(owned.itemId);
+    const colors = itemPalette(def);
+    for (const [ch, shade] of Object.entries(mapping)) palette[ch] = glow ? (bossGlowColor(def) ?? NO_GLOW) : colors[shade];
   }
   return { grid: HERO_SPRITE.grid, palette };
 }
@@ -89,20 +108,41 @@ export function getMainWeapon(equipment: Equipment): HeldWeapon | null {
   return { ...worn, hand: { x: RIGHT_HAND.x + SIDE_MARGIN, y: RIGHT_HAND.y + TOP_MARGIN } };
 }
 
+/** Leuchtfarbe der Waffe in der rechten Hand (nur Boss-Waffen) – die Kampfszene lässt sie separat leuchten. */
+export function getMainWeaponGlow(equipment: Equipment): string | null {
+  const { main } = heldItems(equipment);
+  return main ? bossGlowColor(main) : null;
+}
+
 /**
  * Der Held mit sichtbarer Ausrüstung: Rüstung in Materialfarben, Helm auf dem
  * Kopf, Waffe in der rechten Hand, Schild bzw. zweite Waffe in der linken.
  * Mit `withoutMainWeapon` fehlt die rechte Waffe (siehe `getMainWeapon`).
  */
 export function getHeroSprite(equipment: Equipment, { withoutMainWeapon = false } = {}): SpriteDef {
+  return composeSprites(WIDTH, HEIGHT, heroLayers(equipment, withoutMainWeapon, false));
+}
+
+/**
+ * Leuchtschicht zu `getHeroSprite` (gleiche Grösse): nur die sichtbaren Pixel
+ * angelegter Boss-Items, in ihrer Leuchtfarbe. null, wenn nichts leuchtet.
+ */
+export function getHeroGlowSprite(equipment: Equipment, { withoutMainWeapon = false } = {}): SpriteDef | null {
+  const { grid, palette } = composeSprites(WIDTH, HEIGHT, heroLayers(equipment, withoutMainWeapon, true));
+  const glowing = Object.fromEntries(Object.entries(palette).filter(([, color]) => color !== NO_GLOW));
+  return Object.keys(glowing).length > 0 ? { grid, palette: glowing } : null;
+}
+
+function heroLayers(equipment: Equipment, withoutMainWeapon: boolean, glow: boolean): SpriteLayer[] {
   const at = (sprite: SpriteDef, x: number, y: number): SpriteLayer => ({
     sprite,
     x: x + SIDE_MARGIN,
     y: y + TOP_MARGIN,
   });
+  const paint = (sprite: SpriteDef, def: ItemDef) => (glow ? glowLayer(sprite, def) : sprite);
   const inHand = (def: ItemDef, hand: { x: number; y: number }, mirrored: boolean) => {
     const worn = getWornWeapon(def, mirrored);
-    return at(worn.sprite, hand.x - worn.grip.x, hand.y - worn.grip.y);
+    return at(paint(worn.sprite, def), hand.x - worn.grip.x, hand.y - worn.grip.y);
   };
   const { main, shield, offHand } = heldItems(equipment);
 
@@ -111,8 +151,11 @@ export function getHeroSprite(equipment: Equipment, { withoutMainWeapon = false 
   if (main && !withoutMainWeapon) behind.push(inHand(main, RIGHT_HAND, false));
   if (offHand) behind.push(inHand(offHand, LEFT_HAND, true));
   const front: SpriteLayer[] = [];
-  if (equipment.head) front.push(at(getWornHelmet(getItem(equipment.head.itemId)), 0, -TOP_MARGIN));
+  if (equipment.head) {
+    const helmet = getItem(equipment.head.itemId);
+    front.push(at(paint(getWornHelmet(helmet), helmet), 0, -TOP_MARGIN));
+  }
   if (shield) front.push(inHand(shield, LEFT_HAND, false));
 
-  return composeSprites(WIDTH, HEIGHT, [...behind, at(armoredBody(equipment), 0, 0), ...front]);
+  return [...behind, at(armoredBody(equipment, glow), 0, 0), ...front];
 }

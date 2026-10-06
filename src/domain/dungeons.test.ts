@@ -65,11 +65,11 @@ describe("Dungeons", () => {
     expect(() => spendBattlePoint({ ...hero, battlePoints: fights - 1 }, dungeonCost(fights))).toThrow(/Kampfpunkte/);
   });
 
-  it("die Beute gibt es nur beim Dungeon-Boss, mit 5 % Chance", () => {
+  it("die Beute gibt es nur beim Dungeon-Boss, mit 10 % Chance", () => {
     const boss = getCreature("void-lord").creature;
-    const drop = rollBossLoot(boss, "x", () => 0.04);
+    const drop = rollBossLoot(boss, "x", () => 0.09);
     expect(getBossItems("void-lord").map((i) => i.id)).toContain(drop?.itemId);
-    expect(rollBossLoot(boss, "x", () => 0.06)).toBeNull();
+    expect(rollBossLoot(boss, "x", () => 0.11)).toBeNull();
     expect(rollBossLoot(getCreature("soul-eater").creature, "x", () => 0)).toBeNull();
   });
 });

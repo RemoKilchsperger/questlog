@@ -23,9 +23,11 @@ export interface PixelImage {
   pixels: (string | null)[][];
 }
 
-/** Löst das Raster in Farben auf und ergänzt optional einen 1-px-Umriss. */
-export function renderSprite(def: SpriteDef, outline = true): PixelImage {
-  const pad = outline ? 1 : 0;
+/**
+ * Löst das Raster in Farben auf und ergänzt optional einen 1-px-Umriss.
+ * `pad` = leerer Rand ringsum (mit Umriss 1, damit dieser Platz hat).
+ */
+export function renderSprite(def: SpriteDef, outline = true, pad = outline ? 1 : 0): PixelImage {
   const width = Math.max(...def.grid.map((r) => r.length)) + pad * 2;
   const height = def.grid.length + pad * 2;
   const colorAt = (x: number, y: number): string | null => {
