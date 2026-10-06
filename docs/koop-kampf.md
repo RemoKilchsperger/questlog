@@ -3,8 +3,8 @@
 Mehrere Spieler kämpfen gemeinsam gegen einen Koop-Boss. Pro Runde handeln
 zuerst alle Spieler, danach greift der Boss an.
 
-Status: **Etappe 1 umgesetzt** (Branch `feature/koop-kampf`). Zahlen sind
-Startwerte und werden beim Testen abgestimmt.
+Status: **Etappe 1 live, Etappe 2 umgesetzt** (Branch `feature/koop-etappe-2`).
+Zahlen sind Startwerte und werden beim Testen abgestimmt.
 
 ---
 
@@ -221,10 +221,30 @@ Spielstand teilen, überschreiben sich dabei Kampfpunkte und Beute gegenseitig. 
 nur im Testmodus.
 
 ### Etappe 2: Server
-- [ ] Tabelle `coop_battles` + RLS im `schema.sql`
-- [ ] Edge Functions, Heldenprofil aus dem Cloud-Spielstand
-- [ ] Zeitlimit serverseitig, Wiederverbinden nach Abbruch
-- [ ] Host-Modell entfernen
+- [x] Tabelle `coop_battles` + RLS (`supabase/migrations/20261006120000_coop_battles.sql`)
+- [x] Edge Function `coop`, Heldenprofil aus dem Cloud-Spielstand
+- [x] Zeitlimit serverseitig, Wiederverbinden nach Abbruch („Zurückkehren“ im Kampf-Tab)
+- [x] Host-Modell entfernt: Verlässt der Host den Kampf, kämpfen die anderen weiter
+- [ ] In Supabase einrichten (siehe unten) und mit zwei Konten testen
+
+**Umsetzung:**
+- `src/coop/server.ts`: Befehle auf einen Kampf-Datensatz anwenden. Rein und getestet.
+- `supabase/functions/coop/index.ts`: Edge Function. Prüft die Anmeldung, lädt die Spielstände
+  und speichert mit Versionsprüfung.
+- `src/coop/backend.ts`: Browser-Seite (Edge Function + Realtime, lokaler Testmodus).
+- `src/coop/coopStore.ts`: übernimmt den Stand vom Server, zahlt Kampfpunkte, würfelt die eigene Beute.
+
+Gegenüber dem Plan: Statt drei Functions gibt es eine (`coop`) mit Befehlen
+(create, join, ready, leave, start, act, tick). Alte Kämpfe räumt die Function nach
+24 Stunden beim Erstellen einer neuen Lobby auf, ein Cron-Job ist nicht nötig.
+
+**Einrichten in Supabase (einmalig):**
+1. Vorher die Tabelle `saves` als CSV sichern (Table Editor → saves → Export).
+2. SQL Editor → Inhalt von `supabase/migrations/20261006120000_coop_battles.sql` ausführen.
+3. Einmal `npx supabase login` (öffnet den Browser) und `npx supabase link --project-ref <ref>`.
+   `<ref>` steht in der Projekt-URL: `https://<ref>.supabase.co`.
+4. `npm run functions:deploy`: bündelt die Spiellogik und lädt die Function hoch.
+   Nach jeder Änderung an der Spiellogik wiederholen.
 
 ### Etappe 3: Inhalt und Feinschliff
 - [ ] Weitere Koop-Bosse (Frostriese, Weltenverschlinger)

@@ -11,9 +11,9 @@ export default function PhaserCoopBattle({ battleId }: { battleId: string }) {
   const parent = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const { battle, members, myId } = useCoopStore.getState();
-    if (!battle || !parent.current) return;
-    const data: CoopSceneData = { state: battle, members, myId };
+    const { row, myId } = useCoopStore.getState();
+    if (!row?.state || !parent.current) return;
+    const data: CoopSceneData = { state: row.state, members: row.members, myId };
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: parent.current,

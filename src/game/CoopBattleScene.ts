@@ -7,7 +7,7 @@ import { getAbility } from "../domain/abilities";
 import { BOSS, getCoopBoss, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
-import type { CoopMember } from "../coop/transport";
+import type { CoopMember } from "../coop/protocol";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
 import { getCreatureSprite } from "./creatureSprites";

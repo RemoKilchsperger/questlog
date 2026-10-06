@@ -1,46 +1,16 @@
-// Koop-Lobby und -Kampf (Etappe 1 aus docs/koop-kampf.md: Host-Modell).
-// Wer die Lobby erstellt, ist Host: Er sammelt die Aktionen aller Spieler,
-// löst die Runde auf (sobald alle gewählt haben oder die Zeit um ist) und
-// schickt den neuen Stand an alle. Die anderen zeigen nur an und wählen.
-// Jeder Spieler bezahlt seine Kampfpunkte und würfelt seine Beute selbst.
-//
-// Wird nicht gespeichert: Ein Neuladen verlässt die Lobby. Kommt ein Spieler
-// während des Kampfs zurück (gleiche Id), bekommt er den laufenden Stand.
+// Koop-Lobby und -Kampf im Browser (Etappe 2 aus docs/koop-kampf.md).
+// Der Server (Edge Function bzw. lokaler Testmodus) rechnet alles; der
+// Browser schickt nur Befehle und übernimmt den Stand, den er zurückbekommt –
+// als Antwort oder live über Realtime. Hier passiert nur, was zum eigenen
+// Spielstand gehört: Kampfpunkte zahlen, Tränke abziehen, eigene Beute würfeln.
 
 import { create } from "zustand";
 import { useCloudStore } from "../cloud/cloudStore";
-import { getHeroCombatProfile } from "../domain/combat";
-import {
-  COOP_COST,
-  COOP_MAX_PLAYERS,
-  COOP_MIN_PLAYERS,
-  resolveRound,
-  rollCoopReward,
-  startCoopBattle,
-  type CoopAction,
-  type CoopBattleState,
-  type CoopEvent,
-} from "../domain/coopCombat";
-import { getLevel } from "../domain/leveling";
+import { COOP_COST, rollCoopReward, type CoopAction, type CoopBattleState } from "../domain/coopCombat";
 import { EventBus } from "../game/EventBus";
 import { useGameStore, type ClaimedChest } from "../store/gameStore";
-import {
-  availableTransport,
-  newLobbyCode,
-  openTransport,
-  type CoopMember,
-  type CoopMessage,
-  type CoopTransport,
-} from "./transport";
-
-/** Alle so oft ein Lebenszeichen … */
-const PING_MS = 3000;
-/** … wer so lange still ist, gilt als getrennt (sein Held greift automatisch an). */
-const OFFLINE_MS = 10_000;
-/** Ist der Host so lange still, wird der Kampf abgebrochen. */
-const HOST_LOST_MS = 15_000;
-/** So lange wartet ein Beitretender auf eine Antwort des Hosts. */
-const JOIN_TIMEOUT_MS = 8000;
+import { availableBackend, getBackend, type CoopBackend } from "./backend";
+import type { CoopCommand, CoopRow } from "./protocol";
 
 type Phase = "idle" | "joining" | "lobby" | "battle";
 
@@ -52,31 +22,30 @@ export interface CoopResult {
 
 interface CoopState {
   phase: Phase;
-  transport: CoopTransport["kind"] | null;
-  code: string | null;
-  bossId: string | null;
-  hostId: string | null;
+  backend: CoopBackend["kind"] | null;
+  /** Der Kampf, wie ihn der Server zuletzt geschickt hat */
+  row: CoopRow | null;
   myId: string;
-  members: CoopMember[];
-  /** Ids der Spieler mit aktuellem Lebenszeichen (inkl. einem selbst) */
-  online: string[];
-  battle: CoopBattleState | null;
-  /** Lokale Uhrzeit, zu der die Spielerphase endet */
-  deadline: number;
-  /** Wer in dieser Runde schon gewählt hat */
-  chosen: string[];
-  myAction: CoopAction | null;
+  /** Serveruhr minus eigene Uhr – für einen genauen Countdown */
+  clockOffset: number;
+  /** Eben gewählte Aktion – bis der Server sie bestätigt */
+  pendingAction: CoopAction | null;
   result: CoopResult | null;
+  /** Laufende Lobby bzw. laufender Kampf, zu dem man zurückkehren kann */
+  rejoin: CoopRow | null;
+  busy: boolean;
   error: string | null;
 
-  createLobby: (bossId: string) => void;
-  joinLobby: (code: string) => void;
-  setReady: (ready: boolean) => void;
+  createLobby: (bossId: string) => Promise<void>;
+  joinLobby: (code: string) => Promise<void>;
+  setReady: (ready: boolean) => Promise<void>;
   /** Nur der Host: Kampf starten */
-  startBattle: () => void;
-  chooseAction: (action: CoopAction) => void;
-  /** Lobby bzw. Kampf verlassen (der Host löst damit alles auf) */
+  startBattle: () => Promise<void>;
+  chooseAction: (action: CoopAction) => Promise<void>;
+  /** Lobby verlassen bzw. Kampf verlassen (der Held greift dann automatisch an) */
   leave: () => void;
+  /** Nachsehen, ob ein laufender Koop-Kampf auf einen wartet */
+  checkRejoin: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -92,369 +61,182 @@ function currentPlayerId(): string {
   return id;
 }
 
-/** Der eigene Held, wie ihn die Mitspieler sehen. */
-function myMember(ready: boolean): CoopMember {
-  const { character, equipment } = useGameStore.getState();
-  return {
-    id: currentPlayerId(),
-    name: character.name,
-    username: useCloudStore.getState().username,
-    level: getLevel(character.totalXp),
-    equipment,
-    profile: getHeroCombatProfile(character, equipment),
-    ready,
-  };
-}
-
-/** Warum man nicht bereit sein kann – oder null. */
+/** Warum man nicht bereit sein bzw. starten kann – oder null. */
 export function coopReadyBlocker(): string | null {
   const points = useGameStore.getState().character.battlePoints;
   return points < COOP_COST ? `Du brauchst ${COOP_COST} Kampfpunkte (du hast ${points}).` : null;
 }
 
-// Verbindungszustand ausserhalb von React (Timer, Kanal, Aktionen beim Host)
-let link: CoopTransport | null = null;
-let pingTimer: number | undefined;
-let roundTimer: number | undefined;
-let joinTimer: number | undefined;
-const lastSeen = new Map<string, number>();
-/** Beim Host: gewählte Aktionen der laufenden Runde */
-let hostActions: Record<string, CoopAction> = {};
-/** Kampfpunkte für den laufenden Kampf bezahlt (für die Erstattung bei Abbruch) */
-let paid = false;
+/** Ende der Spielerphase in eigener Uhrzeit. */
+export function localDeadline(state: CoopBattleState, clockOffset: number): number {
+  return state.deadline - clockOffset;
+}
+
+// Ausserhalb von React: Abo der Änderungen, Timer für den Zeitablauf
+let unsubscribe: (() => void) | null = null;
+let tickTimer: number | undefined;
+/** Kämpfe, für die schon bezahlt bzw. Beute gewürfelt wurde (nie doppelt) */
+const paid = new Set<string>();
+const rewarded = new Set<string>();
 
 export const useCoopStore = create<CoopState>()((set, get) => {
-  const isHost = () => get().hostId !== null && get().hostId === get().myId;
-  const send = (message: CoopMessage) => link?.send(message);
-  const remaining = (state: CoopBattleState) => Math.max(0, state.deadline - Date.now());
-
-  function broadcastLobby() {
-    const { hostId, bossId, members } = get();
-    if (hostId && bossId) send({ type: "lobby", hostId, bossId, members });
-  }
-
-  /** Alles schliessen und auf Anfang – optional mit Fehlermeldung. */
   function reset(error: string | null = null) {
-    link?.close();
-    link = null;
-    window.clearInterval(pingTimer);
-    window.clearTimeout(roundTimer);
-    window.clearTimeout(joinTimer);
-    lastSeen.clear();
-    hostActions = {};
-    paid = false;
+    unsubscribe?.();
+    unsubscribe = null;
+    window.clearTimeout(tickTimer);
+    set({ phase: "idle", backend: null, row: null, pendingAction: null, result: null, busy: false, error });
+  }
+
+  function backend(): CoopBackend {
+    return getBackend(get().backend!);
+  }
+
+  /** Neuen Stand übernehmen – ältere Versionen (verspätete Nachrichten) werden ignoriert. */
+  function applyRow(next: CoopRow | null) {
+    if (!next) return reset();
+    const prev = get().row;
+    if (prev && prev.id === next.id && next.version <= prev.version) return;
+    const myId = get().myId;
+    if (!next.player_ids.includes(myId)) return reset("Du bist nicht mehr Teil dieser Lobby.");
+
+    // Kampfstart erlebt: jetzt die Kampfpunkte zahlen (nur einmal pro Kampf)
+    if (prev?.phase === "lobby" && next.phase !== "lobby" && next.state && !paid.has(next.state.id)) {
+      paid.add(next.state.id);
+      try {
+        useGameStore.getState().payCoop(COOP_COST);
+      } catch {
+        // zu wenig Kampfpunkte – die Bereit-Prüfung verhindert das eigentlich
+      }
+    }
+
+    // Neue Runde: eigene Tränke abziehen, Szene animieren
+    const prevLog = prev?.id === next.id ? (prev.state?.log.length ?? 0) : null;
+    if (next.state && prevLog !== null && next.state.log.length > prevLog) {
+      for (const e of next.last_events) {
+        if (e.type === "potion" && e.heroId === myId) useGameStore.getState().consumePotion(e.potionId);
+      }
+      EventBus.emit("coop:events", { state: next.state, events: next.last_events });
+    }
+
+    // Kampfende erlebt: eigene Beute würfeln (nur einmal pro Kampf)
+    let result = get().result;
+    if (prev?.state?.status === "active" && next.state && next.state.status !== "active" && !rewarded.has(next.state.id)) {
+      rewarded.add(next.state.id);
+      if (next.state.status === "won") {
+        const me = next.members.find((m) => m.id === myId);
+        const chest = me ? useGameStore.getState().grantCoopReward(rollCoopReward(next.boss_id, me.profile, crypto.randomUUID())) : null;
+        result = { won: true, chest };
+      } else {
+        result = { won: false, chest: null };
+      }
+    }
+
+    const roundChanged = next.state?.round !== prev?.state?.round || next.phase !== prev?.phase;
     set({
-      phase: "idle",
-      transport: null,
-      code: null,
-      bossId: null,
-      hostId: null,
-      members: [],
-      online: [],
-      battle: null,
-      chosen: [],
-      myAction: null,
-      result: null,
-      error,
+      row: next,
+      phase: next.phase === "lobby" ? "lobby" : "battle",
+      result,
+      pendingAction: roundChanged ? null : get().pendingAction,
     });
-  }
-
-  function connect(kind: CoopTransport["kind"], code: string) {
-    link = openTransport(kind, code);
-    link.onMessage(handle);
-    pingTimer = window.setInterval(heartbeat, PING_MS);
-  }
-
-  /** Lebenszeichen senden, Verbindungsabbrüche erkennen. */
-  function heartbeat() {
-    const { myId, members, online, phase, battle } = get();
-    send({ type: "ping", id: myId });
-    const now = Date.now();
-    const next = members.map((m) => m.id).filter((id) => id === myId || now - (lastSeen.get(id) ?? 0) < OFFLINE_MS);
-    if (next.join() !== online.join()) {
-      set({ online: next });
-      if (isHost() && battle?.status === "active") maybeResolve();
+    if (!unsubscribe || prev?.id !== next.id) {
+      unsubscribe?.();
+      unsubscribe = backend().subscribe(next.id, applyRow);
     }
-    const hostId = get().hostId;
-    const battleRunning = phase === "battle" && battle?.status === "active";
-    if (!isHost() && hostId && (phase === "lobby" || battleRunning) && now - (lastSeen.get(hostId) ?? now) > HOST_LOST_MS) {
-      abort("Die Verbindung zum Host ist abgebrochen.");
-    }
+    scheduleTick(next);
   }
 
-  /** Verbindung schliessen, aber den Stand (z. B. die Beute-Truhe) stehen lassen. */
-  function disconnect() {
-    link?.close();
-    link = null;
-    window.clearInterval(pingTimer);
-    window.clearTimeout(roundTimer);
+  /** Zur Deadline nachfragen: ist die Zeit um, löst der Server die Runde auf. */
+  function scheduleTick(row: CoopRow) {
+    window.clearTimeout(tickTimer);
+    if (row.phase !== "battle" || !row.state || row.state.status !== "active") return;
+    const wait = Math.max(0, localDeadline(row.state, get().clockOffset) - Date.now()) + 600;
+    tickTimer = window.setTimeout(() => void send({ type: "tick" }), wait);
   }
 
-  /**
-   * Kampf bzw. Lobby wurde aufgelöst – Kampfpunkte zurück, falls der Kampf noch
-   * lief. Ist er schon vorbei, bleibt das Ergebnis samt Truhe stehen.
-   */
-  function abort(reason: string) {
-    if (get().result) return disconnect();
-    if (paid && get().battle?.status === "active") useGameStore.getState().refundCoop(COOP_COST);
-    reset(reason);
-  }
-
-  function onStart(state: CoopBattleState, ms: number) {
-    useGameStore.getState().payCoop(COOP_COST);
-    paid = true;
-    set({ phase: "battle", battle: state, deadline: Date.now() + ms, chosen: [], myAction: null, result: null });
-  }
-
-  function onRound(state: CoopBattleState, events: CoopEvent[], ms: number) {
-    const { myId } = get();
-    // Getrunkene oder verabreichte Tränke verlassen den eigenen Vorrat
-    for (const e of events) if (e.type === "potion" && e.heroId === myId) useGameStore.getState().consumePotion(e.potionId);
-    set({ battle: state, deadline: Date.now() + ms, chosen: [], myAction: null });
-    EventBus.emit("coop:events", { state, events });
-    if (state.status !== "active") finish(state);
-  }
-
-  /** Kampf vorbei: jeder würfelt seine eigene Beute. */
-  function finish(state: CoopBattleState) {
-    window.clearTimeout(roundTimer);
-    if (state.status !== "won") return set({ result: { won: false, chest: null } });
-    const me = get().members.find((m) => m.id === get().myId);
-    const profile = me?.profile ?? myMember(true).profile;
-    const reward = rollCoopReward(state.bossId, profile, crypto.randomUUID());
-    set({ result: { won: true, chest: useGameStore.getState().grantCoopReward(reward) } });
-  }
-
-  /* ───────────── Host ───────────── */
-
-  function scheduleRound(state: CoopBattleState) {
-    window.clearTimeout(roundTimer);
-    if (state.status === "active") roundTimer = window.setTimeout(resolveNow, remaining(state) + 250);
-  }
-
-  function shareChosen() {
-    const { battle } = get();
-    if (!battle) return;
-    const ids = Object.keys(hostActions);
-    set({ chosen: ids });
-    send({ type: "chosen", round: battle.round, ids });
-  }
-
-  /** Auflösen, sobald alle verbundenen, lebenden Spieler gewählt haben. */
-  function maybeResolve() {
-    const { battle, online } = get();
-    if (!battle || battle.status !== "active") return;
-    const waiting = battle.heroes.filter((h) => !h.down && online.includes(h.id) && !(h.id in hostActions));
-    if (waiting.length === 0) resolveNow();
-  }
-
-  function resolveNow() {
-    const { battle } = get();
-    if (!isHost() || !battle || battle.status !== "active") return;
-    const result = resolveRound(battle, hostActions, Math.random, Date.now());
-    hostActions = {};
-    const ms = remaining(result.state);
-    send({ type: "round", state: result.state, events: result.events, remaining: ms });
-    onRound(result.state, result.events, ms);
-    scheduleRound(result.state);
-  }
-
-  /* ───────────── Nachrichten ───────────── */
-
-  function handle(message: CoopMessage) {
-    const { phase, battle, myId } = get();
-    const sender =
-      message.type === "ping" || message.type === "leave"
-        ? message.id
-        : message.type === "hello" || message.type === "ready"
-          ? message.member.id
-          : message.type === "action"
-            ? message.id
-            : message.type === "lobby" || message.type === "sync"
-              ? message.hostId
-              : get().hostId;
-    if (sender) lastSeen.set(sender, Date.now());
-
-    switch (message.type) {
-      case "hello": {
-        if (!isHost()) return;
-        const { member } = message;
-        if (phase === "lobby") {
-          const known = get().members.some((m) => m.id === member.id);
-          if (!known && get().members.length >= COOP_MAX_PLAYERS) {
-            return send({ type: "rejected", id: member.id, reason: "Die Lobby ist voll." });
-          }
-          set({ members: known ? get().members.map((m) => (m.id === member.id ? member : m)) : [...get().members, member] });
-          broadcastLobby();
-        } else if (phase === "battle" && battle) {
-          const { hostId, bossId, members, chosen } = get();
-          if (!battle.heroes.some((h) => h.id === member.id) || !hostId || !bossId) {
-            return send({ type: "rejected", id: member.id, reason: "Der Kampf läuft bereits." });
-          }
-          send({ type: "sync", to: member.id, hostId, bossId, members, state: battle, chosen, remaining: remaining(battle) });
-        }
-        return;
+  async function send(command: CoopCommand): Promise<boolean> {
+    const kind = get().backend;
+    if (!kind) return false;
+    set({ busy: true });
+    try {
+      // Der Server liest die Kampfwerte aus dem Cloud-Spielstand – vorher den aktuellen hochladen.
+      if (kind === "cloud" && (command.type === "create" || command.type === "join" || command.type === "ready" || command.type === "start")) {
+        await useCloudStore.getState().uploadNow();
       }
-      case "ready": {
-        if (!isHost() || phase !== "lobby") return;
-        set({ members: get().members.map((m) => (m.id === message.member.id ? message.member : m)) });
-        return broadcastLobby();
-      }
-      case "leave": {
-        lastSeen.delete(message.id);
-        if (isHost() && phase === "lobby") {
-          set({ members: get().members.filter((m) => m.id !== message.id) });
-          broadcastLobby();
-        }
-        return;
-      }
-      case "lobby": {
-        if (isHost() || (phase !== "joining" && phase !== "lobby")) return;
-        window.clearTimeout(joinTimer);
-        for (const m of message.members) if (!lastSeen.has(m.id)) lastSeen.set(m.id, Date.now());
-        return set({ phase: "lobby", hostId: message.hostId, bossId: message.bossId, members: message.members });
-      }
-      case "rejected": {
-        if (message.id === myId) reset(message.reason);
-        return;
-      }
-      case "start": {
-        if (isHost() || phase !== "lobby") return;
-        return onStart(message.state, message.remaining);
-      }
-      case "round": {
-        if (isHost() || phase !== "battle") return;
-        return onRound(message.state, message.events, message.remaining);
-      }
-      case "sync": {
-        if (message.to !== myId || (phase !== "joining" && phase !== "lobby")) return;
-        window.clearTimeout(joinTimer);
-        paid = true; // bezahlt wurde schon beim ersten Start
-        set({
-          phase: "battle",
-          hostId: message.hostId,
-          bossId: message.bossId,
-          members: message.members,
-          battle: message.state,
-          chosen: message.chosen,
-          deadline: Date.now() + message.remaining,
-          myAction: null,
-        });
-        return;
-      }
-      case "action": {
-        if (!isHost() || !battle || battle.status !== "active" || message.round !== battle.round) return;
-        hostActions[message.id] = message.action;
-        shareChosen();
-        return maybeResolve();
-      }
-      case "chosen": {
-        if (!isHost() && battle && message.round === battle.round) set({ chosen: message.ids });
-        return;
-      }
-      case "abort": {
-        if (!isHost()) abort(message.reason);
-        return;
-      }
-      case "ping":
-        return;
+      const response = await getBackend(kind).send(command, get().row?.id, get().myId);
+      set({ clockOffset: response.serverNow - Date.now(), busy: false, error: null });
+      applyRow(response.row);
+      return true;
+    } catch (error) {
+      set({ busy: false, error: error instanceof Error ? error.message : String(error) });
+      return false;
     }
   }
 
-  // Tab schliessen = Lobby verlassen
-  if (typeof window !== "undefined") {
-    window.addEventListener("pagehide", () => {
-      if (get().phase !== "idle") get().leave();
-    });
+  /** Verbindung für eine neue Lobby vorbereiten. */
+  function begin(): boolean {
+    const kind = availableBackend(useCloudStore.getState().session !== null);
+    if (!kind) {
+      set({ error: "Für Koop-Kämpfe musst du angemeldet sein." });
+      return false;
+    }
+    if (get().phase !== "idle") reset();
+    set({ backend: kind, myId: currentPlayerId(), error: null, rejoin: null });
+    return true;
   }
 
   return {
     phase: "idle",
-    transport: null,
-    code: null,
-    bossId: null,
-    hostId: null,
+    backend: null,
+    row: null,
     myId: "",
-    members: [],
-    online: [],
-    battle: null,
-    deadline: 0,
-    chosen: [],
-    myAction: null,
+    clockOffset: 0,
+    pendingAction: null,
     result: null,
+    rejoin: null,
+    busy: false,
     error: null,
 
-    createLobby: (bossId) => {
-      const kind = availableTransport(useCloudStore.getState().session !== null);
-      if (!kind) return set({ error: "Für Koop-Kämpfe musst du angemeldet sein." });
-      if (get().phase !== "idle") reset();
-      const code = newLobbyCode();
-      const me = myMember(true);
-      set({ phase: "lobby", transport: kind, code, bossId, hostId: me.id, myId: me.id, members: [me], online: [me.id], error: null });
-      connect(kind, code);
+    createLobby: async (bossId) => {
+      if (!begin()) return;
+      if (!(await send({ type: "create", bossId }))) reset(get().error);
     },
 
-    joinLobby: (code) => {
-      const kind = availableTransport(useCloudStore.getState().session !== null);
-      if (!kind) return set({ error: "Für Koop-Kämpfe musst du angemeldet sein." });
-      if (get().phase !== "idle") reset();
-      const me = myMember(false);
-      set({ phase: "joining", transport: kind, code, myId: me.id, members: [], error: null });
-      connect(kind, code);
-      send({ type: "hello", member: me });
-      joinTimer = window.setTimeout(() => {
-        if (get().phase === "joining") reset(`Keine Lobby mit dem Code ${code} gefunden.`);
-      }, JOIN_TIMEOUT_MS);
+    joinLobby: async (code) => {
+      if (!begin()) return;
+      set({ phase: "joining" });
+      if (!(await send({ type: "join", code }))) reset(get().error);
     },
 
-    setReady: (ready) => {
-      if (get().phase !== "lobby") return;
+    setReady: async (ready) => {
       if (ready && coopReadyBlocker()) return set({ error: coopReadyBlocker() });
-      const me = myMember(ready);
-      set({ members: get().members.map((m) => (m.id === me.id ? me : m)), error: null });
-      send({ type: "ready", member: me });
+      await send({ type: "ready", ready });
     },
 
-    startBattle: () => {
-      const { phase, members, bossId } = get();
-      if (!isHost() || phase !== "lobby" || !bossId) return;
+    startBattle: async () => {
       const blocker = coopReadyBlocker();
       if (blocker) return set({ error: blocker });
-      if (members.length < COOP_MIN_PLAYERS) return set({ error: `Es braucht mindestens ${COOP_MIN_PLAYERS} Spieler.` });
-      if (members.some((m) => m.id !== get().myId && !m.ready)) return set({ error: "Noch nicht alle sind bereit." });
-      // Eigene Werte frisch übernehmen (Ausrüstung könnte sich geändert haben)
-      const me = myMember(true);
-      const team = members.map((m) => (m.id === me.id ? me : m));
-      const state = startCoopBattle(crypto.randomUUID(), bossId, team.map((m) => ({ id: m.id, name: m.name, profile: m.profile })), Date.now());
-      hostActions = {};
-      set({ members: team, online: team.map((m) => m.id) });
-      for (const m of team) lastSeen.set(m.id, Date.now());
-      send({ type: "start", state, remaining: remaining(state) });
-      broadcastLobby();
-      onStart(state, remaining(state));
-      scheduleRound(state);
+      await send({ type: "start" });
     },
 
-    chooseAction: (action) => {
-      const { battle, myId, myAction } = get();
-      if (!battle || battle.status !== "active" || myAction) return;
-      set({ myAction: action, chosen: [...new Set([...get().chosen, myId])] });
-      if (isHost()) {
-        hostActions[myId] = action;
-        shareChosen();
-        maybeResolve();
-      } else {
-        send({ type: "action", id: myId, round: battle.round, action });
-      }
+    chooseAction: async (action) => {
+      const state = get().row?.state;
+      if (!state || state.status !== "active" || get().pendingAction) return;
+      set({ pendingAction: action });
+      if (!(await send({ type: "act", round: state.round, action }))) set({ pendingAction: null });
     },
 
     leave: () => {
-      const { phase, myId } = get();
-      if (phase === "idle") return;
-      // Wer selbst geht, bekommt keine Kampfpunkte zurück. Geht der Host, löst sich alles auf.
-      if (isHost()) send({ type: "abort", reason: "Der Host hat die Lobby aufgelöst." });
-      else send({ type: "leave", id: myId });
+      const { row, backend: kind, myId, result } = get();
+      // Nach Kampfende gibt es nichts mehr abzumelden
+      if (row && kind && !result) void getBackend(kind).send({ type: "leave" }, row.id, myId).catch(() => {});
       reset();
+    },
+
+    checkRejoin: async () => {
+      const kind = availableBackend(useCloudStore.getState().session !== null);
+      if (!kind || get().phase !== "idle") return;
+      const row = await getBackend(kind).findActive(currentPlayerId()).catch(() => null);
+      set({ rejoin: row });
     },
 
     clearError: () => set({ error: null }),

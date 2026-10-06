@@ -1,8 +1,9 @@
 import { motion } from "motion/react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useCloudStore } from "../cloud/cloudStore";
-import { coopReadyBlocker, useCoopStore } from "../coop/coopStore";
-import { availableTransport, isLobbyCode } from "../coop/transport";
+import { availableBackend } from "../coop/backend";
+import { coopReadyBlocker, localDeadline, useCoopStore } from "../coop/coopStore";
+import { isLobbyCode } from "../coop/protocol";
 import { getAbility } from "../domain/abilities";
 import {
   COOP_BOSSES,
@@ -42,10 +43,15 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
   const createLobby = useCoopStore((s) => s.createLobby);
   const joinLobby = useCoopStore((s) => s.joinLobby);
   const error = useCoopStore((s) => s.error);
+  const busy = useCoopStore((s) => s.busy);
+  const rejoin = useCoopStore((s) => s.rejoin);
+  const checkRejoin = useCoopStore((s) => s.checkRejoin);
   const battlePoints = useGameStore((s) => s.character.battlePoints);
   const [code, setCode] = useState("");
-  const kind = availableTransport(loggedIn);
+  const kind = availableBackend(loggedIn);
   const cleanCode = code.trim().toUpperCase();
+  // Läuft noch ein Koop-Kampf (z. B. nach dem Neuladen)? Dann zurückkehren anbieten.
+  useEffect(() => void checkRejoin(), [checkRejoin, loggedIn]);
 
   return (
     <section className="panel p-5">
@@ -67,6 +73,21 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
               🧪 Testmodus: Ohne Anmeldung verbinden sich nur Tabs in diesem Browser.
             </p>
           )}
+          {rejoin && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border-2 border-gold/60 bg-gold/10 p-3">
+              <span className="flex-1 text-sm">
+                ⚔️ {rejoin.phase === "lobby" ? "Deine Lobby" : "Dein Kampf"} gegen <b>{getCoopBoss(rejoin.boss_id).name}</b> läuft noch.
+              </span>
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                disabled={busy}
+                onClick={() => joinLobby(rejoin.code)}
+                className="font-pixel rounded-md border-2 border-gold bg-gold/15 px-3 py-1 text-gold hover:bg-gold/25 disabled:opacity-40"
+              >
+                Zurückkehren
+              </motion.button>
+            </div>
+          )}
           <ul className="flex flex-col gap-2">
             {COOP_BOSSES.map((boss) => {
               const tooLow = heroLevel < boss.level;
@@ -85,7 +106,7 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.92 }}
-                    disabled={tooLow || poor}
+                    disabled={tooLow || poor || busy}
                     onClick={() => createLobby(boss.id)}
                     title={tooLow ? `Ab Level ${boss.level}` : poor ? `Du brauchst ${COOP_COST} Kampfpunkte` : undefined}
                     className="font-pixel rounded-md border-2 border-legendary bg-legendary/15 px-3 py-1.5 text-legendary hover:bg-legendary/25 disabled:cursor-not-allowed disabled:opacity-40"
@@ -116,7 +137,7 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
             />
             <button
               type="submit"
-              disabled={!isLobbyCode(cleanCode)}
+              disabled={!isLobbyCode(cleanCode) || busy}
               className="rounded-md border-2 border-gold/70 px-3 py-1 text-sm text-gold hover:bg-gold/15 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Beitreten
@@ -133,13 +154,12 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
 
 export function CoopScreen() {
   const phase = useCoopStore((s) => s.phase);
-  const code = useCoopStore((s) => s.code);
   const leave = useCoopStore((s) => s.leave);
 
   if (phase === "joining") {
     return (
       <section className="panel flex flex-col items-center gap-3 p-6 text-center">
-        <p className="font-pixel text-xl">Verbinde mit Lobby {code} …</p>
+        <p className="font-pixel text-xl">Verbinde mit der Lobby …</p>
         <button onClick={leave} className="rounded-md border-2 border-night-700 px-4 py-1.5 text-muted hover:text-parchment">
           Abbrechen
         </button>
@@ -150,13 +170,14 @@ export function CoopScreen() {
 }
 
 function Lobby() {
-  const { code, bossId, hostId, myId, members, online, error } = useCoopStore();
+  const { row, myId, error, busy } = useCoopStore();
   const setReady = useCoopStore((s) => s.setReady);
   const start = useCoopStore((s) => s.startBattle);
   const leave = useCoopStore((s) => s.leave);
   const [copied, setCopied] = useState(false);
-  if (!code || !bossId) return null;
-  const boss = getCoopBoss(bossId);
+  if (!row) return null;
+  const { code, host_id: hostId, members } = row;
+  const boss = getCoopBoss(row.boss_id);
   const isHost = hostId === myId;
   const me = members.find((m) => m.id === myId);
   const others = members.filter((m) => m.id !== hostId);
@@ -213,8 +234,8 @@ function Lobby() {
                   Lv. {m.level} · {m.profile.maxHp} LP · {Math.round(m.profile.damage)} Schaden · {Math.round(m.profile.armor)} Rüstung
                 </p>
               </div>
-              <span className={`text-sm ${!online.includes(m.id) ? "text-muted" : m.id === hostId || m.ready ? "text-xp" : "text-muted"}`}>
-                {!online.includes(m.id) ? "📡 getrennt" : m.id === hostId ? "Host" : m.ready ? "✓ bereit" : "…"}
+              <span className={`text-sm ${m.id === hostId || m.ready ? "text-xp" : "text-muted"}`}>
+                {m.id === hostId ? "Host" : m.ready ? "✓ bereit" : "…"}
               </span>
             </li>
           ))}
@@ -230,12 +251,12 @@ function Lobby() {
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={leave} className="rounded-md border-2 border-night-700 px-4 py-1.5 text-muted hover:text-parchment">
-            {isHost ? "Lobby auflösen" : "Verlassen"}
+            Verlassen
           </button>
           {isHost ? (
             <motion.button
               whileTap={{ scale: 0.92 }}
-              disabled={startBlocker !== null}
+              disabled={startBlocker !== null || busy}
               onClick={start}
               title={startBlocker ?? undefined}
               className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-5 py-1.5 text-lg text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
@@ -245,7 +266,7 @@ function Lobby() {
           ) : (
             <motion.button
               whileTap={{ scale: 0.92 }}
-              disabled={!me?.ready && readyBlocker !== null}
+              disabled={(!me?.ready && readyBlocker !== null) || busy}
               onClick={() => setReady(!me?.ready)}
               title={!me?.ready ? (readyBlocker ?? undefined) : undefined}
               className={`font-pixel rounded-md border-2 px-5 py-1.5 text-lg disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -273,8 +294,12 @@ function useCountdown(deadline: number): number {
 }
 
 function CoopBattle() {
-  const { battle, members, myId, online, chosen, hostId } = useCoopStore();
+  const { row, myId } = useCoopStore();
   const leave = useCoopStore((s) => s.leave);
+  const battle = row?.state ?? null;
+  const members = row?.members ?? [];
+  const chosen = Object.keys(row?.actions ?? {});
+  const away = members.filter((m) => m.left).map((m) => m.id);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const cancelLeave = useCallback(() => setConfirmLeave(false), []);
   // Während die Szene animiert, sind die Aktionen gesperrt (wie im Solo-Kampf). Gemessen an
@@ -318,7 +343,7 @@ function CoopBattle() {
         <CoopResultPanel battle={battle} onLeave={leave} />
       ) : (
         <section className="panel flex flex-col gap-3 p-4">
-          <TeamStatus battle={battle} chosen={chosen} online={online} myId={myId} names={Object.fromEntries(members.map((m) => [m.id, m.name]))} />
+          <TeamStatus battle={battle} chosen={chosen} away={away} myId={myId} names={Object.fromEntries(members.map((m) => [m.id, m.name]))} />
           {coopAbilityDue(battle) && !finished && (
             <p className="rounded-md bg-danger/15 px-3 py-1.5 text-sm text-danger">
               ⚠️ {boss.ability.icon} {boss.name} setzt diese Runde <b>{boss.ability.name}</b> ein – {boss.ability.description}
@@ -344,9 +369,8 @@ function CoopBattle() {
             }}
           >
             <p>
-              {hostId === myId
-                ? "Du bist Host: Der Kampf endet damit für die ganze Gruppe. Die anderen bekommen ihre Kampfpunkte zurück, du nicht."
-                : "Deine Kampfpunkte bekommst du nicht zurück, und Beute gibt es keine. Die anderen kämpfen ohne dich weiter."}
+              Die anderen kämpfen weiter, dein Held greift automatisch an. Du kannst jederzeit über den Kampf-Tab
+              zurückkehren – Beute gibt es nur, wenn du beim Sieg dabei bist.
             </p>
           </ConfirmDialog>
         </section>
@@ -360,28 +384,29 @@ function CoopBattle() {
 function TeamStatus({
   battle,
   chosen,
-  online,
+  away,
   myId,
   names,
 }: {
   battle: CoopBattleState;
   chosen: string[];
-  online: string[];
+  /** Spieler, die den Kampf verlassen haben */
+  away: string[];
   myId: string;
   names: Record<string, string>;
 }) {
-  const deadline = useCoopStore((s) => s.deadline);
-  const seconds = useCountdown(deadline);
+  const clockOffset = useCoopStore((s) => s.clockOffset);
+  const seconds = useCountdown(localDeadline(battle, clockOffset));
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className={`num rounded-md px-2 py-0.5 ${seconds <= 5 ? "bg-danger/20 text-danger" : "bg-night-800 text-gold"}`}>⏱ {seconds}s</span>
       {battle.heroes.map((h) => {
-        const status = h.down ? "💀" : !online.includes(h.id) ? "📡" : chosen.includes(h.id) ? "✓" : "⏳";
+        const status = h.down ? "💀" : away.includes(h.id) ? "🚪" : chosen.includes(h.id) ? "✓" : "⏳";
         return (
           <span
             key={h.id}
             className={`rounded-md px-2 py-0.5 ${h.id === myId ? "bg-gold/15 text-gold" : "bg-night-800"} ${h.down ? "opacity-60" : ""}`}
-            title={h.down ? "Gefallen" : !online.includes(h.id) ? "Verbindung getrennt – greift automatisch an" : chosen.includes(h.id) ? "Hat gewählt" : "Wählt noch"}
+            title={h.down ? "Gefallen" : away.includes(h.id) ? "Hat den Kampf verlassen – greift automatisch an" : chosen.includes(h.id) ? "Hat gewählt" : "Wählt noch"}
           >
             {status} {names[h.id] ?? h.name}
             <span className="num ml-1 text-xs text-muted">
@@ -395,7 +420,8 @@ function TeamStatus({
 }
 
 function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolean }) {
-  const { myId, myAction } = useCoopStore();
+  const { myId, pendingAction, row } = useCoopStore();
+  const myAction = pendingAction ?? row?.actions[myId] ?? null;
   const choose = useCoopStore((s) => s.chooseAction);
   const stock = useGameStore((s) => s.potions);
   const [potion, setPotion] = useState<CoopAction["potion"]>(undefined);

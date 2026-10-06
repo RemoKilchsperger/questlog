@@ -15,7 +15,7 @@ import { SmithScreen } from "./components/SmithScreen";
 import { unspentSkillPoints } from "./domain/skills";
 import { useGameStore } from "./store/gameStore";
 import { useCoopStore } from "./coop/coopStore";
-import { isLobbyCode } from "./coop/transport";
+import { isLobbyCode } from "./coop/protocol";
 
 type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard";
 /** Untermenü des Dorfs */

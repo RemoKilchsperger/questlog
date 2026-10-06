@@ -8,3 +8,7 @@ dist
 # lokale IDE-/Build-Dateien
 .vs
 *.tsbuildinfo
+
+# Supabase: gebündelte Spiellogik (npm run functions:build) und CLI-Zwischenstände
+supabase/functions/_shared/coop-server.js
+supabase/.temp
