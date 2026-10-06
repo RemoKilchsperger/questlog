@@ -30,7 +30,7 @@ import { BOSS_ITEMS, createItem, getBossItems, indexForLevel, ITEM_TYPES, ITEMS 
 import { lootPool } from "./loot";
 import { MAX_LEVEL, xpForNextLevel } from "./leveling";
 import { buyPotion, getPotion } from "./potions";
-import type { Character, Equipment } from "./types";
+import type { Character, Equipment, Rarity } from "./types";
 
 const xpForLevel = (level: number) => {
   let xp = 0;
@@ -51,9 +51,9 @@ const heroAt = (level: number): Character => ({
   abilities: [],
 });
 
-/** Volle gewöhnliche Ausrüstung des passenden Levels, zwei Schwerter. */
-const gearAt = (level: number): Equipment => {
-  const item = (type: string) => createItem(`${type}-${indexForLevel(level)}`, "common", type);
+/** Volle Ausrüstung des passenden Levels (Standard: gewöhnlich), zwei Schwerter. */
+const gearAt = (level: number, rarity: Rarity = "common"): Equipment => {
+  const item = (type: string) => createItem(`${type}-${indexForLevel(level)}`, rarity, type, () => 0.5);
   return {
     head: item("head"),
     chest: item("chest"),
@@ -61,7 +61,7 @@ const gearAt = (level: number): Equipment => {
     legs: item("legs"),
     feet: item("feet"),
     weapon1: item("sword"),
-    weapon2: createItem(`sword-${indexForLevel(level)}`, "common", "sword2"),
+    weapon2: createItem(`sword-${indexForLevel(level)}`, rarity, "sword2", () => 0.5),
   };
 };
 
@@ -345,10 +345,10 @@ describe("Gebiete und Balance", () => {
     }
   });
 
-  it("ein gut ausgerüsteter Held besiegt Kreaturen seines Levels meistens", () => {
+  it("mit seltener Ausrüstung besiegt ein Held Kreaturen seines Levels meistens – ohne Fähigkeiten und Tränke", () => {
     for (const area of AREAS) {
       for (const creature of area.creatures.filter((c) => !c.boss)) {
-        const hero = getHeroCombatProfile(heroAt(creature.level), gearAt(creature.level));
+        const hero = getHeroCombatProfile(heroAt(creature.level), gearAt(creature.level, "rare"));
         const rng = seeded(creature.level);
         const results = Array.from({ length: 100 }, () => simulate(hero, creature, rng));
         const winRate = results.filter((r) => r.status === "won").length / results.length;

@@ -74,10 +74,11 @@ describe("Katalog", () => {
     expect(getItem("chest-199").armor).toBeGreaterThan(getItem("chest-0").armor * 10);
   });
 
-  it("Schilde geben Rüstung statt Angriff, Zweihandwaffen sind stärker", () => {
+  it("Schilde geben vor allem Rüstung und etwas Angriff, Zweihandwaffen sind stärker", () => {
     const shield = getItem("shield-50");
     expect(shield.armor).toBeGreaterThan(0);
-    expect(shield.attack).toBe(0);
+    expect(shield.attack).toBeGreaterThan(0);
+    expect(shield.attack).toBeLessThan(getItem("sword-50").attack);
     expect(getItem("greatsword-50").twoHanded).toBe(true);
     expect(getItem("greatsword-50").attack).toBeGreaterThan(getItem("sword-50").attack);
   });
@@ -105,7 +106,7 @@ describe("Anlegen und Ablegen", () => {
     gear = equipItem(gear, "u1", 1, "weapon2");
     expect(getCombatStats(gear.equipment)).toEqual({
       armor: getItem("shield-0").armor,
-      attack: getItem("sword-0").attack,
+      attack: getItem("sword-0").attack + getItem("shield-0").attack,
     });
   });
 

@@ -76,35 +76,35 @@ describe("Klassen: Erkennung", () => {
 describe("Klassen: Werte und Fähigkeiten", () => {
   const profile = (equipment: Equipment) => getHeroCombatProfile(hero, equipment);
 
-  it("Champion: +10 % Schaden und LP; Wächter: +20 % LP; Paladin: +15 % Rüstung", () => {
+  it("Champion: +15 % Schaden, +10 % LP; Wächter: +15 % LP; Paladin: mehr Rüstung", () => {
     const plain = profile(gear("heavy", "greatsword-90", null, 2));
     const champion = profile(gear("heavy", "greatsword-90"));
     expect(champion.heroClass).toBe("champion");
     // Ein Rüstungsteil mehr verändert LP nicht – der Unterschied ist der Klassenbonus
     expect(Math.abs(champion.maxHp - plain.maxHp * 1.1)).toBeLessThanOrEqual(1);
-    expect(champion.damage).toBeCloseTo(plain.damage * 1.1);
+    expect(champion.damage).toBeCloseTo(plain.damage * 1.15);
     const warden = profile(gear("heavy", "greathammer-90")).maxHp;
-    expect(Math.abs(warden - profile(gear("heavy", "greathammer-90", null, 2)).maxHp * 1.2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(warden - profile(gear("heavy", "greathammer-90", null, 2)).maxHp * 1.15)).toBeLessThanOrEqual(1);
     const paladin = profile(gear("heavy", "mace-90", "shield-90"));
     expect(paladin.heroClass).toBe("paladin");
     expect(paladin.armor).toBeGreaterThan(profile(gear("heavy", "mace-90", "shield-90", 2)).armor);
   });
 
-  it("Assassine: +10 % Krit, Krits doppelt; Plünderer: +25 % Gold", () => {
+  it("Assassine: +20 % Krit, Krits 2,25-fach; Plünderer: +25 % Gold", () => {
     const assassin = profile(gear("light", "dagger-90"));
     const plain = profile(gear("light", "dagger-90", null, 2));
-    expect(assassin.critMultiplier).toBe(2);
-    expect(assassin.critChance).toBeGreaterThan(plain.critChance + 0.09);
+    expect(assassin.critMultiplier).toBe(2.25);
+    expect(assassin.critChance).toBeGreaterThan(plain.critChance + 0.19);
     expect(profile(gear("medium", "axe-90")).goldBonus).toBeCloseTo(profile(gear("medium", "axe-90", null, 2)).goldBonus + 0.25);
   });
 
-  it("Fähigkeiten: Magier günstiger und stärker, Waldläufer 5 Pfeile, Paladin halbes Bollwerk, Wächter betäubt, Hexer länger", () => {
-    expect(classAbility("staff", "mage").manaCost).toBe(Math.round(getAbility("staff").manaCost * 0.75));
-    expect(classAbility("staff", "mage").multiplier).toBeCloseTo(getAbility("staff").multiplier * 1.15);
+  it("Fähigkeiten: Magier günstiger und stärker, Waldläufer 5 Pfeile, Paladin halbes Bollwerk, Hexer länger", () => {
+    expect(classAbility("staff", "mage").manaCost).toBe(Math.round(getAbility("staff").manaCost * 0.8));
+    expect(classAbility("staff", "mage").multiplier).toBeCloseTo(getAbility("staff").multiplier * 1.05);
     expect(classAbility("bow", "ranger").hits).toBe(5);
     expect(classAbility("shield", "paladin").manaCost).toBe(10);
-    expect(classAbility("greathammer", "warden").stun).toBe(true);
-    expect(classAbility("scepter", "warlock").poison).toEqual({ percent: expect.closeTo(0.52), rounds: 4 });
+    expect(classAbility("greathammer", "warden").stun).toBeUndefined();
+    expect(classAbility("scepter", "warlock").poison).toEqual({ percent: expect.closeTo(0.6), rounds: 4 });
     expect(classAbility("staff", null)).toEqual(getAbility("staff"));
   });
 });
@@ -132,7 +132,7 @@ describe("Klassen: Kampfmechanik", () => {
   it("Kleriker regeneriert jede Runde und heilt mit Tränken stärker", () => {
     const hurt = (s: BattleState): BattleState => ({ ...s, hero: { ...s.hero, hp: Math.round(s.hero.maxHp / 2) } });
     const cleric = hurt(battle(gear("medium", "mace-90")));
-    expect(attackRound(cleric, rng(0.5)).events).toContainEqual({ type: "regen", heal: Math.round(cleric.hero.maxHp * 0.04) });
+    expect(attackRound(cleric, rng(0.5)).events).toContainEqual({ type: "regen", heal: Math.round(cleric.hero.maxHp * 0.03) });
     const plain = hurt(battle(gear("medium", "mace-90", null, 2)));
     const potion = getPotion("small");
     const healed = (s: BattleState) => drinkPotion(s, potion).state.hero.hp - s.hero.hp;

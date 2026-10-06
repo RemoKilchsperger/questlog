@@ -138,7 +138,7 @@ export const AREAS: readonly AreaDef[] = [
  * damit man sie auch nach drei Kämpfen ohne Heilung noch schaffen kann.
  */
 const DUNGEON_POWER = 1.2;
-const ABYSS_POWER = 1.3;
+const ABYSS_POWER = 1.2;
 const DUNGEON_BOSS_POWER = 0.9;
 const ABYSS_BOSS_POWER = 1;
 
@@ -226,8 +226,8 @@ export function getCreatureStats(creature: CreatureDef): CreatureStats {
   const L = creature.level;
   const power = creature.power ?? 1;
   return {
-    maxHp: Math.round((40 + 8 * L) * (creature.boss ? 2.5 : 1) * power),
-    damage: (6 + 1.4 * L) * (creature.boss ? 1.4 : 1) * power,
+    maxHp: Math.round((60 + 14 * L) * (creature.boss ? 3 : 1) * power),
+    damage: (8 + 2.2 * L) * (creature.boss ? 1.25 : 1) * power,
     armor: Math.round(L * 3 * (creature.boss ? 1.3 : 1)),
     critChance: creature.boss ? 0.1 : 0.05,
   };

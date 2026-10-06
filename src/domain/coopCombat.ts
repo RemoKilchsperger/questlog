@@ -136,7 +136,7 @@ export const COOP_BOSSES: readonly CoopBossDef[] = [
     level: 60,
     sprite: "world-eater",
     areaId: "void-abyss",
-    power: 2.1,
+    power: 1.9,
     lifesteal: 0.5,
     ability: {
       name: "Leerenstrudel",
