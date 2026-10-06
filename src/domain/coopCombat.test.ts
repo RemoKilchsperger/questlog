@@ -75,15 +75,47 @@ describe("Koop-Kampf: Runde", () => {
     expect(state.round).toBe(2);
   });
 
-  it("Schaden erzeugt Bedrohung, der Boss zielt meist auf die höchste", () => {
+  it("Schaden erzeugt Bedrohung, der Boss wählt sein Ziel gewichtet danach", () => {
     const battle = tough(start([player("a", { damage: 10 }), player("b", { damage: 80 })]));
-    const { state, events } = resolveRound(battle, {}, rng(0.5), 0);
+    const { state } = resolveRound(battle, {}, rng(0.5), 0);
     const [a, b] = state.heroes;
     expect(b.threat).toBeGreaterThan(a.threat);
-    const bossHit = events.find((e) => e.type === "hit" && e.attacker === BOSS);
-    expect(bossHit).toMatchObject({ target: "b" });
-    // Mit Zufall über der Fokus-Schwelle trifft es einen beliebigen lebenden Helden
-    expect(pickBossTarget(state.heroes, rng(0.99))?.id).toBeDefined();
+    // Über viele Würfe entspricht die Trefferquote dem Anteil an der Bedrohung
+    const heroes = state.heroes.map((h) => ({ ...h, threat: h.id === "a" ? 99 : 299 }));
+    let hitsOnB = 0;
+    for (let i = 0; i < 1000; i++) if (pickBossTarget(heroes, () => i / 1000)?.id === "b") hitsOnB++;
+    expect(hitsOnB).toBe(750);
+    // Ohne Bedrohung ist jeder gleich wahrscheinlich, Gefallene nie
+    const fresh = state.heroes.map((h) => ({ ...h, threat: 0 }));
+    expect(pickBossTarget(fresh, () => 0.25)?.id).toBe("a");
+    expect(pickBossTarget(fresh, () => 0.75)?.id).toBe("b");
+    expect(pickBossTarget(fresh.map((h) => (h.id === "a" ? { ...h, down: true } : h)), () => 0)?.id).toBe("b");
+  });
+
+  it("Bedrohung klingt jede Runde um 30 % ab – wer gerade viel Schaden macht, zählt mehr", () => {
+    const battle = tough(start([player("a", { damage: 10 }), player("b", { damage: 80 })]));
+    // a hat früher viel Bedrohung aufgebaut, b macht jetzt deutlich mehr Schaden
+    const before = { ...battle, heroes: battle.heroes.map((h) => (h.id === "a" ? { ...h, threat: 300 } : h)) };
+    let state = before;
+    const dealt = (events: ReturnType<typeof resolveRound>["events"], id: string) =>
+      events.reduce((sum, e) => sum + (e.type === "hit" && e.attacker === id ? e.damage : 0), 0);
+    const first = resolveRound(state, {}, rng(0.5), 0);
+    expect(first.state.heroes.find((h) => h.id === "a")!.threat).toBe(Math.round((300 + dealt(first.events, "a")) * 0.7));
+    state = first.state;
+    // Nach ein paar Runden hat b die alte Bedrohung von a überholt
+    for (let i = 0; i < 4; i++) state = resolveRound(state, {}, rng(0.5), 0).state;
+    const [a, b] = state.heroes;
+    expect(b.threat).toBeGreaterThan(a.threat);
+  });
+
+  it("Bollwerk zieht 75 % der Angriffe auf den Schildträger – auch in einer Vierergruppe", () => {
+    const team = [player("tank", { abilities: ["shield"], damage: 5 }), player("b", { damage: 90 }), player("c", { damage: 90 }), player("d", { damage: 90 })];
+    const { state } = resolveRound(tough(start(team)), { tank: { ability: "shield" } }, rng(0.5), 0);
+    // Nach dem Abklingen am Rundenende bleibt das Verhältnis gleich
+    const total = state.heroes.reduce((sum, h) => sum + h.threat + 1, 0);
+    const tankShare = (state.heroes.find((h) => h.id === "tank")!.threat + 1) / total;
+    expect(tankShare).toBeGreaterThan(0.73);
+    expect(tankShare).toBeLessThan(0.77);
   });
 
   it("Bollwerk zieht den Boss auf den Schildträger und blockt den Angriff", () => {

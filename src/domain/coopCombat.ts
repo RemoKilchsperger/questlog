@@ -33,10 +33,13 @@ export const COOP_TURN_SECONDS = 30;
 export const COOP_COST = 3;
 /** XP und Gold eines Koop-Sieges im Vergleich zu einem Solo-Boss gleichen Levels. */
 export const COOP_REWARD_FACTOR = 1.5;
-/** So oft greift der Boss das Ziel mit der höchsten Bedrohung an, sonst ein zufälliges. */
-export const THREAT_FOCUS = 0.7;
-/** Bollwerk zieht den Boss auf sich: Bedrohung = höchste der anderen × (1 + diesen Anteil). */
-export const BULWARK_THREAT = 0.5;
+/**
+ * Am Ende jeder Runde verliert jeder Held diesen Anteil seiner Bedrohung – so
+ * zählt vor allem, wer gerade viel Schaden macht, und das Ziel kann wechseln.
+ */
+export const THREAT_DECAY = 0.3;
+/** Mit Bollwerk zieht der Schildträger diesen Anteil der Boss-Angriffe auf sich – egal wie gross die Gruppe ist. */
+export const BULWARK_SHARE = 0.75;
 /** Ab der zweiten Betäubung im Kampf wirkt sie nur noch mit dieser Chance. */
 export const REPEAT_STUN_CHANCE = 0.5;
 
@@ -323,12 +326,22 @@ export function coopAbilityBlocker(hero: CoopHero, weapon: SkillWeapon): string 
   return null;
 }
 
-/** Ziel des Bosses: meist die höchste Bedrohung, manchmal ein zufälliger lebender Held. */
+/**
+ * Ziel des Bosses, gewichtet nach Bedrohung: Wer 60 % der Bedrohung der Gruppe
+ * hat, wird mit 60 % Wahrscheinlichkeit angegriffen. Ohne Bedrohung (z. B. in
+ * der ersten Runde) ist jeder lebende Held gleich wahrscheinlich.
+ */
 export function pickBossTarget(heroes: CoopHero[], rng: () => number): CoopHero | null {
   const alive = heroes.filter((h) => !h.down);
   if (alive.length === 0) return null;
-  if (rng() < THREAT_FOCUS) return alive.reduce((a, b) => (b.threat > a.threat ? b : a));
-  return alive[Math.floor(rng() * alive.length)];
+  // +1, damit auch Helden ohne Bedrohung eine kleine Chance behalten
+  const weights = alive.map((h) => h.threat + 1);
+  let roll = rng() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < alive.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return alive[i];
+  }
+  return alive[alive.length - 1];
 }
 
 /**
@@ -423,10 +436,11 @@ export function resolveRound(
     }
   }
 
-  // Bollwerk: erst jetzt, wenn alle Helden gehandelt haben, über die höchste Bedrohung setzen
+  // Bollwerk: erst jetzt, wenn alle Helden gehandelt haben – der Schildträger bekommt so viel
+  // Bedrohung, dass er BULWARK_SHARE der Gruppe hält (bei 75 % das Dreifache aller anderen zusammen)
   for (const taunter of taunts) {
-    const top = Math.max(0, ...heroes.filter((h) => h !== taunter).map((h) => h.threat));
-    taunter.threat = Math.max(taunter.threat, 20, Math.round(top * (1 + BULWARK_THREAT)));
+    const others = heroes.filter((h) => h !== taunter && !h.down).reduce((sum, h) => sum + h.threat, 0);
+    taunter.threat = Math.max(taunter.threat, 20, Math.round((others * BULWARK_SHARE) / (1 - BULWARK_SHARE)));
   }
 
   // 2. Gift, Feuer, Bluten – erst am Boss, dann an den Helden
@@ -515,9 +529,10 @@ export function resolveRound(
     }
   }
 
-  // 4. Mana und Verstärkungen
+  // 4. Mana, Verstärkungen und abklingende Bedrohung
   heroes = heroes.map((h) => ({
     ...h,
+    threat: Math.round(h.threat * (1 - THREAT_DECAY)),
     mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + MANA_REGEN),
     buffs: Object.fromEntries(
       Object.entries(h.buffs)

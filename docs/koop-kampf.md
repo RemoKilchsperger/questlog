@@ -73,11 +73,15 @@ Namen und Werte stehen noch offen.
 
 - Jeder Spieler hat einen Bedrohungswert, gestartet wird bei 0.
 - Verursachter Schaden erhöht die Bedrohung um den Schadenswert, auch Gift, Feuer und Bluten.
-- **Bollwerk (Schild)** erhöht zusätzlich die Bedrohung stark, um +50 % des
-  höchsten Werts der Gruppe. Der Schildträger zieht den Boss auf sich und blockt
-  den nächsten Angriff. Das ist die neue Tank-Rolle.
+- **Bollwerk (Schild)** setzt die Bedrohung des Schildträgers so hoch, dass er 75 % der
+  Bedrohung der Gruppe hält (das Dreifache aller anderen zusammen). Er zieht den Boss auf
+  sich und blockt den nächsten Angriff. Das ist die Tank-Rolle.
 - Gefallene Spieler haben keine Bedrohung.
-- Zielwahl: 70 % der Spieler mit der höchsten Bedrohung, 30 % ein zufälliger lebender Spieler.
+- **Bedrohung klingt ab:** Am Ende jeder Runde sinkt sie um 30 %. So zählt vor allem, wer gerade
+  viel Schaden macht, und das Ziel des Bosses wechselt im Lauf des Kampfs.
+- **Zielwahl gewichtet:** Der Boss greift jeden lebenden Spieler mit der Wahrscheinlichkeit
+  seines Anteils an der Bedrohung an. Wer 60 % hält, wird zu 60 % getroffen. Gleich starke
+  Spieler werden so etwa abwechselnd angegriffen, statt dass ein kleiner Vorsprung reicht.
 - Boss-Fähigkeiten mit „trifft alle“ ignorieren die Bedrohung.
 
 ### 3.4 Gefallen und Wiederbeleben
