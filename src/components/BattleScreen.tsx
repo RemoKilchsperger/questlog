@@ -41,6 +41,8 @@ import { unlockAudio } from "../game/sfx";
 import { useGameStore } from "../store/gameStore";
 import { useSoundStore } from "../store/soundStore";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { CoopPanel, CoopScreen } from "./CoopScreen";
+import { useCoopStore } from "../coop/coopStore";
 import { DungeonChest } from "./DungeonChest";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
@@ -56,6 +58,8 @@ const PhaserBattle = lazy(() => import("../game/PhaserBattle"));
 
 export function BattleScreen() {
   const battle = useGameStore((s) => s.battle);
+  const coop = useCoopStore((s) => s.phase !== "idle");
+  if (coop) return <CoopScreen />;
   return battle ? <Battle battle={battle} /> : <AreaSelect />;
 }
 
@@ -100,6 +104,7 @@ function AreaSelect() {
 
         <AreaPanel area={area} heroLevel={hero.level} />
         <DungeonPanel heroLevel={hero.level} />
+        <CoopPanel heroLevel={hero.level} />
       </div>
     </div>
   );

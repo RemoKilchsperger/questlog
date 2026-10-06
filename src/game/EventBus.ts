@@ -4,6 +4,7 @@
 // React und Phaser direkt voneinander wissen müssen.
 
 import type { BattleEvent, BattleState } from "../domain/combat";
+import type { CoopBattleState, CoopEvent } from "../domain/coopCombat";
 import type { CombatStats, Loot, Quest, Reward } from "../domain/types";
 
 export interface GameEvents {
@@ -16,6 +17,10 @@ export interface GameEvents {
   "battle:events": { battle: BattleState; events: BattleEvent[] };
   /** Phaser → React: Animationen sind fertig, die nächste Aktion ist möglich. */
   "battle:animation-done": { battleId: string };
+  /** Koop → Phaser: neue Ereignisse einer Runde, `state` ist der Stand danach. */
+  "coop:events": { state: CoopBattleState; events: CoopEvent[] };
+  /** Phaser → React: Animationen sind fertig – `logLength` = Länge des Protokolls danach. */
+  "coop:animation-done": { logLength: number };
 }
 
 type Handler<T> = (payload: T) => void;

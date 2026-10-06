@@ -744,6 +744,26 @@ const SOUL_EATER = [
 
 /* ───────────── Dungeon-Bosse ───────────── */
 
+/** Koop-Boss Sumpfhydra: drei Köpfe auf langen Hälsen, schwerer Leib */
+const HYDRA = [
+  "....11..........",
+  "...1e11.........",
+  "..ww111...11....",
+  ".....11..1e11...",
+  "..11..1.ww111...",
+  ".1e11.11...11...",
+  "ww111..1...1....",
+  "....11.11.11....",
+  ".....1111111....",
+  "......11111111..",
+  ".....1133333111.",
+  "....11333333311.",
+  "....111111111111",
+  ".....22..22..22.",
+  "....222.222.222.",
+  "................",
+];
+
 /** Erzkönig Grimmbart: Zwergenkönig mit Krone, rotem Bart und Spitzhacke */
 const ORE_KING = [
   "....5.5.5.......",
@@ -969,6 +989,8 @@ export const CREATURE_SPRITES: Readonly<Record<string, SpriteDef>> = {
   },
   "soul-eater": { grid: SOUL_EATER, palette: { "1": "#3a2a5a", "2": "#5a3a8a", "3": "#4af0ff", e: "#ff4af0" } },
   "void-lord": { grid: VOID_LORD, palette: { "1": "#2a1a40", "2": "#5a2a8a", "3": "#7a1a5a", e: "#4af0ff" } },
+  // Koop-Bosse
+  hydra: { grid: HYDRA, palette: { "1": "#3f6b4a", "2": "#2a4632", "3": "#a8b45a", e: "#f4e27a" } },
 };
 
 export function getCreatureSprite(key: string): SpriteDef {

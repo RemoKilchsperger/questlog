@@ -14,10 +14,19 @@ import { SkillTree } from "./components/SkillTree";
 import { SmithScreen } from "./components/SmithScreen";
 import { unspentSkillPoints } from "./domain/skills";
 import { useGameStore } from "./store/gameStore";
+import { useCoopStore } from "./coop/coopStore";
+import { isLobbyCode } from "./coop/transport";
 
 type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard";
 /** Untermenü des Dorfs */
 type VillageView = "merchant" | "smith";
+
+/** Einladungslink zu einer Koop-Lobby: #/koop/<code> – null, wenn die Adresse keiner ist. */
+function readCoopInvite(): string | null {
+  const match = window.location.hash.match(/^#\/koop\/([A-Za-z0-9]{6})$/);
+  const code = match?.[1].toUpperCase() ?? null;
+  return code && isLobbyCode(code) ? code : null;
+}
 
 /** Teilbare Adressen: #/rangliste und #/held/<name> öffnen Rangliste bzw. Profil. */
 function readRoute(): { tab: "leaderboard"; username: string | null } | null {
@@ -28,10 +37,24 @@ function readRoute(): { tab: "leaderboard"; username: string | null } | null {
 }
 
 export default function App() {
-  const [tab, setTabState] = useState<Tab>(() => readRoute()?.tab ?? "quests");
+  const [tab, setTabState] = useState<Tab>(() => (readCoopInvite() ? "battle" : (readRoute()?.tab ?? "quests")));
   const [profileName, setProfileName] = useState<string | null>(() => readRoute()?.username ?? null);
   const [villageView, setVillageView] = useState<VillageView>("merchant");
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
+
+  // Einladungslink: der Lobby beitreten und die Adresse wieder aufräumen
+  useEffect(() => {
+    const join = () => {
+      const code = readCoopInvite();
+      if (!code) return;
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      setTabState("battle");
+      useCoopStore.getState().joinLobby(code);
+    };
+    join();
+    window.addEventListener("hashchange", join);
+    return () => window.removeEventListener("hashchange", join);
+  }, []);
 
   useEffect(() => {
     const onHash = () => {

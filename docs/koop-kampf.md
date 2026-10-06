@@ -3,8 +3,8 @@
 Mehrere Spieler kämpfen gemeinsam gegen einen Koop-Boss. Pro Runde handeln
 zuerst alle Spieler, danach greift der Boss an.
 
-Status: **Planung** (Branch `feature/koop-kampf`). Zahlen sind Startwerte
-und werden beim Testen abgestimmt.
+Status: **Etappe 1 umgesetzt** (Branch `feature/koop-kampf`). Zahlen sind
+Startwerte und werden beim Testen abgestimmt.
 
 ---
 
@@ -203,12 +203,22 @@ resolveRound(state, actions: Record<playerId, CoopAction>, rng): { state; events
 ## 5. Etappen
 
 ### Etappe 1: Spielbar zu zweit bis zu viert, Host-Modell
-- [ ] `coopCombat.ts` mit Tests: Start, Runde, Skalierung, Bedrohung, Wiederbeleben, Zeitablauf
-- [ ] Ein erster Koop-Boss (Sumpfhydra, Lv. 20) mit Grafik und Fähigkeiten
-- [ ] Realtime-Lobby: erstellen, Link, beitreten, bereit, starten
-- [ ] Host-Logik: Aktionen sammeln, Countdown, Runde auflösen, verteilen
-- [ ] Kampfszene mit mehreren Helden
-- [ ] Beute-Truhe pro Spieler, Kampfpunkte
+- [x] `coopCombat.ts` mit Tests: Start, Runde, Skalierung, Bedrohung, Wiederbeleben, Zeitablauf
+- [x] Ein erster Koop-Boss (Sumpfhydra, Lv. 20) mit Grafik und Fähigkeiten
+- [x] Realtime-Lobby: erstellen, Link, beitreten, bereit, starten
+- [x] Host-Logik: Aktionen sammeln, Countdown, Runde auflösen, verteilen
+- [x] Kampfszene mit mehreren Helden
+- [x] Beute-Truhe pro Spieler, Kampfpunkte
+- [ ] Test mit zwei echten Cloud-Konten auf zwei Geräten
+
+**Umsetzung:** `src/domain/coopCombat.ts` (Logik), `src/coop/transport.ts` (Verbindung),
+`src/coop/coopStore.ts` (Lobby und Host), `src/game/CoopBattleScene.ts` (Szene),
+`src/components/CoopScreen.tsx` (Oberfläche).
+
+**Testmodus:** Im Dev-Server ohne Anmeldung verbinden sich Tabs desselben Browsers über
+`BroadcastChannel`. Damit lässt sich alles ohne Konto ausprobieren. Weil sich die Tabs einen
+Spielstand teilen, überschreiben sich dabei Kampfpunkte und Beute gegenseitig. Das gilt
+nur im Testmodus.
 
 ### Etappe 2: Server
 - [ ] Tabelle `coop_battles` + RLS im `schema.sql`
@@ -231,8 +241,9 @@ resolveRound(state, actions: Record<playerId, CoopAction>, rng): { state; events
 - **Handy im Hintergrund:** Browser drosseln Timer in Hintergrund-Tabs. Ein Host
   auf dem Handy, der die App wechselt, bremst die Gruppe. Das ist ein weiterer Grund für Etappe 2.
 - **Gleichzeitiges Spielen auf zwei Geräten** mit demselben Konto: Die Beute landet
-  im lokalen Spielstand. Die bestehende Cloud-Synchronisation muss Konflikte sauber
-  behandeln. Das muss vor Etappe 1 geprüft werden.
+  im lokalen Spielstand und wird wie jede Änderung hochgeladen (der letzte Upload gewinnt).
+  Das war vor Koop schon so. Koop verschärft es nicht, weil jeder Spieler sein eigenes Konto
+  nutzt. *Geprüft vor Etappe 1.*
 - **Supabase-Limits** (Realtime-Verbindungen und Nachrichten im Gratis-Tarif)
   reichen für Freundesgruppen bei Weitem.
 - **Balance:** Bedrohung, Betäubung und Wiederbeleben brauchen Testspiele. Die Zahlen

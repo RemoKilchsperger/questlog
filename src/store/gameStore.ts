@@ -148,6 +148,16 @@ interface GameState {
   nextDungeonFight: () => void;
   /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
   leaveDungeonWithChest: () => void;
+
+  // Koop-Kampf (der Kampf selbst läuft in src/coop/coopStore.ts)
+  /** Zahlt die Kampfpunkte für einen Koop-Kampf – wirft, wenn sie nicht reichen. */
+  payCoop: (cost: number) => void;
+  /** Erstattet Kampfpunkte, wenn ein Koop-Kampf abgebrochen wurde. */
+  refundCoop: (cost: number) => void;
+  /** Ein im Koop-Kampf getrunkener (oder verabreichter) Trank verlässt den Vorrat. */
+  consumePotion: (potionId: string) => void;
+  /** Schreibt die eigene Koop-Beute gut und gibt die Truhe für die Anzeige zurück. */
+  grantCoopReward: (reward: BattleReward) => ClaimedChest;
 }
 
 export interface DungeonRun {
@@ -630,6 +640,22 @@ export const useGameStore = create<GameState>()(
         }),
 
       leaveBattle: () => set({ battle: null, battleReward: null, dungeon: null }),
+
+      payCoop: (cost) => set((s) => ({ character: spendBattlePoint(regenerateBattlePoints(s.character), cost) })),
+
+      refundCoop: (cost) => set((s) => ({ character: refillBattlePoints(s.character, cost) })),
+
+      consumePotion: (potionId) =>
+        set((s) => ({ potions: { ...s.potions, [potionId]: Math.max(0, (s.potions[potionId] ?? 0) - 1) } })),
+
+      grantCoopReward: (reward) => {
+        const chest = addToChest(EMPTY_CHEST, reward);
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        if (levels.levelAfter > levels.levelBefore) {
+          EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
+        }
+        return { ...chest, ...levels, completed: true };
+      },
       };
     },
     {
