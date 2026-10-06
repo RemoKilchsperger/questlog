@@ -36,6 +36,7 @@ import {
   START_BATTLE_POINTS,
 } from "../domain/battlePoints";
 import { getDailyBonusQuests } from "../domain/bonusQuests";
+import { advanceRecurring, firstDue, isValidRecurrence, type Recurrence } from "../domain/recurrence";
 import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon } from "../domain/skills";
 import type { AbilityId } from "../domain/abilities";
 import { dateKey } from "../domain/calendar";
@@ -62,6 +63,8 @@ export interface NewQuestInput {
   effort: Effort;
   category: Category;
   dueDate?: string;
+  /** Wiederkehrend – dann ist `dueDate` der erste Termin (wird hier berechnet) */
+  recurrence?: Recurrence;
 }
 
 /** Wird von der UI für Belohnungs-/Level-up-Animationen genutzt. */
@@ -329,26 +332,43 @@ export const useGameStore = create<GameState>()(
         }
       };
 
-      const finishQuest = (quest: Quest, extra: Partial<GameState> = {}) => {
+      /**
+       * `recurring`: Die Quest wiederholt sich – sie bleibt als `next` (neuer Termin,
+       * neue Serie) stehen, unter „Erledigt“ kommt ein eigener Eintrag dazu.
+       */
+      const finishQuest = (quest: Quest, extra: Partial<GameState> = {}, recurring?: { next: Quest; streak: number }) => {
         const { quests, inventory } = get();
         const character = regenerateBattlePoints(get().character);
         const bonus = quest.bonus === true;
-        const reward = calculateReward(quest.effort, quest.category, bonus);
+        const reward = calculateReward(quest.effort, quest.category, bonus, recurring?.streak ?? 0);
         const levelBefore = getLevel(character.totalXp);
         const totalXp = character.totalXp + reward.xp;
         const levelAfter = getLevel(totalXp);
         const loot = rollLoot(quest.effort, levelAfter, newId(), Math.random, bonus);
-        const completed: Quest = {
-          ...quest,
-          status: "done",
-          completedAt: new Date().toISOString(),
-          reward,
-        };
+        const completedAt = new Date().toISOString();
+        const completed: Quest = recurring
+          ? {
+              id: newId(),
+              title: quest.title,
+              description: quest.description,
+              effort: quest.effort,
+              category: quest.category,
+              status: "done",
+              createdAt: completedAt,
+              completedAt,
+              reward,
+              recurringId: quest.id,
+            }
+          : { ...quest, status: "done", completedAt, reward };
         const known = quests.some((q) => q.id === quest.id);
 
         set({
           ...extra,
-          quests: known ? quests.map((q) => (q.id === quest.id ? completed : q)) : [completed, ...quests],
+          quests: recurring
+            ? [completed, ...quests.map((q) => (q.id === quest.id ? recurring.next : q))]
+            : known
+              ? quests.map((q) => (q.id === quest.id ? completed : q))
+              : [completed, ...quests],
           character: refillBattlePoints(
             {
               ...character,
@@ -389,25 +409,34 @@ export const useGameStore = create<GameState>()(
       lastReward: null,
 
       addQuest: (input) =>
-        set((s) => ({
-          quests: [
-            {
-              id: newId(),
-              title: input.title.trim(),
-              description: input.description?.trim() || undefined,
-              effort: input.effort,
-              category: input.category,
-              dueDate: input.dueDate || undefined,
-              status: "open",
-              createdAt: new Date().toISOString(),
-            },
-            ...s.quests,
-          ],
-        })),
+        set((s) => {
+          const recurrence = input.recurrence && isValidRecurrence(input.recurrence) ? input.recurrence : undefined;
+          return {
+            quests: [
+              {
+                id: newId(),
+                title: input.title.trim(),
+                description: input.description?.trim() || undefined,
+                effort: input.effort,
+                category: input.category,
+                dueDate: recurrence ? firstDue(recurrence, dateKey()) : input.dueDate || undefined,
+                status: "open",
+                createdAt: new Date().toISOString(),
+                ...(recurrence && { recurrence, streak: 0 }),
+              },
+              ...s.quests,
+            ],
+          };
+        }),
 
       completeQuest: (id) => {
         const quest = get().quests.find((q) => q.id === id);
         if (!quest || quest.status === "done") return;
+        if (quest.recurrence) {
+          // Wiederkehrend: erst am Termin erledigbar, dann springt sie zum nächsten
+          attempt(() => finishQuest(quest, {}, advanceRecurring(quest, dateKey())));
+          return;
+        }
         finishQuest(quest);
       },
 

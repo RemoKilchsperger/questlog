@@ -1,3 +1,4 @@
+import { streakBonus } from "./recurrence";
 import type { Category, Effort, Reward, StatKey } from "./types";
 
 export interface EffortTier {
@@ -66,18 +67,20 @@ export function getCategory(category: Category): CategoryInfo {
 export const BONUS_MULTIPLIER = 1.5;
 
 /**
- * Berechnet die Belohnung für eine Quest.
+ * Berechnet die Belohnung für eine Quest. Bei wiederkehrenden Quests gibt
+ * die Serie (`streak`) zusätzlich bis zu +50 % XP und Gold.
  * Reine Funktion → kann 1:1 auf den Server wandern (Anti-Cheat).
  */
-export function calculateReward(effort: Effort, category: Category, bonus = false): Reward {
+export function calculateReward(effort: Effort, category: Category, bonus = false, streak = 0): Reward {
   const tier = getEffortTier(effort);
-  const factor = bonus ? BONUS_MULTIPLIER : 1;
+  const factor = (bonus ? BONUS_MULTIPLIER : 1) * (1 + streakBonus(streak));
   return {
     xp: Math.round(tier.xp * factor),
     gold: Math.round(tier.gold * factor),
     stat: getCategory(category).stat,
     statPoints: bonus ? tier.bonusStatPoints : tier.statPoints,
     battlePoints: tier.battlePoints,
+    ...(streak > 0 && { streak }),
   };
 }
 

@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { currentStreak, isMissed, isWaiting, recurrenceLabel, streakAfterCompletion, streakBonus } from "../domain/recurrence";
 import { calculateReward, dropChance, getCategory, getEffortTier } from "../domain/rewards";
 import type { Quest } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
@@ -10,9 +11,16 @@ export function QuestCard({ quest }: { quest: Quest }) {
 
   const category = getCategory(quest.category);
   const tier = getEffortTier(quest.effort);
-  const reward = quest.reward ?? calculateReward(quest.effort, quest.category, quest.bonus);
   const isDone = quest.status === "done";
-  const overdue = !isDone && quest.dueDate !== undefined && quest.dueDate < today();
+  const now = today();
+  const recurring = quest.recurrence !== undefined && !isDone;
+  const waiting = recurring && isWaiting(quest, now);
+  const missed = recurring && isMissed(quest, now);
+  // Vorschau: die Serie, mit der die Quest jetzt erledigt würde
+  const nextStreak = recurring ? streakAfterCompletion(quest, now) : 0;
+  const reward = quest.reward ?? calculateReward(quest.effort, quest.category, quest.bonus, nextStreak);
+  const overdue = !isDone && !recurring && quest.dueDate !== undefined && quest.dueDate < now;
+  const streak = recurring ? currentStreak(quest, now) : 0;
 
   return (
     <motion.li
@@ -21,7 +29,7 @@ export function QuestCard({ quest }: { quest: Quest }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
       className={`group flex items-start gap-3 rounded-md border-2 bg-night-800 p-3 ${
-        overdue ? "border-danger/70" : "border-night-700"
+        overdue ? "border-danger/70" : waiting ? "border-night-700 opacity-60" : "border-night-700"
       }`}
     >
       <div className="mt-0.5 text-2xl" aria-hidden>
@@ -38,6 +46,24 @@ export function QuestCard({ quest }: { quest: Quest }) {
           )}
           {quest.title}
         </p>
+        {recurring && (
+          <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
+            <span className="text-intellect">🔁 {recurrenceLabel(quest.recurrence!)}</span>
+            <span
+              className={streak > 0 ? "text-legendary" : "text-muted"}
+              title={`Serie: pünktlich erledigte Termine in Folge (Rekord: ${quest.bestStreak ?? 0})`}
+            >
+              🔥 {streak}
+              {missed && (quest.streak ?? 0) > 0 && " · Serie gerissen"}
+            </span>
+            {!waiting && nextStreak > 1 && (
+              <span className="text-legendary">+{Math.round(streakBonus(nextStreak) * 100)} % Serienbonus</span>
+            )}
+          </p>
+        )}
+        {quest.reward?.streak !== undefined && quest.reward.streak > 1 && (
+          <p className="mt-0.5 text-xs text-legendary">🔥 Serie {quest.reward.streak}</p>
+        )}
         {quest.description && <p className="mt-0.5 text-sm break-words text-muted">{quest.description}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className="rounded bg-night-950 px-1.5 py-0.5 text-muted">
@@ -55,17 +81,17 @@ export function QuestCard({ quest }: { quest: Quest }) {
               🎁 {Math.round(dropChance(quest.effort, quest.bonus) * 100)}%
             </span>
           )}
-          {quest.dueDate && (
-            <span className={overdue ? "text-danger" : "text-muted"}>
-              {overdue ? "Überfällig: " : "Fällig: "}
-              {formatDate(quest.dueDate)}
+          {quest.dueDate && !isDone && (
+            <span className={overdue || missed ? "text-danger" : "text-muted"}>
+              {waiting ? "Wieder fällig: " : overdue ? "Überfällig: " : missed ? "Verpasst: " : "Fällig: "}
+              {quest.dueDate === now ? "heute" : formatDate(quest.dueDate)}
             </span>
           )}
         </div>
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-1">
-        {!isDone && (
+        {!isDone && !waiting && (
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => completeQuest(quest.id)}
@@ -74,6 +100,7 @@ export function QuestCard({ quest }: { quest: Quest }) {
             Erledigt
           </motion.button>
         )}
+        {waiting && <span className="text-xs text-xp">✓ Erledigt</span>}
         <button
           onClick={() => deleteQuest(quest.id)}
           className="text-xs text-muted opacity-70 hover:text-danger hover:opacity-100"

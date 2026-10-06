@@ -1,4 +1,5 @@
 import type { AbilityId } from "./abilities";
+import type { Recurrence } from "./recurrence";
 // Zentrale Datentypen. Bewusst frei von React/Zustand, damit dieselben
 // Typen später im Backend (Supabase Edge Function) und im Kampfsystem
 // (Phaser) wiederverwendet werden können.
@@ -29,6 +30,16 @@ export interface Quest {
   reward?: Reward;
   /** Tägliche Bonusquest (src/domain/bonusQuests.ts) – gibt mehr Belohnung. */
   bonus?: boolean;
+  /** Wiederkehrende Quest (recurrence.ts): `dueDate` ist dann der nächste Termin. */
+  recurrence?: Recurrence;
+  /** Aktuelle Serie pünktlich erledigter Termine */
+  streak?: number;
+  /** Längste Serie bisher */
+  bestStreak?: number;
+  /** Datum des letzten Erledigens ("yyyy-mm-dd") */
+  lastDone?: string;
+  /** Eintrag unter „Erledigt“: Id der wiederkehrenden Quest, aus der er stammt */
+  recurringId?: string;
 }
 
 export interface Reward {
@@ -38,6 +49,8 @@ export interface Reward {
   statPoints: number;
   /** Aufgefüllte Kampfpunkte (fehlt bei Quests, die vor den Kampfpunkten erledigt wurden) */
   battlePoints?: number;
+  /** Serie, mit der eine wiederkehrende Quest erledigt wurde (XP und Gold enthalten den Bonus) */
+  streak?: number;
 }
 
 /** Zufällige Item-Belohnung einer Quest (oder null, wenn nichts gedroppt ist). */

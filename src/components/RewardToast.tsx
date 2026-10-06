@@ -7,6 +7,7 @@ import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
+import { streakBonus } from "../domain/recurrence";
 import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 
 /** Belohnungs-Popup nach Abschluss einer Quest, mit grossem Level-up-Banner. */
@@ -56,6 +57,11 @@ export function RewardToast() {
             )}
             <p className={`text-sm ${event.bonus ? "text-gold" : "text-muted"}`}>
               {event.bonus ? "⭐ Bonusquest abgeschlossen" : "Quest abgeschlossen"}
+              {(event.reward.streak ?? 0) > 1 && (
+                <span className="ml-2 text-legendary">
+                  🔥 Serie {event.reward.streak} (+{Math.round(streakBonus(event.reward.streak!) * 100)} %)
+                </span>
+              )}
             </p>
             <p className="truncate font-semibold">{event.questTitle}</p>
             <div className="num mt-2 flex justify-center gap-4 text-base">

@@ -1,5 +1,7 @@
 import { AnimatePresence } from "motion/react";
 import { useState, type ReactNode } from "react";
+import { dateKey } from "../domain/calendar";
+import { isWaiting } from "../domain/recurrence";
 import { useGameStore } from "../store/gameStore";
 import { QuestCard } from "./QuestCard";
 
@@ -9,7 +11,11 @@ export function QuestBoard() {
   const quests = useGameStore((s) => s.quests);
   const [filter, setFilter] = useState<Filter>("open");
 
-  const open = quests.filter((q) => q.status === "open");
+  const today = dateKey();
+  const allOpen = quests.filter((q) => q.status === "open");
+  // Wiederkehrende Quests, die für ihren Termin schon erledigt sind, kommen ans Ende
+  const waiting = allOpen.filter((q) => isWaiting(q, today)).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
+  const open = allOpen.filter((q) => !isWaiting(q, today));
   const done = quests
     .filter((q) => q.status === "done")
     .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
@@ -29,7 +35,7 @@ export function QuestBoard() {
         </div>
       </div>
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && !(filter === "open" && waiting.length > 0) ? (
         <p className="m-auto max-w-xs text-center text-muted">
           {filter === "open"
             ? "Keine offenen Quests. Nimm links eine neue Quest an!"
@@ -43,6 +49,18 @@ export function QuestBoard() {
             ))}
           </AnimatePresence>
         </ul>
+      )}
+      {filter === "open" && waiting.length > 0 && (
+        <>
+          <h3 className="mt-4 mb-2 text-xs uppercase tracking-wide text-muted">🔁 Für heute erledigt ({waiting.length})</h3>
+          <ul className="flex flex-col gap-2">
+            <AnimatePresence initial={false}>
+              {waiting.map((q) => (
+                <QuestCard key={q.id} quest={q} />
+              ))}
+            </AnimatePresence>
+          </ul>
+        </>
       )}
     </section>
   );
