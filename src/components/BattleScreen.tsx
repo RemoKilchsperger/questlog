@@ -35,7 +35,9 @@ import type { ItemStats } from "../domain/types";
 import { BUFF_LABELS, getPotion, POTIONS, potionEffectText, potionHeal, type BuffKind } from "../domain/potions";
 import { getCreatureSprite } from "../game/creatureSprites";
 import { EventBus } from "../game/EventBus";
+import { unlockAudio } from "../game/sfx";
 import { useGameStore } from "../store/gameStore";
+import { useSoundStore } from "../store/soundStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
@@ -366,6 +368,7 @@ function Battle({ battle }: { battle: BattleState }) {
     setBusy(true);
     // Sicherheitsnetz, falls die Szene (z. B. beim Tab-Wechsel) nicht antwortet.
     fallback.current = window.setTimeout(() => setBusy(false), 4000);
+    unlockAudio();
     action();
   }
 
@@ -378,9 +381,12 @@ function Battle({ battle }: { battle: BattleState }) {
           <h2 className="font-pixel text-2xl">
             {area.name} <span className="text-base text-muted">· {creature.name}</span>
           </h2>
-          <span className="font-pixel text-gold">
-            Runde <span className="num">{battle.round}</span>
-          </span>
+          <div className="flex items-center gap-3">
+            <SoundControl />
+            <span className="font-pixel text-gold">
+              Runde <span className="num">{battle.round}</span>
+            </span>
+          </div>
         </div>
         {area.dungeon && <DungeonProgress area={area} />}
         <Suspense
@@ -417,6 +423,20 @@ function Battle({ battle }: { battle: BattleState }) {
                 {battle.enemyEffects.poison.roundsLeft === 1 ? "Runde" : "Runden"}
               </span>
             )}
+            {battle.enemyEffects.burn && (
+              <span className="rounded-md bg-night-800 px-2 py-0.5 text-strength">
+                🔥 Feuer −{battle.enemyEffects.burn.damage} · noch{" "}
+                <span className="num">{battle.enemyEffects.burn.roundsLeft}</span>{" "}
+                {battle.enemyEffects.burn.roundsLeft === 1 ? "Runde" : "Runden"}
+              </span>
+            )}
+            {battle.enemyEffects.bleed && (
+              <span className="rounded-md bg-night-800 px-2 py-0.5 text-danger">
+                🩸 Bluten −{battle.enemyEffects.bleed.damage} · noch{" "}
+                <span className="num">{battle.enemyEffects.bleed.roundsLeft}</span>{" "}
+                {battle.enemyEffects.bleed.roundsLeft === 1 ? "Runde" : "Runden"}
+              </span>
+            )}
             {battle.enemyEffects.armorBreak && (
               <span className="rounded-md bg-night-800 px-2 py-0.5 text-strength">
                 💥 Gegner-Rüstung −{Math.round(battle.enemyEffects.armorBreak * 100)} %
@@ -432,6 +452,20 @@ function Battle({ battle }: { battle: BattleState }) {
                 ☠️ Du bist vergiftet: −{battle.heroEffects.poison.damage} · noch{" "}
                 <span className="num">{battle.heroEffects.poison.roundsLeft}</span>{" "}
                 {battle.heroEffects.poison.roundsLeft === 1 ? "Runde" : "Runden"}
+              </span>
+            )}
+            {battle.heroEffects.burn && (
+              <span className="rounded-md bg-danger/15 px-2 py-0.5 text-danger">
+                🔥 Du brennst: −{battle.heroEffects.burn.damage} · noch{" "}
+                <span className="num">{battle.heroEffects.burn.roundsLeft}</span>{" "}
+                {battle.heroEffects.burn.roundsLeft === 1 ? "Runde" : "Runden"}
+              </span>
+            )}
+            {battle.heroEffects.bleed && (
+              <span className="rounded-md bg-danger/15 px-2 py-0.5 text-danger">
+                🩸 Du blutest: −{battle.heroEffects.bleed.damage} · noch{" "}
+                <span className="num">{battle.heroEffects.bleed.roundsLeft}</span>{" "}
+                {battle.heroEffects.bleed.roundsLeft === 1 ? "Runde" : "Runden"}
               </span>
             )}
           </div>
@@ -534,6 +568,54 @@ function Battle({ battle }: { battle: BattleState }) {
       )}
 
       <BattleLog battle={battle} />
+    </div>
+  );
+}
+
+/** Stummschalten und Lautstärke der Kampfgeräusche (pro Gerät gespeichert). */
+function SoundControl() {
+  const muted = useSoundStore((s) => s.muted);
+  const volume = useSoundStore((s) => s.volume);
+  const toggleMuted = useSoundStore((s) => s.toggleMuted);
+  const musicOn = useSoundStore((s) => s.music);
+  const toggleMusic = useSoundStore((s) => s.toggleMusic);
+  const setVolume = useSoundStore((s) => s.setVolume);
+  const silent = muted || volume === 0;
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={toggleMusic}
+        className={`rounded-md px-1 text-lg leading-none hover:bg-night-800 ${musicOn ? "" : "opacity-40"}`}
+        title={musicOn ? "Musik ausschalten" : "Musik einschalten"}
+        aria-label={musicOn ? "Musik ausschalten" : "Musik einschalten"}
+        aria-pressed={musicOn}
+      >
+        🎵
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          toggleMuted();
+          unlockAudio();
+        }}
+        className="rounded-md px-1 text-lg leading-none hover:bg-night-800"
+        title={silent ? "Ton einschalten" : "Ton ausschalten"}
+        aria-label={silent ? "Ton einschalten" : "Ton ausschalten"}
+      >
+        {silent ? "🔇" : "🔊"}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={silent ? 0 : Math.round(volume * 100)}
+        onChange={(e) => setVolume(Number(e.target.value) / 100)}
+        onPointerUp={unlockAudio}
+        className="hidden w-20 accent-gold sm:block"
+        aria-label="Lautstärke"
+      />
     </div>
   );
 }
@@ -849,6 +931,10 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `Du setzt ${getAbility(e.weapon).name} ein (−${e.manaCost} Mana).`;
     case "poison":
       return e.target === "enemy" ? `Gift fügt ${enemy} ${e.damage} Schaden zu.` : `Gift fügt dir ${e.damage} Schaden zu.`;
+    case "bleed":
+      return e.target === "enemy" ? `${enemy} blutet und erleidet ${e.damage} Schaden.` : `Du blutest und erleidest ${e.damage} Schaden.`;
+    case "burn":
+      return e.target === "enemy" ? `Feuer fügt ${enemy} ${e.damage} Schaden zu.` : `Feuer fügt dir ${e.damage} Schaden zu.`;
     case "stunned":
       return `${enemy} ist betäubt und kann nicht zurückschlagen.`;
     case "bossAbility":

@@ -16,6 +16,10 @@ export interface BossAbilityDef {
   ignoreArmor?: boolean;
   /** Vergiftet den Helden: Anteil des Boss-Schadens pro Runde */
   poison?: { percent: number; rounds: number };
+  /** Setzt den Helden in Brand: Anteil des Boss-Schadens pro Runde */
+  burn?: { percent: number; rounds: number };
+  /** Lässt den Helden bluten: Anteil des Boss-Schadens pro Runde */
+  bleed?: { percent: number; rounds: number };
   /** Heilt den Boss um diesen Anteil des verursachten Schadens */
   drain?: number;
   /** Raubt dem Helden so viel Mana */
@@ -76,7 +80,7 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     every: 3,
     multiplier: 1.6,
     ignoreArmor: true,
-    poison: { percent: 0.25, rounds: 2 },
+    burn: { percent: 0.25, rounds: 2 },
   },
 
   // Dungeon-Bosse

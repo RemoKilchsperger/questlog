@@ -10,6 +10,8 @@ import type { SkillWeapon } from "../domain/skills";
 import * as fx from "./battleEffects";
 import { getCreatureSprite } from "./creatureSprites";
 import { EventBus } from "./EventBus";
+import { music } from "./music";
+import { sfx } from "./sfx";
 import type { HeldWeapon } from "./heroSprite";
 import { paintSprite, renderSprite, type PixelImage, type SpriteDef } from "./sprites";
 
@@ -106,6 +108,13 @@ export class BattleScene extends Phaser.Scene {
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
     this.events.once(Phaser.Scenes.Events.DESTROY, off);
+
+    if (battle.status === "active") {
+      music.start(this.setup.boss, this);
+      const stopMusic = () => music.stop(this);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, stopMusic);
+      this.events.once(Phaser.Scenes.Events.DESTROY, stopMusic);
+    }
   }
 
   private drawBackground(colors: BattleSceneData["colors"]) {
@@ -257,11 +266,14 @@ export class BattleScene extends Phaser.Scene {
           : { text: "RÜSTUNG ↑", color: "#7aa7f0", tint: 0xa9c6ff }
         : { text: `+${event.heal}`, color: "#7dd3a8", tint: 0x9dffc8 };
       if (event.heal > 0) this.setHp("hero", hero.hp + event.heal);
+      if (event.buff) sfx.buff();
+      else sfx.heal();
       this.floatText(hero.homeX, GROUND_Y - 105, look.text, look.color, 28);
       for (const image of hero.images) image.setTint(look.tint);
       this.time.delayedCall(350, () => hero.images.forEach((image) => image.clearTint()));
       this.sparkles(hero.homeX, GROUND_Y - 60, Phaser.Display.Color.HexStringToColor(look.color).color);
     } else if (event.type === "fled") {
+      music.stop(this, 0.3);
       this.showFlight(false);
     } else if (event.type === "ability") {
       this.announceHeroAbility(event.weapon);
@@ -269,13 +281,30 @@ export class BattleScene extends Phaser.Scene {
       const target = this.fighters[event.target];
       this.setHp(event.target, Math.max(0, target.hp - event.damage));
       this.floatText(target.homeX, GROUND_Y - 100, `☠ -${event.damage}`, "#7dd3a8", 24);
+      sfx.poison();
       this.tint(target, 0x7dd3a8, 350);
       fx.rise(this, this.center(event.target), 0x7dd3a8, 8);
+    } else if (event.type === "bleed") {
+      const target = this.fighters[event.target];
+      this.setHp(event.target, Math.max(0, target.hp - event.damage));
+      this.floatText(target.homeX, GROUND_Y - 100, `🩸 -${event.damage}`, "#c23a3a", 24);
+      sfx.bleed();
+      this.tint(target, 0xc23a3a, 350);
+      this.drips(target.homeX, GROUND_Y - 80);
+    } else if (event.type === "burn") {
+      const target = this.fighters[event.target];
+      this.setHp(event.target, Math.max(0, target.hp - event.damage));
+      this.floatText(target.homeX, GROUND_Y - 100, `🔥 -${event.damage}`, "#f08a2c", 24);
+      sfx.burn();
+      this.tint(target, 0xf08a2c, 350);
+      fx.rise(this, this.center(event.target), 0xf08a2c, 10);
+      fx.rise(this, this.center(event.target), 0xffe28f, 5, 30);
     } else if (event.type === "bossAbility") {
       this.announceBossAbility(event.bossId);
     } else if (event.type === "blocked") {
       const hero = this.fighters.hero;
       this.floatText(hero.homeX, GROUND_Y - 115, "GEBLOCKT!", "#7aa7f0", 28);
+      sfx.block();
       this.tint(hero, 0xa9c6ff, 400);
       // Die Kuppel fängt den Schlag ab und zerspringt
       fx.burst(this, { x: hero.homeX + 60, y: GROUND_Y - 70 }, 0xa9c6ff, 18, 90);
@@ -286,6 +315,7 @@ export class BattleScene extends Phaser.Scene {
       // Lebenskraft fliesst sichtbar vom Helden zum Gegner
       const enemy = this.fighters.enemy;
       fx.siphon(this, this.center("hero"), this.center("enemy"), 0xb0203a, 12);
+      sfx.drain();
       this.time.delayedCall(400, () => {
         this.setHp("enemy", enemy.hp + event.heal);
         this.floatText(enemy.homeX, GROUND_Y - 105, `+${event.heal}`, "#b07cff", 26);
@@ -294,16 +324,19 @@ export class BattleScene extends Phaser.Scene {
     } else if (event.type === "manaBurn") {
       const hero = this.fighters.hero;
       fx.siphon(this, this.center("hero"), this.center("enemy"), 0x7aa7f0, 10);
+      sfx.manaBurn();
       this.floatText(hero.homeX, GROUND_Y - 105, `-${event.amount} Mana`, "#7aa7f0", 24);
     } else if (event.type === "stunned") {
       const enemy = this.fighters.enemy;
       this.floatText(enemy.homeX, GROUND_Y - 120, "BETÄUBT", "#d39bf0", 26);
+      sfx.stun();
       this.tweens.add({ targets: enemy.body, angle: 8, duration: 90, yoyo: true, repeat: 3 });
       fx.dizzyStars(this, { x: enemy.homeX, y: GROUND_Y - 150 });
     } else if (event.type === "hit") {
       if (event.attacker === "hero") this.heroHit(event, special as SkillWeapon | null);
       else this.enemyHit(event, special);
     } else {
+      music.stop(this, 0.3);
       this.showDefeat(event.side, false);
     }
   }
@@ -330,6 +363,7 @@ export class BattleScene extends Phaser.Scene {
     const defender = this.fighters[defenderSide];
     const dir = defenderSide === "enemy" ? 1 : -1;
     this.setHp(defenderSide, Math.max(0, defender.hp - damage));
+    sfx.hit(crit, shake >= 0.012);
     this.tweens.add({ targets: defender.body, alpha: 0.25, duration: 70, yoyo: true, repeat: 2 });
     this.tweens.add({ targets: defender.body, x: defender.homeX + 10 * dir, duration: 60, yoyo: true, repeat: 1 });
     if (crit || shake > 0) this.cameras.main.shake(crit ? 180 : 220, Math.max(shake, crit ? 0.01 : 0));
@@ -342,6 +376,7 @@ export class BattleScene extends Phaser.Scene {
     const f = this.fighters[side];
     const dir = side === "hero" ? 1 : -1;
     if (f.weapon) this.swing(f.weapon);
+    sfx.swing();
     this.tweens.add({
       targets: f.body,
       x: f.homeX + distance * dir,
@@ -358,6 +393,7 @@ export class BattleScene extends Phaser.Scene {
     const baseY = f.groundY ?? f.body.y;
     const dir = side === "hero" ? 1 : -1;
     if (f.weapon) this.swing(f.weapon);
+    sfx.whoosh(0.25);
     f.breath?.pause();
     this.tweens.chain({
       targets: f.body,
@@ -378,18 +414,22 @@ export class BattleScene extends Phaser.Scene {
     const ability = getAbility(weapon);
     this.floatText(hero.homeX, GROUND_Y - 125, `${ability.name}!`, "#f4c95d", 26);
     this.tint(hero, 0xffe28f, 300);
+    sfx.ability();
     const at = this.center("hero");
     switch (weapon) {
       case "dagger": // in Rauch auflösen
         fx.burst(this, at, 0x5a3a8a, 16, 60);
+        sfx.whoosh(0.2);
         this.tweens.add({ targets: hero.body, alpha: 0.15, duration: 200 });
         break;
       case "sword": // einmal um die eigene Achse wirbeln
         this.tweens.add({ targets: hero.body, angle: 360, duration: 380, onComplete: () => hero.body.setAngle(0) });
         fx.whirl(this, at);
+        sfx.whoosh(0.35);
         break;
       case "greatsword": // Schwert zum Himmel, Licht sammelt sich
         fx.rise(this, at, 0xffe66b, 12, 80);
+        sfx.magic();
         break;
       case "axe": // ausholen
         if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -80, duration: 250 });
@@ -407,10 +447,12 @@ export class BattleScene extends Phaser.Scene {
         break;
       case "staff": // Flammen sammeln sich
         fx.siphon(this, { x: at.x, y: at.y + 40 }, this.front("hero"), 0xf08a2c, 10);
+        sfx.fire(0.3);
         break;
       case "shield": // schützende Kuppel
         this.bulwark?.destroy();
         this.bulwark = fx.dome(this, at);
+        sfx.magic();
         break;
     }
   }
@@ -429,13 +471,14 @@ export class BattleScene extends Phaser.Scene {
         this.tweens.chain({
           targets: body,
           tweens: [
-            { alpha: 1, duration: 120 },
+            { alpha: 1, duration: 120, onStart: () => sfx.whoosh(0.15) },
             {
               x: target.x + 45,
               duration: 90,
               onComplete: () => {
                 hit();
                 fx.slashes(this, target, 0xb07cff, 1, true);
+                sfx.slash();
               },
             },
             { alpha: 0, duration: 140, delay: 120 },
@@ -455,10 +498,12 @@ export class BattleScene extends Phaser.Scene {
         this.lunge("hero", () => {
           hit();
           fx.slashes(this, target, 0xffffff, 1);
+          sfx.slash();
         }, 80, 110);
         break;
       case "greatsword":
         fx.pillar(this, target, 0xffe66b);
+        sfx.magic();
         this.time.delayedCall(150, () =>
           this.lunge("hero", () => {
             hit(0.012);
@@ -472,6 +517,7 @@ export class BattleScene extends Phaser.Scene {
           ? this.add.image(0, 0, "hero-weapon").setScale(7)
           : this.add.rectangle(0, 0, 24, 24, 0xc8d0d8);
         hero.weapon?.setVisible(false);
+        sfx.whoosh(0.33);
         fx.projectile(this, this.front("hero"), target, axe, {
           duration: 330,
           spin: 900,
@@ -501,11 +547,13 @@ export class BattleScene extends Phaser.Scene {
         this.leapStrike("hero", () => {
           hit(0.02);
           fx.ring(this, { x: target.x, y: GROUND_Y }, 0xffe28f, 140, 450, true);
+          sfx.quake(0.4);
           fx.groundWave(this, { x: target.x - 80, y: GROUND_Y }, { x: target.x + 80, y: GROUND_Y }, 0x8a7a60, 250);
         });
         break;
       case "scepter":
         fx.beam(this, this.front("hero"), target, 0x7dd3a8, 12, 420);
+        sfx.beam();
         this.time.delayedCall(170, () => {
           hit();
           fx.rise(this, target, 0x7dd3a8, 12);
@@ -514,6 +562,7 @@ export class BattleScene extends Phaser.Scene {
       case "staff": {
         // Feuerball mit Glutspur und Explosion
         const ball = this.add.circle(0, 0, 16, 0xf08a2c).setStrokeStyle(5, 0xffe28f);
+        sfx.fire(0.3);
         fx.projectile(this, this.front("hero"), target, ball, {
           duration: 340,
           arc: 20,
@@ -521,6 +570,7 @@ export class BattleScene extends Phaser.Scene {
           onArrive: () => {
             hit(0.008);
             fx.burst(this, target, 0xf08a2c, 20, 90, 8);
+            sfx.explosion();
             fx.ring(this, target, 0xffe28f, 90);
           },
         });
@@ -539,6 +589,7 @@ export class BattleScene extends Phaser.Scene {
     this.floatText(enemy.homeX, GROUND_Y - 130, `${ability?.name ?? "Spezialangriff"}!`, "#f0776a", 28);
     this.tint(enemy, 0xff6b5a, 400);
     this.cameras.main.shake(250, 0.006);
+    sfx.roar();
     const at = this.center("enemy");
     switch (bossId) {
       case "primal-mammoth": // Aufbäumen vor dem Stampfer
@@ -576,21 +627,25 @@ export class BattleScene extends Phaser.Scene {
         this.lunge("enemy", () => {
           hit();
           fx.slashes(this, target, 0xf0776a, 2, true);
+          sfx.slash();
         }, 90, 100);
         break;
       case "ancient-lizard": // Giftbiss: Zähne und Giftblasen
         this.lunge("enemy", () => {
           hit();
           fx.slashes(this, target, 0xf5f2ea, 2);
+          sfx.poison();
           fx.rise(this, target, 0x7dd3a8, 12);
         });
         break;
       case "cave-eye": // Lähmender Blick: violetter Strahl aus dem Auge
         fx.beam(this, enemyAt, target, 0xb07cff, 14, 450);
+        sfx.beam();
         this.time.delayedCall(180, () => hit());
         break;
       case "primal-mammoth": // Erdstampfer: Schockwelle über den Boden
         fx.ring(this, { x: this.fighters.enemy.homeX, y: GROUND_Y }, 0xc8b090, 150, 450, true);
+        sfx.quake(0.7);
         fx.groundWave(this, { x: enemyAt.x, y: GROUND_Y }, { x: target.x, y: GROUND_Y }, 0x8a6a4a, 330, () => {
           hit(0.02);
           fx.burst(this, { x: target.x, y: GROUND_Y - 20 }, 0x8a6a4a, 14, 70);
@@ -598,24 +653,30 @@ export class BattleScene extends Phaser.Scene {
         break;
       case "lich-king": // Lebensentzug: dunkler Strahl
         fx.beam(this, enemyAt, target, 0x5a2a8a, 14, 450);
+        sfx.beam(true);
         this.time.delayedCall(180, () => hit());
         break;
       case "ignaroth": // Feueratem
         fx.fireStream(this, enemyAt, target, 420);
+        sfx.fire(0.5);
         this.time.delayedCall(260, () => hit(0.008));
         break;
       case "ore-king": // Erzlawine: Steine prasseln herab
         fx.rockfall(this, target, [0x8a909a, 0x6a7280, 0xc0602f], () => hit(0.012));
+        sfx.quake(0.8);
         break;
       case "high-priestess": // Fluch der Mumie: Zeichenkreis zieht sich zusammen
         fx.curseRing(this, target, 0x3ad6c5, () => hit());
+        sfx.curse();
         break;
       case "storm-lord": // Kettenblitz: Blitz von oben
         fx.lightning(this, target);
+        sfx.thunder();
         this.time.delayedCall(60, () => hit());
         break;
       case "void-lord": // Leerenschlund: Strudel am Helden
         fx.vortex(this, target, [0x5a2a8a, 0x4af0ff]);
+        sfx.curse();
         this.time.delayedCall(320, () => hit(0.01));
         break;
       default:
@@ -650,6 +711,8 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.add({ targets: f.body, alpha: 0, scale: f.body.scale * 0.6, y: f.body.y + 20, duration });
     }
     const won = side === "enemy";
+    // Kurz warten, damit der letzte Treffer ausklingt
+    if (!instant) this.time.delayedCall(250, () => (won ? sfx.victory() : sfx.defeat()));
     const banner = this.add
       .text(SCENE_WIDTH / 2, 140, won ? "SIEG!" : "NIEDERLAGE", {
         fontFamily: FONT,
@@ -668,6 +731,7 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.killTweensOf(hero);
     hero.scaleX = -Math.abs(hero.scaleX); // spiegeln: Container kennen kein setFlipX
     this.tweens.add({ targets: hero, x: -80, duration: instant ? 0 : 700, ease: "Quad.easeIn" });
+    if (!instant) sfx.flee();
     const banner = this.add
       .text(SCENE_WIDTH / 2, 140, "GEFLOHEN", { fontFamily: FONT, fontSize: "48px", color: "#a49cb8" })
       .setOrigin(0.5)
@@ -682,6 +746,22 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setStroke("#0e0b16", 5);
     this.tweens.add({ targets: t, y: y - 40, alpha: 0, duration: 900, ease: "Cubic.easeOut", onComplete: () => t.destroy() });
+  }
+
+  /** Blutstropfen fallen von der Figur zu Boden. */
+  private drips(x: number, y: number) {
+    for (let i = 0; i < 7; i++) {
+      const p = this.add.rectangle(x + Phaser.Math.Between(-35, 35), y + Phaser.Math.Between(-30, 20), 5, 7, 0xc23a3a);
+      this.tweens.add({
+        targets: p,
+        y: GROUND_Y - Phaser.Math.Between(0, 8),
+        alpha: 0,
+        duration: Phaser.Math.Between(450, 700),
+        delay: Phaser.Math.Between(0, 200),
+        ease: "Quad.easeIn",
+        onComplete: () => p.destroy(),
+      });
+    }
   }
 
   private sparkles(x: number, y: number, color: number) {

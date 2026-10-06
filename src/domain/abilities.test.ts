@@ -105,6 +105,31 @@ describe("Fähigkeiten", () => {
     expect(state.enemyEffects.poison).toBeUndefined();
   });
 
+  it("Feuerball setzt den Gegner 2 Runden in Brand – zusätzlich zum Gift", () => {
+    const equipment = withWeapons("staff-0", "scepter-0");
+    let state = attackRound(battleWith(equipment), rng(0.5), "scepter").state;
+    state = attackRound({ ...state, mana: state.maxMana }, rng(0.5), "staff").state;
+    const burning = state.log.filter((e) => e.type === "burn");
+    expect(burning).toHaveLength(1);
+    expect(burning[0]).toMatchObject({ target: "enemy" });
+    expect(state.enemyEffects.burn?.roundsLeft).toBe(1);
+    // Gift und Feuer wirken in derselben Runde nebeneinander
+    expect(state.log.filter((e) => e.round === 2).map((e) => e.type)).toEqual(
+      expect.arrayContaining(["poison", "burn"]),
+    );
+
+    const before = state.enemy.hp;
+    const { state: after, events } = attackRound(state, rng(0.5));
+    expect(events.some((e) => e.type === "burn")).toBe(true);
+    expect(after.enemyEffects.burn).toBeUndefined();
+    // Feuer zieht tatsächlich LP ab: Treffer + Gift + Feuer = gesamter Verlust
+    const dealt = events.reduce(
+      (sum, e) => sum + ((e.type === "hit" && e.attacker === "hero") || e.type === "poison" || e.type === "burn" ? e.damage : 0),
+      0,
+    );
+    expect(dealt).toBe(before - after.enemy.hp);
+  });
+
   it("Spalter senkt die Rüstung des Gegners dauerhaft, Axtwurf ignoriert sie", () => {
     const battle = battleWith(withWeapons("greataxe-0"));
     const split = attackRound(battle, rng(0.5), "greataxe").state;
@@ -115,6 +140,15 @@ describe("Fähigkeiten", () => {
       normalBefore.type === "hit" ? normalBefore.damage : Infinity,
     );
     expect(getAbility("axe").ignoreArmor).toBe(true);
+  });
+
+  it("Spalter lässt den Gegner 3 Runden bluten", () => {
+    let state = attackRound(battleWith(withWeapons("greataxe-0")), rng(0.5), "greataxe").state;
+    expect(state.log.some((e) => e.type === "bleed" && e.target === "enemy")).toBe(true);
+    expect(state.enemyEffects.bleed?.roundsLeft).toBe(2);
+    state = attackRound(attackRound(state, rng(0.5)).state, rng(0.5)).state;
+    expect(state.log.filter((e) => e.type === "bleed")).toHaveLength(3);
+    expect(state.enemyEffects.bleed).toBeUndefined();
   });
 });
 
@@ -175,7 +209,7 @@ describe("Boss-Fähigkeiten", () => {
     expect(stunned.events.some((e) => e.type === "bossAbility")).toBe(false);
   });
 
-  it("Giftbiss vergiftet, Lebensentzug heilt, Lähmender Blick raubt Mana", () => {
+  it("Giftbiss vergiftet, Feueratem setzt in Brand, Lebensentzug heilt, Lähmender Blick raubt Mana", () => {
     const bite = attackRound(toAbilityRound(bossBattle("ancient-lizard")), rng(0.5)).state;
     expect(bite.heroEffects.poison?.roundsLeft).toBe(3);
     const poisoned = attackRound(bite, rng(0.5));
@@ -184,6 +218,12 @@ describe("Boss-Fähigkeiten", () => {
     const lich = toAbilityRound(bossBattle("lich-king"));
     const hurtLich = { ...lich, enemy: { ...lich.enemy, hp: 1000 } };
     expect(attackRound(hurtLich, rng(0.5)).events.some((e) => e.type === "drain")).toBe(true);
+
+    const breath = attackRound(toAbilityRound(bossBattle("ignaroth")), rng(0.5)).state;
+    expect(breath.heroEffects.burn?.roundsLeft).toBe(2);
+    expect(breath.heroEffects.poison).toBeUndefined();
+    const burning = attackRound(breath, rng(0.5));
+    expect(burning.events.some((e) => e.type === "burn" && e.target === "hero")).toBe(true);
 
     const eye = toAbilityRound(bossBattle("cave-eye"));
     const gaze = attackRound(eye, rng(0.5));

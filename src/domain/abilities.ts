@@ -26,6 +26,10 @@ export interface AbilityDef {
   stun?: boolean;
   /** Gift: Anteil des Heldenschadens pro Runde, ignoriert Rüstung */
   poison?: { percent: number; rounds: number };
+  /** Feuer: Anteil des Heldenschadens pro Runde, ignoriert Rüstung */
+  burn?: { percent: number; rounds: number };
+  /** Bluten: Anteil des Heldenschadens pro Runde, ignoriert Rüstung */
+  bleed?: { percent: number; rounds: number };
   /** Senkt die Rüstung des Gegners für den Rest des Kampfes */
   armorBreak?: number;
   /** Blockt den nächsten Angriff des Gegners komplett (inkl. aller Zusatzeffekte) */
@@ -82,7 +86,9 @@ export const ABILITIES: readonly AbilityDef[] = [
     manaCost: 30,
     multiplier: 1.5,
     armorBreak: 0.3,
-    description: "Spaltet die Panzerung: −30 % Rüstung des Gegners für den Rest des Kampfes.",
+    bleed: { percent: 0.25, rounds: 3 },
+    description:
+      "Spaltet die Panzerung: −30 % Rüstung des Gegners für den Rest des Kampfes, dazu blutet er 3 Runden lang.",
   },
   {
     weapon: "mace",
@@ -116,9 +122,10 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Feuerball",
     icon: "🔥",
     manaCost: 40,
-    multiplier: 2,
+    multiplier: 1.7,
     ignoreArmor: true,
-    description: "Ein Feuerball mit doppeltem Schaden, der Rüstung ignoriert.",
+    burn: { percent: 0.3, rounds: 2 },
+    description: "Ein Feuerball mit 1,7-fachem Schaden, der Rüstung ignoriert und den Gegner 2 Runden lang in Brand setzt.",
   },
   {
     weapon: "shield",

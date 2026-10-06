@@ -5,7 +5,7 @@
 //   1. optional: ein Trank (höchstens einer pro Runde, jede Sorte einmal pro Kampf)
 //   2. Angriff des Helden – normal oder mit einer Waffen-Fähigkeit (kostet Mana) –
 //      oder Flucht (kostet Gold, beendet den Kampf)
-//   3. Gift wirkt, dann Gegenangriff der Kreatur (falls sie noch steht und nicht betäubt ist)
+//   3. Gift, Feuer und Bluten wirken, dann Gegenangriff der Kreatur (falls sie noch steht und nicht betäubt ist)
 //   4. Der Held regeneriert etwas Mana
 
 import { getCombatStats, getEffectiveStats } from "./equipment";
@@ -97,6 +97,10 @@ export type BattleEvent =
   | { type: "ability"; weapon: SkillWeapon; manaCost: number }
   /** Giftschaden – `target` ist, wer vergiftet ist */
   | { type: "poison"; target: Side; damage: number }
+  /** Feuerschaden – `target` ist, wer brennt */
+  | { type: "burn"; target: Side; damage: number }
+  /** Blutungsschaden – `target` ist, wer blutet */
+  | { type: "bleed"; target: Side; damage: number }
   /** Der betäubte Gegner setzt diese Runde aus */
   | { type: "stunned" }
   /** Der Boss setzt seine Fähigkeit ein – die Treffer folgen als "hit" */
@@ -109,6 +113,13 @@ export type BattleEvent =
   | { type: "manaBurn"; amount: number }
   | { type: "defeated"; side: Side }
   | { type: "fled"; goldLost: number };
+
+/** Schaden pro Runde (Gift, Feuer, Bluten) – ignoriert Rüstung */
+export interface DamageOverTime {
+  damage: number;
+  /** Verbleibende Runden inklusive der aktuellen */
+  roundsLeft: number;
+}
 
 export type BattleStatus = "active" | "won" | "lost" | "fled";
 
@@ -136,14 +147,18 @@ export interface BattleState {
   abilities: SkillWeapon[];
   /** Wirkungen der Fähigkeiten auf den Gegner */
   enemyEffects: {
-    poison?: { damage: number; roundsLeft: number };
+    poison?: DamageOverTime;
+    burn?: DamageOverTime;
+    bleed?: DamageOverTime;
     /** Rüstungsminderung für den Rest des Kampfes (0.3 = −30 %) */
     armorBreak?: number;
   };
   /** Wirkungen auf den Helden */
   heroEffects: {
-    /** Gift/Verbrennung durch Boss-Fähigkeiten */
-    poison?: { damage: number; roundsLeft: number };
+    /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
+    poison?: DamageOverTime;
+    burn?: DamageOverTime;
+    bleed?: DamageOverTime;
     /** Bollwerk: der nächste gegnerische Angriff wird geblockt */
     bulwark?: boolean;
   };
@@ -262,10 +277,13 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
   };
 }
 
-/** Eine Runde Gift ist vorbei – nach der letzten verschwindet es. */
-function tickPoison(poison: { damage: number; roundsLeft: number }) {
-  return poison.roundsLeft > 1 ? { ...poison, roundsLeft: poison.roundsLeft - 1 } : undefined;
+/** Eine Runde Gift/Feuer/Bluten ist vorbei – nach der letzten verschwindet es. */
+function tickOverTime(effect: DamageOverTime): DamageOverTime | undefined {
+  return effect.roundsLeft > 1 ? { ...effect, roundsLeft: effect.roundsLeft - 1 } : undefined;
 }
+
+/** Gift, Feuer und Bluten – in dieser Reihenfolge wirken sie pro Runde. */
+const OVER_TIME = ["poison", "burn", "bleed"] as const;
 
 /** Nach jeder Runde läuft eine Runde der Verstärkungen ab. */
 function tickBuffs(buffs: BattleState["buffs"]): BattleState["buffs"] {
@@ -287,7 +305,7 @@ export function abilityBlocker(state: BattleState, weapon: SkillWeapon): string 
 
 /**
  * Eine Runde: Angriff des Helden – normal oder mit einer Fähigkeit –,
- * danach Gift und Gegenangriff der Kreatur (ausser sie ist betäubt).
+ * danach Gift, Feuer, Bluten und Gegenangriff der Kreatur (ausser sie ist betäubt).
  * Am Ende regeneriert der Held etwas Mana.
  */
 export function attackRound(
@@ -317,9 +335,11 @@ export function attackRound(
     events.push({ type: "ability", weapon: ability.weapon, manaCost: ability.manaCost });
     if (ability.bulwark) heroEffects = { ...heroEffects, bulwark: true };
     if (ability.armorBreak) enemyEffects = { ...enemyEffects, armorBreak: ability.armorBreak };
-    if (ability.poison) {
-      const damage = Math.max(1, Math.round(strong.damage * ability.poison.percent));
-      enemyEffects = { ...enemyEffects, poison: { damage, roundsLeft: ability.poison.rounds } };
+    for (const kind of OVER_TIME) {
+      const effect = ability[kind];
+      if (!effect) continue;
+      const damage = Math.max(1, Math.round(strong.damage * effect.percent));
+      enemyEffects = { ...enemyEffects, [kind]: { damage, roundsLeft: effect.rounds } };
     }
   }
   const attacker: Combatant = ability
@@ -336,18 +356,22 @@ export function attackRound(
     events.push({ type: "hit", attacker: "hero", ...heroHit });
   }
 
-  // 2. Gift wirkt nach der Aktion des Helden – erst beim Gegner, dann beim Helden
-  const poison = enemyEffects.poison;
-  if (poison && enemy.hp > 0) {
-    enemy = { ...enemy, hp: Math.max(0, enemy.hp - poison.damage) };
-    events.push({ type: "poison", target: "enemy", damage: poison.damage });
-    enemyEffects = { ...enemyEffects, poison: tickPoison(poison) };
+  // 2. Gift, Feuer und Bluten wirken nach der Aktion des Helden – erst beim Gegner, dann beim Helden
+  for (const kind of OVER_TIME) {
+    const effect = enemyEffects[kind];
+    if (effect && enemy.hp > 0) {
+      enemy = { ...enemy, hp: Math.max(0, enemy.hp - effect.damage) };
+      events.push({ type: kind, target: "enemy", damage: effect.damage });
+      enemyEffects = { ...enemyEffects, [kind]: tickOverTime(effect) };
+    }
   }
-  const heroPoison = heroEffects.poison;
-  if (heroPoison && enemy.hp > 0) {
-    hero = { ...hero, hp: Math.max(0, hero.hp - heroPoison.damage) };
-    events.push({ type: "poison", target: "hero", damage: heroPoison.damage });
-    heroEffects = { ...heroEffects, poison: tickPoison(heroPoison) };
+  for (const kind of OVER_TIME) {
+    const effect = heroEffects[kind];
+    if (effect && enemy.hp > 0 && hero.hp > 0) {
+      hero = { ...hero, hp: Math.max(0, hero.hp - effect.damage) };
+      events.push({ type: kind, target: "hero", damage: effect.damage });
+      heroEffects = { ...heroEffects, [kind]: tickOverTime(effect) };
+    }
   }
 
   // 3. Gegenangriff (entfällt bei Betäubung) – Bosse setzen regelmässig ihre Fähigkeit ein
@@ -386,9 +410,11 @@ export function attackRound(
         mana -= amount;
         if (amount > 0) events.push({ type: "manaBurn", amount });
       }
-      if (special?.poison) {
-        const damage = Math.max(1, Math.round(enemy.damage * special.poison.percent));
-        heroEffects = { ...heroEffects, poison: { damage, roundsLeft: special.poison.rounds } };
+      for (const kind of OVER_TIME) {
+        const effect = special?.[kind];
+        if (!effect) continue;
+        const damage = Math.max(1, Math.round(enemy.damage * effect.percent));
+        heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: effect.rounds } };
       }
     }
     if (hero.hp === 0) {
