@@ -203,7 +203,7 @@ function AbilityCard({ ability }: { ability: AbilityDef }) {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-intellect">{ability.name}</p>
           <p className="text-xs text-muted">
-            {ability.manaCost} Mana · {ability.description}
+            {ability.manaCost} Mana · ⏳ {ability.cooldown} {ability.cooldown === 1 ? "Runde" : "Runden"} · {ability.description}
           </p>
         </div>
         {!learned && (

@@ -176,6 +176,8 @@ export interface BattleState {
   maxMana: number;
   /** Fähigkeiten, die der Held in diesem Kampf einsetzen kann */
   abilities: AbilityId[];
+  /** Abklingzeiten: verbleibende Runden, bis die Fähigkeit wieder geht (fehlt bei älteren Kämpfen) */
+  cooldowns?: Partial<Record<AbilityId, number>>;
   /** Aktive Klasse des Helden (fehlt bei älteren Kämpfen) */
   heroClass?: HeroClassId | null;
   /** Wirkungen der Fähigkeiten auf den Gegner */
@@ -241,6 +243,7 @@ export function startBattle(
     mana: hero.maxMana,
     maxMana: hero.maxMana,
     abilities: hero.abilities,
+    cooldowns: {},
     heroClass: hero.heroClass,
     enemyEffects: {},
     heroEffects: {},
@@ -343,10 +346,33 @@ function tickBuffs(buffs: BattleState["buffs"]): BattleState["buffs"] {
   return next;
 }
 
+/** Hinweis für eine Fähigkeit, die noch abklingt. */
+export function cooldownText(rounds: number): string {
+  return `Abklingzeit: noch ${rounds} ${rounds === 1 ? "Runde" : "Runden"}.`;
+}
+
+/**
+ * Nach einer Runde: Abklingzeiten laufen ab. Die gerade eingesetzte Fähigkeit
+ * bekommt ihre volle Abklingzeit – sie ist die nächsten `cooldown` Runden gesperrt.
+ */
+export function tickCooldowns(
+  cooldowns: Partial<Record<AbilityId, number>> | undefined,
+  used: { id: AbilityId; cooldown: number } | null,
+): Partial<Record<AbilityId, number>> {
+  const next: Partial<Record<AbilityId, number>> = {};
+  for (const [id, rounds] of Object.entries(cooldowns ?? {}) as [AbilityId, number][]) {
+    if (rounds > 1) next[id] = rounds - 1;
+  }
+  if (used && used.cooldown > 0) next[used.id] = used.cooldown;
+  return next;
+}
+
 /** Warum diese Fähigkeit gerade nicht geht – oder null. */
 export function abilityBlocker(state: BattleState, id: AbilityId): string | null {
   if (state.status !== "active") return "Der Kampf ist vorbei.";
   if (!state.abilities.includes(id)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
+  const wait = state.cooldowns?.[id] ?? 0;
+  if (wait > 0) return cooldownText(wait);
   const { manaCost } = classAbility(id, state.heroClass);
   if (state.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
@@ -551,6 +577,7 @@ export function attackRound(
       enemyEffects: { ...enemyEffects, weaken: tickBuff(enemyEffects.weaken), vulnerable: tickBuff(enemyEffects.vulnerable) },
       heroEffects: { ...heroEffects, empower: tickBuff(heroEffects.empower) },
       mana: Math.min(state.maxMana, mana + MANA_REGEN),
+      cooldowns: tickCooldowns(state.cooldowns, ability),
       status,
       round: status === "active" ? state.round + 1 : state.round,
       potionUsedThisRound: false,

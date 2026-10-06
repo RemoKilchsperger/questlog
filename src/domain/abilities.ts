@@ -4,6 +4,9 @@
 // zweite danach ab Level 25 (siehe skills.ts). Verfügbar sind die
 // freigeschalteten Fähigkeiten aller angelegten Waffen.
 //
+// Abklingzeit: Nach dem Einsatz ist eine Fähigkeit 1–4 Runden gesperrt – je
+// stärker, desto länger. So lohnt es sich, den richtigen Moment abzupassen.
+//
 // Ids: Die erste Fähigkeit heisst wie der Waffentyp ("sword"), die zweite
 // bekommt "-2" angehängt ("sword-2") – so bleiben alte Spielstände gültig.
 //
@@ -22,6 +25,8 @@ export interface AbilityDef {
   name: string;
   icon: string;
   manaCost: number;
+  /** Abklingzeit: so viele Runden ist die Fähigkeit nach dem Einsatz gesperrt (je stärker, desto länger) */
+  cooldown: number;
   description: string;
   /** Faktor auf den Schaden des Helden – pro Treffer */
   multiplier: number;
@@ -84,6 +89,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Hinterhältiger Stoss",
     icon: "🗡️",
     manaCost: 20,
+    cooldown: 1,
     multiplier: 1.2,
     guaranteedCrit: true,
     description: "Ein gezielter Stich – trifft immer kritisch.",
@@ -95,6 +101,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Schwertwirbel",
     icon: "🌀",
     manaCost: 25,
+    cooldown: 1,
     multiplier: 0.55,
     hits: 3,
     description: "Drei schnelle Hiebe – jeder kann kritisch treffen.",
@@ -106,6 +113,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Richterstoss",
     icon: "⚖️",
     manaCost: 35,
+    cooldown: 2,
     multiplier: 2,
     description: "Ein gewaltiger Stoss mit doppeltem Schaden.",
   },
@@ -116,6 +124,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Axtwurf",
     icon: "🪓",
     manaCost: 25,
+    cooldown: 1,
     multiplier: 1.4,
     ignoreArmor: true,
     description: "Die geworfene Axt durchschlägt jede Rüstung.",
@@ -127,6 +136,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Spalter",
     icon: "💥",
     manaCost: 30,
+    cooldown: 3,
     multiplier: 1.5,
     armorBreak: 0.3,
     bleed: { percent: 0.25, rounds: 3 },
@@ -140,6 +150,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Betäubender Schlag",
     icon: "💫",
     manaCost: 30,
+    cooldown: 3,
     multiplier: 0.9,
     stun: true,
     description: "Betäubt den Gegner – er kann in dieser Runde nicht zurückschlagen.",
@@ -151,6 +162,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Wuchtiger Schlag",
     icon: "🔨",
     manaCost: 40,
+    cooldown: 2,
     multiplier: 2.4,
     description: "Ein vernichtender Hieb mit 2,4-fachem Schaden.",
   },
@@ -161,6 +173,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Giftstrahl",
     icon: "☠️",
     manaCost: 25,
+    cooldown: 2,
     multiplier: 0.6,
     ignoreArmor: true,
     poison: { percent: 0.4, rounds: 3 },
@@ -173,6 +186,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Feuerball",
     icon: "🔥",
     manaCost: 40,
+    cooldown: 2,
     multiplier: 1.7,
     ignoreArmor: true,
     burn: { percent: 0.3, rounds: 2 },
@@ -185,6 +199,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Pfeilhagel",
     icon: "🏹",
     manaCost: 35,
+    cooldown: 2,
     multiplier: 0.5,
     hits: 4,
     description: "Vier Pfeile regnen auf den Gegner herab – jeder kann kritisch treffen.",
@@ -196,6 +211,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Bollwerk",
     icon: "🛡️",
     manaCost: 20,
+    cooldown: 3,
     multiplier: 0,
     hits: 0,
     bulwark: true,
@@ -209,6 +225,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Meucheln",
     icon: "🩸",
     manaCost: 30,
+    cooldown: 2,
     multiplier: 1,
     execute: { threshold: 0.3, factor: 3 },
     description: "Ein Stich ins Herz: dreifacher Schaden, wenn der Gegner unter 30 % seiner Lebenspunkte ist.",
@@ -220,6 +237,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Parade",
     icon: "🤺",
     manaCost: 25,
+    cooldown: 2,
     multiplier: 0.6,
     guard: { reduce: 0.5, counter: 1 },
     description:
@@ -232,6 +250,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Kriegsschrei",
     icon: "📯",
     manaCost: 30,
+    cooldown: 4,
     multiplier: 1,
     empower: { percent: 0.25, rounds: 3 },
     description: "Ein Hieb mit lautem Schrei: In den nächsten 3 Runden machst du 25 % mehr Schaden.",
@@ -243,6 +262,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Zerfleischen",
     icon: "🐺",
     manaCost: 30,
+    cooldown: 2,
     multiplier: 0.7,
     hits: 2,
     bleed: { percent: 0.3, rounds: 2 },
@@ -255,6 +275,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Blutrausch",
     icon: "🧛",
     manaCost: 35,
+    cooldown: 3,
     multiplier: 1.6,
     lifesteal: 0.4,
     description: "Ein rasender Hieb mit 1,6-fachem Schaden – du heilst dich um 40 % des Schadens.",
@@ -266,6 +287,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Heiliges Licht",
     icon: "✨",
     manaCost: 35,
+    cooldown: 4,
     multiplier: 0.5,
     heal: 0.25,
     description: "Heilt dich um 25 % deiner Lebenspunkte, dazu ein leichter Schlag.",
@@ -277,6 +299,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Erdbeben",
     icon: "🌋",
     manaCost: 40,
+    cooldown: 3,
     multiplier: 1.3,
     ignoreArmor: true,
     weaken: { percent: 0.4, rounds: 2 },
@@ -289,6 +312,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Fluch der Schwäche",
     icon: "🕯️",
     manaCost: 30,
+    cooldown: 4,
     multiplier: 0.6,
     ignoreArmor: true,
     weaken: { percent: 0.3, rounds: 3 },
@@ -302,6 +326,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Meteor",
     icon: "☄️",
     manaCost: 60,
+    cooldown: 4,
     multiplier: 2.6,
     ignoreArmor: true,
     burn: { percent: 0.3, rounds: 3 },
@@ -314,6 +339,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Durchbohrender Schuss",
     icon: "🎯",
     manaCost: 35,
+    cooldown: 2,
     multiplier: 1.8,
     ignoreArmor: true,
     bleed: { percent: 0.25, rounds: 2 },
@@ -326,6 +352,7 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Vergeltung",
     icon: "🔁",
     manaCost: 25,
+    cooldown: 3,
     multiplier: 0,
     hits: 0,
     guard: { reduce: 0.5, reflect: 1 },

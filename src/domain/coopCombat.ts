@@ -23,8 +23,10 @@ import {
   type HeroClassId,
 } from "./heroClasses";
 import {
+  cooldownText,
   rollBattleReward,
   rollHit,
+  tickCooldowns,
   type ActiveBuff,
   type BattleReward,
   type Combatant,
@@ -192,6 +194,8 @@ export interface CoopHero {
   mana: number;
   maxMana: number;
   abilities: AbilityId[];
+  /** Abklingzeiten: verbleibende Runden (fehlt bei älteren Kämpfen) */
+  cooldowns?: Partial<Record<AbilityId, number>>;
   /** Aktive Klasse (heroClasses.ts) – fehlt bei älteren Kämpfen */
   heroClass?: HeroClassId | null;
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
@@ -306,6 +310,7 @@ export function startCoopBattle(id: string, bossId: string, players: CoopPlayer[
       mana: profile.maxMana,
       maxMana: profile.maxMana,
       abilities: profile.abilities,
+      cooldowns: {},
       heroClass: profile.heroClass,
       buffs: {},
       potionsUsed: [],
@@ -352,6 +357,8 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
 /** Warum diese Fähigkeit nicht geht – oder null. */
 export function coopAbilityBlocker(hero: CoopHero, id: AbilityId): string | null {
   if (!hero.abilities.includes(id)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
+  const wait = hero.cooldowns?.[id] ?? 0;
+  if (wait > 0) return cooldownText(wait);
   const { manaCost } = classAbility(id, hero.heroClass);
   if (hero.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
@@ -405,6 +412,9 @@ export function resolveRound(
     events.push({ type: "down", heroId: hero.id });
   };
 
+  /** Pro Held die in dieser Runde eingesetzte Fähigkeit (für die Abklingzeit) */
+  const used = new Map<string, { id: AbilityId; cooldown: number }>();
+
   // 1. Die Helden handeln der Reihe nach.
   for (const hero of heroes) {
     if (hero.down || boss.hp <= 0) continue;
@@ -451,6 +461,7 @@ export function resolveRound(
     const threatFactor = hero.heroClass === "paladin" ? PALADIN_THREAT : 1;
     if (ability) {
       hero.mana -= ability.manaCost;
+      used.set(hero.id, ability);
       events.push({ type: "ability", heroId: hero.id, ability: ability.id, weapon: ability.weapon, manaCost: ability.manaCost });
       if (ability.guard) hero.effects.guard = ability.guard;
       // +1, weil die Verstärkung erst ab der nächsten Runde zählt
@@ -649,6 +660,7 @@ export function resolveRound(
   heroes = heroes.map((h) => ({
     ...h,
     effects: { ...h.effects, empower: tick(h.effects.empower) },
+    cooldowns: tickCooldowns(h.cooldowns, used.get(h.id) ?? null),
     threat: Math.round(h.threat * (1 - THREAT_DECAY)),
     mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + MANA_REGEN),
     buffs: Object.fromEntries(

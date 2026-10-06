@@ -525,6 +525,7 @@ export class CoopBattleScene extends Phaser.Scene {
         fx.groundWave(this, { x: hero.homeX + 30, y: GROUND_Y }, { x: target.x, y: GROUND_Y }, 0x8a7a60, 380, () => {
           hit();
           fx.cracks(this, target);
+          this.float(this.boss, "GESCHWÄCHT", "#c8b090", 18, 30);
         });
         return true;
       case "scepter-2":
@@ -533,6 +534,8 @@ export class CoopBattleScene extends Phaser.Scene {
         this.time.delayedCall(160, () => {
           hit();
           fx.ring(this, target, 0x8a4ad0, 55, 480);
+          this.float(this.boss, "VERFLUCHT", "#b07cff", 18, 30);
+          this.tint(this.boss, 0x8a4ad0, 900);
         });
         return true;
       case "staff-2": {

@@ -141,7 +141,7 @@ describe("Koop-Kampf: Runde", () => {
     const stunner = () => tough(start([player("a", { abilities: ["mace"] }), player("b")]));
     const first = resolveRound(stunner(), { a: { ability: "mace" } }, rng(0.9), 0);
     expect(first.events).toContainEqual({ type: "stunned" });
-    const again = resolveRound({ ...first.state, heroes: first.state.heroes.map((h) => ({ ...h, mana: 80 })) }, { a: { ability: "mace" } }, rng(0.9), 0);
+    const again = resolveRound({ ...first.state, heroes: first.state.heroes.map((h) => ({ ...h, mana: 80, cooldowns: {} })) }, { a: { ability: "mace" } }, rng(0.9), 0);
     expect(again.events).toContainEqual({ type: "stunResisted" });
   });
 });

@@ -199,3 +199,36 @@ describe("Zweite Fähigkeiten im Koop", () => {
     expect(heals[0]).toMatchObject({ heroId: "a" });
   });
 });
+
+describe("Abklingzeiten", () => {
+  it("jede Fähigkeit hat 1–4 Runden, starke länger als schwache", () => {
+    for (const a of ABILITIES) expect(a.cooldown, a.id).toBeGreaterThanOrEqual(1);
+    for (const a of ABILITIES) expect(a.cooldown, a.id).toBeLessThanOrEqual(4);
+    expect(getAbility("staff-2").cooldown).toBeGreaterThan(getAbility("staff").cooldown);
+  });
+
+  it("nach dem Einsatz ist die Fähigkeit so viele Runden gesperrt", () => {
+    let state = attackRound(battleWith("greataxe-30"), rng(0.5), "greataxe").state;
+    const rounds = getAbility("greataxe").cooldown;
+    for (let i = 0; i < rounds; i++) {
+      expect(() => attackRound(state, rng(0.5), "greataxe"), `Runde ${i + 1}`).toThrow(/Abklingzeit/);
+      // Die andere Fähigkeit derselben Waffe bleibt frei
+      expect(state.cooldowns?.["greataxe-2"]).toBeUndefined();
+      state = attackRound(state, rng(0.5)).state;
+    }
+    expect(() => attackRound(state, rng(0.5), "greataxe")).not.toThrow();
+  });
+
+  it("auch im Koop – eine Fähigkeit in Abklingzeit wird zum normalen Angriff", () => {
+    const battle = startCoopBattle("k", "swamp-hydra", [
+      { id: "a", name: "A", profile: profileWith("staff-30") },
+      { id: "b", name: "B", profile: profileWith("sword-30") },
+    ], 0);
+    const tough = { ...battle, boss: { ...battle.boss, hp: 999_999, maxHp: 999_999 } };
+    const first = resolveRound(tough, { a: { ability: "staff-2" } }, rng(0.5), 0);
+    expect(first.state.heroes.find((h) => h.id === "a")!.cooldowns).toEqual({ "staff-2": 4 });
+    const again = resolveRound(first.state, { a: { ability: "staff-2" } }, rng(0.5), 0);
+    expect(again.events.some((e) => e.type === "ability" && e.heroId === "a")).toBe(false);
+    expect(again.state.heroes.find((h) => h.id === "a")!.cooldowns).toEqual({ "staff-2": 3 });
+  });
+});

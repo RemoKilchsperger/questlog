@@ -10,7 +10,6 @@ import {
   fleeCost,
   getHeroCombatProfile,
   potionBlocker,
-  type ActiveBuff,
   type BattleReward,
   type BattleState,
 } from "../domain/combat";
@@ -34,7 +33,7 @@ import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { EFFORT_TIERS } from "../domain/rewards";
 import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
-import { BUFF_LABELS, getPotion, POTIONS, potionEffectText, potionHeal, type BuffKind } from "../domain/potions";
+import { getPotion, POTIONS, potionEffectText, potionHeal } from "../domain/potions";
 import { EventBus } from "../game/EventBus";
 import { unlockAudio } from "../game/sfx";
 import { useGameStore } from "../store/gameStore";
@@ -50,6 +49,7 @@ import { CreatureSprite } from "./CreatureSprite";
 import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { PixelAvatar } from "./PixelAvatar";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
+import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
 import { useNow } from "./useNow";
 import { classAbility } from "../domain/heroClasses";
 
@@ -413,148 +413,92 @@ function Battle({ battle }: { battle: BattleState }) {
       </section>
 
       {active || busy ? (
-        <section className="panel flex flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <div className="flex min-w-48 flex-1 items-center gap-2" title={`+${MANA_REGEN} Mana pro Runde`}>
-              <span className="text-intellect">💧 Mana</span>
-              <div className="h-3 flex-1 overflow-hidden rounded-sm bg-night-700">
-                <motion.div
-                  className="h-full bg-intellect"
-                  initial={false}
-                  animate={{ width: `${(battle.mana / battle.maxMana) * 100}%` }}
-                />
+        <section className="panel flex flex-col gap-4 p-4">
+          {/* Zustand: links du, rechts der Gegner */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <StatusSide title="Du" chips={heroStatusChips(battle.buffs, battle.heroEffects)}>
+              <div className="flex items-center gap-2 text-sm" title={`+${MANA_REGEN} Mana pro Runde`}>
+                <span className="text-intellect">💧</span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-sm bg-night-700">
+                  <motion.div
+                    className="h-full bg-intellect"
+                    initial={false}
+                    animate={{ width: `${(battle.mana / battle.maxMana) * 100}%` }}
+                  />
+                </div>
+                <span className="num text-xs text-intellect">
+                  {battle.mana}/{battle.maxMana}
+                </span>
               </div>
-              <span className="num text-intellect">
-                {battle.mana}/{battle.maxMana}
-              </span>
-            </div>
-            {battle.enemyEffects.poison && (
-              <span className="rounded-md bg-night-800 px-2 py-0.5 text-xp">
-                ☠️ Gift −{battle.enemyEffects.poison.damage} · noch{" "}
-                <span className="num">{battle.enemyEffects.poison.roundsLeft}</span>{" "}
-                {battle.enemyEffects.poison.roundsLeft === 1 ? "Runde" : "Runden"}
-              </span>
-            )}
-            {battle.enemyEffects.burn && (
-              <span className="rounded-md bg-night-800 px-2 py-0.5 text-strength">
-                🔥 Feuer −{battle.enemyEffects.burn.damage} · noch{" "}
-                <span className="num">{battle.enemyEffects.burn.roundsLeft}</span>{" "}
-                {battle.enemyEffects.burn.roundsLeft === 1 ? "Runde" : "Runden"}
-              </span>
-            )}
-            {battle.enemyEffects.bleed && (
-              <span className="rounded-md bg-night-800 px-2 py-0.5 text-danger">
-                🩸 Bluten −{battle.enemyEffects.bleed.damage} · noch{" "}
-                <span className="num">{battle.enemyEffects.bleed.roundsLeft}</span>{" "}
-                {battle.enemyEffects.bleed.roundsLeft === 1 ? "Runde" : "Runden"}
-              </span>
-            )}
-            {battle.enemyEffects.armorBreak && (
-              <span className="rounded-md bg-night-800 px-2 py-0.5 text-strength">
-                💥 Gegner-Rüstung −{Math.round(battle.enemyEffects.armorBreak * 100)} %
-              </span>
-            )}
-            {battle.heroEffects.bulwark && (
-              <span className="rounded-md bg-night-800 px-2 py-0.5 text-intellect">
-                🛡️ Bollwerk bereit
-              </span>
-            )}
-            {battle.heroEffects.poison && (
-              <span className="rounded-md bg-danger/15 px-2 py-0.5 text-danger">
-                ☠️ Du bist vergiftet: −{battle.heroEffects.poison.damage} · noch{" "}
-                <span className="num">{battle.heroEffects.poison.roundsLeft}</span>{" "}
-                {battle.heroEffects.poison.roundsLeft === 1 ? "Runde" : "Runden"}
-              </span>
-            )}
-            {battle.heroEffects.burn && (
-              <span className="rounded-md bg-danger/15 px-2 py-0.5 text-danger">
-                🔥 Du brennst: −{battle.heroEffects.burn.damage} · noch{" "}
-                <span className="num">{battle.heroEffects.burn.roundsLeft}</span>{" "}
-                {battle.heroEffects.burn.roundsLeft === 1 ? "Runde" : "Runden"}
-              </span>
-            )}
-            {battle.heroEffects.bleed && (
-              <span className="rounded-md bg-danger/15 px-2 py-0.5 text-danger">
-                🩸 Du blutest: −{battle.heroEffects.bleed.damage} · noch{" "}
-                <span className="num">{battle.heroEffects.bleed.roundsLeft}</span>{" "}
-                {battle.heroEffects.bleed.roundsLeft === 1 ? "Runde" : "Runden"}
-              </span>
-            )}
+            </StatusSide>
+            <StatusSide title={battle.enemy.name} chips={enemyStatusChips(battle.enemyEffects)} />
           </div>
           <BossWarning battle={battle} />
-          {battle.abilities.length === 0 && (
-            <p className="text-xs text-muted">
-              Fähigkeiten schaltest du im Skilltree frei, sobald du eine Waffe gemeistert hast – im Kampf brauchst du
-              dann die passende Waffe.
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              disabled={busy || !active}
-              onClick={() => act(() => attack())}
-              className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-5 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              ⚔️ Angreifen
-            </motion.button>
-            {battle.abilities.map((id) => {
-              const ability = classAbility(id, battle.heroClass);
-              const blocker = abilityBlocker(battle, id);
-              return (
-                <motion.button
+
+          <ActionGroup label="Angriff" hint="Danach schlägt der Gegner zurück.">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                disabled={busy || !active}
+                onClick={() => act(() => attack())}
+                className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ⚔️ Angreifen
+              </motion.button>
+              {battle.abilities.map((id) => (
+                <AbilityButton
                   key={id}
-                  whileTap={{ scale: 0.92 }}
-                  disabled={busy || blocker !== null}
+                  ability={classAbility(id, battle.heroClass)}
+                  blocker={abilityBlocker(battle, id)}
+                  disabled={busy}
                   onClick={() => act(() => attack(id))}
-                  title={blocker ? `${ability.description}\n${blocker}` : ability.description}
-                  className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-3 py-2 text-lg text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {ability.icon} {ability.name} <span className="num text-xs">{ability.manaCost} 💧</span>
-                </motion.button>
-              );
-            })}
-            <span className="mx-1 hidden h-8 border-l-2 border-night-700 sm:block" aria-hidden />
-            {POTIONS.map((p) => {
-              const count = potions[p.id] ?? 0;
-              const used = battle.potionsUsed.includes(p.id);
-              const blocker = count === 0 ? "Keine mehr im Vorrat – Nachschub beim Händler." : potionBlocker(battle, p);
-              const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, battle.hero.maxHp)} LP` : potionEffectText(p);
-              return (
-                <button
-                  key={p.id}
-                  disabled={busy || blocker !== null}
-                  onClick={() => act(() => drink(p.id))}
-                  title={blocker ? `${effect}\n${blocker}` : effect}
-                  className={`rounded-md border-2 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]}`}
-                >
-                  {p.icon} {p.name} <span className="font-bold">× {count}</span>
-                  {used && <span className="ml-1 text-xs">✓</span>}
-                </button>
-              );
-            })}
-            <button
-              disabled={busy || !active}
-              onClick={() => setConfirmFlee(true)}
-              className="ml-auto rounded-md border-2 border-night-600 px-3 py-1.5 text-sm text-muted hover:border-muted hover:text-parchment disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              🏃 Fliehen
-            </button>
-          </div>
-          {Object.keys(battle.buffs).length > 0 && (
-            <div className="flex flex-wrap gap-2 text-sm">
-              {(Object.entries(battle.buffs) as [BuffKind, ActiveBuff][]).map(([kind, buff]) => (
-                <span key={kind} className={`rounded-md bg-night-800 px-2 py-0.5 ${POTION_COLORS[kind]}`}>
-                  {kind === "attack" ? "🔥" : "🪨"} +{Math.round(buff.percent * 100)} % {BUFF_LABELS[kind]} · noch{" "}
-                  <span className="num">{buff.roundsLeft}</span> {buff.roundsLeft === 1 ? "Runde" : "Runden"}
-                </span>
+                />
               ))}
             </div>
-          )}
-          <p className="text-xs text-muted">
-            {battle.potionUsedThisRound
-              ? "Trank für diese Runde verbraucht – jetzt angreifen."
-              : "Pro Runde: optional einen Trank trinken (jede Sorte nur einmal pro Kampf), dann angreifen – normal oder mit einer Fähigkeit, die Mana kostet. Danach schlägt der Gegner zurück."}
-          </p>
+            {battle.abilities.length === 0 && (
+              <p className="text-xs text-muted">
+                Fähigkeiten schaltest du im Skilltree frei, sobald du eine Waffe gemeistert hast – im Kampf brauchst du
+                dann die passende Waffe.
+              </p>
+            )}
+          </ActionGroup>
+
+          <ActionGroup
+            label="Tränke"
+            hint={
+              battle.potionUsedThisRound
+                ? "Trank für diese Runde verbraucht – jetzt angreifen."
+                : "Vor dem Angriff · einer pro Runde, jede Sorte einmal pro Kampf"
+            }
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              {POTIONS.map((p) => {
+                const count = potions[p.id] ?? 0;
+                const used = battle.potionsUsed.includes(p.id);
+                const blocker = count === 0 ? "Keine mehr im Vorrat – Nachschub beim Händler." : potionBlocker(battle, p);
+                const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, battle.hero.maxHp)} LP` : potionEffectText(p);
+                return (
+                  <button
+                    key={p.id}
+                    disabled={busy || blocker !== null}
+                    onClick={() => act(() => drink(p.id))}
+                    title={blocker ? `${p.name}: ${effect}\n${blocker}` : `${p.name}: ${effect}`}
+                    className={`rounded-md border-2 px-2.5 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]}`}
+                  >
+                    {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
+                    {used && <span className="ml-1 text-xs">✓</span>}
+                  </button>
+                );
+              })}
+              <button
+                disabled={busy || !active}
+                onClick={() => setConfirmFlee(true)}
+                className="ml-auto rounded-md border-2 border-night-600 px-3 py-1 text-sm text-muted hover:border-muted hover:text-parchment disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                🏃 Fliehen
+              </button>
+            </div>
+          </ActionGroup>
           <ConfirmDialog
             open={confirmFlee}
             title="Fliehen?"

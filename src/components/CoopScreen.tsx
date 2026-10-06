@@ -29,6 +29,7 @@ import { DungeonChest } from "./DungeonChest";
 import { PixelAvatar } from "./PixelAvatar";
 import { CreatureSprite } from "./CreatureSprite";
 import { POTION_BUTTONS } from "./potionUi";
+import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
 import { classAbility } from "../domain/heroClasses";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
@@ -459,91 +460,96 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   const fallen = battle.heroes.filter((h) => h.down && !h.revived);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-intellect">💧 {me.mana}/{me.maxMana} Mana</span>
-        <span className="text-xp">
-          ❤️ {me.combatant.hp}/{me.combatant.maxHp} LP
-        </span>
-        {me.effects.poison && <span className="text-danger">☠️ vergiftet (−{me.effects.poison.damage})</span>}
-        {me.effects.bulwark && <span className="text-intellect">🛡️ Bollwerk bereit</span>}
+    <div className="flex flex-col gap-4">
+      {/* Zustand: links du, rechts der Boss */}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <StatusSide title="Du" chips={heroStatusChips(me.buffs, me.effects)}>
+          <div className="flex flex-wrap gap-x-3 text-sm">
+            <span className="text-xp">
+              ❤️ <span className="num">{me.combatant.hp}/{me.combatant.maxHp}</span>
+            </span>
+            <span className="text-intellect">
+              💧 <span className="num">{me.mana}/{me.maxMana}</span>
+            </span>
+          </div>
+        </StatusSide>
+        <StatusSide title={battle.boss.name} chips={enemyStatusChips(battle.bossEffects)} />
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <motion.button
-          whileTap={{ scale: 0.92 }}
-          disabled={locked}
-          onClick={() => send()}
-          className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-5 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          ⚔️ Angreifen
-        </motion.button>
-        {me.abilities.map((id) => {
-          const ability = classAbility(id, me.heroClass);
-          const blocker = coopAbilityBlocker(me, id);
-          return (
-            <motion.button
+
+      <ActionGroup label="Angriff" hint="Alle Helden handeln, danach der Boss.">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            disabled={locked}
+            onClick={() => send()}
+            className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ⚔️ Angreifen
+          </motion.button>
+          {me.abilities.map((id) => (
+            <AbilityButton
               key={id}
-              whileTap={{ scale: 0.92 }}
-              disabled={locked || blocker !== null}
+              ability={classAbility(id, me.heroClass)}
+              blocker={coopAbilityBlocker(me, id)}
+              disabled={locked}
               onClick={() => send(id)}
-              title={blocker ? `${ability.description}\n${blocker}` : ability.description}
-              className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-3 py-2 text-lg text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {ability.icon} {ability.name} <span className="num text-xs">{ability.manaCost} 💧</span>
-            </motion.button>
-          );
-        })}
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-xs text-muted">Trank dazu:</span>
-        {POTIONS.map((p) => {
-          const count = stock[p.id] ?? 0;
-          const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, myId);
-          const selected = potion?.potionId === p.id && potion.targetId === myId;
-          const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : p.name;
-          return (
-            <button
-              key={p.id}
-              disabled={locked || blocker !== null}
-              onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: myId })}
-              aria-pressed={selected}
-              title={blocker ? `${effect}\n${blocker}` : effect}
-              className={`rounded-md border-2 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${selected ? "ring-2 ring-gold" : ""}`}
-            >
-              {p.icon} × {count}
-            </button>
-          );
-        })}
-      </div>
-      {fallen.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-xs text-muted">Wiederbeleben:</span>
-          {fallen.flatMap((target) =>
-            POTIONS.filter((p) => p.effect.kind === "heal").map((p) => {
-              const count = stock[p.id] ?? 0;
-              const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, target.id);
-              const selected = potion?.potionId === p.id && potion.targetId === target.id;
-              return (
-                <button
-                  key={`${target.id}-${p.id}`}
-                  disabled={locked || blocker !== null}
-                  onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: target.id })}
-                  aria-pressed={selected}
-                  title={blocker ?? `${target.name} steht mit ${potionHeal(p, target.combatant.maxHp)} LP wieder auf`}
-                  className={`rounded-md border-2 border-xp/60 px-2 py-1 text-xp disabled:cursor-not-allowed disabled:opacity-40 ${selected ? "ring-2 ring-gold" : ""}`}
-                >
-                  {p.icon} → {target.name}
-                </button>
-              );
-            }),
-          )}
+            />
+          ))}
         </div>
+      </ActionGroup>
+
+      <ActionGroup label="Trank dazu" hint="Wird vor deinem Angriff getrunken – erst wählen, dann angreifen.">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {POTIONS.map((p) => {
+            const count = stock[p.id] ?? 0;
+            const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, myId);
+            const selected = potion?.potionId === p.id && potion.targetId === myId;
+            const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : p.name;
+            return (
+              <button
+                key={p.id}
+                disabled={locked || blocker !== null}
+                onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: myId })}
+                aria-pressed={selected}
+                title={blocker ? `${effect}\n${blocker}` : effect}
+                className={`rounded-md border-2 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${selected ? "ring-2 ring-gold" : ""}`}
+              >
+                {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </ActionGroup>
+      {fallen.length > 0 && (
+        <ActionGroup label="Wiederbeleben" hint="Ein Heiltrank holt einen gefallenen Mitspieler zurück.">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {fallen.flatMap((target) =>
+              POTIONS.filter((p) => p.effect.kind === "heal").map((p) => {
+                const count = stock[p.id] ?? 0;
+                const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, target.id);
+                const selected = potion?.potionId === p.id && potion.targetId === target.id;
+                return (
+                  <button
+                    key={`${target.id}-${p.id}`}
+                    disabled={locked || blocker !== null}
+                    onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: target.id })}
+                    aria-pressed={selected}
+                    title={blocker ?? `${target.name} steht mit ${potionHeal(p, target.combatant.maxHp)} LP wieder auf`}
+                    className={`rounded-md border-2 border-xp/60 px-2 py-1 text-xp disabled:cursor-not-allowed disabled:opacity-40 ${selected ? "ring-2 ring-gold" : ""}`}
+                  >
+                    {p.icon} → {target.name}
+                  </button>
+                );
+              }),
+            )}
+          </div>
+        </ActionGroup>
       )}
-      <p className="text-xs text-muted">
-        {potion
-          ? `${getPotion(potion.potionId).name} ${potion.targetId === myId ? "für dich" : "zum Wiederbeleben"} gewählt – jetzt angreifen.`
-          : "Wähle optional einen Trank, dann angreifen – normal oder mit einer Fähigkeit. Danach schlägt der Boss zurück."}
-      </p>
+      {potion && (
+        <p className="text-xs text-gold">
+          {getPotion(potion.potionId).name} {potion.targetId === myId ? "für dich" : "zum Wiederbeleben"} gewählt – jetzt angreifen.
+        </p>
+      )}
     </div>
   );
 }

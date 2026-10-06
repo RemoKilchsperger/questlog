@@ -849,6 +849,7 @@ export class BattleScene extends Phaser.Scene {
           hit(0.015);
           fx.cracks(this, target);
           fx.ring(this, { x: target.x, y: GROUND_Y }, 0xc8b090, 120, 420, true);
+          this.floatText(target.x, GROUND_Y - 140, "GESCHWÄCHT", "#c8b090", 22);
         });
         break;
       case "scepter-2":
@@ -859,6 +860,8 @@ export class BattleScene extends Phaser.Scene {
           hit();
           fx.ring(this, target, 0x8a4ad0, 60, 500);
           fx.rise(this, target, 0x5a2a8a, 10);
+          this.floatText(target.x, GROUND_Y - 140, "VERFLUCHT", "#b07cff", 22);
+          this.tint(this.fighters.enemy, 0x8a4ad0, 900);
         });
         break;
       case "staff-2": {
