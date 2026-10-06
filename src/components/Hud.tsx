@@ -3,7 +3,7 @@ import { MAX_BATTLE_POINTS, REGEN_HOURS } from "../domain/battlePoints";
 import { formatCountdown, nextBoundary } from "../domain/calendar";
 import { getLevelProgress, unspentPoints } from "../domain/leveling";
 import { useGameStore } from "../store/gameStore";
-import { Gold } from "./Gold";
+import { Essence, Gold } from "./Gold";
 import { CloudButton } from "./CloudAccount";
 import { PixelAvatar } from "./PixelAvatar";
 import { useNow } from "./useNow";
@@ -59,6 +59,11 @@ export function Hud({ onOpenCharacter }: { onOpenCharacter: () => void }) {
       <div className="shrink-0 rounded-md bg-night-800 px-3 py-2 text-gold">
         <Gold amount={character.gold} className="font-bold" />
       </div>
+      {character.essence > 0 && (
+        <div className="shrink-0 rounded-md bg-night-800 px-3 py-2 text-essence" title="Essenz – beim Schmied aus Items gewonnen">
+          <Essence amount={character.essence} className="font-bold" />
+        </div>
+      )}
       <CloudButton />
     </header>
   );

@@ -7,7 +7,7 @@ import type { ItemStats } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { BossSetInfo } from "./BossSetInfo";
 import { ItemIcon } from "./ItemIcon";
-import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
+import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 const CARD_WIDTH = 232;
 const GAP = 8;
@@ -84,7 +84,7 @@ function TooltipCard({ stats, hint, anchor }: { stats: ItemStats; hint?: string;
       <div className="rounded-md bg-night-950/60 p-2">
         <ItemIcon def={def} rarity={rarity} size={96} />
       </div>
-      <p className={`font-pixel text-lg leading-tight ${RARITY_TEXT[rarity]}`}>{def.name}</p>
+      <p className={`font-pixel text-lg leading-tight ${RARITY_TEXT[rarity]}`}>{itemName(stats)}</p>
       <p className="text-xs text-muted">
         {rarity !== "common" && <span className={RARITY_TEXT[rarity]}>{rarityLabel(rarity)} · </span>}
         {typeText(def)}

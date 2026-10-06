@@ -382,20 +382,41 @@ export function createItem(
   return { uid, itemId, rarity, bonuses };
 }
 
-/** Endgültige Werte eines Exemplars. */
+/** Höchste Verbesserungsstufe beim Schmied. */
+export const MAX_UPGRADE = 5;
+/** Jede Verbesserungsstufe gibt diesen Anteil des Hauptwerts dazu (mindestens +1). */
+export const UPGRADE_STEP = 0.06;
+
+/** Hauptwert nach `upgrade` Verbesserungen: +6 % pro Stufe, mindestens +1 pro Stufe. */
+export function upgradedValue(base: number, upgrade: number): number {
+  if (base <= 0 || upgrade <= 0) return base;
+  return base + Math.max(upgrade, Math.round(base * UPGRADE_STEP * upgrade));
+}
+
+/**
+ * Endgültige Werte eines Exemplars. Verbesserungen beim Schmied wirken auf den
+ * Hauptwert: Angriff bei Waffen, Rüstung bei Rüstungsteilen und Schilden.
+ */
 export function getItemStats(owned: OwnedItem): ItemStats {
   const def = getItem(owned.itemId);
   const { statMultiplier } = getRarity(owned.rarity);
+  const upgrade = owned.upgrade ?? 0;
+  const armor = Math.round(def.armor * statMultiplier);
+  const attack = Math.round(def.attack * statMultiplier);
   return {
     def,
     rarity: owned.rarity,
-    armor: Math.round(def.armor * statMultiplier),
-    attack: Math.round(def.attack * statMultiplier),
+    armor: attack > 0 ? armor : upgradedValue(armor, upgrade),
+    attack: upgradedValue(attack, upgrade),
     bonuses: owned.bonuses,
+    upgrade,
   };
 }
 
-/** Verkaufspreis beim Händler: die Hälfte des Kaufpreises, seltene Stücke sind mehr wert. */
+/** Anteil des Kaufpreises, den der Händler beim Verkauf zahlt. */
+export const SELL_RATE = 0.25;
+
+/** Verkaufspreis beim Händler: ein Viertel des Kaufpreises (mind. 1 Gold), seltene Stücke sind mehr wert. */
 export function sellPrice(owned: OwnedItem): number {
-  return Math.floor((getItem(owned.itemId).price * getRarity(owned.rarity).priceMultiplier) / 2);
+  return Math.max(1, Math.floor(getItem(owned.itemId).price * getRarity(owned.rarity).priceMultiplier * SELL_RATE));
 }

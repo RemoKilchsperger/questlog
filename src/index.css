@@ -21,6 +21,7 @@
   --color-rare: #5fb3f0;
   --color-epic: #b57af0;
   --color-legendary: #f59e42;
+  --color-essence: #6fe0e8;
 }
 
 @layer base {

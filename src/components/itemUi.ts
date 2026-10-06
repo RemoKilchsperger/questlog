@@ -27,6 +27,11 @@ export function mainStatText(stats: ItemStats): string {
   return stats.attack > 0 ? `+${stats.attack} Angriff` : `+${stats.armor} Rüstung`;
 }
 
+/** Name samt Verbesserungsstufe beim Schmied: "Eisenschwert +2". */
+export function itemName(stats: ItemStats): string {
+  return stats.upgrade > 0 ? `${stats.def.name} +${stats.upgrade}` : stats.def.name;
+}
+
 /** "Schwert", "Zweihandschwert · Zweihand", "Helm" … */
 export function typeText(def: ItemDef): string {
   const label = getItemType(def.type).label;

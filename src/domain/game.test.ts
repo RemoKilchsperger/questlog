@@ -55,6 +55,7 @@ describe("Kampfpunkte", () => {
     name: "Held",
     totalXp: 0,
     gold: 0,
+    essence: 0,
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
     spentPoints: 0,
     battlePoints,
@@ -145,6 +146,7 @@ describe("Leveling", () => {
       name: "Held",
       totalXp: xpForNextLevel(1) + xpForNextLevel(2), // Level 3
       gold: 0,
+      essence: 0,
       stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
       spentPoints: 0,
       battlePoints: 0,
@@ -168,6 +170,7 @@ describe("Leveling", () => {
       name: "Held",
       totalXp: xpForNextLevel(1), // Level 2 → 2 Punkte verdient
       gold: 0,
+      essence: 0,
       stats: { strength: 4, intellect: 1, endurance: 1, charisma: 1 },
       spentPoints: 3,
       battlePoints: 0,

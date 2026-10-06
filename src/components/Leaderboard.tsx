@@ -9,6 +9,7 @@ import { STAT_LABELS } from "../domain/rewards";
 import type { EquipSlot, StatKey } from "../domain/types";
 import { BossCollection } from "./CharacterSheet";
 import { ItemIcon } from "./ItemIcon";
+import { itemName } from "./itemUi";
 import { ItemTooltip } from "./ItemTooltip";
 import { PixelAvatar } from "./PixelAvatar";
 
@@ -181,7 +182,7 @@ function ProfilePage({ username }: { username: string }) {
                     )}
                     <span className="min-w-0">
                       <span className="block text-muted">{SLOT_LABELS[slot]}</span>
-                      <span className="block truncate">{stats ? stats.def.name : "–"}</span>
+                      <span className="block truncate">{stats ? itemName(stats) : "–"}</span>
                     </span>
                   </li>
                 );

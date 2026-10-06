@@ -16,6 +16,7 @@ const character: Character = {
   name: "Remo",
   totalXp: xpForNextLevel(1) + xpForNextLevel(2), // Level 3
   gold: 50,
+  essence: 0,
   stats: { strength: 4, intellect: 2, endurance: 3, charisma: 1 },
   spentPoints: 0,
   battlePoints: 5,

@@ -17,3 +17,13 @@ export function Gold({ amount, sign = false, className = "" }: { amount: number;
     </span>
   );
 }
+
+/** Essenz aus zerlegten Items – Gegenstück zur Gold-Anzeige. */
+export function Essence({ amount, sign = false, className = "" }: { amount: number; sign?: boolean; className?: string }) {
+  return (
+    <span className={`font-sans whitespace-nowrap tabular-nums ${className}`}>
+      {sign && amount >= 0 ? "+" : ""}
+      {formatNumber(amount)} <span aria-label="Essenz">💠</span>
+    </span>
+  );
+}

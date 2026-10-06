@@ -5,7 +5,7 @@ import { getItemStats } from "../domain/items";
 import type { CombatStats, Equipment, ItemStats } from "../domain/types";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
-import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
+import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 /** Eine Item-Zeile mit Werten, Vergleich zum Angelegten und Aktions-Buttons. */
 export function ItemRow({
@@ -39,7 +39,7 @@ export function ItemRow({
       </ItemTooltip>
       <div className="min-w-0 flex-1">
         <p className={`truncate font-semibold ${RARITY_TEXT[rarity]}`}>
-          {def.name}
+          {itemName(stats)}
           {rarity !== "common" && <span className="ml-2 text-xs font-normal">{rarityLabel(rarity)}</span>}
         </p>
         <div className="flex flex-wrap gap-x-2 text-xs">

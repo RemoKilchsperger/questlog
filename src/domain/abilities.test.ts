@@ -13,6 +13,7 @@ const hero: Character = {
   name: "Held",
   totalXp: xpForNextLevel(1) * 4,
   gold: 0,
+  essence: 0,
   stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
   spentPoints: 0,
   battlePoints: 5,

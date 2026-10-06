@@ -19,6 +19,7 @@ import {
   type BattleState,
 } from "../domain/combat";
 import { getCreature, getDungeon } from "../domain/creatures";
+import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, getItem, migrateLegacyItemId, STARTER_ITEM_IDS } from "../domain/items";
 import { rollLoot } from "../domain/loot";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
@@ -111,6 +112,10 @@ interface GameState {
   rerollShop: () => void;
   buyOffer: (uid: string) => void;
   sell: (uid: string) => void;
+  /** Zerlegt ein Item (ab selten) beim Schmied in Essenz. */
+  salvage: (uid: string) => void;
+  /** Verbessert ein Item (Inventar oder angelegt) beim Schmied um eine Stufe. */
+  upgrade: (uid: string) => void;
 
   potions: PotionStock;
   buyPotion: (potionId: string) => void;
@@ -173,6 +178,7 @@ const createCharacter = (): Character => ({
   name: "Held",
   totalXp: 0,
   gold: 0,
+  essence: 0,
   stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
   spentPoints: 0,
   battlePoints: START_BATTLE_POINTS,
@@ -440,6 +446,24 @@ export const useGameStore = create<GameState>()(
           const { inventory, equipment, character } = get();
           const result = sellItem({ inventory, equipment }, character.gold, uid);
           set({ inventory: result.gear.inventory, character: { ...character, gold: result.gold } });
+        }),
+
+      salvage: (uid) =>
+        attempt(() => {
+          const { inventory, equipment, character } = get();
+          const result = salvageItem({ inventory, equipment }, character.essence, uid);
+          set({ inventory: result.gear.inventory, character: { ...character, essence: result.essence } });
+        }),
+
+      upgrade: (uid) =>
+        attempt(() => {
+          const { inventory, equipment, character } = get();
+          const result = forgeUpgrade({ inventory, equipment }, character.essence, uid);
+          set({
+            inventory: result.gear.inventory,
+            equipment: result.gear.equipment,
+            character: { ...character, essence: result.essence },
+          });
         }),
 
       buyPotion: (potionId) =>

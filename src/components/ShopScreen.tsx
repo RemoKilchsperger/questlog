@@ -21,7 +21,7 @@ import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemRow } from "./ItemRow";
 import { POTION_COLORS } from "./potionUi";
-import { RARITY_TEXT, rarityLabel } from "./itemUi";
+import { itemName, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { useNow } from "./useNow";
 
 export function ShopScreen() {
@@ -61,7 +61,7 @@ export function ShopScreen() {
           <>
             <p>
               <span className={`font-semibold ${RARITY_TEXT[sale.rarity]}`}>
-                <ItemIcon def={sale.def} rarity={sale.rarity} size={24} /> {sale.def.name}
+                <ItemIcon def={sale.def} rarity={sale.rarity} size={24} /> {itemName(sale)}
               </span>{" "}
               <span className="text-muted">({rarityLabel(sale.rarity)})</span>
             </p>
@@ -69,6 +69,12 @@ export function ShopScreen() {
               Du erhältst <Gold amount={sellPrice(pendingSale)} className="font-bold text-gold" />. Das Item ist danach
               weg.
             </p>
+            {sale.upgrade > 0 && (
+              <p className="mt-2 text-sm text-essence">
+                Achtung: Die Verbesserung +{sale.upgrade} geht beim Verkauf verloren. Beim Schmied bekommst du beim
+                Zerlegen die Hälfte der Essenz zurück.
+              </p>
+            )}
           </>
         )}
       </ConfirmDialog>

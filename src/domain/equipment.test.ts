@@ -211,7 +211,7 @@ describe("Händler", () => {
     expect(shopSlot(new Date(2026, 9, 5, 23, 0))).not.toBe(shopSlot(new Date(2026, 9, 6, 23, 0)));
   });
 
-  it("kauft mit Gold, das Stück verschwindet aus dem Angebot; Verkauf zum halben Preis", () => {
+  it("kauft mit Gold, das Stück verschwindet aus dem Angebot; Verkauf zu einem Viertel des Preises", () => {
     const offer = createItem("dagger-0", "common", "offer");
     const price = getItem("dagger-0").price;
     const bought = buyOffer(gearWith(), 100, stockOf(offer), "offer", 1);
@@ -220,7 +220,7 @@ describe("Händler", () => {
     expect(bought.stock.offers).toHaveLength(0);
 
     const sold = sellItem(bought.gear, bought.gold, "offer");
-    expect(sold.gold).toBe(100 - price + Math.floor(price / 2));
+    expect(sold.gold).toBe(100 - price + Math.max(1, Math.floor(price / 4)));
     expect(sold.gear.inventory).toHaveLength(0);
   });
 

@@ -11,10 +11,13 @@ import { QuestForm } from "./components/QuestForm";
 import { RewardToast } from "./components/RewardToast";
 import { ShopScreen } from "./components/ShopScreen";
 import { SkillTree } from "./components/SkillTree";
+import { SmithScreen } from "./components/SmithScreen";
 import { unspentSkillPoints } from "./domain/skills";
 import { useGameStore } from "./store/gameStore";
 
-type Tab = "quests" | "character" | "skills" | "equipment" | "shop" | "battle" | "leaderboard";
+type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard";
+/** Untermenü des Dorfs */
+type VillageView = "merchant" | "smith";
 
 /** Teilbare Adressen: #/rangliste und #/held/<name> öffnen Rangliste bzw. Profil. */
 function readRoute(): { tab: "leaderboard"; username: string | null } | null {
@@ -27,6 +30,7 @@ function readRoute(): { tab: "leaderboard"; username: string | null } | null {
 export default function App() {
   const [tab, setTabState] = useState<Tab>(() => readRoute()?.tab ?? "quests");
   const [profileName, setProfileName] = useState<string | null>(() => readRoute()?.username ?? null);
+  const [villageView, setVillageView] = useState<VillageView>("merchant");
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
 
   useEffect(() => {
@@ -71,8 +75,8 @@ export default function App() {
         <TabButton active={tab === "equipment"} onClick={() => setTab("equipment")}>
           🎒 Ausrüstung
         </TabButton>
-        <TabButton active={tab === "shop"} onClick={() => setTab("shop")}>
-          🏪 Händler
+        <TabButton active={tab === "village"} onClick={() => setTab("village")}>
+          🏘️ Dorf
         </TabButton>
         <TabButton active={tab === "battle"} onClick={() => setTab("battle")}>
           ⚔️ Kampf
@@ -81,6 +85,17 @@ export default function App() {
           🏆 Rangliste
         </TabButton>
       </nav>
+
+      {tab === "village" && (
+        <nav className="mt-3 flex flex-wrap gap-2 border-l-4 border-gold/40 pl-3" aria-label="Dorf">
+          <SubTabButton active={villageView === "merchant"} onClick={() => setVillageView("merchant")}>
+            🏪 Händler
+          </SubTabButton>
+          <SubTabButton active={villageView === "smith"} onClick={() => setVillageView("smith")}>
+            ⚒️ Schmied
+          </SubTabButton>
+        </nav>
+      )}
 
       <main className="mt-4">
         {tab === "quests" && (
@@ -95,7 +110,7 @@ export default function App() {
         {tab === "character" && <CharacterSheet />}
         {tab === "skills" && <SkillTree />}
         {tab === "equipment" && <EquipmentScreen />}
-        {tab === "shop" && <ShopScreen />}
+        {tab === "village" && (villageView === "merchant" ? <ShopScreen /> : <SmithScreen />)}
         {tab === "battle" && <BattleScreen />}
         {tab === "leaderboard" && <Leaderboard username={profileName} />}
       </main>
@@ -123,6 +138,28 @@ function TabButton({
         active
           ? "border-gold bg-night-800 text-gold"
           : "border-night-700 bg-night-900 text-muted hover:text-parchment"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SubTabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`font-pixel rounded-md border-2 px-3 py-1 transition ${
+        active ? "border-gold/70 bg-night-800 text-gold" : "border-night-700 bg-night-900 text-muted hover:text-parchment"
       }`}
     >
       {children}

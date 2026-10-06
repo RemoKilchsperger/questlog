@@ -47,6 +47,8 @@ export interface Character {
   /** Gesamt-XP seit Spielbeginn. Level wird daraus berechnet, nie gespeichert. */
   totalXp: number;
   gold: number;
+  /** Essenz aus zerlegten Items (src/domain/forge.ts). */
+  essence: number;
   stats: Stats;
   /** Bereits verteilte Level-up-Punkte (verfügbar: siehe `unspentPoints`). */
   spentPoints: number;
@@ -111,6 +113,8 @@ export interface OwnedItem {
   itemId: string;
   rarity: Rarity;
   bonuses: Partial<Stats>;
+  /** Verbesserungsstufe beim Schmied (0 bzw. fehlend = nicht verbessert, siehe forge.ts). */
+  upgrade?: number;
 }
 
 /** Endgültige Werte eines Exemplars (Katalogwert × Seltenheit + Boni). */
@@ -120,6 +124,8 @@ export interface ItemStats {
   armor: number;
   attack: number;
   bonuses: Partial<Stats>;
+  /** Verbesserungsstufe beim Schmied */
+  upgrade: number;
 }
 
 export type Equipment = Record<EquipSlot, OwnedItem | null>;

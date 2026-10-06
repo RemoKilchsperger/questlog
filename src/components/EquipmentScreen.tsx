@@ -6,7 +6,7 @@ import { ActiveSets } from "./BossSetInfo";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
-import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
+import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 
 /** Position der Slots im „Paper-Doll“-Raster (Spalte / Zeile). */
 const SLOT_LAYOUT: { slot: EquipSlot; className: string }[] = [
@@ -63,7 +63,7 @@ function SlotTile({ slot, className }: { slot: EquipSlot; className: string }) {
     const main = getItemStats(equipment.weapon1!);
     return (
       <div
-        title={`Belegt durch ${main.def.name} (Zweihand)`}
+        title={`Belegt durch ${itemName(main)} (Zweihand)`}
         className={`${className} flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed p-1 text-center ${RARITY_BORDER[main.rarity]} bg-night-950/60`}
       >
         <ItemIcon def={main.def} rarity={main.rarity} size={32} className="opacity-40" />
@@ -90,12 +90,12 @@ function SlotTile({ slot, className }: { slot: EquipSlot; className: string }) {
     <ItemTooltip stats={stats} hint="Klicken zum Ablegen" className={`${className} flex`}>
       <button
         onClick={() => unequip(slot)}
-        aria-label={`${stats.def.name} (${rarityLabel(stats.rarity)}) ablegen`}
+        aria-label={`${itemName(stats)} (${rarityLabel(stats.rarity)}) ablegen`}
         className={`flex aspect-square w-full flex-col items-center justify-center gap-0.5 rounded-md border-2 bg-night-800 p-1 text-center transition hover:border-danger ${RARITY_BORDER[stats.rarity]}`}
       >
         <ItemIcon def={stats.def} rarity={stats.rarity} size={32} />
         <span className={`w-full truncate text-[10px] leading-tight ${RARITY_TEXT[stats.rarity]}`}>
-          {stats.def.name}
+          {itemName(stats)}
         </span>
         <span className="num text-[10px] leading-none">{mainStatText(stats)}</span>
       </button>
