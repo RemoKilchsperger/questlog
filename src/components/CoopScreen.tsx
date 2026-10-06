@@ -21,14 +21,13 @@ import {
   type CoopEvent,
 } from "../domain/coopCombat";
 import { getPotion, POTIONS, potionHeal } from "../domain/potions";
-import { getCreatureSprite } from "../game/creatureSprites";
 import { EventBus } from "../game/EventBus";
 import { useGameStore } from "../store/gameStore";
 import { BossDrops } from "./BattleScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DungeonChest } from "./DungeonChest";
 import { PixelAvatar } from "./PixelAvatar";
-import { PixelSprite } from "./PixelSprite";
+import { CreatureSprite } from "./CreatureSprite";
 import { POTION_BUTTONS } from "./potionUi";
 import { classAbility } from "../domain/heroClasses";
 
@@ -97,7 +96,7 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
               const poor = battlePoints < COOP_COST;
               return (
                 <li key={boss.id} className="flex flex-wrap items-center gap-3 rounded-md border-2 border-legendary/40 bg-night-800 p-3">
-                  <PixelSprite sprite={getCreatureSprite(boss.sprite)} size={56} />
+                  <CreatureSprite sprite={boss.sprite} size={56} />
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-legendary">
                       {boss.name} <span className="text-xs text-muted">Lv. {boss.level}</span>
@@ -196,7 +195,7 @@ function Lobby() {
   return (
     <div className="flex flex-col gap-4">
       <section className="panel flex flex-wrap items-center gap-4 p-5">
-        <PixelSprite sprite={getCreatureSprite(boss.sprite)} size={72} />
+        <CreatureSprite sprite={boss.sprite} size={72} />
         <div className="min-w-0 flex-1">
           <h2 className="font-pixel text-2xl">
             Koop-Lobby · <span className="text-legendary">{boss.name}</span>

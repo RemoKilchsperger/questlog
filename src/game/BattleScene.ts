@@ -9,6 +9,7 @@ import type { BattleEvent, BattleState, Side } from "../domain/combat";
 import type { SkillWeapon } from "../domain/skills";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
+import { creatureImage, lastOpaqueRow } from "./creatureImages";
 import { getCreatureSprite } from "./creatureSprites";
 import { EventBus } from "./EventBus";
 import { music } from "./music";
@@ -44,6 +45,12 @@ const GROUND_Y = 250;
 const HERO_X = 190;
 const ENEMY_X = 530;
 const BAR_WIDTH = 160;
+/** Lebensbalken weit oben, damit grosse Gegner darunter Platz haben */
+const BAR_Y = 34;
+/** Grössen: Held etwas kleiner, Gegner-Bilder grösser, Bosse am grössten */
+const HERO_SCALE = 7;
+const ENEMY_IMAGE_SCALE = 1.3;
+const BOSS_IMAGE_SCALE = 1.55;
 
 /** Pfeil für Bogenschüsse: Federn links, Spitze rechts. */
 const ARROW_SPRITE: SpriteDef = {
@@ -82,17 +89,23 @@ export class BattleScene extends Phaser.Scene {
     this.setup = data;
   }
 
+  /** Gegner mit eigenem Bild (creatureImages.ts) vorab laden. */
+  preload() {
+    const url = creatureImage(this.setup.enemySprite);
+    const key = `creature-img-${this.setup.enemySprite}`;
+    if (url && !this.textures.exists(key)) this.load.image(key, url);
+  }
+
   create() {
     const { battle, colors } = this.setup;
     this.drawBackground(colors, this.setup.areaId);
 
-    const hero = this.addBody(HERO_X, "hero", this.setup.heroSprite, 9, this.setup.heroWeapon);
-    const enemy = this.addBody(
-      ENEMY_X,
-      `creature-${this.setup.enemySprite}`,
-      getCreatureSprite(this.setup.enemySprite),
-      this.setup.boss ? 9.5 : 8,
-    );
+    const hero = this.addBody(HERO_X, "hero", this.setup.heroSprite, HERO_SCALE, this.setup.heroWeapon);
+    const enemyScale = this.setup.boss ? 9.5 : 8;
+    const enemyImage = `creature-img-${this.setup.enemySprite}`;
+    const enemy = this.textures.exists(enemyImage)
+      ? this.addImageBody(ENEMY_X, enemyImage, this.setup.boss ? BOSS_IMAGE_SCALE : ENEMY_IMAGE_SCALE)
+      : this.addBody(ENEMY_X, `creature-${this.setup.enemySprite}`, getCreatureSprite(this.setup.enemySprite), enemyScale);
 
     this.addHeroGlow(hero);
 
@@ -203,6 +216,14 @@ export class BattleScene extends Phaser.Scene {
    * Helden, ein pulsierender Schimmer darüber und ein Glühen um die Hauptwaffe.
    * Die Effekte (preFX) gibt es nur mit WebGL – im Canvas-Modus bleibt der Schimmer.
    */
+  /** Wie addBody, aber für ein geladenes Bild: unterste sichtbare Zeile auf den Boden. */
+  private addImageBody(x: number, key: string, scale: number): Pick<Fighter, "body" | "images" | "weapon"> {
+    const source = this.textures.get(key).getSourceImage() as HTMLImageElement;
+    const figure = this.add.image(0, 0, key).setOrigin(0.5, (lastOpaqueRow(source) + 1) / source.height);
+    const body = this.add.container(x, GROUND_Y + 4, [figure]).setScale(scale);
+    return { body, images: [figure], weapon: null };
+  }
+
   private addHeroGlow(hero: Pick<Fighter, "body" | "images" | "weapon">) {
     const { heroGlow, heroWeaponGlow } = this.setup;
     if (heroWeaponGlow && hero.weapon?.preFX) {
@@ -242,7 +263,7 @@ export class BattleScene extends Phaser.Scene {
   ): Fighter {
     const x = parts.body.x;
     this.add
-      .text(x, 26, `${name} · Lv. ${level}`, {
+      .text(x, 6, `${name} · Lv. ${level}`, {
         fontFamily: NUMBER_FONT,
         fontSize: "17px",
         fontStyle: "bold",
@@ -252,7 +273,7 @@ export class BattleScene extends Phaser.Scene {
       .setStroke("#0e0b16", 4);
     const bar = this.add.graphics();
     const hpText = this.add
-      .text(x, 66, "", { fontFamily: NUMBER_FONT, fontSize: "14px", fontStyle: "bold", color: "#efe6d2" })
+      .text(x, 48, "", { fontFamily: NUMBER_FONT, fontSize: "14px", fontStyle: "bold", color: "#efe6d2" })
       .setOrigin(0.5, 0)
       .setStroke("#0e0b16", 3);
     const fighter: Fighter = { ...parts, bar, hpText, hp, maxHp, homeX: x };
@@ -265,9 +286,9 @@ export class BattleScene extends Phaser.Scene {
     const color = ratio > 0.5 ? 0x7dd3a8 : ratio > 0.25 ? 0xf4c95d : 0xf0776a;
     const x = f.homeX - BAR_WIDTH / 2;
     f.bar.clear();
-    f.bar.fillStyle(0x0e0b16).fillRect(x - 3, 50 - 3, BAR_WIDTH + 6, 16);
-    f.bar.fillStyle(0x2e2640).fillRect(x, 50, BAR_WIDTH, 10);
-    f.bar.fillStyle(color).fillRect(x, 50, Math.round(BAR_WIDTH * ratio), 10);
+    f.bar.fillStyle(0x0e0b16).fillRect(x - 3, BAR_Y - 3, BAR_WIDTH + 6, 16);
+    f.bar.fillStyle(0x2e2640).fillRect(x, BAR_Y, BAR_WIDTH, 10);
+    f.bar.fillStyle(color).fillRect(x, BAR_Y, Math.round(BAR_WIDTH * ratio), 10);
     f.hpText.setText(`${Math.round(hp)} / ${f.maxHp} LP`);
   }
 

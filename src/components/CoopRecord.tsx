@@ -1,6 +1,5 @@
 import { COOP_BOSSES, EMPTY_COOP_STATS, type CoopStats } from "../domain/coopCombat";
-import { getCreatureSprite } from "../game/creatureSprites";
-import { PixelSprite } from "./PixelSprite";
+import { CreatureSprite } from "./CreatureSprite";
 
 /** Koop-Erfolge: Anzahl Siege und welche Koop-Bosse schon gefallen sind. */
 export function CoopRecord({ stats = EMPTY_COOP_STATS }: { stats?: CoopStats }) {
@@ -23,7 +22,7 @@ export function CoopRecord({ stats = EMPTY_COOP_STATS }: { stats?: CoopStats }) 
               }`}
               title={defeated ? `${boss.name} besiegt` : `${boss.name} – noch nicht besiegt`}
             >
-              <PixelSprite sprite={getCreatureSprite(boss.sprite)} size={48} className={defeated ? "" : "opacity-30 grayscale"} />
+              <CreatureSprite sprite={boss.sprite} size={48} className={defeated ? "" : "opacity-30 grayscale"} />
               <span className={`text-xs ${defeated ? "text-legendary" : "text-muted"}`}>
                 {defeated ? "✓ " : ""}
                 {boss.name}

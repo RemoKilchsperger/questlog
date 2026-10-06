@@ -35,7 +35,6 @@ import { EFFORT_TIERS } from "../domain/rewards";
 import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
 import { BUFF_LABELS, getPotion, POTIONS, potionEffectText, potionHeal, type BuffKind } from "../domain/potions";
-import { getCreatureSprite } from "../game/creatureSprites";
 import { EventBus } from "../game/EventBus";
 import { unlockAudio } from "../game/sfx";
 import { useGameStore } from "../store/gameStore";
@@ -47,7 +46,7 @@ import { DungeonChest } from "./DungeonChest";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
-import { PixelSprite } from "./PixelSprite";
+import { CreatureSprite } from "./CreatureSprite";
 import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { PixelAvatar } from "./PixelAvatar";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
@@ -186,7 +185,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
       <div className="mt-2 flex flex-wrap items-end gap-2">
         {dungeon.creatures.map((creature, i) => (
           <div key={creature.id} className="flex flex-col items-center text-center" title={creature.name}>
-            <PixelSprite sprite={getCreatureSprite(creature.sprite)} size={creature.boss ? 48 : 36} />
+            <CreatureSprite sprite={creature.sprite} size={creature.boss ? 48 : 36} />
             <span className={`text-[10px] leading-tight ${creature.boss ? "text-legendary" : "text-muted"}`}>
               {i + 1}. Lv. {creature.level}
             </span>
@@ -223,7 +222,7 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
         creature.boss ? "border-legendary/70" : "border-night-700"
       }`}
     >
-      <PixelSprite sprite={getCreatureSprite(creature.sprite)} size={creature.boss ? 64 : 52} className="shrink-0" />
+      <CreatureSprite sprite={creature.sprite} size={creature.boss ? 64 : 52} className="shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="font-semibold">
           {creature.name}

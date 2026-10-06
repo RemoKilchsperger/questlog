@@ -10,6 +10,7 @@ import type { ItemType } from "../domain/types";
 import type { CoopMember } from "../coop/protocol";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
+import { creatureImage, lastOpaqueRow } from "./creatureImages";
 import { getCreatureSprite } from "./creatureSprites";
 import { EventBus } from "./EventBus";
 import { getHeroSprite, getMainWeapon } from "./heroSprite";
@@ -30,8 +31,10 @@ const FONT = '"Pixelify Sans", monospace';
 const NUMBER_FONT = '"Inter", sans-serif';
 const GROUND_Y = 250;
 const BOSS_X = 560;
-const HERO_SCALE = 6;
+const HERO_SCALE = 5;
 const BOSS_SCALE = 10;
+/** Koop-Bosse mit eigenem Bild: deutlich grösser als die Helden */
+const BOSS_IMAGE_SCALE = 1.6;
 const HERO_BAR = 64;
 
 /** x-Positionen der Helden – der erste steht vorne, nah am Boss. */
@@ -72,6 +75,13 @@ export class CoopBattleScene extends Phaser.Scene {
   init(data: CoopSceneData) {
     this.setup = data;
     this.heroes = new Map();
+  }
+
+  /** Boss mit eigenem Bild (creatureImages.ts) vorab laden. */
+  preload() {
+    const sprite = getCoopBoss(this.setup.state.bossId).sprite;
+    const url = creatureImage(sprite);
+    if (url && !this.textures.exists(`creature-img-${sprite}`)) this.load.image(`creature-img-${sprite}`, url);
   }
 
   create() {
@@ -182,11 +192,20 @@ export class CoopBattleScene extends Phaser.Scene {
   }
 
   private addBoss(spriteKey: string, name: string, level: number, hp: number, maxHp: number): Unit {
-    const { object } = this.figure(`creature-${spriteKey}`, getCreatureSprite(spriteKey));
-    const body = this.add.container(BOSS_X, GROUND_Y + 4, [object]).setScale(BOSS_SCALE);
+    const imageKey = `creature-img-${spriteKey}`;
+    let object: Phaser.GameObjects.Image;
+    let scale = BOSS_SCALE;
+    if (this.textures.exists(imageKey)) {
+      const source = this.textures.get(imageKey).getSourceImage() as HTMLImageElement;
+      object = this.add.image(0, 0, imageKey).setOrigin(0.5, (lastOpaqueRow(source) + 1) / source.height);
+      scale = BOSS_IMAGE_SCALE;
+    } else {
+      object = this.figure(`creature-${spriteKey}`, getCreatureSprite(spriteKey)).object;
+    }
+    const body = this.add.container(BOSS_X, GROUND_Y + 4, [object]).setScale(scale);
     this.tweens.add({ targets: body, y: body.y - 4, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     this.add
-      .text(BOSS_X, 22, `${name} · Lv. ${level}`, { fontFamily: NUMBER_FONT, fontSize: "17px", fontStyle: "bold", color: "#efe6d2" })
+      .text(BOSS_X, 6, `${name} · Lv. ${level}`, { fontFamily: NUMBER_FONT, fontSize: "17px", fontStyle: "bold", color: "#efe6d2" })
       .setOrigin(0.5, 0)
       .setStroke("#0e0b16", 4);
     const unit: Unit = {
@@ -196,14 +215,14 @@ export class CoopBattleScene extends Phaser.Scene {
       weaponType: null,
       bar: this.add.graphics(),
       hpText: this.add
-        .text(BOSS_X, 62, "", { fontFamily: NUMBER_FONT, fontSize: "14px", fontStyle: "bold", color: "#efe6d2" })
+        .text(BOSS_X, 46, "", { fontFamily: NUMBER_FONT, fontSize: "14px", fontStyle: "bold", color: "#efe6d2" })
         .setOrigin(0.5, 0)
         .setStroke("#0e0b16", 4),
       hp,
       maxHp,
       homeX: BOSS_X,
       barWidth: 180,
-      barY: 46,
+      barY: 32,
     };
     this.drawBar(unit, hp);
     return unit;
