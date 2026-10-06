@@ -14,6 +14,7 @@ import { itemName } from "./itemUi";
 import { ItemTooltip } from "./ItemTooltip";
 import { PixelAvatar } from "./PixelAvatar";
 import { HeroClassBadge } from "./HeroClassInfo";
+import { gearScore } from "../domain/gearScore";
 
 /** Öffentliche Rangliste – oder, mit `username`, die Profilseite eines Helden. */
 export function Leaderboard({ username }: { username: string | null }) {
@@ -81,7 +82,12 @@ function Ranking() {
                 <span className="block text-xs text-muted">{p.snapshot.title}</span>
               </span>
               <span className="text-right text-xs text-muted">
-                <span className="font-pixel block text-base text-gold">Lv. {p.level}</span>
+                <span className="block text-base text-gold">
+                  Lv. <span className="num">{p.level}</span>
+                </span>
+                <span className="block text-legendary">
+                  GS <span className="num">{gearScore(p.snapshot.equipment)}</span>
+                </span>
                 <span className="num">{p.quests_done}</span> Quests · 👑 <span className="num">{p.boss_items}</span>
               </span>
             </a>
@@ -156,6 +162,9 @@ function ProfilePage({ username }: { username: string }) {
             Level <span className="num">{profile.level}</span> · {snapshot.title}
           </p>
           <HeroClassBadge equipment={snapshot.equipment} />
+          <p className="text-sm text-muted">
+            Gear Score <span className="num font-semibold text-legendary">{gearScore(snapshot.equipment)}</span>
+          </p>
           <p className="text-sm text-muted">
             <span className="num text-parchment">{profile.total_xp}</span> XP ·{" "}
             <span className="num text-parchment">{profile.quests_done}</span> Quests erledigt

@@ -28,7 +28,9 @@ import {
   buyOffer,
   rerollCost,
   rerollShop,
+  rollShopRarity,
   rollShopStock,
+  SHOP_REROLLS_PER_DAY,
   SHOP_SIZE,
   shopPrice,
   shopSlot,
@@ -168,40 +170,53 @@ describe("Händler", () => {
   let uid = 0;
   const newUid = () => `n${uid++}`;
 
-  it("hat höchstens 5 verschiedene, tragbare Stücke, genau eines selten", () => {
+  it("hat 8 verschiedene, tragbare Stücke", () => {
+    expect(SHOP_SIZE).toBe(8);
     for (const level of [1, 7, 30, 60]) {
       const stock = rollShopStock("s", level, newUid);
       expect(stock.offers).toHaveLength(SHOP_SIZE);
       expect(new Set(stock.offers.map((o) => o.itemId)).size).toBe(SHOP_SIZE);
-      expect(stock.offers.filter((o) => o.rarity === "rare")).toHaveLength(1);
-      expect(stock.offers.filter((o) => o.rarity === "epic").length).toBeLessThanOrEqual(1);
-      expect(stock.offers.some((o) => o.rarity === "legendary")).toBe(false);
       expect(stock.offers.every((o) => getItem(o.itemId).requiredLevel <= level)).toBe(true);
       expect(stock.offers.some((o) => getItem(o.itemId).bossId)).toBe(false);
     }
   });
 
-  it("hat mit 4 % Chance zusätzlich ein episches Stück", () => {
-    const rarities = (roll: number) => rollShopStock("s", 10, newUid, () => roll).offers.map((o) => o.rarity);
-    expect(rarities(0.03).filter((r) => r === "epic")).toHaveLength(1); // unter 4 %
-    expect(rarities(0.05).filter((r) => r === "epic")).toHaveLength(0); // darüber
-    let epics = 0;
-    for (let i = 0; i < 5000; i++) epics += rollShopStock("s", 10, newUid).offers.some((o) => o.rarity === "epic") ? 1 : 0;
-    expect(epics / 5000).toBeGreaterThan(0.025);
-    expect(epics / 5000).toBeLessThan(0.055);
+  it("jedes Stück: 0,2 % legendär, 5 % episch, 20 % selten, sonst gewöhnlich", () => {
+    expect(rollShopRarity(() => 0.001)).toBe("legendary");
+    expect(rollShopRarity(() => 0.003)).toBe("epic");
+    expect(rollShopRarity(() => 0.051)).toBe("epic");
+    expect(rollShopRarity(() => 0.053)).toBe("rare");
+    expect(rollShopRarity(() => 0.251)).toBe("rare");
+    expect(rollShopRarity(() => 0.253)).toBe("common");
+    const counts: Record<string, number> = {};
+    const n = 20_000;
+    for (let i = 0; i < n / SHOP_SIZE; i++) {
+      for (const o of rollShopStock("s", 30, newUid).offers) counts[o.rarity] = (counts[o.rarity] ?? 0) + 1;
+    }
+    expect(counts.rare / n).toBeGreaterThan(0.18);
+    expect(counts.rare / n).toBeLessThan(0.22);
+    expect(counts.epic / n).toBeGreaterThan(0.04);
+    expect(counts.epic / n).toBeLessThan(0.06);
+    expect((counts.legendary ?? 0) / n).toBeLessThan(0.006);
   });
 
-  it("würfelt einmal pro Tag gegen Gold neu aus", () => {
+  it("würfelt bis zu 5-mal pro Tag gegen Gold neu aus", () => {
     const morning = new Date(2026, 9, 5, 9, 0);
     const cost = rerollCost(10);
-    const first = rerollShop(1000, 10, "", newUid, morning);
+    const first = rerollShop(1000, 10, "", 0, newUid, morning);
     expect(first.gold).toBe(1000 - cost);
+    expect(first.count).toBe(1);
     expect(first.stock.slot).toBe(shopSlot(morning));
     expect(first.stock.offers).toHaveLength(SHOP_SIZE);
-    expect(() => rerollShop(1000, 10, first.lastReroll, newUid, new Date(2026, 9, 5, 22, 0))).toThrow(/schon/);
-    expect(() => rerollShop(cost - 1, 10, "", newUid, morning)).toThrow(/Gold/);
-    // Am nächsten Tag wieder erlaubt
-    expect(rerollShop(1000, 10, first.lastReroll, newUid, new Date(2026, 9, 6, 0, 1)).gold).toBe(1000 - cost);
+    let last = first;
+    for (let i = 1; i < SHOP_REROLLS_PER_DAY; i++) last = rerollShop(1000, 10, last.lastReroll, last.count, newUid, morning);
+    expect(last.count).toBe(SHOP_REROLLS_PER_DAY);
+    expect(() => rerollShop(1000, 10, last.lastReroll, last.count, newUid, new Date(2026, 9, 5, 22, 0))).toThrow(/schon/);
+    expect(() => rerollShop(cost - 1, 10, "", 0, newUid, morning)).toThrow(/Gold/);
+    // Am nächsten Tag wieder erlaubt – der Zähler beginnt neu
+    const next = rerollShop(1000, 10, last.lastReroll, last.count, newUid, new Date(2026, 9, 6, 0, 1));
+    expect(next.gold).toBe(1000 - cost);
+    expect(next.count).toBe(1);
     expect(rerollCost(60)).toBeGreaterThan(rerollCost(1));
   });
 

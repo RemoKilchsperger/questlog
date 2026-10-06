@@ -113,8 +113,10 @@ interface GameState {
   shop: ShopStock;
   /** Würfelt neue Ware aus, sobald ein neuer Abschnitt begonnen hat. */
   refreshShop: () => void;
-  /** Datum ("yyyy-mm-dd") des letzten bezahlten Neuauswürfelns – einmal pro Tag erlaubt. */
+  /** Datum ("yyyy-mm-dd") des letzten bezahlten Neuauswürfelns … */
   lastShopReroll: string;
+  /** … und wie oft an diesem Tag schon ausgewürfelt wurde (höchstens SHOP_REROLLS_PER_DAY). */
+  shopRerolls: number;
   rerollShop: () => void;
   buyOffer: (uid: string) => void;
   sell: (uid: string) => void;
@@ -201,6 +203,7 @@ type SaveState = Pick<
   | "bonusDone"
   | "shop"
   | "lastShopReroll"
+  | "shopRerolls"
   | "bossCollection"
   | "coopStats"
 >;
@@ -256,6 +259,8 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     bonusDone: saved.bonusDone ?? NO_BONUS_DONE,
     shop: saved.shop ?? EMPTY_SHOP,
     lastShopReroll: saved.lastShopReroll ?? "",
+    // Ältere Stände kannten nur einen Wurf pro Tag
+    shopRerolls: saved.shopRerolls ?? (saved.lastShopReroll ? 1 : 0),
     bossCollection: saved.bossCollection ?? [],
     coopStats: saved.coopStats ?? EMPTY_COOP_STATS,
   };
@@ -374,6 +379,7 @@ export const useGameStore = create<GameState>()(
       bonusDone: NO_BONUS_DONE,
       shop: EMPTY_SHOP,
       lastShopReroll: "",
+      shopRerolls: 0,
       bossCollection: [],
       coopStats: EMPTY_COOP_STATS,
       battle: null,
@@ -455,6 +461,7 @@ export const useGameStore = create<GameState>()(
           bonusDone: NO_BONUS_DONE,
           shop: EMPTY_SHOP,
           lastShopReroll: "",
+          shopRerolls: 0,
           bossCollection: [],
       coopStats: EMPTY_COOP_STATS,
           battle: null,
@@ -486,11 +493,12 @@ export const useGameStore = create<GameState>()(
 
       rerollShop: () =>
         attempt(() => {
-          const { character, lastShopReroll } = get();
-          const result = rerollShop(character.gold, getLevel(character.totalXp), lastShopReroll, newId);
+          const { character, lastShopReroll, shopRerolls } = get();
+          const result = rerollShop(character.gold, getLevel(character.totalXp), lastShopReroll, shopRerolls, newId);
           set({
             shop: result.stock,
             lastShopReroll: result.lastReroll,
+            shopRerolls: result.count,
             character: { ...character, gold: result.gold },
           });
         }),
@@ -678,6 +686,7 @@ export const useGameStore = create<GameState>()(
         bonusDone: s.bonusDone,
         shop: s.shop,
         lastShopReroll: s.lastShopReroll,
+        shopRerolls: s.shopRerolls,
         bossCollection: s.bossCollection,
         coopStats: s.coopStats,
       }),

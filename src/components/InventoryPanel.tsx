@@ -9,9 +9,11 @@ import { ItemRow } from "./ItemRow";
 import { RARITY_TEXT } from "./itemUi";
 
 type TypeFilter = "all" | "armor" | "weapon" | ItemType;
+/** "found" = Reihenfolge im Inventar (wie erhalten) */
+type SortOrder = "found" | "levelAsc" | "levelDesc";
 
 /**
- * Inventarliste mit Filtern nach Typ und Seltenheit. Was man mit einem Item
+ * Inventarliste mit Filtern nach Typ und Seltenheit und Sortierung nach Level. Was man mit einem Item
  * tun kann (anlegen, verkaufen …), bestimmt der jeweilige Tab über `actions`.
  */
 export function InventoryPanel({
@@ -31,6 +33,7 @@ export function InventoryPanel({
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [rarityFilter, setRarityFilter] = useState<Rarity | "all">("all");
   const [classFilter, setClassFilter] = useState<ArmorClass | "all">("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("found");
 
   const entries = inventory.map((owned) => ({ owned, stats: getItemStats(owned) }));
   const visible = entries.filter(
@@ -39,6 +42,11 @@ export function InventoryPanel({
       (rarityFilter === "all" || rarityFilter === stats.rarity) &&
       (classFilter === "all" || classFilter === stats.def.armorClass),
   );
+  // sort ist stabil: gleiches Level behält die Reihenfolge im Inventar
+  if (sortOrder !== "found") {
+    const dir = sortOrder === "levelAsc" ? 1 : -1;
+    visible.sort((a, b) => dir * (a.stats.def.requiredLevel - b.stats.def.requiredLevel));
+  }
 
   return (
     <section className={`panel self-start p-5 ${className}`}>
@@ -89,6 +97,16 @@ export function InventoryPanel({
                 {c.icon} {c.label}
               </option>
             ))}
+          </select>
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+            aria-label="Sortierung"
+            className="rounded-md border-2 border-night-700 bg-night-950 px-2 py-1 text-sm outline-none focus:border-gold"
+          >
+            <option value="found">Neueste zuletzt</option>
+            <option value="levelDesc">Level absteigend</option>
+            <option value="levelAsc">Level aufsteigend</option>
           </select>
           <div className="flex flex-wrap gap-1" role="group" aria-label="Nach Seltenheit filtern">
             <FilterChip active={rarityFilter === "all"} onClick={() => setRarityFilter("all")}>

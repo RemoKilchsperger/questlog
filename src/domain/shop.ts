@@ -1,17 +1,23 @@
-// Händler: ein kleines, wechselndes Angebot. Alle 4 Stunden kommt komplett
-// neue, zufällige Ware passend zum Level des Helden – ein Stück ist immer selten,
-// mit etwas Glück eines episch. Gekaufte Stücke sind bis zum nächsten Wechsel weg.
-// Einmal am Tag kann man gegen Gold sofort neue Ware auswürfeln lassen.
+// Händler: ein wechselndes Angebot. Alle 4 Stunden kommt komplett neue,
+// zufällige Ware passend zum Level des Helden – jedes Stück kann selten, episch
+// oder (sehr selten) legendär sein. Gekaufte Stücke sind bis zum nächsten Wechsel
+// weg. Bis zu 5-mal am Tag kann man gegen Gold sofort neue Ware auswürfeln lassen.
 
 import { dateKey } from "./calendar";
 import { createItem, getItem, getRarity } from "./items";
 import { lootPool, pickFromPool } from "./loot";
 import type { Gear, OwnedItem, Rarity } from "./types";
 
-export const SHOP_SIZE = 5;
+export const SHOP_SIZE = 8;
 export const SHOP_ROTATION_HOURS = 4;
-/** Chance pro Wechsel, dass zusätzlich zum seltenen ein episches Stück dabei ist. */
-export const SHOP_EPIC_CHANCE = 0.04;
+/** Chance pro Stück auf die jeweilige Seltenheit – der Rest ist gewöhnlich. */
+export const SHOP_RARITY_CHANCES: readonly { rarity: Rarity; chance: number }[] = [
+  { rarity: "legendary", chance: 0.002 },
+  { rarity: "epic", chance: 0.05 },
+  { rarity: "rare", chance: 0.2 },
+];
+/** So oft am Tag darf gegen Gold neu ausgewürfelt werden. */
+export const SHOP_REROLLS_PER_DAY = 5;
 
 export interface ShopStock {
   /** Zeitabschnitt, zu dem die Ware gehört (siehe `shopSlot`); "" = noch nie ausgewürfelt */
@@ -27,10 +33,17 @@ export function shopSlot(now: Date = new Date()): string {
   return `${dateKey(now)}#${Math.floor(now.getHours() / SHOP_ROTATION_HOURS)}`;
 }
 
-/**
- * Würfelt neue Ware aus: verschiedene, sofort tragbare Items, genau eines davon
- * selten – und mit 4 % Chance ein weiteres episch.
- */
+/** Seltenheit eines Stücks: 0,2 % legendär, 5 % episch, 20 % selten, sonst gewöhnlich. */
+export function rollShopRarity(rng: () => number = Math.random): Rarity {
+  let roll = rng();
+  for (const { rarity, chance } of SHOP_RARITY_CHANCES) {
+    if (roll < chance) return rarity;
+    roll -= chance;
+  }
+  return "common";
+}
+
+/** Würfelt neue Ware aus: verschiedene, sofort tragbare Items, jedes mit eigener Seltenheit. */
 export function rollShopStock(
   slot: string,
   level: number,
@@ -45,10 +58,7 @@ export function rollShopStock(
     picked.push(def);
     pool = pool.filter((i) => i.id !== def.id);
   }
-  // Die Reihenfolge ist schon zufällig: Platz 0 wird selten, Platz 1 eventuell episch.
-  const epic = rng() < SHOP_EPIC_CHANCE;
-  const rarityAt = (i: number): Rarity => (i === 0 ? "rare" : i === 1 && epic ? "epic" : "common");
-  const offers = picked.map((def, i) => createItem(def.id, rarityAt(i), newUid(), rng));
+  const offers = picked.map((def) => createItem(def.id, rollShopRarity(rng), newUid(), rng));
   return { slot, offers };
 }
 
@@ -57,24 +67,31 @@ export function rerollCost(level: number): number {
   return Math.round(10 * (1 + (level - 1) * 0.25) * (1 + level / 10));
 }
 
-/** Darf heute (noch) neu ausgewürfelt werden? Einmal pro Tag. */
-export function canReroll(lastReroll: string, now: Date = new Date()): boolean {
-  return lastReroll !== dateKey(now);
+/** Wie oft heute noch neu ausgewürfelt werden darf. `count` zählt die Würfe am Tag `lastReroll`. */
+export function rerollsLeft(lastReroll: string, count: number, now: Date = new Date()): number {
+  return lastReroll === dateKey(now) ? Math.max(0, SHOP_REROLLS_PER_DAY - count) : SHOP_REROLLS_PER_DAY;
 }
 
-/** Gegen Gold sofort komplett neue Ware – höchstens einmal pro Tag. Der nächste Wechsel bleibt gleich. */
+/** Gegen Gold sofort komplett neue Ware – bis zu 5-mal pro Tag. Der nächste Wechsel bleibt gleich. */
 export function rerollShop(
   gold: number,
   level: number,
   lastReroll: string,
+  count: number,
   newUid: () => string,
   now: Date = new Date(),
   rng: () => number = Math.random,
-): { stock: ShopStock; gold: number; lastReroll: string } {
-  if (!canReroll(lastReroll, now)) throw new Error("Heute wurde schon neu ausgewürfelt.");
+): { stock: ShopStock; gold: number; lastReroll: string; count: number } {
+  const left = rerollsLeft(lastReroll, count, now);
+  if (left === 0) throw new Error("Heute wurde schon so oft neu ausgewürfelt.");
   const cost = rerollCost(level);
   if (gold < cost) throw new Error("Nicht genug Gold.");
-  return { stock: rollShopStock(shopSlot(now), level, newUid, rng), gold: gold - cost, lastReroll: dateKey(now) };
+  return {
+    stock: rollShopStock(shopSlot(now), level, newUid, rng),
+    gold: gold - cost,
+    lastReroll: dateKey(now),
+    count: SHOP_REROLLS_PER_DAY - left + 1,
+  };
 }
 
 /** Kaufpreis eines Exemplars – seltene Stücke kosten entsprechend mehr. */

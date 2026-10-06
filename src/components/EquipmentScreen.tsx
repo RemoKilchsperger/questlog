@@ -9,6 +9,7 @@ import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { HeroClassPanel } from "./HeroClassInfo";
+import { gearScore } from "../domain/gearScore";
 
 /** Position der Slots im „Paper-Doll“-Raster (Spalte / Zeile). */
 const SLOT_LAYOUT: { slot: EquipSlot; className: string }[] = [
@@ -40,6 +41,13 @@ export function EquipmentScreen() {
         <div className="grid grid-cols-2 gap-3">
           <CombatTile label="Rüstung" value={armor} icon="🛡️" accent="text-intellect" />
           <CombatTile label="Angriff" value={attack} icon="⚔️" accent="text-strength" />
+        </div>
+        <div
+          className="rounded-md bg-night-800 p-2 text-center"
+          title="Durchschnitt aller 7 Plätze aus Item-Level × Seltenheit, +2 % pro Schmied-Stufe. Zweihandwaffen zählen doppelt."
+        >
+          <div className="num text-2xl text-legendary">{gearScore(equipment)}</div>
+          <div className="text-xs text-muted">Gear Score</div>
         </div>
         <div className="rounded-md bg-night-800 p-2 text-center text-sm">
           <div className="text-xs text-muted">Attributboni</div>

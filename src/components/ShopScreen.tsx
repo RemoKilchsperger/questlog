@@ -5,9 +5,9 @@ import { getItemStats, sellPrice } from "../domain/items";
 import { getLevel } from "../domain/leveling";
 import { potionEffectText, SHOP_POTIONS } from "../domain/potions";
 import {
-  canReroll,
   rerollCost,
-  SHOP_EPIC_CHANCE,
+  rerollsLeft,
+  SHOP_REROLLS_PER_DAY,
   SHOP_ROTATION_HOURS,
   SHOP_SIZE,
   shopPrice,
@@ -107,7 +107,7 @@ function Offers() {
   );
 }
 
-/** Die wechselnde Ware: höchstens 5 Stücke, alle 4 Stunden neu, eines davon selten. */
+/** Die wechselnde Ware: höchstens 8 Stücke, alle 4 Stunden neu, jedes mit eigener Seltenheit. */
 function WareOffers() {
   const now = useNow();
   const slot = shopSlot(now);
@@ -118,11 +118,13 @@ function WareOffers() {
   const refreshShop = useGameStore((s) => s.refreshShop);
   const buyOffer = useGameStore((s) => s.buyOffer);
   const lastReroll = useGameStore((s) => s.lastShopReroll);
+  const rerollCount = useGameStore((s) => s.shopRerolls);
   const rerollShop = useGameStore((s) => s.rerollShop);
   const [confirmReroll, setConfirmReroll] = useState(false);
   const closeReroll = useCallback(() => setConfirmReroll(false), []);
   const cost = rerollCost(level);
-  const rerollAvailable = canReroll(lastReroll, now);
+  const left = rerollsLeft(lastReroll, rerollCount, now);
+  const rerollAvailable = left > 0;
 
   // Neuer Abschnitt → neue Ware (auch wenn die Seite offen bleibt).
   useEffect(() => refreshShop(), [slot, refreshShop]);
@@ -133,9 +135,9 @@ function WareOffers() {
   return (
     <>
       <p className="mb-2 text-xs text-muted">
-        Alle {SHOP_ROTATION_HOURS} Stunden komplett neue Ware passend zu deinem Level – ein Stück ist immer{" "}
-        <span className="text-rare">selten</span>, mit {Math.round(SHOP_EPIC_CHANCE * 100)} % Glück ist zusätzlich
-        eines <span className="text-epic">episch</span>. Neue Ware in{" "}
+        Alle {SHOP_ROTATION_HOURS} Stunden komplett neue Ware passend zu deinem Level – jedes Stück kann{" "}
+        <span className="text-rare">selten</span> (20 %), <span className="text-epic">episch</span> (5 %) oder mit
+        viel Glück <span className="text-legendary">legendär</span> (0,2 %) sein. Neue Ware in{" "}
         <span className="text-parchment">{formatCountdown(now, nextBoundary(now, SHOP_ROTATION_HOURS))}</span>.
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -144,12 +146,12 @@ function WareOffers() {
           disabled={!rerollAvailable || gold < cost}
           onClick={() => setConfirmReroll(true)}
           className="rounded-md border-2 border-epic/70 bg-epic/10 px-3 py-1 text-sm text-epic hover:bg-epic/20 disabled:cursor-not-allowed disabled:opacity-40"
-          title={!rerollAvailable ? "Heute schon genutzt" : gold < cost ? "Nicht genug Gold" : "Sofort neue Ware"}
+          title={!rerollAvailable ? "Heute aufgebraucht" : gold < cost ? "Nicht genug Gold" : "Sofort neue Ware"}
         >
           🎲 Neue Ware <Gold amount={cost} className="font-bold" />
         </motion.button>
         <span className="text-xs text-muted">
-          {rerollAvailable ? "1× pro Tag möglich" : "Heute schon genutzt – morgen wieder"}
+          {rerollAvailable ? `Heute noch ${left} von ${SHOP_REROLLS_PER_DAY}×` : "Heute aufgebraucht – morgen wieder"}
         </span>
       </div>
       <ConfirmDialog
@@ -164,7 +166,7 @@ function WareOffers() {
       >
         <p>
           Für <Gold amount={cost} className="font-bold text-gold" /> ersetzt der Händler sein ganzes Angebot sofort
-          durch neue Ware. Das geht nur einmal pro Tag.
+          durch neue Ware. Das geht {SHOP_REROLLS_PER_DAY}-mal pro Tag – heute noch {left}-mal.
         </p>
       </ConfirmDialog>
       {offers.length === 0 ? (
