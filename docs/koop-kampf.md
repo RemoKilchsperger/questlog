@@ -209,7 +209,7 @@ resolveRound(state, actions: Record<playerId, CoopAction>, rng): { state; events
 - [x] Host-Logik: Aktionen sammeln, Countdown, Runde auflösen, verteilen
 - [x] Kampfszene mit mehreren Helden
 - [x] Beute-Truhe pro Spieler, Kampfpunkte
-- [ ] Test mit zwei echten Cloud-Konten auf zwei Geräten
+- [x] Test mit zwei echten Cloud-Konten auf zwei Geräten
 
 **Umsetzung:** `src/domain/coopCombat.ts` (Logik), `src/coop/transport.ts` (Verbindung),
 `src/coop/coopStore.ts` (Lobby und Host), `src/game/CoopBattleScene.ts` (Szene),
