@@ -42,6 +42,8 @@ describe("Dungeon-Truhe (Store)", () => {
       goldBonus: 0,
       maxMana: 40,
       abilities: [],
+      heroClass: null,
+      critMultiplier: 1.5,
     };
     const base = startBattle("b", "Held", hero, dungeon.creatures[stage]);
     const battle: BattleState = win

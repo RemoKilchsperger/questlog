@@ -11,7 +11,17 @@
 //      höchsten Bedrohung (mit etwas Zufall). Betäubung lässt sie ausfallen.
 //   4. Mana-Regeneration, Verstärkungen laufen ab.
 
-import { getAbility, MANA_REGEN } from "./abilities";
+import { MANA_REGEN } from "./abilities";
+import {
+  classAbility,
+  CLERIC_POTION_FACTOR,
+  CLERIC_REGEN,
+  DUELIST_EXTRA_HIT,
+  PALADIN_THREAT,
+  PLUNDERER_BLEED,
+  rageFactor,
+  type HeroClassId,
+} from "./heroClasses";
 import {
   rollBattleReward,
   rollHit,
@@ -182,6 +192,8 @@ export interface CoopHero {
   mana: number;
   maxMana: number;
   abilities: SkillWeapon[];
+  /** Aktive Klasse (heroClasses.ts) – fehlt bei älteren Kämpfen */
+  heroClass?: HeroClassId | null;
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
   /** Sorten, die in diesem Kampf schon getrunken wurden – jede nur einmal pro Kampf. */
   potionsUsed: string[];
@@ -214,7 +226,9 @@ export type CoopEvent =
   | { type: "skipped"; heroId: string }
   /** Der Boss raubt einem Helden Mana bzw. heilt sich durch seinen Biss */
   | { type: "manaBurn"; heroId: string; amount: number }
-  | { type: "drain"; heal: number };
+  | { type: "drain"; heal: number }
+  /** Klassen-Regeneration (Kleriker) am Ende der Runde */
+  | { type: "regen"; heroId: string; heal: number };
 
 export type CoopStatus = "active" | "won" | "lost";
 
@@ -272,10 +286,12 @@ export function startCoopBattle(id: string, bossId: string, players: CoopPlayer[
         damage: profile.damage,
         armor: profile.armor,
         critChance: profile.critChance,
+        critMultiplier: profile.critMultiplier,
       },
       mana: profile.maxMana,
       maxMana: profile.maxMana,
       abilities: profile.abilities,
+      heroClass: profile.heroClass,
       buffs: {},
       potionsUsed: [],
       effects: {},
@@ -321,7 +337,7 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
 /** Warum diese Fähigkeit nicht geht – oder null. */
 export function coopAbilityBlocker(hero: CoopHero, weapon: SkillWeapon): string | null {
   if (!hero.abilities.includes(weapon)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
-  const { manaCost } = getAbility(weapon);
+  const { manaCost } = classAbility(weapon, hero.heroClass);
   if (hero.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
 }
@@ -396,7 +412,8 @@ export function resolveRound(
         target.combatant.hp = Math.max(1, potionHeal(potion, target.combatant.maxHp));
         events.push({ type: "potion", heroId: hero.id, targetId: target.id, potionId: potion.id, heal: target.combatant.hp, revive: true });
       } else if (potion.effect.kind === "heal") {
-        const heal = Math.min(potionHeal(potion, hero.combatant.maxHp), hero.combatant.maxHp - hero.combatant.hp);
+        const factor = hero.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1;
+        const heal = Math.min(Math.round(potionHeal(potion, hero.combatant.maxHp) * factor), hero.combatant.maxHp - hero.combatant.hp);
         hero.combatant.hp += heal;
         events.push({ type: "potion", heroId: hero.id, targetId: hero.id, potionId: potion.id, heal });
       } else {
@@ -406,8 +423,11 @@ export function resolveRound(
       }
     }
 
-    const ability = action.ability && !coopAbilityBlocker(hero, action.ability) ? getAbility(action.ability) : null;
-    const strong = buffed(hero);
+    const ability = action.ability && !coopAbilityBlocker(hero, action.ability) ? classAbility(action.ability, hero.heroClass) : null;
+    const plain = buffed(hero);
+    // Berserker: bei wenig Lebenspunkten mehr Schaden
+    const strong = { ...plain, damage: plain.damage * rageFactor(hero.heroClass, hero.combatant.hp, hero.combatant.maxHp) };
+    const threatFactor = hero.heroClass === "paladin" ? PALADIN_THREAT : 1;
     if (ability) {
       hero.mana -= ability.manaCost;
       events.push({ type: "ability", heroId: hero.id, weapon: ability.weapon, manaCost: ability.manaCost });
@@ -428,12 +448,22 @@ export function resolveRound(
       ? { ...strong, damage: strong.damage * ability.multiplier, critChance: ability.guaranteedCrit ? 1 : strong.critChance }
       : strong;
     const armor = ability?.ignoreArmor ? 0 : Math.round(boss.armor * (1 - (bossEffects.armorBreak ?? 0)));
-    for (let i = 0; i < (ability?.hits ?? 1) && boss.hp > 0; i++) {
+    const strike = () => {
       const hit = rollHit(attacker, { ...boss, armor }, rng);
       boss.hp = Math.max(0, boss.hp - hit.damage);
-      hero.threat += hit.damage;
+      hero.threat += hit.damage * threatFactor;
       events.push({ type: "hit", attacker: hero.id, target: BOSS, ...hit, ...(ability && { weapon: ability.weapon }) });
-    }
+      // Plünderer: kritische Treffer lassen bluten
+      if (hit.crit && hero.heroClass === "plunderer" && boss.hp > 0) {
+        const damage = Math.max(1, Math.round(strong.damage * PLUNDERER_BLEED.percent));
+        if ((bossEffects.bleed?.damage ?? 0) <= damage) {
+          bossEffects = { ...bossEffects, bleed: { damage, roundsLeft: PLUNDERER_BLEED.rounds, sourceId: hero.id } };
+        }
+      }
+    };
+    for (let i = 0; i < (ability?.hits ?? 1) && boss.hp > 0; i++) strike();
+    // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
+    if (!ability && hero.heroClass === "duelist" && boss.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike();
   }
 
   // Bollwerk: erst jetzt, wenn alle Helden gehandelt haben – der Schildträger bekommt so viel
@@ -449,7 +479,7 @@ export function resolveRound(
     if (!effect || boss.hp <= 0) continue;
     boss.hp = Math.max(0, boss.hp - effect.damage);
     const source = heroes.find((h) => h.id === effect.sourceId && !h.down);
-    if (source) source.threat += effect.damage;
+    if (source) source.threat += effect.damage * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
     events.push({ type: kind, target: BOSS, damage: effect.damage });
     bossEffects = { ...bossEffects, [kind]: effect.roundsLeft > 1 ? { ...effect, roundsLeft: effect.roundsLeft - 1 } : undefined };
   }
@@ -525,6 +555,18 @@ export function resolveRound(
       if (heroes.every((h) => h.down)) {
         status = "lost";
         events.push({ type: "wipe" });
+      }
+    }
+  }
+
+  // Kleriker: Regeneration am Ende der Runde
+  if (status === "active") {
+    for (const hero of heroes) {
+      if (hero.down || hero.heroClass !== "cleric") continue;
+      const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(hero.combatant.maxHp * CLERIC_REGEN));
+      if (heal > 0) {
+        hero.combatant.hp += heal;
+        events.push({ type: "regen", heroId: hero.id, heal });
       }
     }
   }

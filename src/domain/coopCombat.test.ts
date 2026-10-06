@@ -26,6 +26,8 @@ const profile = (overrides: Partial<HeroCombatProfile> = {}): HeroCombatProfile 
   goldBonus: 0,
   maxMana: 80,
   abilities: [],
+  heroClass: null,
+  critMultiplier: 1.5,
   ...overrides,
 });
 const player = (id: string, overrides: Partial<HeroCombatProfile> = {}): CoopPlayer => ({ id, name: id, profile: profile(overrides) });

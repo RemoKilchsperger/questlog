@@ -52,6 +52,7 @@ import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from
 import { PixelAvatar } from "./PixelAvatar";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
 import { useNow } from "./useNow";
+import { classAbility } from "../domain/heroClasses";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
 const PhaserBattle = lazy(() => import("../game/PhaserBattle"));
@@ -498,7 +499,7 @@ function Battle({ battle }: { battle: BattleState }) {
               ⚔️ Angreifen
             </motion.button>
             {battle.abilities.map((weapon) => {
-              const ability = getAbility(weapon);
+              const ability = classAbility(weapon, battle.heroClass);
               const blocker = abilityBlocker(battle, weapon);
               return (
                 <motion.button
@@ -1017,5 +1018,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `${enemy} heilt sich um ${e.heal} LP.`;
     case "manaBurn":
       return `${enemy} raubt dir ${e.amount} Mana.`;
+    case "regen":
+      return `Deine Klasse heilt dich um ${e.heal} LP.`;
   }
 }

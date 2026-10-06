@@ -13,6 +13,7 @@ import { ItemIcon } from "./ItemIcon";
 import { itemName } from "./itemUi";
 import { ItemTooltip } from "./ItemTooltip";
 import { PixelAvatar } from "./PixelAvatar";
+import { HeroClassBadge } from "./HeroClassInfo";
 
 /** Öffentliche Rangliste – oder, mit `username`, die Profilseite eines Helden. */
 export function Leaderboard({ username }: { username: string | null }) {
@@ -154,6 +155,7 @@ function ProfilePage({ username }: { username: string }) {
           <p className="font-pixel text-lg text-gold">
             Level <span className="num">{profile.level}</span> · {snapshot.title}
           </p>
+          <HeroClassBadge equipment={snapshot.equipment} />
           <p className="text-sm text-muted">
             <span className="num text-parchment">{profile.total_xp}</span> XP ·{" "}
             <span className="num text-parchment">{profile.quests_done}</span> Quests erledigt

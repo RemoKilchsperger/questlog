@@ -25,7 +25,18 @@ import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potio
 import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { getSetHpMultiplier } from "./bossSets";
-import { ABILITIES, getAbility, MANA_REGEN, maxManaFor } from "./abilities";
+import { ABILITIES, MANA_REGEN, maxManaFor } from "./abilities";
+import {
+  classAbility,
+  classStatBonus,
+  CLERIC_POTION_FACTOR,
+  CLERIC_REGEN,
+  detectHeroClass,
+  DUELIST_EXTRA_HIT,
+  PLUNDERER_BLEED,
+  rageFactor,
+  type HeroClassId,
+} from "./heroClasses";
 import type { Character, Equipment, Loot, OwnedItem } from "./types";
 
 /** Kampfwerte des Helden, abgeleitet aus Level, Attributen und Ausrüstung. */
@@ -41,6 +52,10 @@ export interface HeroCombatProfile {
   maxMana: number;
   /** Freigeschaltete Fähigkeiten der angelegten Waffen */
   abilities: SkillWeapon[];
+  /** Aktive Klasse (heroClasses.ts) – oder null */
+  heroClass: HeroClassId | null;
+  /** Schadensfaktor kritischer Treffer (1,5, Assassine 2) */
+  critMultiplier: number;
 }
 
 /** Freigeschaltete Fähigkeiten aller angelegten Waffen, ohne Doppelte. */
@@ -67,15 +82,20 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
   const stats = getEffectiveStats(character.stats, equipment);
   const gear = getCombatStats(equipment);
   const armorClasses = getArmorClassSummary(equipment);
+  const heroClass = detectHeroClass(equipment);
+  const bonus = classStatBonus(heroClass);
   return {
     level,
-    maxHp: Math.round((80 + (level - 1) * 12 + stats.endurance * 1.5) * getSetHpMultiplier(equipment)),
-    damage: 5 + gear.attack + skillDamageBonus(character, equipment) + stats.strength * 0.25,
-    armor: gear.armor + skillArmorBonus(character, equipment),
-    critChance: Math.min(0.3, 0.05 + stats.intellect * 0.002 + armorClasses.crit),
-    goldBonus: Math.min(1, stats.charisma * 0.005),
+    maxHp: Math.round((80 + (level - 1) * 12 + stats.endurance * 1.5) * getSetHpMultiplier(equipment) * (1 + bonus.hp)),
+    damage: (5 + gear.attack + skillDamageBonus(character, equipment) + stats.strength * 0.25) * (1 + bonus.damage),
+    armor: Math.round((gear.armor + skillArmorBonus(character, equipment)) * (1 + bonus.armor)),
+    // Die Klassen-Krit-Chance kommt über die normale Obergrenze hinaus dazu
+    critChance: Math.min(0.3, 0.05 + stats.intellect * 0.002 + armorClasses.crit) + bonus.crit,
+    goldBonus: Math.min(1, stats.charisma * 0.005) + bonus.gold,
     maxMana: maxManaFor(level, stats.intellect) + armorClasses.mana,
     abilities: availableAbilities(character, equipment),
+    heroClass,
+    critMultiplier: bonus.critMultiplier,
   };
 }
 
@@ -89,6 +109,8 @@ export interface Combatant {
   damage: number;
   armor: number;
   critChance: number;
+  /** Schadensfaktor kritischer Treffer – Standard 1,5 */
+  critMultiplier?: number;
 }
 
 export type BattleEvent =
@@ -114,7 +136,9 @@ export type BattleEvent =
   /** Der Gegner raubt dem Helden Mana */
   | { type: "manaBurn"; amount: number }
   | { type: "defeated"; side: Side }
-  | { type: "fled"; goldLost: number };
+  | { type: "fled"; goldLost: number }
+  /** Klassen-Regeneration (Kleriker) am Ende der Runde */
+  | { type: "regen"; heal: number };
 
 /** Schaden pro Runde (Gift, Feuer, Bluten) – ignoriert Rüstung */
 export interface DamageOverTime {
@@ -147,6 +171,8 @@ export interface BattleState {
   maxMana: number;
   /** Fähigkeiten, die der Held in diesem Kampf einsetzen kann */
   abilities: SkillWeapon[];
+  /** Aktive Klasse des Helden (fehlt bei älteren Kämpfen) */
+  heroClass?: HeroClassId | null;
   /** Wirkungen der Fähigkeiten auf den Gegner */
   enemyEffects: {
     poison?: DamageOverTime;
@@ -192,6 +218,7 @@ export function startBattle(
       damage: hero.damage,
       armor: hero.armor,
       critChance: hero.critChance,
+      critMultiplier: hero.critMultiplier,
     },
     enemy: { name: creature.name, level: creature.level, hp: enemy.maxHp, ...enemy },
     round: 1,
@@ -201,6 +228,7 @@ export function startBattle(
     mana: hero.maxMana,
     maxMana: hero.maxMana,
     abilities: hero.abilities,
+    heroClass: hero.heroClass,
     enemyEffects: {},
     heroEffects: {},
     status: "active",
@@ -243,7 +271,7 @@ export function rollHit(
   const crit = rng() < attacker.critChance;
   const spread = 0.85 + rng() * 0.3;
   const raw = attacker.damage * spread * (1 - armorReduction(defender.armor, attacker.level));
-  return { damage: Math.max(1, Math.round(raw * (crit ? 1.5 : 1))), crit };
+  return { damage: Math.max(1, Math.round(raw * (crit ? (attacker.critMultiplier ?? 1.5) : 1))), crit };
 }
 
 export type RoundResult = { state: BattleState; events: BattleEvent[] };
@@ -260,7 +288,8 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
   const blocker = potionBlocker(state, potion);
   if (blocker) throw new Error(blocker);
   const { effect } = potion;
-  const heal = Math.min(potionHeal(potion, state.hero.maxHp), state.hero.maxHp - state.hero.hp);
+  const factor = state.heroClass === "cleric" && effect.kind === "heal" ? CLERIC_POTION_FACTOR : 1;
+  const heal = Math.min(Math.round(potionHeal(potion, state.hero.maxHp) * factor), state.hero.maxHp - state.hero.hp);
   const buff = effect.kind === "heal" ? undefined : effect.kind;
   const event: BattleEvent = { type: "potion", potionId: potion.id, heal, ...(buff && { buff }) };
   return {
@@ -300,7 +329,7 @@ function tickBuffs(buffs: BattleState["buffs"]): BattleState["buffs"] {
 export function abilityBlocker(state: BattleState, weapon: SkillWeapon): string | null {
   if (state.status !== "active") return "Der Kampf ist vorbei.";
   if (!state.abilities.includes(weapon)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
-  const { manaCost } = getAbility(weapon);
+  const { manaCost } = classAbility(weapon, state.heroClass);
   if (state.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
 }
@@ -316,7 +345,7 @@ export function attackRound(
   abilityWeapon?: SkillWeapon,
 ): RoundResult {
   assertActive(state);
-  const ability = abilityWeapon ? getAbility(abilityWeapon) : null;
+  const ability = abilityWeapon ? classAbility(abilityWeapon, state.heroClass) : null;
   if (abilityWeapon) {
     const blocker = abilityBlocker(state, abilityWeapon);
     if (blocker) throw new Error(blocker);
@@ -329,7 +358,9 @@ export function attackRound(
   let mana = state.mana;
   let status: BattleStatus = "active";
   // Verstärkungen wirken auf Schaden und Rüstung, die Lebenspunkte bleiben die echten.
-  const strong = buffedHero(state);
+  const strongBase = buffedHero(state);
+  // Berserker: bei wenig Lebenspunkten mehr Schaden
+  const strong = { ...strongBase, damage: strongBase.damage * rageFactor(state.heroClass, hero.hp, hero.maxHp) };
 
   // 1. Aktion des Helden
   if (ability) {
@@ -352,11 +383,21 @@ export function attackRound(
       }
     : strong;
   const targetArmor = ability?.ignoreArmor ? 0 : Math.round(enemy.armor * (1 - (enemyEffects.armorBreak ?? 0)));
-  for (let i = 0; i < (ability?.hits ?? 1) && enemy.hp > 0; i++) {
+  const strike = () => {
     const heroHit = rollHit(attacker, { ...enemy, armor: targetArmor }, rng);
     enemy = { ...enemy, hp: Math.max(0, enemy.hp - heroHit.damage) };
     events.push({ type: "hit", attacker: "hero", ...heroHit });
-  }
+    // Plünderer: kritische Treffer lassen bluten
+    if (heroHit.crit && state.heroClass === "plunderer" && enemy.hp > 0) {
+      const damage = Math.max(1, Math.round(strong.damage * PLUNDERER_BLEED.percent));
+      if ((enemyEffects.bleed?.damage ?? 0) <= damage) {
+        enemyEffects = { ...enemyEffects, bleed: { damage, roundsLeft: PLUNDERER_BLEED.rounds } };
+      }
+    }
+  };
+  for (let i = 0; i < (ability?.hits ?? 1) && enemy.hp > 0; i++) strike();
+  // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
+  if (!ability && state.heroClass === "duelist" && enemy.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike();
 
   // 2. Gift, Feuer und Bluten wirken nach der Aktion des Helden – erst beim Gegner, dann beim Helden
   for (const kind of OVER_TIME) {
@@ -422,6 +463,15 @@ export function attackRound(
     if (hero.hp === 0) {
       status = "lost";
       events.push({ type: "defeated", side: "hero" });
+    }
+  }
+
+  // Kleriker: Regeneration am Ende der Runde
+  if (status === "active" && state.heroClass === "cleric" && hero.hp > 0) {
+    const heal = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * CLERIC_REGEN));
+    if (heal > 0) {
+      hero = { ...hero, hp: hero.hp + heal };
+      events.push({ type: "regen", heal });
     }
   }
 

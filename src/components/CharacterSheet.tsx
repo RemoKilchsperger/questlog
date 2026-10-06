@@ -15,6 +15,7 @@ import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { PixelAvatar } from "./PixelAvatar";
 import { XpBar } from "./XpBar";
+import { HeroClassBadge } from "./HeroClassInfo";
 
 const STAT_COLORS: Record<StatKey, string> = {
   strength: "bg-strength",
@@ -93,6 +94,9 @@ export function CharacterSheet() {
 
         <p className="font-pixel text-lg text-gold">
           Level <span className="num">{level}</span> · {getTitle(level)}
+          <span className="mt-1 block">
+            <HeroClassBadge equipment={equipment} />
+          </span>
         </p>
         <XpBar totalXp={character.totalXp} />
       </section>

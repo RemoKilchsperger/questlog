@@ -8,6 +8,7 @@ import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
+import { HeroClassPanel } from "./HeroClassInfo";
 
 /** Position der Slots im „Paper-Doll“-Raster (Spalte / Zeile). */
 const SLOT_LAYOUT: { slot: EquipSlot; className: string }[] = [
@@ -45,6 +46,7 @@ export function EquipmentScreen() {
           <div className="text-xp">{bonuses || "–"}</div>
         </div>
         <ArmorClassInfo equipment={equipment} />
+        <HeroClassPanel equipment={equipment} />
         <ActiveSets equipment={equipment} />
         <p className="text-xs text-muted">Klicke auf ein angelegtes Teil, um es abzulegen.</p>
       </section>

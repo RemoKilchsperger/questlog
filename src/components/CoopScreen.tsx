@@ -30,6 +30,7 @@ import { DungeonChest } from "./DungeonChest";
 import { PixelAvatar } from "./PixelAvatar";
 import { PixelSprite } from "./PixelSprite";
 import { POTION_BUTTONS } from "./potionUi";
+import { classAbility } from "../domain/heroClasses";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
 const PhaserCoopBattle = lazy(() => import("../game/PhaserCoopBattle"));
@@ -478,7 +479,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
           ⚔️ Angreifen
         </motion.button>
         {me.abilities.map((weapon) => {
-          const ability = getAbility(weapon);
+          const ability = classAbility(weapon, me.heroClass);
           const blocker = coopAbilityBlocker(me, weapon);
           return (
             <motion.button
@@ -609,6 +610,8 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${bossName} raubt ${name(e.heroId)} ${e.amount} Mana.`;
     case "drain":
       return `${bossName} heilt sich um ${e.heal} LP.`;
+    case "regen":
+      return `${name(e.heroId)} regeneriert ${e.heal} LP.`;
   }
 }
 

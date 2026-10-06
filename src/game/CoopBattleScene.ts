@@ -357,6 +357,13 @@ export class CoopBattleScene extends Phaser.Scene {
         sfx.manaBurn();
         break;
       }
+      case "regen": {
+        const hero = this.unit(event.heroId);
+        this.setHp(hero, hero.hp + event.heal);
+        this.float(hero, `+${event.heal}`, "#9dffc8", 16, 20);
+        fx.rise(this, this.center(hero), 0x9dffc8, 6, 30);
+        break;
+      }
       case "drain":
         this.setHp(this.boss, this.boss.hp + event.heal);
         this.float(this.boss, `+${event.heal}`, "#b07cff", 20, 40);

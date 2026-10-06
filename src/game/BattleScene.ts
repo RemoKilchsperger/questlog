@@ -391,6 +391,11 @@ export class BattleScene extends Phaser.Scene {
     } else if (event.type === "hit") {
       if (event.attacker === "hero") this.heroHit(event, special as SkillWeapon | null);
       else this.enemyHit(event, special);
+    } else if (event.type === "regen") {
+      const hero = this.fighters.hero;
+      this.setHp("hero", hero.hp + event.heal);
+      this.floatText(hero.homeX, GROUND_Y - 105, `+${event.heal}`, "#9dffc8", 22);
+      this.sparkles(hero.homeX, GROUND_Y - 60, 0x9dffc8);
     } else {
       music.stop(this, 0.3);
       this.showDefeat(event.side, false);
