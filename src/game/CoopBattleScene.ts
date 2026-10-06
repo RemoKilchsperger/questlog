@@ -61,6 +61,8 @@ interface Unit {
   homeX: number;
   barWidth: number;
   barY: number;
+  /** Leichtes Auf und Ab im Stand (pausiert bei Sprüngen) */
+  idle?: Phaser.Tweens.Tween;
 }
 
 export class CoopBattleScene extends Phaser.Scene {
@@ -163,7 +165,7 @@ export class CoopBattleScene extends Phaser.Scene {
     }
     const images = weapon ? (held?.type === "bow" ? [figure, weapon] : [weapon, figure]) : [figure];
     const body = this.add.container(x, GROUND_Y + 4, images).setScale(HERO_SCALE);
-    this.tweens.add({ targets: body, y: body.y - 3, duration: 900 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    const idle = this.tweens.add({ targets: body, y: body.y - 3, duration: 900 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
 
     const label = name.length > 11 ? `${name.slice(0, 10)}…` : name;
     this.add
@@ -186,6 +188,7 @@ export class CoopBattleScene extends Phaser.Scene {
       homeX: x,
       barWidth: HERO_BAR,
       barY: 110,
+      idle,
     };
     this.drawBar(unit, hp);
     return unit;
@@ -426,6 +429,31 @@ export class CoopBattleScene extends Phaser.Scene {
       case "shield":
         fx.ring(this, at, 0xa9c6ff, 50);
         break;
+      case "dagger": // in Rauch auflösen
+        fx.burst(this, at, 0x5a3a8a, 12, 45);
+        sfx.whoosh(0.2);
+        this.tweens.add({ targets: hero.body, alpha: 0.15, duration: 200 });
+        break;
+      case "sword": // einmal um die eigene Achse wirbeln
+        this.tweens.add({ targets: hero.body, angle: 360, duration: 360, onComplete: () => hero.body.setAngle(0) });
+        fx.whirl(this, at);
+        sfx.whoosh(0.35);
+        break;
+      case "greatsword": // Licht sammelt sich
+        fx.rise(this, at, 0xffe66b, 10, 60);
+        sfx.magic();
+        break;
+      case "axe": // ausholen
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -80, duration: 220 });
+        break;
+      case "greataxe":
+      case "greathammer": // tief in die Knie gehen
+        this.tweens.add({ targets: hero.body, scaleY: hero.body.scaleY * 0.85, duration: 180, yoyo: true });
+        fx.rise(this, at, 0xf0776a, 6, 50);
+        break;
+      case "mace":
+        fx.rise(this, at, 0xd39bf0, 6, 45);
+        break;
       case "dagger-2":
         fx.burst(this, { x: at.x + 8, y: at.y - 20 }, 0xff3a3a, 6, 16, 3);
         break;
@@ -471,14 +499,126 @@ export class CoopBattleScene extends Phaser.Scene {
     }
   }
 
-  /** Eigene Treffer-Animation der zweiten Fähigkeiten – false, wenn es keine gibt. */
+  /** Eigene Treffer-Animation einer Fähigkeit – false, wenn sie die Animation ihres Waffentyps nutzt (Bogen, Stab, Zepter). */
   private abilityHit(hero: Unit, id: AbilityId, from: fx.Point, target: fx.Point, hit: () => void, crit: boolean): boolean {
     const dash = (onHit: () => void) => {
       sfx.swing();
       if (hero.weapon) this.swing(hero.weapon);
       this.tweens.add({ targets: hero.body, x: hero.homeX + 70, duration: 120, ease: "Quad.easeIn", yoyo: true, onYoyo: onHit });
     };
+    // Das leichte Auf und Ab im Stand anhalten, solange der Held sich bewegt
+    const holdIdle = () => {
+      hero.idle?.pause();
+      return () => hero.idle?.resume();
+    };
+    // Sprungangriff: in hohem Bogen zum Boss, Aufprall, zurück
+    const leap = (onHit: () => void) => {
+      sfx.whoosh(0.3);
+      const resume = holdIdle();
+      const y = GROUND_Y + 4;
+      this.tweens.chain({
+        targets: hero.body,
+        tweens: [
+          { x: target.x - 70, y: y - 70, duration: 200, ease: "Quad.easeOut" },
+          { y, duration: 130, ease: "Quad.easeIn", onComplete: onHit },
+          { x: hero.homeX, duration: 260, delay: 120, ease: "Quad.easeInOut", onComplete: resume },
+        ],
+      });
+    };
     switch (id) {
+      case "dagger": {
+        // Hinter dem Boss auftauchen, zustechen, zurück in den Schatten
+        const body = hero.body;
+        const scaleX = body.scaleX;
+        const y = body.y;
+        const resume = holdIdle();
+        body.setPosition(target.x + 90, y).setAlpha(0);
+        body.scaleX = -Math.abs(scaleX);
+        this.tweens.chain({
+          targets: body,
+          tweens: [
+            { alpha: 1, duration: 110, onStart: () => sfx.whoosh(0.15) },
+            {
+              x: target.x + 60,
+              duration: 80,
+              onComplete: () => {
+                hit();
+                fx.slashes(this, target, 0xb07cff, 1, true);
+                sfx.slash();
+              },
+            },
+            { alpha: 0, duration: 130, delay: 110 },
+            {
+              alpha: 1,
+              duration: 150,
+              onStart: () => {
+                body.setPosition(hero.homeX, y);
+                body.scaleX = Math.abs(scaleX);
+              },
+              onComplete: resume,
+            },
+          ],
+        });
+        return true;
+      }
+      case "sword":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xffffff, 1, crit);
+          sfx.slash();
+        });
+        return true;
+      case "greatsword":
+        fx.pillar(this, target, 0xffe66b, 60);
+        sfx.magic();
+        this.time.delayedCall(140, () =>
+          dash(() => {
+            hit();
+            fx.burst(this, target, 0xffe66b, 14, 60);
+          }),
+        );
+        return true;
+      case "axe": {
+        // Die Axt fliegt drehend zum Boss
+        const key = hero.weapon?.texture.key;
+        const axe = key ? this.add.image(0, 0, key).setScale(HERO_SCALE) : this.add.rectangle(0, 0, 18, 18, 0xc8d0d8);
+        hero.weapon?.setVisible(false);
+        sfx.whoosh(0.33);
+        fx.projectile(this, from, target, axe, {
+          duration: 320,
+          spin: 900,
+          arc: 50,
+          onArrive: () => {
+            hit();
+            fx.burst(this, target, 0xc8d0d8, 8, 40);
+            hero.weapon?.setVisible(true).setAngle(0);
+          },
+        });
+        return true;
+      }
+      case "greataxe":
+        leap(() => {
+          hit();
+          fx.cracks(this, target);
+          this.float(this.boss, "RÜSTUNG ↓", "#f0776a", 16, 40);
+          this.cameras.main.shake(180, 0.008);
+        });
+        return true;
+      case "mace":
+        dash(() => {
+          hit();
+          fx.ring(this, { x: target.x, y: target.y - 60 }, 0xd39bf0, 45, 300);
+        });
+        return true;
+      case "greathammer":
+        leap(() => {
+          hit();
+          fx.ring(this, { x: target.x, y: GROUND_Y }, 0xffe28f, 120, 450, true);
+          fx.groundWave(this, { x: target.x - 70, y: GROUND_Y }, { x: target.x + 70, y: GROUND_Y }, 0x8a7a60, 250);
+          this.cameras.main.shake(260, 0.012);
+          sfx.quake(0.4);
+        });
+        return true;
       case "dagger-2":
         dash(() => {
           hit();
