@@ -48,13 +48,13 @@ const sequence = (...values: number[]) => {
 };
 
 describe("Katalog", () => {
-  it("hat 16 Typen mit je 200 Items und eindeutigen IDs und Namen", () => {
+  it("hat 16 Typen – Waffen je 200 Items, Rüstung je 200 pro Klasse – mit eindeutigen IDs und Namen", () => {
     expect(ITEM_TYPES).toHaveLength(16);
-    expect(ITEMS).toHaveLength(16 * ITEMS_PER_TYPE);
+    expect(ITEMS).toHaveLength(11 * ITEMS_PER_TYPE + 5 * 3 * ITEMS_PER_TYPE);
     expect(new Set(ITEMS.map((i) => i.id)).size).toBe(ITEMS.length);
-    for (const { type } of ITEM_TYPES) {
+    for (const { type, kind } of ITEM_TYPES) {
       const names = ITEMS.filter((i) => i.type === type).map((i) => i.name);
-      expect(new Set(names).size).toBe(ITEMS_PER_TYPE);
+      expect(new Set(names).size, type).toBe(kind === "armor" ? 3 * ITEMS_PER_TYPE : ITEMS_PER_TYPE);
     }
   });
 

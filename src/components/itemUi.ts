@@ -1,5 +1,6 @@
 // Gemeinsame Darstellung von Items (Farben, Texte) für Ausrüstung und Belohnungs-Popup.
 
+import { getArmorClass } from "../domain/armorClasses";
 import { getItemType, getRarity } from "../domain/items";
 import { STAT_LABELS } from "../domain/rewards";
 import type { ItemDef, ItemStats, Rarity, StatKey, Stats } from "../domain/types";
@@ -35,7 +36,19 @@ export function itemName(stats: ItemStats): string {
 /** "Schwert", "Zweihandschwert · Zweihand", "Helm" … */
 export function typeText(def: ItemDef): string {
   const label = getItemType(def.type).label;
+  if (def.armorClass) return `${label} · ${getArmorClass(def.armorClass).label}`;
   return def.twoHanded ? `${label} · Zweihand` : label;
+}
+
+/** Ausgleich leichter und mittlerer Rüstung pro Teil: "+4 Mana · +0,6 % Krit" – leer bei schwerer. */
+export function armorClassPerkText(def: ItemDef): string {
+  if (!def.armorClass) return "";
+  const { manaPerPiece, critPerPiece } = getArmorClass(def.armorClass);
+  const parts = [
+    manaPerPiece > 0 && `+${manaPerPiece} Mana`,
+    critPerPiece > 0 && `+${(critPerPiece * 100).toLocaleString("de-CH")} % Krit`,
+  ].filter(Boolean);
+  return parts.join(" · ");
 }
 
 /** "+2 Stärke · +1 Charisma" – leer bei Items ohne Boni. */

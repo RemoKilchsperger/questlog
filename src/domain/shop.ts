@@ -5,7 +5,7 @@
 
 import { dateKey } from "./calendar";
 import { createItem, getItem, getRarity } from "./items";
-import { lootPool } from "./loot";
+import { lootPool, pickFromPool } from "./loot";
 import type { Gear, OwnedItem, Rarity } from "./types";
 
 export const SHOP_SIZE = 5;
@@ -37,17 +37,18 @@ export function rollShopStock(
   newUid: () => string,
   rng: () => number = Math.random,
 ): ShopStock {
-  const pool = [...lootPool(level)];
-  const count = Math.min(SHOP_SIZE, pool.length);
-  // Teilweises Fisher-Yates: die ersten `count` Plätze zufällig belegen.
-  for (let i = 0; i < count; i++) {
-    const j = i + Math.floor(rng() * (pool.length - i));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+  // Verschiedene Stücke, ausgewogen nach Typ (wie bei der Beute)
+  let pool = [...lootPool(level)];
+  const picked: typeof pool = [];
+  while (picked.length < SHOP_SIZE && pool.length > 0) {
+    const def = pickFromPool(pool, rng);
+    picked.push(def);
+    pool = pool.filter((i) => i.id !== def.id);
   }
   // Die Reihenfolge ist schon zufällig: Platz 0 wird selten, Platz 1 eventuell episch.
   const epic = rng() < SHOP_EPIC_CHANCE;
   const rarityAt = (i: number): Rarity => (i === 0 ? "rare" : i === 1 && epic ? "epic" : "common");
-  const offers = pool.slice(0, count).map((def, i) => createItem(def.id, rarityAt(i), newUid(), rng));
+  const offers = picked.map((def, i) => createItem(def.id, rarityAt(i), newUid(), rng));
   return { slot, offers };
 }
 

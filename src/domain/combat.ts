@@ -8,7 +8,7 @@
 //   3. Gift, Feuer und Bluten wirken, dann Gegenangriff der Kreatur (falls sie noch steht und nicht betäubt ist)
 //   4. Der Held regeneriert etwas Mana
 
-import { getCombatStats, getEffectiveStats } from "./equipment";
+import { getArmorClassSummary, getCombatStats, getEffectiveStats } from "./equipment";
 import {
   getCreatureGold,
   getCreatureLoot,
@@ -59,20 +59,22 @@ export function availableAbilities(character: Character, equipment: Equipment): 
  * - Intelligenz: +0.2 % kritische Trefferchance und +1 Mana pro Punkt
  * - Charisma:    +0.5 % Gold pro Sieg pro Punkt (max. +100 %)
  * Dazu kommt der Skilltree: +2 % Waffenschaden pro Rang im jeweiligen Waffentyp,
- * beim Schild +2 % Schild-Rüstung pro Rang.
+ * beim Schild +2 % Schild-Rüstung pro Rang – und der Ausgleich leichter und
+ * mittlerer Rüstung (mehr Mana und Krit, siehe armorClasses.ts).
  */
 export function getHeroCombatProfile(character: Character, equipment: Equipment): HeroCombatProfile {
   const level = getLevel(character.totalXp);
   const stats = getEffectiveStats(character.stats, equipment);
   const gear = getCombatStats(equipment);
+  const armorClasses = getArmorClassSummary(equipment);
   return {
     level,
     maxHp: Math.round((80 + (level - 1) * 12 + stats.endurance * 1.5) * getSetHpMultiplier(equipment)),
     damage: 5 + gear.attack + skillDamageBonus(character, equipment) + stats.strength * 0.25,
     armor: gear.armor + skillArmorBonus(character, equipment),
-    critChance: Math.min(0.3, 0.05 + stats.intellect * 0.002),
+    critChance: Math.min(0.3, 0.05 + stats.intellect * 0.002 + armorClasses.crit),
     goldBonus: Math.min(1, stats.charisma * 0.005),
-    maxMana: maxManaFor(level, stats.intellect),
+    maxMana: maxManaFor(level, stats.intellect) + armorClasses.mana,
     abilities: availableAbilities(character, equipment),
   };
 }

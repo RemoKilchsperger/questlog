@@ -81,7 +81,10 @@ export type WeaponType =
   | "greathammer"
   | "bow";
 
-/** Item-Typ: ein Rüstungsplatz oder eine Waffenart. Pro Typ gibt es 200 Items. */
+/** Rüstungsklasse: leicht (Stoff), mittel (Leder) oder schwer (Metall) – siehe armorClasses.ts. */
+export type ArmorClass = "light" | "medium" | "heavy";
+
+/** Item-Typ: ein Rüstungsplatz oder eine Waffenart. Pro Typ (und Rüstungsklasse) gibt es 200 Items. */
 export type ItemType = ArmorSlot | WeaponType;
 
 /** Item-Vorlage aus dem Katalog (src/domain/items.ts). */
@@ -96,6 +99,8 @@ export interface ItemDef {
   attack: number;
   /** Zweihandwaffen belegen beide Waffenhände. */
   twoHanded: boolean;
+  /** Nur Rüstungsteile: leicht, mittel oder schwer */
+  armorClass?: ArmorClass;
   price: number;
   requiredLevel: number;
   /** Einzigartiges Boss-Item: nur als Beute dieses Bosses erhältlich (nie beim Händler oder aus Quests). */

@@ -1,6 +1,7 @@
-import { getCombatStats, getStatBonuses, isOffHandBlocked, slotsFor } from "../domain/equipment";
+import { ARMOR_CLASSES } from "../domain/armorClasses";
+import { getArmorClassSummary, getCombatStats, getStatBonuses, isOffHandBlocked, slotsFor } from "../domain/equipment";
 import { getItemStats, SLOT_ICONS, SLOT_LABELS } from "../domain/items";
-import type { EquipSlot } from "../domain/types";
+import type { EquipSlot, Equipment } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { ActiveSets } from "./BossSetInfo";
 import { InventoryPanel } from "./InventoryPanel";
@@ -43,11 +44,34 @@ export function EquipmentScreen() {
           <div className="text-xs text-muted">Attributboni</div>
           <div className="text-xp">{bonuses || "–"}</div>
         </div>
+        <ArmorClassInfo equipment={equipment} />
         <ActiveSets equipment={equipment} />
         <p className="text-xs text-muted">Klicke auf ein angelegtes Teil, um es abzulegen.</p>
       </section>
 
       <Inventory />
+    </div>
+  );
+}
+
+/** Angelegte Rüstungsklassen und ihr Ausgleich (Grundlage für spätere Klassenboni). */
+function ArmorClassInfo({ equipment }: { equipment: Equipment }) {
+  const { pieces, mana, crit } = getArmorClassSummary(equipment);
+  const worn = ARMOR_CLASSES.filter((c) => pieces[c.key] > 0);
+  const perks = [mana > 0 && `+${mana} Mana`, crit > 0 && `+${(Math.round(crit * 1000) / 10).toLocaleString("de-CH")} % Krit`].filter(Boolean);
+  return (
+    <div className="rounded-md bg-night-800 p-2 text-center text-sm">
+      <div className="text-xs text-muted">Rüstungsklassen</div>
+      <div>
+        {worn.length === 0
+          ? "–"
+          : worn.map((c) => (
+              <span key={c.key} className="mx-1 whitespace-nowrap">
+                {c.icon} {pieces[c.key]}× {c.label}
+              </span>
+            ))}
+      </div>
+      {perks.length > 0 && <div className="text-xs text-intellect">{perks.join(" · ")}</div>}
     </div>
   );
 }

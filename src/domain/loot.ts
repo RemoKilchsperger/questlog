@@ -28,6 +28,21 @@ export function lootPool(level: number): ItemDef[] {
   return recent.length > 0 ? recent : usable;
 }
 
+/**
+ * Ein Item aus dem Pool, ausgewogen nach Typ: erst ein Typ (alle gleich
+ * wahrscheinlich), bei Rüstung dann eine Klasse, dann ein Item. Sonst kämen
+ * Rüstungsteile dreimal so oft wie Waffen, weil es sie in drei Klassen gibt.
+ */
+export function pickFromPool(pool: readonly ItemDef[], rng: () => number): ItemDef {
+  const types = [...new Set(pool.map((i) => i.type))];
+  const type = types[Math.floor(rng() * types.length)];
+  const ofType = pool.filter((i) => i.type === type);
+  const classes = [...new Set(ofType.map((i) => i.armorClass))];
+  const armorClass = classes[Math.floor(rng() * classes.length)];
+  const candidates = ofType.filter((i) => i.armorClass === armorClass);
+  return candidates[Math.floor(rng() * candidates.length)];
+}
+
 export function rollRarity(weights: Record<Rarity, number>, rng: () => number): Rarity {
   const total = RARITIES.reduce((sum, r) => sum + weights[r.key], 0);
   let roll = rng() * total;
@@ -47,8 +62,7 @@ export function rollDrop(
   rng: () => number = Math.random,
 ): Loot {
   if (rng() >= dropChance) return null;
-  const pool = lootPool(level);
-  const def = pool[Math.floor(rng() * pool.length)];
+  const def = pickFromPool(lootPool(level), rng);
   return createItem(def.id, rollRarity(weights, rng), uid, rng);
 }
 

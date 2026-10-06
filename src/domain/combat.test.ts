@@ -281,9 +281,11 @@ describe("Boss-Items", () => {
     expect(weaponTypes.size).toBe(ITEM_TYPES.filter((t) => t.kind === "weapon").length);
   });
 
-  it("Boss-Waffen übertreffen jedes Katalog-Item gleichen Typs und Levels deutlich", () => {
+  it("Boss-Items übertreffen jedes Katalog-Item gleichen Typs, Levels und gleicher Rüstungsklasse deutlich", () => {
     for (const item of BOSS_ITEMS) {
-      const peers = ITEMS.filter((i) => i.type === item.type && i.requiredLevel === item.requiredLevel);
+      const peers = ITEMS.filter(
+        (i) => i.type === item.type && i.requiredLevel === item.requiredLevel && i.armorClass === item.armorClass,
+      );
       const key = item.kind === "weapon" ? "attack" : "armor";
       const best = Math.max(...peers.map((i) => i[key]));
       expect(item[key], item.id).toBeGreaterThanOrEqual(Math.round(best * (key === "attack" ? 1.3 : 1.15)));

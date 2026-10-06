@@ -2,9 +2,10 @@
 // Alle Funktionen geben einen neuen Zustand zurück und werfen bei ungültigen
 // Aktionen einen Fehler – so können sie später 1:1 serverseitig laufen.
 
+import { ARMOR_CLASSES } from "./armorClasses";
 import { getSetGearMultiplier, getSetStatBonuses } from "./bossSets";
 import { getItem, getItemStats, sellPrice, WEAPON_SLOTS } from "./items";
-import type { CombatStats, EquipSlot, Equipment, Gear, ItemDef, OwnedItem, StatKey, Stats } from "./types";
+import type { ArmorClass, CombatStats, EquipSlot, Equipment, Gear, ItemDef, OwnedItem, StatKey, Stats } from "./types";
 
 export const EMPTY_EQUIPMENT: Equipment = {
   head: null,
@@ -114,6 +115,30 @@ export function getCombatStats(equipment: Equipment): CombatStats {
   }
   const factor = getSetGearMultiplier(equipment);
   return { armor: Math.round(armor * factor), attack: Math.round(attack * factor) };
+}
+
+/** Was die angelegten Rüstungsklassen bringen: Teile pro Klasse und der Ausgleich leichter Rüstung. */
+export interface ArmorClassSummary {
+  pieces: Record<ArmorClass, number>;
+  /** Zusätzliches Mana-Maximum */
+  mana: number;
+  /** Zusätzliche kritische Trefferchance (0.03 = +3 %) */
+  crit: number;
+}
+
+export function getArmorClassSummary(equipment: Equipment): ArmorClassSummary {
+  const pieces: Record<ArmorClass, number> = { light: 0, medium: 0, heavy: 0 };
+  for (const owned of Object.values(equipment)) {
+    const armorClass = owned && getItem(owned.itemId).armorClass;
+    if (armorClass) pieces[armorClass]++;
+  }
+  let mana = 0;
+  let crit = 0;
+  for (const info of ARMOR_CLASSES) {
+    mana += pieces[info.key] * info.manaPerPiece;
+    crit += pieces[info.key] * info.critPerPiece;
+  }
+  return { pieces, mana, crit };
 }
 
 /** Summe der Attributboni aller angelegten Items und aktiven Set-Boni. */

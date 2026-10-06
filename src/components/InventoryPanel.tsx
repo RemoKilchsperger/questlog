@@ -1,8 +1,9 @@
 import { AnimatePresence } from "motion/react";
 import { useState, type ReactNode } from "react";
+import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { getItemStats, ITEM_TYPES, RARITIES } from "../domain/items";
 import { getLevel } from "../domain/leveling";
-import type { ItemStats, ItemType, OwnedItem, Rarity } from "../domain/types";
+import type { ArmorClass, ItemStats, ItemType, OwnedItem, Rarity } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { ItemRow } from "./ItemRow";
 import { RARITY_TEXT } from "./itemUi";
@@ -29,12 +30,14 @@ export function InventoryPanel({
   const level = useGameStore((s) => getLevel(s.character.totalXp));
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [rarityFilter, setRarityFilter] = useState<Rarity | "all">("all");
+  const [classFilter, setClassFilter] = useState<ArmorClass | "all">("all");
 
   const entries = inventory.map((owned) => ({ owned, stats: getItemStats(owned) }));
   const visible = entries.filter(
     ({ stats }) =>
       (typeFilter === "all" || typeFilter === stats.def.kind || typeFilter === stats.def.type) &&
-      (rarityFilter === "all" || rarityFilter === stats.rarity),
+      (rarityFilter === "all" || rarityFilter === stats.rarity) &&
+      (classFilter === "all" || classFilter === stats.def.armorClass),
   );
 
   return (
@@ -73,6 +76,19 @@ export function InventoryPanel({
                 </option>
               ))}
             </optgroup>
+          </select>
+          <select
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value as ArmorClass | "all")}
+            aria-label="Nach Rüstungsklasse filtern"
+            className="rounded-md border-2 border-night-700 bg-night-950 px-2 py-1 text-sm outline-none focus:border-gold"
+          >
+            <option value="all">Alle Klassen</option>
+            {ARMOR_CLASSES.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.icon} {c.label}
+              </option>
+            ))}
           </select>
           <div className="flex flex-wrap gap-1" role="group" aria-label="Nach Seltenheit filtern">
             <FilterChip active={rarityFilter === "all"} onClick={() => setRarityFilter("all")}>

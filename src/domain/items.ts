@@ -1,5 +1,7 @@
+import { ARMOR_CLASSES, BOSS_ARMOR_CLASS, getArmorClass, METAL_PREFIXES } from "./armorClasses";
 import { MAX_LEVEL } from "./leveling";
 import type {
+  ArmorClass,
   ArmorSlot,
   EquipSlot,
   ItemDef,
@@ -34,7 +36,7 @@ export const SLOT_ICONS: Record<EquipSlot, string> = {
   weapon2: "🛡️",
 };
 
-/** Anzahl verschiedener Items pro Typ, verteilt über Level 1 bis MAX_LEVEL. */
+/** Anzahl verschiedener Items pro Typ (bei Rüstung: pro Typ und Klasse), verteilt über Level 1 bis MAX_LEVEL. */
 export const ITEMS_PER_TYPE = 200;
 
 export interface ItemTypeInfo {
@@ -42,7 +44,7 @@ export interface ItemTypeInfo {
   kind: "armor" | "weapon";
   label: string;
   icon: string;
-  /** Wortendungen für die Namen, z. B. "Eisen" + "helm". Werden reihum verwendet. */
+  /** Wortendungen für die Namen, z. B. "Eisen" + "helm". Werden reihum verwendet (Rüstung: die schwere Klasse). */
   nouns: readonly string[];
   /** Rüstung bzw. Angriff auf Level 1 – wächst mit dem Level. */
   baseArmor: number;
@@ -68,11 +70,11 @@ const weapon = (
  * Einhandwaffen, belegen dafür aber beide Hände.
  */
 export const ITEM_TYPES: readonly ItemTypeInfo[] = [
-  armor("head", "Helm", "🪖", ["helm", "haube"], 2),
-  armor("chest", "Brust", "🥋", ["harnisch", "panzer", "brünne"], 4),
-  armor("arms", "Armschutz", "🧤", ["armschienen", "handschuhe", "stulpen"], 1.5),
-  armor("legs", "Beine", "👖", ["beinschienen", "beinlinge"], 3),
-  armor("feet", "Schuhe", "🥾", ["stiefel", "schuhe"], 1.5),
+  armor("head", "Helm", "🪖", [...getArmorClass("heavy").nouns.head], 2),
+  armor("chest", "Brust", "🥋", [...getArmorClass("heavy").nouns.chest], 4),
+  armor("arms", "Armschutz", "🧤", [...getArmorClass("heavy").nouns.arms], 1.5),
+  armor("legs", "Beine", "👖", [...getArmorClass("heavy").nouns.legs], 3),
+  armor("feet", "Schuhe", "🥾", [...getArmorClass("heavy").nouns.feet], 1.5),
   weapon("dagger", "Dolch", "🔪", ["dolch", "stilett"], 2.5),
   weapon("sword", "Schwert", "🗡️", ["schwert", "klinge", "säbel"], 3),
   weapon("greatsword", "Zweihandschwert", "⚔️", ["zweihänder", "bihänder"], 6.5, true),
@@ -86,11 +88,8 @@ export const ITEM_TYPES: readonly ItemTypeInfo[] = [
   weapon("bow", "Bogen", "🏹", ["bogen", "langbogen", "kurzbogen"], 6.4, true),
 ];
 
-/** 20 Materialstufen für den Namensanfang – je eine pro 3 Level. */
-const NAME_PREFIXES = [
-  "Rost", "Kupfer", "Bronze", "Eisen", "Wolfs", "Stahl", "Silber", "Runen", "Schatten", "Mondsilber",
-  "Sturm", "Glut", "Frost", "Mithril", "Obsidian", "Adamant", "Drachen", "Sternen", "Phönix", "Götter",
-] as const;
+/** 20 Materialstufen für den Namensanfang – je eine pro 3 Level (Rüstung: je nach Klasse). */
+const NAME_PREFIXES = METAL_PREFIXES;
 
 /** 10 Beinamen – zusammen mit den Materialstufen ergibt das 200 Namen pro Typ. */
 const NAME_SUFFIXES = [
@@ -121,33 +120,44 @@ export interface ItemParts {
   suffix: number;
 }
 
-function partsForIndex(info: ItemTypeInfo, index: number): ItemParts {
+function partsForIndex(nouns: number, index: number): ItemParts {
   return {
     material: Math.floor(index / NAME_SUFFIXES.length),
-    noun: index % info.nouns.length,
+    noun: index % nouns,
     suffix: index % NAME_SUFFIXES.length,
   };
+}
+
+/** Namensformen eines Typs – bei Rüstung die der jeweiligen Klasse. */
+function nounsFor(info: ItemTypeInfo, armorClass?: ArmorClass): readonly string[] {
+  return info.kind === "armor" && armorClass ? getArmorClass(armorClass).nouns[info.type as ArmorSlot] : info.nouns;
 }
 
 /** Woraus ein Item besteht – Grundlage für seine Grafik (z. B. Kupfer- vs. Eisenbeinschienen). */
 export function getItemParts(def: ItemDef): ItemParts {
   if (def.bossId) throw new Error(`${def.name} ist ein Boss-Item und hat kein Material.`);
-  const index = Number(def.id.slice(def.type.length + 1));
-  return partsForIndex(getItemType(def.type), index);
+  // IDs: "chest-12" (schwer bzw. Waffe), "chest-light-12", "chest-medium-12"
+  const index = Number(def.id.slice(def.id.lastIndexOf("-") + 1));
+  return partsForIndex(nounsFor(getItemType(def.type), def.armorClass).length, index);
 }
 
-function buildItem(info: ItemTypeInfo, index: number): ItemDef {
+function buildItem(info: ItemTypeInfo, index: number, armorClass?: ArmorClass): ItemDef {
   const requiredLevel = levelForIndex(index);
-  const factor = levelScale(requiredLevel) * variance(index);
+  const classInfo = armorClass ? getArmorClass(armorClass) : null;
+  const factor = levelScale(requiredLevel) * variance(index) * (classInfo?.armorFactor ?? 1);
   const scaled = (base: number) => (base > 0 ? Math.max(1, Math.round(base * factor)) : 0);
   const armorValue = scaled(info.baseArmor);
   const attack = scaled(info.baseAttack);
-  const parts = partsForIndex(info, index);
+  const nouns = nounsFor(info, armorClass);
+  const parts = partsForIndex(nouns.length, index);
+  const prefixes = classInfo?.prefixes ?? NAME_PREFIXES;
   return {
-    id: `${info.type}-${index}`,
+    // Schwere Rüstung behält die bisherigen IDs – gespeicherte Spielstände bleiben gültig.
+    id: armorClass && armorClass !== "heavy" ? `${info.type}-${armorClass}-${index}` : `${info.type}-${index}`,
     kind: info.kind,
     type: info.type,
-    name: `${NAME_PREFIXES[parts.material]}${info.nouns[parts.noun]} ${NAME_SUFFIXES[parts.suffix]}`,
+    ...(armorClass && { armorClass }),
+    name: `${prefixes[parts.material]}${nouns[parts.noun]} ${NAME_SUFFIXES[parts.suffix]}`,
     icon: info.icon,
     armor: armorValue,
     attack,
@@ -157,9 +167,11 @@ function buildItem(info: ItemTypeInfo, index: number): ItemDef {
   };
 }
 
-/** Gesamter Katalog: 16 Typen × 200 Items, sortiert nach Level. */
+/** Gesamter Katalog: 11 Waffentypen × 200 und 5 Rüstungsplätze × 3 Klassen × 200 Items, sortiert nach Level. */
 export const ITEMS: readonly ItemDef[] = ITEM_TYPES.flatMap((info) =>
-  Array.from({ length: ITEMS_PER_TYPE }, (_, i) => buildItem(info, i)),
+  (info.kind === "armor" ? ARMOR_CLASSES.map((c) => c.key) : [undefined]).flatMap((armorClass) =>
+    Array.from({ length: ITEMS_PER_TYPE }, (_, i) => buildItem(info, i, armorClass)),
+  ),
 ).sort((a, b) => a.requiredLevel - b.requiredLevel);
 
 interface BossItemSpec {
@@ -299,7 +311,9 @@ export const RAID_ARMOR_FACTOR = 1.4;
 
 function buildBossItem(spec: BossItemSpec): ItemDef {
   const info = getItemType(spec.type);
-  const peers = ITEMS.filter((i) => i.type === spec.type && i.requiredLevel === spec.level);
+  // Boss-Rüstung hat die Klasse ihres Sets und wird mit Teilen derselben Klasse verglichen
+  const armorClass = info.kind === "armor" ? (BOSS_ARMOR_CLASS[spec.bossId] ?? "heavy") : undefined;
+  const peers = ITEMS.filter((i) => i.type === spec.type && i.requiredLevel === spec.level && i.armorClass === armorClass);
   const best = (key: "attack" | "armor") => Math.max(...peers.map((i) => i[key]));
   const weaponFactor = spec.raid ? RAID_WEAPON_FACTOR : spec.dungeon ? DUNGEON_WEAPON_FACTOR : BOSS_WEAPON_FACTOR;
   const armorFactor = spec.raid ? RAID_ARMOR_FACTOR : spec.dungeon ? DUNGEON_ARMOR_FACTOR : BOSS_ARMOR_FACTOR;
@@ -309,6 +323,7 @@ function buildBossItem(spec: BossItemSpec): ItemDef {
     id: `boss-${spec.bossId}-${spec.type}`,
     kind: info.kind,
     type: spec.type,
+    ...(armorClass && { armorClass }),
     name: spec.name,
     icon: info.icon,
     armor: armorValue,

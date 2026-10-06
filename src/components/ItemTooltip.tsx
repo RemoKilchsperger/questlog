@@ -7,7 +7,7 @@ import type { ItemStats } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { BossSetInfo } from "./BossSetInfo";
 import { ItemIcon } from "./ItemIcon";
-import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
+import { armorClassPerkText, bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 const CARD_WIDTH = 232;
 const GAP = 8;
@@ -91,6 +91,7 @@ function TooltipCard({ stats, hint, anchor }: { stats: ItemStats; hint?: string;
       </p>
       <p className={`num text-base ${stats.attack > 0 ? "text-strength" : "text-intellect"}`}>{mainStatText(stats)}</p>
       {bonuses && <p className="text-sm text-xp">{bonuses}</p>}
+      {armorClassPerkText(def) && <p className="text-xs text-intellect">{armorClassPerkText(def)} (Rüstungsklasse)</p>}
       {def.bossId && (
         <>
           <p className="text-xs text-legendary">👑 Einzigartig – {isCoopBoss(def.bossId) ? "Raid-Beute" : "Beute"} von {bossName(def.bossId)}</p>

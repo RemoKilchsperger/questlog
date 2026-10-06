@@ -10,7 +10,7 @@
 //   k/w    dunkle Details / Weiss (siehe SHARED_PALETTE)
 
 import { getItemParts } from "../domain/items";
-import type { ItemDef, ItemType, WeaponType } from "../domain/types";
+import type { ArmorSlot, ItemDef, ItemType, WeaponType } from "../domain/types";
 import type { SpriteDef } from "./sprites";
 
 /** Farben pro Materialstufe [hell, mittel, dunkel, Zierde] – Reihenfolge wie die Namensanfänge. */
@@ -45,10 +45,74 @@ const GEMS = [
 
 const HANDLE = { h: "#8a5a2b", H: "#5c3a1c", G: "#8a5a2b" };
 
+/** Mischt eine Farbe mit Weiss (amount > 0) oder Schwarz (amount < 0). */
+function shade(hex: string, amount: number): string {
+  const target = amount > 0 ? 255 : 0;
+  const a = Math.abs(amount);
+  return `#${[1, 3, 5]
+    .map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - a) + target * a).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/**
+ * Stoff- und Lederfarben pro Materialstufe [Grundfarbe, Zierde] – Reihenfolge
+ * wie die Namensanfänge in armorClasses.ts. Hell und Dunkel werden abgeleitet.
+ */
+const CLASS_COLORS: Record<"light" | "medium", readonly (readonly [string, string])[]> = {
+  light: [
+    ["#d8cfb8", "#8a5a2b"], // Leinen
+    ["#b8a88a", "#6b4a2b"], // Woll
+    ["#ece6d8", "#5b7bd5"], // Baumwoll
+    ["#8a7a6a", "#c9a06a"], // Filz
+    ["#8a2a4a", "#f4c95d"], // Samt
+    ["#e0d0f0", "#b07cff"], // Seiden
+    ["#c8d4f0", "#fff1a8"], // Mondseiden
+    ["#4a6aa8", "#6ff2ff"], // Runen
+    ["#3a2a4a", "#b07cff"], // Schatten
+    ["#2a3a7a", "#ffe66b"], // Sternen
+    ["#4a7ac0", "#ffe66b"], // Sturm
+    ["#c04a2a", "#ffd27a"], // Glut
+    ["#9ad9f0", "#ffffff"], // Frost
+    ["#f0a8d8", "#fff1a8"], // Feen
+    ["#6ab07a", "#f4c95d"], // Elfen
+    ["#a8b0c0", "#e8e1d4"], // Nebel
+    ["#a82a2a", "#f4c95d"], // Drachen
+    ["#7ac0f0", "#ffffff"], // Himmels
+    ["#f08a2c", "#ff5a3c"], // Phönix
+    ["#fff1c8", "#f4c95d"], // Götter
+  ],
+  medium: [
+    ["#8a6a4a", "#c9a06a"], // Rohleder
+    ["#a07a52", "#d0d4db"], // Wildleder
+    ["#b08a5a", "#c9a06a"], // Hirschleder
+    ["#7a7068", "#e8e1d4"], // Wolfsleder
+    ["#5a3a28", "#c9a06a"], // Bärenleder
+    ["#5f8f45", "#d0d4db"], // Echsenleder
+    ["#3a3040", "#b07cff"], // Schattenleder
+    ["#4a5a7a", "#6ff2ff"], // Runenleder
+    ["#2a2a3a", "#d0d4db"], // Nachtleder
+    ["#3a5a8a", "#ffe66b"], // Sturmleder
+    ["#8a3a1e", "#ffd27a"], // Glutleder
+    ["#6a9ab0", "#ffffff"], // Frostleder
+    ["#4a7a5a", "#c9a06a"], // Wyvernleder
+    ["#b08a3a", "#f4c95d"], // Greifenleder
+    ["#a04a3a", "#d0d4db"], // Mantikorleder
+    ["#6a8a3a", "#f4c95d"], // Basiliskenleder
+    ["#8a2020", "#f4c95d"], // Drachenleder
+    ["#2a2a6a", "#fff6c2"], // Sternenleder
+    ["#c0602a", "#ff5a3c"], // Phönixleder
+    ["#8a8a9a", "#fff1a8"], // Titanenleder
+  ],
+};
+
 /** Farben eines Items: Material (L/m/D/t), Edelstein (j) und Griff (h/H/G). */
 export function itemPalette(def: ItemDef): Record<string, string> {
   if (def.bossId) return BOSS_LOOKS[def.id].palette;
   const { material, suffix } = getItemParts(def);
+  if (def.armorClass === "light" || def.armorClass === "medium") {
+    const [m, t] = CLASS_COLORS[def.armorClass][material];
+    return { L: shade(m, 0.35), m, D: shade(m, -0.45), t, j: GEMS[suffix], ...HANDLE };
+  }
   const [L, m, D, t] = MATERIALS[material];
   return { L, m, D, t, j: GEMS[suffix], ...HANDLE };
 }
@@ -1741,6 +1805,273 @@ Object.assign(BOSS_LOOKS, RAID_LOOKS);
 /** Kleinste Kantenlänge eines Symbols – kleine Items (Dolch, Schuhe) wirken dadurch auch kleiner. */
 const ICON_SIZE = 12;
 
+/** Symbole leichter (Stoff) und mittlerer (Leder) Rüstung – eine Form pro Namensform (armorClasses.ts). */
+const CLASS_ICONS: Record<"light" | "medium", Record<ArmorSlot, readonly IconShape[]>> = {
+  light: {
+    head: [
+      { grid: [ // Kapuze
+        "............",
+        "....LmmD....",
+        "...LmmmmD...",
+        "..LmmmmmmD..",
+        "..LmkkkkmD..",
+        "..LkkkkkkD..",
+        "..LkkkkkkD..",
+        "..LmkkkkmD..",
+        "..LmmmmmmD..",
+        "...DttttD...",
+        "....tjjt....",
+        "............",
+      ] },
+      { grid: [ // Spitzhut
+        ".....j......",
+        ".....Lm.....",
+        "....LmD.....",
+        "....LmmD....",
+        "...LmmmD....",
+        "...LmmmmD...",
+        "..LmmmmmD...",
+        "..LmmmmmmD..",
+        ".tttttttttt.",
+        "LmmmmmmmmmmD",
+        ".DDDDDDDDDD.",
+        "............",
+      ] },
+    ],
+    chest: [
+      { grid: [ // Robe
+        "...LmmmmD...",
+        "..LmmttmmD..",
+        ".LmmmtjmmmD.",
+        ".LmmmmmmmmD.",
+        "..LmmmmmmD..",
+        "..LmmttmmD..",
+        "..LmmmmmmD..",
+        ".LmmmmmmmmD.",
+        ".LmmmmmmmmD.",
+        "LmmmmmmmmmmD",
+        "LDDDDDDDDDDD",
+        "............",
+      ] },
+      { grid: [ // Gewand
+        "..LmD..LmD..",
+        ".LmmmmmmmmD.",
+        ".LmmmjjmmmD.",
+        ".LmmmmmmmmD.",
+        "..LmmmmmmD..",
+        "..tttttttt..",
+        "..LmmmmmmD..",
+        "..LmmmmmmD..",
+        "..LmmmmmmD..",
+        "..DDDDDDDD..",
+        "............",
+        "............",
+      ] },
+    ],
+    arms: [
+      { grid: [ // Armbinden
+        "............",
+        "..tt....tt..",
+        ".LmmD..LmmD.",
+        ".LmjD..LmjD.",
+        ".LmmD..LmmD.",
+        "..tt....tt..",
+        ".LmmD..LmmD.",
+        "..DD....DD..",
+        "............",
+      ] },
+      { grid: [ // Ärmel
+        "............",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        ".LmmD..LmmD.",
+        "LmmmD.LmmmD.",
+        "tttt..tttt..",
+        "............",
+      ] },
+    ],
+    legs: [
+      { grid: [ // Hose
+        "..tttttttt..",
+        "..LmmmmmmD..",
+        "..LmmmmmmD..",
+        "..LmmD.LmD..",
+        "..LmmD.LmD..",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        "..DDD..DDD..",
+        "............",
+      ] },
+      { grid: [ // Beinkleider
+        "..tttttttt..",
+        ".LmmmmmmmmD.",
+        ".LmmmjjmmmD.",
+        ".LmmmD.LmmD.",
+        ".LmmmD.LmmD.",
+        ".LmmD..LmmD.",
+        "..tt....tt..",
+        "............",
+      ] },
+    ],
+    feet: [
+      { grid: [ // Sandalen
+        "............",
+        "..t.t..t.t..",
+        "..tmt..tmt..",
+        "..t.t..t.t..",
+        ".LmmD.LmmD..",
+        "DDDD.DDDD...",
+        "............",
+      ] },
+      { grid: [ // Pantoffeln
+        "............",
+        "............",
+        "..LmmD.LmmD.",
+        ".LmjmDLmjmD.",
+        "LmmmDLmmmD..",
+        "DDDD.DDDD...",
+        "............",
+      ] },
+    ],
+  },
+  medium: {
+    head: [
+      { grid: [ // Lederkappe
+        "............",
+        "............",
+        "....LmmD....",
+        "...LmmmmD...",
+        "..LmmmmmmD..",
+        "..LmmmmmmD..",
+        "..tmtmmtmt..",
+        "..LmD..LmD..",
+        "..D......D..",
+        "............",
+      ] },
+      { grid: [ // Haube mit Ohrenschutz
+        "............",
+        "....LmmD....",
+        "...LmmmmD...",
+        "..LmmmmmmD..",
+        "..LmmjjmmD..",
+        "..tttttttt..",
+        "..Lm....mD..",
+        "..Lm....mD..",
+        "..DD....DD..",
+        "............",
+      ] },
+    ],
+    chest: [
+      { grid: [ // Wams
+        "..LmD..LmD..",
+        ".LmmmmmmmmD.",
+        ".LmtmmmmtmD.",
+        ".LmmmmmmmmD.",
+        "..LmtmmtmD..",
+        "..LmmmmmmD..",
+        "..tttjtttt..",
+        "..LmmmmmmD..",
+        "..DDDDDDDD..",
+        "............",
+      ] },
+      { grid: [ // Weste mit Schnürung
+        "...LD..LD...",
+        "..LmD..LmD..",
+        "..LmmtkmmD..",
+        "..LmmkkmmD..",
+        "..LmmtkmmD..",
+        "..LmmkkmmD..",
+        "..LmmtkmmD..",
+        "..tttttttt..",
+        "..DDDDDDDD..",
+        "............",
+      ] },
+    ],
+    arms: [
+      { grid: [ // Lederhandschuhe
+        "............",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        ".LmmD..LmmD.",
+        ".LmmD..LmmD.",
+        ".tttD..tttD.",
+        ".LmmD..LmmD.",
+        "..DD....DD..",
+        "............",
+      ] },
+      { grid: [ // Armschienen mit Riemen
+        "............",
+        ".LmmD..LmmD.",
+        ".tttt..tttt.",
+        ".LmmD..LmmD.",
+        ".tttt..tttt.",
+        ".LmmD..LmmD.",
+        "..DD....DD..",
+        "............",
+      ] },
+    ],
+    legs: [
+      { grid: [ // Lederhose
+        "..tttjtttt..",
+        "..LmmmmmmD..",
+        "..LmmD.LmD..",
+        "..LmmD.LmD..",
+        "..LtmD.LtD..",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        "..DDD..DDD..",
+        "............",
+      ] },
+      { grid: [ // Beinlinge mit Kniestück
+        "..tttttttt..",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        "..ttt..ttt..",
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        "..DDD..DDD..",
+        "............",
+      ] },
+    ],
+    feet: [
+      { grid: [ // Stiefel
+        "..LmD..LmD..",
+        "..LmD..LmD..",
+        "..tmD..tmD..",
+        "..LmD..LmD..",
+        ".LmmD.LmmD..",
+        "LmmmDLmmmD..",
+        "DDDD.DDDD...",
+        "............",
+      ] },
+      { grid: [ // Schnürschuhe
+        "............",
+        "............",
+        "..LkD..LkD..",
+        "..LmD..LmD..",
+        ".LkmD.LkmD..",
+        "LmmmDLmmmD..",
+        "DDDD.DDDD...",
+        "............",
+      ] },
+    ],
+  },
+};
+
+/** Kopfbedeckungen leichter und mittlerer Rüstung am Helden (wie WORN_HELMETS). */
+const CLASS_WORN_HEADS: Record<"light" | "medium", readonly (readonly string[])[]> = {
+  light: [
+    ["............", "....LmmD....", "...LmmmmD...", "..LmmmmmmD..", "..Lm....mD..", "..Lm....mD.."], // Kapuze
+    ["....Lm......", "...LmmD.....", "..LmmmmD....", ".tttttttttt.", "LmmmmmmmmmmD"], // Spitzhut
+  ],
+  medium: [
+    ["............", "............", "...LmmmmD...", "..LmmmmmmD..", "..tmtmmtmt.."], // Lederkappe
+    ["............", "....LmmD....", "...LmmmmD...", "..LmmjjmmD..", "..tttttttt..", "..Lm....mD.."], // Haube
+  ],
+};
+
 /**
  * Kippt eine aufrecht gezeichnete Waffe um 45°, Spitze nach rechts oben.
  * Jede Zeile wandert einen Pixel nach links unten; seitliche Pixel werden
@@ -1785,8 +2116,13 @@ const ITEM_SPRITES = new Map<string, SpriteDef>();
 export function getItemSprite(def: ItemDef): SpriteDef {
   let sprite = ITEM_SPRITES.get(def.id);
   if (!sprite) {
-    const shape = def.bossId ? BOSS_LOOKS[def.id].icon : ICONS[def.type][getItemParts(def).noun];
-    const key = def.bossId ? def.id : `${def.type}-${getItemParts(def).noun}`;
+    const cls = def.armorClass === "light" || def.armorClass === "medium" ? def.armorClass : null;
+    const shape = def.bossId
+      ? BOSS_LOOKS[def.id].icon
+      : cls
+        ? CLASS_ICONS[cls][def.type as ArmorSlot][getItemParts(def).noun]
+        : ICONS[def.type][getItemParts(def).noun];
+    const key = def.bossId ? def.id : `${def.type}-${cls ?? "heavy"}-${getItemParts(def).noun}`;
     let grid = ICON_GRIDS.get(key);
     if (!grid) {
       grid = shapeGrid(shape);
@@ -1867,6 +2203,11 @@ export function getWornWeapon(def: ItemDef, mirrored = false): WornSprite {
 }
 
 export function getWornHelmet(def: ItemDef): SpriteDef {
-  const grid = def.bossId ? (BOSS_LOOKS[def.id].worn ?? WORN_HELMETS[0]) : WORN_HELMETS[getItemParts(def).noun];
+  const cls = def.armorClass === "light" || def.armorClass === "medium" ? def.armorClass : null;
+  const grid = def.bossId
+    ? (BOSS_LOOKS[def.id].worn ?? WORN_HELMETS[0])
+    : cls
+      ? CLASS_WORN_HEADS[cls][getItemParts(def).noun]
+      : WORN_HELMETS[getItemParts(def).noun];
   return { grid, palette: itemPalette(def) };
 }
