@@ -3,7 +3,7 @@
 Mehrere Spieler kämpfen gemeinsam gegen einen Koop-Boss. Pro Runde handeln
 zuerst alle Spieler, danach greift der Boss an.
 
-Status: **Etappe 1 live, Etappe 2 umgesetzt** (Branch `feature/koop-etappe-2`).
+Status: **Etappe 1 und 2 live.** Als Nächstes: Etappe 3.
 Zahlen sind Startwerte und werden beim Testen abgestimmt.
 
 ---
@@ -225,7 +225,7 @@ nur im Testmodus.
 - [x] Edge Function `coop`, Heldenprofil aus dem Cloud-Spielstand
 - [x] Zeitlimit serverseitig, Wiederverbinden nach Abbruch („Zurückkehren“ im Kampf-Tab)
 - [x] Host-Modell entfernt: Verlässt der Host den Kampf, kämpfen die anderen weiter
-- [ ] In Supabase einrichten (siehe unten) und mit zwei Konten testen
+- [x] In Supabase einrichten (siehe unten) und mit zwei Konten testen
 
 **Umsetzung:**
 - `src/coop/server.ts`: Befehle auf einen Kampf-Datensatz anwenden. Rein und getestet.
