@@ -3,7 +3,7 @@
 Mehrere Spieler kämpfen gemeinsam gegen einen Koop-Boss. Pro Runde handeln
 zuerst alle Spieler, danach greift der Boss an.
 
-Status: **Etappe 1 und 2 live, Etappe 3 umgesetzt** (Branch `feature/koop-etappe-3`).
+Status: **Etappe 1 bis 3 live.** Offen: Feinabstimmung der Zahlen nach Testspielen.
 Zahlen sind Startwerte und werden beim Testen abgestimmt.
 
 ---
@@ -252,7 +252,7 @@ Gegenüber dem Plan: Statt drei Functions gibt es eine (`coop`) mit Befehlen
 - [x] Raid-Sets als Koop-Beute: je 7 Teile pro Koop-Boss, Werte ×1,55 (Waffen) bzw. ×1,4 (Rüstung),
       Set-Boni wie bei Dungeons; jeder Waffentyp hat weiterhin 2–3 Boss-Waffen
 - [x] Koop-Erfolge im Profil (Siege, besiegte Koop-Bosse) – im Charakterbogen und auf der Profilseite
-- [ ] Edge Function neu deployen (`npm run functions:deploy`), dann mit zwei Konten testen
+- [x] Edge Function neu deployen (`npm run functions:deploy`), dann mit zwei Konten testen
 - [ ] Feinabstimmung der Zahlen nach Testspielen („fordernd“: mit Teamwork gut machbar)
 
 ---
