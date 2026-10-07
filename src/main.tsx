@@ -8,6 +8,9 @@ import "./index.css";
 // damit die Kampfmusik gleich beim Kampfbeginn spielen kann.
 window.addEventListener("pointerdown", unlockAudio, { once: true });
 
+// Nur im Dev-Server: Testhelden per Adresse (?dev=testheld, ?dev=zurueck) – siehe src/dev/testHero.ts
+if (import.meta.env.DEV) void import("./dev/testHero").then((m) => m.runDevCommand());
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
