@@ -133,7 +133,7 @@ export type BattleEvent =
   /** Der betäubte Gegner setzt diese Runde aus */
   | { type: "stunned" }
   /** Der Boss setzt seine Fähigkeit ein – die Treffer folgen als "hit" */
-  | { type: "bossAbility"; bossId: string }
+  | { type: "bossAbility"; bossId: string; abilityId: string }
   /** Bollwerk hat den Angriff des Gegners komplett geblockt */
   | { type: "blocked" }
   /** Der Gegner heilt sich (Lebensentzug) */
@@ -500,7 +500,7 @@ export function attackRound(
     events.push({ type: "stunned" });
   } else {
     const special = bossAbilityDue(state.creatureId, state.round);
-    if (special) events.push({ type: "bossAbility", bossId: special.bossId });
+    if (special) events.push({ type: "bossAbility", bossId: special.bossId, abilityId: special.id });
     if (heroEffects.bulwark) {
       // Bollwerk blockt den ganzen Angriff samt Zusatzeffekten.
       events.push({ type: "blocked" });

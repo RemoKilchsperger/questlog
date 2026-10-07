@@ -10,7 +10,9 @@ import { getHeroCombatProfile } from "../domain/combat";
 import {
   COOP_MAX_PLAYERS,
   COOP_MIN_PLAYERS,
-  getCoopBoss,
+  coopContent,
+  hasNextStage,
+  nextDungeonStage,
   resolveRound,
   startCoopBattle,
 } from "../domain/coopCombat";
@@ -97,6 +99,10 @@ export function applyCommand(row: CoopRow | null, command: CoopCommand, ctx: Ser
       return act(row, command.round, command.action, ctx);
     case "tick":
       return tick(row, ctx);
+    case "next":
+      return nextStage(row, ctx);
+    case "exit":
+      return exitDungeon(row, ctx);
   }
 }
 
@@ -105,10 +111,15 @@ function touch(row: CoopRow, changes: Partial<CoopRow>, ctx: ServerContext): Coo
 }
 
 function create(bossId: string, ctx: ServerContext): CoopRow {
-  getCoopBoss(bossId); // wirft bei unbekanntem Boss
+  let content: ReturnType<typeof coopContent>;
+  try {
+    content = coopContent(bossId);
+  } catch {
+    throw new CoopError("Unbekannter Koop-Inhalt.");
+  }
   if (!ctx.member) throw new CoopError("Kein Cloud-Spielstand gefunden.");
-  if (ctx.member.level < getCoopBoss(bossId).level) {
-    throw new CoopError(`${getCoopBoss(bossId).name} ist erst ab Level ${getCoopBoss(bossId).level} zugänglich.`);
+  if (ctx.member.level < content.level) {
+    throw new CoopError(`${content.name} ist erst ab Level ${content.level} zugänglich.`);
   }
   return {
     id: ctx.newId(),
@@ -216,14 +227,45 @@ function maybeResolve(row: CoopRow, ctx: ServerContext): CoopRow {
 
 function resolve(row: CoopRow, ctx: ServerContext): CoopRow {
   const result = resolveRound(row.state!, row.actions, ctx.rng, ctx.now);
+  // Im Dungeon geht es nach einem Sieg weiter, solange noch Gegner warten – der Host entscheidet.
+  const goesOn = result.state.status === "active" || hasNextStage(result.state);
   return touch(
     row,
     {
       state: result.state,
       last_events: result.events,
       actions: {},
-      phase: result.state.status === "active" ? "battle" : "finished",
+      phase: goesOn ? "battle" : "finished",
     },
     ctx,
   );
+}
+
+/* ───────────── Dungeons: weiter oder aussteigen ───────────── */
+
+/** Wer zwischen zwei Dungeon-Kämpfen entscheidet: der Host – hat er den Kampf verlassen, der nächste Anwesende. */
+export function dungeonDecider(row: CoopRow): string | null {
+  const present = row.members.filter((m) => !m.left);
+  return present.find((m) => m.id === row.host_id)?.id ?? present[0]?.id ?? null;
+}
+
+/** Steht der Dungeon gerade zwischen zwei Kämpfen? */
+function betweenFights(row: CoopRow): boolean {
+  return row.phase === "battle" && row.state !== null && hasNextStage(row.state);
+}
+
+function assertDecider(row: CoopRow, ctx: ServerContext) {
+  if (dungeonDecider(row) !== ctx.userId) throw new CoopError("Das entscheidet der Host.");
+}
+
+function nextStage(row: CoopRow, ctx: ServerContext): CoopRow {
+  if (!betweenFights(row)) return row; // schon weiter – doppelter Klick
+  assertDecider(row, ctx);
+  return touch(row, { state: nextDungeonStage(row.state!, ctx.newId(), ctx.now), actions: {}, last_events: [] }, ctx);
+}
+
+function exitDungeon(row: CoopRow, ctx: ServerContext): CoopRow {
+  if (!betweenFights(row)) return row;
+  assertDecider(row, ctx);
+  return touch(row, { phase: "finished", actions: {}, last_events: [] }, ctx);
 }

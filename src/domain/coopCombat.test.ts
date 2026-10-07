@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { HeroCombatProfile } from "./combat";
 import {
   BOSS,
+  clearedStages,
+  coopAbilityDue,
+  COOP_COST,
+  coopCost,
+  DUNGEON_REVIVE_HP,
+  dungeonCompleted,
+  getCoopEnemy,
+  hasNextStage,
+  isCoopDungeon,
+  nextDungeonStage,
+  rollCoopDungeonChest,
   COOP_BOSSES,
   COOP_TURN_SECONDS,
   coopBossStats,
@@ -13,7 +24,7 @@ import {
   type CoopBattleState,
   type CoopPlayer,
 } from "./coopCombat";
-import { getCreatureXp } from "./creatures";
+import { getCreatureStats, getCreatureXp, getDungeon } from "./creatures";
 import { getCreatureSprite } from "../game/creatureSprites";
 import { hasBackground } from "../game/backgrounds";
 
@@ -227,5 +238,139 @@ describe("Koop-Kampf: Frostriese und Weltenverschlinger", () => {
     expect(drain).toBeDefined();
     const bossHit = bite.events.find((e) => e.type === "hit" && e.attacker === BOSS);
     expect(drain!.type === "drain" && bossHit!.type === "hit" && drain!.heal).toBe(Math.round((bossHit as { damage: number }).damage * 0.5));
+  });
+});
+
+describe("Koop-Dungeons", () => {
+  const MINE = "abandoned-mine";
+  const startMine = (players: CoopPlayer[] = [player("a"), player("b")]) => startCoopBattle("k1", MINE, players, 0);
+  /** Den aktuellen Gegner sofort besiegen (eine Runde mit 1 LP). */
+  const win = (state: CoopBattleState) => resolveRound({ ...state, boss: { ...state.boss, hp: 1 } }, {}, rng(0.5), 0).state;
+
+  it("beginnt beim ersten Gegner des Dungeons – Lebenspunkte × n (+10 %), Schaden +40 % pro Spieler über einem", () => {
+    const duo = startMine();
+    const { creatures } = getDungeon(MINE);
+    expect(duo.bossId).toBe(creatures[0].id);
+    expect(duo.dungeon).toEqual({ id: MINE, stage: 0, runId: "k1" });
+    const base = getCreatureStats(creatures[0]);
+    expect(duo.boss.maxHp).toBe(Math.round(base.maxHp * 2 * 1.1));
+    expect(duo.boss.damage).toBeCloseTo(base.damage * 1.4);
+    const four = startMine([player("a"), player("b"), player("c"), player("d")]);
+    expect(four.boss.maxHp).toBe(Math.round(base.maxHp * 4 * 1.3));
+    expect(four.boss.damage).toBeCloseTo(base.damage * 2.2);
+  });
+
+  it("Kosten wie solo: ein Kampfpunkt pro Kampf; Raid-Bosse pauschal", () => {
+    expect(coopCost(MINE)).toBe(getDungeon(MINE).creatures.length);
+    expect(coopCost(HYDRA)).toBe(COOP_COST);
+    expect(isCoopDungeon(MINE)).toBe(true);
+    expect(isCoopDungeon(HYDRA)).toBe(false);
+  });
+
+  it("nach einem Sieg wartet der nächste Gegner – LP bleiben, Gefallene stehen mit 25 % auf, Mana ist voll", () => {
+    let state = startMine();
+    state = {
+      ...state,
+      heroes: [
+        { ...state.heroes[0], combatant: { ...state.heroes[0].combatant, hp: 123 }, mana: 3, potionsUsed: ["small"], threat: 50 },
+        { ...state.heroes[1], combatant: { ...state.heroes[1].combatant, hp: 0 }, down: true, revived: true },
+      ],
+    };
+    const won = win(state);
+    expect(won.status).toBe("won");
+    expect(hasNextStage(won)).toBe(true);
+    expect(clearedStages(won)).toBe(1);
+
+    const next = nextDungeonStage(won, "k2", 5000);
+    expect(next.id).toBe("k2");
+    expect(next.bossId).toBe(getDungeon(MINE).creatures[1].id);
+    expect(next.dungeon).toEqual({ id: MINE, stage: 1, runId: "k1" });
+    expect(next.status).toBe("active");
+    expect(next.round).toBe(1);
+    expect(next.log).toEqual([]);
+    const [a, b] = next.heroes;
+    expect(a.combatant.hp).toBe(123);
+    expect(a.mana).toBe(a.maxMana);
+    expect(a.potionsUsed).toEqual([]);
+    expect(a.threat).toBe(0);
+    expect(b.down).toBe(false);
+    expect(b.revived).toBe(false);
+    expect(b.combatant.hp).toBe(Math.round(b.combatant.maxHp * DUNGEON_REVIVE_HP));
+  });
+
+  it("nach dem Endboss ist der Dungeon geschafft – kein weiterer Kampf", () => {
+    let state = startMine();
+    const total = getDungeon(MINE).creatures.length;
+    for (let i = 0; i < total - 1; i++) state = nextDungeonStage(win(state), `k${i + 2}`, 0);
+    const done = win(state);
+    expect(done.bossId).toBe("ore-king");
+    expect(hasNextStage(done)).toBe(false);
+    expect(dungeonCompleted(done)).toBe(true);
+    expect(() => nextDungeonStage(done, "x", 0)).toThrow();
+  });
+
+  it("die Truhe enthält die Beute aller gewonnenen Kämpfe – und ist beim Neuwürfeln gleich", () => {
+    const won = win(startMine());
+    const chest = rollCoopDungeonChest(won, profile(), "a");
+    expect(chest.xp).toBe(getCreatureXp(getDungeon(MINE).creatures[0]));
+    expect(rollCoopDungeonChest(won, profile(), "a")).toEqual(chest);
+    // Zwei Kämpfe: XP beider Gegner
+    const second = win(nextDungeonStage(won, "k2", 0));
+    const [c1, c2] = getDungeon(MINE).creatures;
+    expect(rollCoopDungeonChest(second, profile(), "a").xp).toBe(getCreatureXp(c1) + getCreatureXp(c2));
+    // Verloren: der laufende Kampf zählt nicht
+    expect(clearedStages({ ...second, status: "lost" })).toBe(1);
+  });
+
+  /** Dungeon bis zum Endboss durchspielen. */
+  const toBoss = (dungeonId: string, players: CoopPlayer[] = [player("a"), player("b")]) => {
+    let state = startCoopBattle("s", dungeonId, players, 0);
+    const { creatures } = getDungeon(dungeonId);
+    for (let i = 0; i < creatures.length - 1; i++) state = nextDungeonStage(win(state), `s${i}`, 0);
+    return state;
+  };
+  const bossHits = (state: CoopBattleState, round: number) =>
+    resolveRound(tough({ ...state, round }), {}, rng(0.5), 0).events.filter((e) => e.type === "hit" && e.attacker === BOSS);
+
+  it("normale Dungeon-Gegner haben keine Fähigkeit; Endbosse zwei im Wechsel: erst ein Ziel, dann die ganze Gruppe", () => {
+    expect(getCoopEnemy("mine-rat").abilities).toEqual([]);
+    const state = toBoss("storm-tower");
+    expect(state.bossId).toBe("storm-lord");
+    const [single, group] = getCoopEnemy("storm-lord").abilities;
+    expect(single.aoe).toBeFalsy();
+    expect(group.aoe).toBe(true);
+    expect(coopAbilityDue({ ...state, round: 3 })?.name).toBe(single.name);
+    expect(coopAbilityDue({ ...state, round: 6 })?.name).toBe(group.name);
+    expect(coopAbilityDue({ ...state, round: 9 })?.name).toBe(single.name);
+    // Runde 3: Donnerschlag trifft ein Ziel einmal
+    expect(bossHits(state, 3)).toHaveLength(1);
+    // Runde 6: Kettenblitz trifft jeden der beiden Helden dreimal
+    const chain = bossHits(state, 6);
+    expect(chain.filter((e) => e.type === "hit" && e.target === "a")).toHaveLength(3);
+    expect(chain.filter((e) => e.type === "hit" && e.target === "b")).toHaveLength(3);
+  });
+
+  it("die Gruppen-Fähigkeit trifft jeden mit dem Solo-Schaden (× Faktor) – ohne den Gruppenzuschlag", () => {
+    const duo = toBoss(MINE);
+    const four = toBoss(MINE, [player("a"), player("b"), player("c"), player("d")]);
+    // Erzlawine (Runde 6) ignoriert Rüstung, rng 0.5 = mittlere Streuung, kein Krit – vergleichbar
+    const damage = (state: CoopBattleState) => {
+      const hit = bossHits(state, 6)[0];
+      return hit?.type === "hit" ? hit.damage : 0;
+    };
+    expect(damage(duo)).toBeGreaterThan(0);
+    expect(damage(four)).toBe(damage(duo));
+  });
+
+  it("Leerenschlund trifft ein Ziel und heilt den Leerenfürsten um den vollen Schaden", () => {
+    const state = toBoss("void-abyss");
+    const hurt = tough({ ...state, round: 3 });
+    const { events } = resolveRound({ ...hurt, boss: { ...hurt.boss, hp: 1000 } }, {}, rng(0.5), 0);
+    const hits = events.filter((e) => e.type === "hit" && e.attacker === BOSS);
+    expect(hits).toHaveLength(1);
+    const dealt = hits[0].type === "hit" ? hits[0].damage : 0;
+    const healed = events.reduce((sum, e) => sum + (e.type === "drain" ? e.heal : 0), 0);
+    expect(dealt).toBeGreaterThan(0);
+    expect(healed).toBe(dealt);
   });
 });

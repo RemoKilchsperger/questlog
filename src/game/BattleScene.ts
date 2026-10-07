@@ -4,7 +4,7 @@
 
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
-import { getBossAbility } from "../domain/bossAbilities";
+import { getBossAbilityById } from "../domain/bossAbilities";
 import type { BattleEvent, BattleState, Side } from "../domain/combat";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
@@ -316,7 +316,7 @@ export class BattleScene extends Phaser.Scene {
     let bossAbility: string | null = null;
     for (const event of events) {
       if (event.type === "ability") heroAbility = event.ability;
-      if (event.type === "bossAbility") bossAbility = event.bossId;
+      if (event.type === "bossAbility") bossAbility = event.abilityId;
       const special =
         event.type === "hit" ? (event.attacker === "hero" ? heroAbility : bossAbility) : null;
       this.time.delayedCall(delay, () => this.animate(event, special));
@@ -376,7 +376,7 @@ export class BattleScene extends Phaser.Scene {
       fx.rise(this, this.center(event.target), 0xf08a2c, 10);
       fx.rise(this, this.center(event.target), 0xffe28f, 5, 30);
     } else if (event.type === "bossAbility") {
-      this.announceBossAbility(event.bossId);
+      this.announceBossAbility(event.abilityId);
     } else if (event.type === "blocked") {
       const hero = this.fighters.hero;
       this.floatText(hero.homeX, GROUND_Y - 115, "GEBLOCKT!", "#7aa7f0", 28);
@@ -903,15 +903,16 @@ export class BattleScene extends Phaser.Scene {
 
   /* ───────────── Fähigkeiten der Bosse ───────────── */
 
-  private announceBossAbility(bossId: string) {
+  /** Ankündigung mit eigenem Effekt pro Fähigkeit – die erste Fähigkeit eines Bosses hat seine Id. */
+  private announceBossAbility(abilityId: string) {
     const enemy = this.fighters.enemy;
-    const ability = getBossAbility(bossId);
+    const ability = getBossAbilityById(abilityId);
     this.floatText(enemy.homeX, GROUND_Y - 130, `${ability?.name ?? "Spezialangriff"}!`, "#f0776a", 28);
     this.tint(enemy, 0xff6b5a, 400);
     this.cameras.main.shake(250, 0.006);
     sfx.roar();
     const at = this.center("enemy");
-    switch (bossId) {
+    switch (abilityId) {
       case "primal-mammoth": // Aufbäumen vor dem Stampfer
         enemy.breath?.pause();
         this.tweens.add({
@@ -926,23 +927,29 @@ export class BattleScene extends Phaser.Scene {
       case "cave-eye":
       case "lich-king":
       case "high-priestess":
-        fx.rise(this, at, bossId === "high-priestess" ? 0x3ad6c5 : 0xb07cff, 12, 80);
+        fx.rise(this, at, abilityId === "high-priestess" ? 0x3ad6c5 : 0xb07cff, 12, 80);
         break;
-      case "storm-lord": // Himmel verdunkelt sich
+      case "high-priestess-spear": // Licht sammelt sich
+        fx.rise(this, at, 0xf4c95d, 12, 80);
+        break;
+      case "storm-lord":
+      case "storm-lord-thunder": // Himmel verdunkelt sich
         fx.flash(this, 0x141e36, 0.5, 400);
         break;
       case "ignaroth":
       case "void-lord":
-        fx.siphon(this, { x: at.x + 60, y: at.y + 30 }, this.front("enemy"), bossId === "ignaroth" ? 0xf08a2c : 0x5a2a8a);
+      case "void-lord-wave":
+        fx.siphon(this, { x: at.x + 60, y: at.y + 30 }, this.front("enemy"), abilityId === "ignaroth" ? 0xf08a2c : 0x5a2a8a);
         break;
     }
   }
 
-  private enemyHit(event: Extract<BattleEvent, { type: "hit" }>, bossId: string | null) {
+  /** Treffer des Gegners – bei Boss-Fähigkeiten (`abilityId`) mit deren eigenem Effekt. */
+  private enemyHit(event: Extract<BattleEvent, { type: "hit" }>, abilityId: string | null) {
     const hit = (shake = 0) => this.impact("hero", event.damage, event.crit, shake);
     const target = this.center("hero");
     const enemyAt = this.front("enemy");
-    switch (bossId) {
+    switch (abilityId) {
       case "goblin-chief": // Rasender Hieb: schnelle Hiebe mit roten Schnitten
         this.lunge("enemy", () => {
           hit();
@@ -998,6 +1005,31 @@ export class BattleScene extends Phaser.Scene {
         fx.vortex(this, target, [0x5a2a8a, 0x4af0ff]);
         sfx.curse();
         this.time.delayedCall(320, () => hit(0.01));
+        break;
+      case "ore-king-pick": // Spitzhackenhieb: wuchtiger Schlag, die Wunde blutet
+        this.lunge("enemy", () => {
+          hit(0.01);
+          fx.slashes(this, target, 0xc23a3a, 2, true);
+          sfx.slash();
+        });
+        break;
+      case "high-priestess-spear": // Sonnenspeer: goldener Strahl
+        fx.beam(this, enemyAt, target, 0xf4c95d, 14, 420);
+        sfx.beam();
+        this.time.delayedCall(180, () => hit());
+        break;
+      case "storm-lord-thunder": // Donnerschlag: ein greller Blitz
+        fx.lightning(this, target);
+        fx.flash(this, 0xffffff, 0.35, 150);
+        sfx.thunder();
+        this.time.delayedCall(60, () => hit(0.015));
+        break;
+      case "void-lord-wave": // Leerenwelle: dunkle Welle über den Boden
+        fx.groundWave(this, { x: enemyAt.x, y: GROUND_Y }, { x: target.x, y: GROUND_Y }, 0x5a2a8a, 330, () => {
+          hit(0.01);
+          fx.ring(this, target, 0x5a2a8a, 70, 380);
+        });
+        sfx.curse();
         break;
       default:
         this.lunge("enemy", () => hit());

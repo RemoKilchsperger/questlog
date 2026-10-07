@@ -6,7 +6,14 @@
 
 import { create } from "zustand";
 import { useCloudStore } from "../cloud/cloudStore";
-import { COOP_COST, rollCoopReward, type CoopAction, type CoopBattleState } from "../domain/coopCombat";
+import {
+  coopCost,
+  dungeonCompleted,
+  rollCoopDungeonChest,
+  rollCoopReward,
+  type CoopAction,
+  type CoopBattleState,
+} from "../domain/coopCombat";
 import { EventBus } from "../game/EventBus";
 import { useGameStore, type ClaimedChest } from "../store/gameStore";
 import { availableBackend, getBackend, type CoopBackend } from "./backend";
@@ -35,6 +42,8 @@ interface CoopState {
   rejoin: CoopRow | null;
   busy: boolean;
   error: string | null;
+  /** Fehler beim Beitreten (Code, Link, Zurückkehren) – erscheint am Eingabefeld für den Code */
+  joinError: string | null;
 
   createLobby: (bossId: string) => Promise<void>;
   joinLobby: (code: string) => Promise<void>;
@@ -42,6 +51,9 @@ interface CoopState {
   /** Nur der Host: Kampf starten */
   startBattle: () => Promise<void>;
   chooseAction: (action: CoopAction) => Promise<void>;
+  /** Dungeon nach einem Sieg (nur der Host): nächster Kampf bzw. mit der Truhe aussteigen */
+  continueDungeon: () => Promise<void>;
+  exitDungeon: () => Promise<void>;
   /** Lobby verlassen bzw. Kampf verlassen (der Held greift dann automatisch an) */
   leave: () => void;
   /** Nachsehen, ob ein laufender Koop-Kampf auf einen wartet */
@@ -61,15 +73,28 @@ function currentPlayerId(): string {
   return id;
 }
 
-/** Warum man nicht bereit sein bzw. starten kann – oder null. */
+/** Warum man nicht bereit sein bzw. starten kann – oder null. Die Kosten hängen vom Inhalt der Lobby ab. */
 export function coopReadyBlocker(): string | null {
+  const row = useCoopStore.getState().row;
+  const cost = row ? coopCost(row.boss_id) : 0;
   const points = useGameStore.getState().character.battlePoints;
-  return points < COOP_COST ? `Du brauchst ${COOP_COST} Kampfpunkte (du hast ${points}).` : null;
+  return points < cost ? `Du brauchst ${cost} Kampfpunkte (du hast ${points}).` : null;
 }
 
 /** Ende der Spielerphase in eigener Uhrzeit. */
 export function localDeadline(state: CoopBattleState, clockOffset: number): number {
   return state.deadline - clockOffset;
+}
+
+/** Schreibt die eigene Beute gut: Raid-Boss wie bisher, im Dungeon die ganze Truhe. */
+function claimReward(row: CoopRow, state: CoopBattleState, myId: string): ClaimedChest | null {
+  const me = row.members.find((m) => m.id === myId);
+  if (!me) return null;
+  const game = useGameStore.getState();
+  if (state.dungeon) {
+    return game.grantCoopDungeon(rollCoopDungeonChest(state, me.profile, myId), state.dungeon.id, dungeonCompleted(state));
+  }
+  return game.grantCoopReward(rollCoopReward(row.boss_id, me.profile, crypto.randomUUID()), row.boss_id);
 }
 
 // Ausserhalb von React: Abo der Änderungen, Timer für den Zeitablauf
@@ -103,14 +128,15 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     if (prev?.phase === "lobby" && next.phase !== "lobby" && next.state && !paid.has(next.state.id)) {
       paid.add(next.state.id);
       try {
-        useGameStore.getState().payCoop(COOP_COST);
+        useGameStore.getState().payCoop(coopCost(next.boss_id));
       } catch {
         // zu wenig Kampfpunkte – die Bereit-Prüfung verhindert das eigentlich
       }
     }
 
-    // Neue Runde: eigene Tränke abziehen, Szene animieren
-    const prevLog = prev?.id === next.id ? (prev.state?.log.length ?? 0) : null;
+    // Neue Runde: eigene Tränke abziehen, Szene animieren. Verglichen wird innerhalb desselben
+    // Kampfs – im Dungeon beginnt jeder Kampf mit eigener Id und leerem Protokoll.
+    const prevLog = prev?.id === next.id && prev.state?.id === next.state?.id ? (prev.state?.log.length ?? 0) : null;
     if (next.state && prevLog !== null && next.state.log.length > prevLog) {
       for (const e of next.last_events) {
         if (e.type === "potion" && e.heroId === myId) useGameStore.getState().consumePotion(e.potionId);
@@ -118,17 +144,12 @@ export const useCoopStore = create<CoopState>()((set, get) => {
       EventBus.emit("coop:events", { state: next.state, events: next.last_events });
     }
 
-    // Kampfende erlebt: eigene Beute würfeln (nur einmal pro Kampf)
+    // Ende erlebt (Sieg, Niederlage oder Ausstieg aus dem Dungeon): eigene Beute – nur einmal
     let result = get().result;
-    if (prev?.state?.status === "active" && next.state && next.state.status !== "active" && !rewarded.has(next.state.id)) {
-      rewarded.add(next.state.id);
-      if (next.state.status === "won") {
-        const me = next.members.find((m) => m.id === myId);
-        const chest = me ? useGameStore.getState().grantCoopReward(rollCoopReward(next.boss_id, me.profile, crypto.randomUUID()), next.boss_id) : null;
-        result = { won: true, chest };
-      } else {
-        result = { won: false, chest: null };
-      }
+    const runId = next.state?.dungeon?.runId ?? next.state?.id;
+    if (prev?.phase === "battle" && next.phase === "finished" && next.state && runId && !rewarded.has(runId)) {
+      rewarded.add(runId);
+      result = next.state.status === "won" ? { won: true, chest: claimReward(next, next.state, myId) } : { won: false, chest: null };
     }
 
     const roundChanged = next.state?.round !== prev?.state?.round || next.phase !== prev?.phase;
@@ -195,6 +216,7 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     rejoin: null,
     busy: false,
     error: null,
+    joinError: null,
 
     createLobby: async (bossId) => {
       if (!begin()) return;
@@ -202,9 +224,16 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     },
 
     joinLobby: async (code) => {
-      if (!begin()) return;
+      // Fehler beim Beitreten gehören ans Eingabefeld, nicht zu den Listen
+      const fail = () => {
+        const message = get().error;
+        reset();
+        set({ joinError: message });
+      };
+      set({ joinError: null });
+      if (!begin()) return fail();
       set({ phase: "joining" });
-      if (!(await send({ type: "join", code }))) reset(get().error);
+      if (!(await send({ type: "join", code }))) fail();
     },
 
     setReady: async (ready) => {
@@ -225,6 +254,14 @@ export const useCoopStore = create<CoopState>()((set, get) => {
       if (!(await send({ type: "act", round: state.round, action }))) set({ pendingAction: null });
     },
 
+    continueDungeon: async () => {
+      await send({ type: "next" });
+    },
+
+    exitDungeon: async () => {
+      await send({ type: "exit" });
+    },
+
     leave: () => {
       const { row, backend: kind, myId, result } = get();
       // Nach Kampfende gibt es nichts mehr abzumelden
@@ -239,6 +276,6 @@ export const useCoopStore = create<CoopState>()((set, get) => {
       set({ rejoin: row });
     },
 
-    clearError: () => set({ error: null }),
+    clearError: () => set({ error: null, joinError: null }),
   };
 });

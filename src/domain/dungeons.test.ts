@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dungeonCost, spendBattlePoint } from "./battlePoints";
-import { getBossAbility } from "./bossAbilities";
+import { bossAbilityDue, getBossAbilities, getBossAbility, upcomingBossAbility } from "./bossAbilities";
 import { getHeroCombatProfile, rollBossLoot, startBattle } from "./combat";
 import { AREAS, DUNGEONS, getCreature, getCreatureStats, getDungeon } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
@@ -30,6 +30,29 @@ describe("Dungeons", () => {
       expect(dungeon.creatures.slice(0, -1).every((c) => !c.boss)).toBe(true);
       expect(getBossAbility(dungeon.creatures.at(-1)!.id), dungeon.name).not.toBeNull();
       expect(getDungeon(dungeon.id)).toBe(dungeon);
+    }
+  });
+
+  it("jeder Dungeon-Boss hat zwei Fähigkeiten im Wechsel: erst gegen ein Ziel, dann gegen die Gruppe", () => {
+    const ids = new Set<string>();
+    for (const dungeon of DUNGEONS) {
+      const boss = dungeon.creatures.at(-1)!;
+      const [single, group, ...rest] = getBossAbilities(boss.id);
+      expect(rest, boss.id).toEqual([]);
+      expect(single.target ?? "single", boss.id).toBe("single");
+      expect(group.target, boss.id).toBe("group");
+      expect(group.every).toBe(single.every);
+      // Solo treffen beide den Helden – im Wechsel
+      expect(bossAbilityDue(boss.id, single.every)?.id).toBe(single.id);
+      expect(bossAbilityDue(boss.id, single.every * 2)?.id).toBe(group.id);
+      expect(bossAbilityDue(boss.id, single.every * 3)?.id).toBe(single.id);
+      expect(bossAbilityDue(boss.id, single.every + 1)).toBeNull();
+      // Angekündigt wird die nächste – auch in der Runde davor
+      expect(upcomingBossAbility(boss.id, single.every * 2 - 1)?.id).toBe(group.id);
+      for (const a of [single, group]) {
+        expect(ids.has(a.id), a.id).toBe(false);
+        ids.add(a.id);
+      }
     }
   });
 

@@ -2,9 +2,17 @@
 // Attacke ein – statt seines normalen Angriffs. Sie wird eine Runde vorher
 // angekündigt, damit man reagieren kann: Bollwerk (Schild) blockt sie komplett,
 // ein Betäubender Schlag (Streitkolben) verhindert sie.
+//
+// Dungeon-Bosse haben zwei Fähigkeiten, die sich abwechseln: erst eine gegen
+// ein einzelnes Ziel, dann eine gegen die ganze Gruppe (`target: "group"`).
+// Solo treffen beide den Helden, im Koop trifft die zweite alle (coopCombat.ts).
 
 export interface BossAbilityDef {
+  /** Eindeutig – bei der ersten Fähigkeit eines Bosses gleich seiner Id */
+  id: string;
   bossId: string;
+  /** Im Koop: ein Ziel (Standard) oder die ganze Gruppe */
+  target?: "single" | "group";
   name: string;
   icon: string;
   description: string;
@@ -28,6 +36,7 @@ export interface BossAbilityDef {
 
 export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
   {
+    id: "goblin-chief",
     bossId: "goblin-chief",
     name: "Rasender Hieb",
     icon: "🪓",
@@ -37,6 +46,7 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     hits: 3,
   },
   {
+    id: "ancient-lizard",
     bossId: "ancient-lizard",
     name: "Giftbiss",
     icon: "🐍",
@@ -46,6 +56,7 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     poison: { percent: 0.3, rounds: 3 },
   },
   {
+    id: "cave-eye",
     bossId: "cave-eye",
     name: "Lähmender Blick",
     icon: "👁️",
@@ -56,6 +67,7 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     manaBurn: 30,
   },
   {
+    id: "primal-mammoth",
     bossId: "primal-mammoth",
     name: "Erdstampfer",
     icon: "🦣",
@@ -64,6 +76,7 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     multiplier: 2.5,
   },
   {
+    id: "lich-king",
     bossId: "lich-king",
     name: "Lebensentzug",
     icon: "💀",
@@ -73,6 +86,7 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     drain: 1,
   },
   {
+    id: "ignaroth",
     bossId: "ignaroth",
     name: "Feueratem",
     icon: "🔥",
@@ -83,9 +97,21 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     burn: { percent: 0.25, rounds: 2 },
   },
 
-  // Dungeon-Bosse
+  // Dungeon-Bosse: je eine Fähigkeit gegen ein Ziel und eine gegen die Gruppe, abwechselnd
   {
+    id: "ore-king-pick",
     bossId: "ore-king",
+    name: "Spitzhackenhieb",
+    icon: "⛏️",
+    description: "Ein wuchtiger Hieb mit der Spitzhacke: doppelter Schaden, die Wunde blutet 2 Runden lang.",
+    every: 3,
+    multiplier: 2,
+    bleed: { percent: 0.3, rounds: 2 },
+  },
+  {
+    id: "ore-king",
+    bossId: "ore-king",
+    target: "group",
     name: "Erzlawine",
     icon: "🪨",
     description: "Lässt Gestein herabstürzen: doppelter Schaden, der Rüstung ignoriert.",
@@ -94,7 +120,19 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     ignoreArmor: true,
   },
   {
+    id: "high-priestess-spear",
     bossId: "high-priestess",
+    name: "Sonnenspeer",
+    icon: "☀️",
+    description: "Ein gleissender Speer aus Licht: doppelter Schaden, der Rüstung ignoriert.",
+    every: 3,
+    multiplier: 2,
+    ignoreArmor: true,
+  },
+  {
+    id: "high-priestess",
+    bossId: "high-priestess",
+    target: "group",
     name: "Fluch der Mumie",
     icon: "𓂀",
     description: "Ein Fluch, der 25 Mana raubt und 4 Runden lang Lebenskraft zehrt.",
@@ -104,7 +142,19 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     poison: { percent: 0.3, rounds: 4 },
   },
   {
+    id: "storm-lord-thunder",
     bossId: "storm-lord",
+    name: "Donnerschlag",
+    icon: "🌩️",
+    description: "Ein einzelner, gewaltiger Blitz: 2,4-facher Schaden, der Rüstung ignoriert.",
+    every: 3,
+    multiplier: 2.4,
+    ignoreArmor: true,
+  },
+  {
+    id: "storm-lord",
+    bossId: "storm-lord",
+    target: "group",
     name: "Kettenblitz",
     icon: "⚡",
     description: "Drei Blitze hintereinander, die Rüstung ignorieren.",
@@ -114,6 +164,7 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     ignoreArmor: true,
   },
   {
+    id: "void-lord",
     bossId: "void-lord",
     name: "Leerenschlund",
     icon: "🌀",
@@ -123,21 +174,61 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     drain: 1,
     manaBurn: 25,
   },
+  {
+    id: "void-lord-wave",
+    bossId: "void-lord",
+    target: "group",
+    name: "Leerenwelle",
+    icon: "🌑",
+    description: "Eine Welle aus Leere: 1,4-facher Schaden, der Rüstung ignoriert – der Leerenfürst heilt sich darum, dazu 15 Mana Verlust.",
+    every: 3,
+    multiplier: 1.4,
+    ignoreArmor: true,
+    drain: 1,
+    manaBurn: 15,
+  },
 ];
 
+/** Alle Fähigkeiten eines Bosses in Einsatzreihenfolge – leer für normale Kreaturen. */
+export function getBossAbilities(creatureId: string): BossAbilityDef[] {
+  return BOSS_ABILITIES.filter((a) => a.bossId === creatureId);
+}
+
+/** Erste Fähigkeit eines Bosses – oder null. */
 export function getBossAbility(creatureId: string): BossAbilityDef | null {
-  return BOSS_ABILITIES.find((a) => a.bossId === creatureId) ?? null;
+  return getBossAbilities(creatureId)[0] ?? null;
 }
 
-/** Setzt der Boss seine Fähigkeit in dieser Runde ein? */
+export function getBossAbilityById(id: string): BossAbilityDef | null {
+  return BOSS_ABILITIES.find((a) => a.id === id) ?? null;
+}
+
+/**
+ * Welche Fähigkeit in Runde `round` dran ist: alle `every` Runden eine, mehrere
+ * Fähigkeiten im Wechsel (Runde 3 die erste, Runde 6 die zweite …). Gemeinsam
+ * für Solo- und Koop-Kampf.
+ */
+export function abilityForRound<T extends { every: number }>(abilities: readonly T[], round: number): T | null {
+  if (abilities.length === 0) return null;
+  const { every } = abilities[0];
+  if (round % every !== 0) return null;
+  return abilities[(round / every - 1) % abilities.length];
+}
+
+/** Setzt der Boss in dieser Runde eine Fähigkeit ein – und welche? */
 export function bossAbilityDue(creatureId: string, round: number): BossAbilityDef | null {
-  const ability = getBossAbility(creatureId);
-  return ability && round % ability.every === 0 ? ability : null;
+  return abilityForRound(getBossAbilities(creatureId), round);
 }
 
-/** In wie vielen Runden kommt die Boss-Fähigkeit (0 = diese Runde)? null ohne Fähigkeit. */
+/** In wie vielen Runden kommt die nächste Boss-Fähigkeit (0 = diese Runde)? null ohne Fähigkeit. */
 export function roundsUntilBossAbility(creatureId: string, round: number): number | null {
   const ability = getBossAbility(creatureId);
   if (!ability) return null;
   return (ability.every - (round % ability.every)) % ability.every;
+}
+
+/** Die nächste Fähigkeit, die der Boss ab Runde `round` einsetzt (diese Runde eingeschlossen) – für die Ankündigung. */
+export function upcomingBossAbility(creatureId: string, round: number): BossAbilityDef | null {
+  const wait = roundsUntilBossAbility(creatureId, round);
+  return wait === null ? null : bossAbilityDue(creatureId, round + wait);
 }

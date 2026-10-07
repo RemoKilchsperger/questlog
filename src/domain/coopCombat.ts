@@ -1,6 +1,9 @@
-// Koop-Kampf: 2–4 Helden gegen einen Koop-Boss (Plan: docs/koop-kampf.md).
+// Koop-Kampf: 2–4 Helden gegen einen Koop-Boss (Plan: docs/koop-kampf.md) –
+// oder nacheinander gegen die Gegner eines Dungeons (docs/koop-dungeons.md).
 // Reine Logik wie combat.ts – wer sie ausführt (Host-Browser, später ein
-// Server), ist egal. Pro Runde handeln zuerst alle Helden, danach der Boss.
+// Server), ist egal. Pro Runde handeln zuerst alle Helden, danach der Gegner.
+// Der Gegner heisst hier durchgehend „Boss“, auch wenn es eine normale
+// Dungeon-Kreatur ist.
 //
 // Ablauf einer Runde (`resolveRound`):
 //   1. Jeder lebende Held der Reihe nach: optional ein Trank (für sich selbst
@@ -23,7 +26,9 @@ import {
   type HeroClassId,
 } from "./heroClasses";
 import {
+  addToChest,
   cooldownText,
+  EMPTY_CHEST,
   rollBattleReward,
   rollHit,
   tickCooldowns,
@@ -31,10 +36,14 @@ import {
   type BattleReward,
   type Combatant,
   type DamageOverTime,
+  type DungeonChest,
   type HeroCombatProfile,
 } from "./combat";
-import { getCreatureStats, type CreatureDef } from "./creatures";
+import { abilityForRound, getBossAbilities } from "./bossAbilities";
+import { dungeonCost } from "./battlePoints";
+import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
+import { hash, seededRng } from "./random";
 import type { SkillWeapon } from "./skills";
 
 export const COOP_MIN_PLAYERS = 2;
@@ -59,6 +68,8 @@ export const REPEAT_STUN_CHANCE = 0.5;
 export const BOSS = "boss";
 
 export interface CoopBossAbility {
+  /** Für Ereignisse und die Animation – bei Raid-Bossen fehlt sie (dann gilt die Boss-Id) */
+  id?: string;
   name: string;
   icon: string;
   description: string;
@@ -68,7 +79,14 @@ export interface CoopBossAbility {
   /** Trifft alle lebenden Helden statt nur das Ziel */
   aoe?: boolean;
   ignoreArmor?: boolean;
+  /** Treffer pro Ziel (Standard 1) */
+  hits?: number;
+  /** Gift, Feuer, Bluten: Anteil des Boss-Schadens pro Runde */
   poison?: { percent: number; rounds: number };
+  burn?: { percent: number; rounds: number };
+  bleed?: { percent: number; rounds: number };
+  /** Heilt den Boss um diesen Anteil des verursachten Schadens */
+  drain?: number;
   /** Raubt jedem getroffenen Helden so viel Mana */
   manaBurn?: number;
   /** Friert einen Helden ein (meist den mit der höchsten Bedrohung): Er setzt die nächste Runde aus. */
@@ -162,22 +180,105 @@ export function coopBossCreature(boss: CoopBossDef): CreatureDef {
   return { id: boss.id, name: boss.name, sprite: boss.sprite, level: boss.level, boss: true, power: boss.power };
 }
 
+/* ───────────── Gegner: Koop-Boss oder Dungeon-Kreatur ───────────── */
+
+/** Ein Gegner im Koop-Kampf – alles, was Logik, Szene und Oberfläche über ihn wissen müssen. */
+export interface CoopEnemy {
+  id: string;
+  name: string;
+  sprite: string;
+  level: number;
+  /** Boss (Koop-Boss oder Dungeon-Endboss) – grösser dargestellt */
+  boss: boolean;
+  /** Eigens für den Koop gebauter Raid-Boss (sonst Dungeon-Kreatur) */
+  raid: boolean;
+  /** Gebiet bzw. Dungeon, dessen Hintergrund die Kampfszene zeigt */
+  areaId: string;
+  /** Fähigkeiten in Einsatzreihenfolge, im Wechsel alle `every` Runden (siehe `abilityForRound`) – leer ohne */
+  abilities: CoopBossAbility[];
+  /** Normale Angriffe heilen den Gegner um diesen Anteil des Schadens */
+  lifesteal?: number;
+  creature: CreatureDef;
+}
+
+export function getCoopEnemy(id: string): CoopEnemy {
+  const boss = COOP_BOSSES.find((b) => b.id === id);
+  if (boss) {
+    const { name, sprite, level, areaId, ability, lifesteal } = boss;
+    const abilities = [{ ...ability, id: boss.id }];
+    return { id, name, sprite, level, boss: true, raid: true, areaId, abilities, lifesteal, creature: coopBossCreature(boss) };
+  }
+  const { creature, area } = getCreature(id);
+  if (!area.dungeon) throw new Error(`Kein Koop-Gegner: ${id}`);
+  // Dungeon-Bosse behalten ihre Solo-Fähigkeiten: die gegen ein Ziel trifft das Ziel mit der höchsten
+  // Bedrohung, die gegen die Gruppe alle – dafür schwächer (siehe DUNGEON_COOP_ABILITY_FACTOR).
+  const abilities = getBossAbilities(id).map((ability): CoopBossAbility =>
+    ability.target === "group" ? { ...ability, aoe: true, multiplier: ability.multiplier * DUNGEON_COOP_ABILITY_FACTOR } : { ...ability },
+  );
+  const { name, sprite, level, boss: isBoss } = creature;
+  return { id, name, sprite, level, boss: isBoss, raid: false, areaId: area.id, abilities, creature };
+}
+
 /**
- * Kampfwerte des Bosses für `players` Spieler. Ausgelegt auf zwei:
- * Lebenspunkte × n/2, Schaden +10 % pro Spieler über zwei.
+ * Dungeon-Gegner pro Spieler über einem: +10 % Lebenspunkte (zusätzlich zu × n) und +40 % Schaden.
+ * Per Simulation so abgestimmt, dass 2, 3 und 4 Helden etwa gleich gut durchkommen – ähnlich
+ * wie solo mit derselben Ausrüstung, eher etwas leichter (Wiederbeleben, Bollwerk).
  */
-export function coopBossStats(boss: CoopBossDef, players: number): Combatant {
-  const base = getCreatureStats(coopBossCreature(boss));
-  const maxHp = Math.round((base.maxHp * players) / 2);
+export const DUNGEON_COOP_HP_STEP = 0.1;
+export const DUNGEON_COOP_DAMAGE_STEP = 0.4;
+/**
+ * Dungeon-Boss-Fähigkeiten treffen im Koop alle Helden – jeden mit dem Solo-Schaden des Bosses
+ * (ohne Gruppenzuschlag) mal diesem Faktor. Per Simulation abgestimmt (docs/koop-dungeons.md).
+ */
+export const DUNGEON_COOP_ABILITY_FACTOR = 0.75;
+
+/**
+ * Kampfwerte des Gegners für `players` Spieler.
+ * - Raid-Bosse sind auf zwei ausgelegt: Lebenspunkte × n/2, Schaden +10 % pro Spieler über zwei.
+ * - Dungeon-Gegner sind auf einen ausgelegt: Lebenspunkte × n × (1 + 10 % pro Spieler über einem),
+ *   Schaden +40 % pro Spieler über einem.
+ */
+export function coopEnemyStats(enemy: CoopEnemy, players: number): Combatant {
+  const base = getCreatureStats(enemy.creature);
+  const extra = players - 1;
+  const maxHp = Math.round(enemy.raid ? (base.maxHp * players) / 2 : base.maxHp * players * (1 + DUNGEON_COOP_HP_STEP * extra));
+  const damage = enemy.raid ? 1 + 0.1 * (players - 2) : 1 + DUNGEON_COOP_DAMAGE_STEP * extra;
   return {
-    name: boss.name,
-    level: boss.level,
+    name: enemy.name,
+    level: enemy.level,
     maxHp,
     hp: maxHp,
-    damage: base.damage * (1 + 0.1 * (players - 2)),
+    damage: base.damage * damage,
     armor: base.armor,
     critChance: base.critChance,
   };
+}
+
+export function coopBossStats(boss: CoopBossDef, players: number): Combatant {
+  return coopEnemyStats(getCoopEnemy(boss.id), players);
+}
+
+/* ───────────── Inhalt einer Lobby: Raid-Boss oder Dungeon ───────────── */
+
+/** Ist diese Lobby ein Dungeon (sonst ein Raid-Boss)? `id` steht in `boss_id` der Lobby. */
+export function isCoopDungeon(id: string): boolean {
+  return DUNGEONS.some((d) => d.id === id);
+}
+
+/** Name, Mindestlevel und Grafik des Inhalts einer Lobby. Wirft bei Unbekanntem. */
+export function coopContent(id: string): { name: string; level: number; sprite: string; description: string } {
+  if (isCoopDungeon(id)) {
+    const dungeon = getDungeon(id);
+    const boss = dungeon.creatures[dungeon.creatures.length - 1];
+    return { name: dungeon.name, level: dungeon.minLevel, sprite: boss.sprite, description: dungeon.description };
+  }
+  const boss = getCoopBoss(id);
+  return { name: boss.name, level: boss.level, sprite: boss.sprite, description: boss.description };
+}
+
+/** Kampfpunkte pro Spieler: Raid-Boss pauschal, Dungeon wie solo einer pro Kampf. */
+export function coopCost(id: string): number {
+  return isCoopDungeon(id) ? dungeonCost(getDungeon(id).creatures.length) : COOP_COST;
 }
 
 type OverTimeKind = "poison" | "burn" | "bleed";
@@ -227,7 +328,7 @@ export type CoopEvent =
   | { type: "counter"; heroId: string; damage: number }
   | { type: "hit"; attacker: string; target: string; damage: number; crit: boolean; weapon?: SkillWeapon; ability?: AbilityId }
   | { type: OverTimeKind; target: string; damage: number }
-  | { type: "bossAbility"; bossId: string; name: string }
+  | { type: "bossAbility"; bossId: string; abilityId: string; name: string }
   | { type: "stunned" }
   | { type: "stunResisted" }
   | { type: "blocked"; heroId: string }
@@ -264,6 +365,16 @@ export interface CoopBattleState {
   stunsUsed: number;
   status: CoopStatus;
   log: (CoopEvent & { round: number })[];
+  /** Nur in Koop-Dungeons: welcher Dungeon, welcher Kampf. `bossId` ist dann der aktuelle Gegner. */
+  dungeon?: CoopDungeonRun;
+}
+
+export interface CoopDungeonRun {
+  id: string;
+  /** Index des aktuellen Gegners in `creatures` */
+  stage: number;
+  /** Id des ersten Kampfs – bleibt für den ganzen Dungeon gleich (Startwert der Beute) */
+  runId: string;
 }
 
 /**
@@ -281,17 +392,23 @@ export interface CoopPlayer {
   profile: HeroCombatProfile;
 }
 
-export function startCoopBattle(id: string, bossId: string, players: CoopPlayer[], now: number): CoopBattleState {
+/**
+ * Startet einen Koop-Kampf. `contentId` ist ein Raid-Boss oder ein Dungeon –
+ * dann beginnt der Kampf gegen dessen ersten Gegner.
+ */
+export function startCoopBattle(id: string, contentId: string, players: CoopPlayer[], now: number): CoopBattleState {
   if (players.length < COOP_MIN_PLAYERS || players.length > COOP_MAX_PLAYERS) {
     throw new Error(`Ein Koop-Kampf braucht ${COOP_MIN_PLAYERS}–${COOP_MAX_PLAYERS} Spieler.`);
   }
   if (new Set(players.map((p) => p.id)).size !== players.length || players.some((p) => p.id === BOSS)) {
     throw new Error("Ungültige Spieler-Ids.");
   }
-  const boss = getCoopBoss(bossId);
+  const dungeon = isCoopDungeon(contentId) ? { id: contentId, stage: 0, runId: id } : undefined;
+  const enemy = getCoopEnemy(dungeon ? getDungeon(contentId).creatures[0].id : getCoopBoss(contentId).id);
   return {
     id,
-    bossId,
+    bossId: enemy.id,
+    ...(dungeon && { dungeon }),
     round: 1,
     deadline: now + COOP_TURN_SECONDS * 1000,
     heroes: players.map(({ id: heroId, name, profile }) => ({
@@ -319,12 +436,97 @@ export function startCoopBattle(id: string, bossId: string, players: CoopPlayer[
       down: false,
       revived: false,
     })),
-    boss: coopBossStats(boss, players.length),
+    boss: coopEnemyStats(enemy, players.length),
     bossEffects: {},
     stunsUsed: 0,
     status: "active",
     log: [],
   };
+}
+
+/* ───────────── Dungeons: von Kampf zu Kampf ───────────── */
+
+/** Gefallene stehen zwischen zwei Dungeon-Kämpfen mit diesem Anteil ihrer Lebenspunkte wieder auf. */
+export const DUNGEON_REVIVE_HP = 0.25;
+
+/** Gegner eines Koop-Dungeons, in Kampfreihenfolge. */
+function dungeonCreatures(state: CoopBattleState): readonly CreatureDef[] {
+  return state.dungeon ? getDungeon(state.dungeon.id).creatures : [];
+}
+
+/** Gewonnen, und im Dungeon wartet noch ein Gegner? Dann entscheidet der Host: weiter oder aussteigen. */
+export function hasNextStage(state: CoopBattleState): boolean {
+  return state.dungeon !== undefined && state.status === "won" && state.dungeon.stage < dungeonCreatures(state).length - 1;
+}
+
+/** Der nächste Gegner im Dungeon – oder null. */
+export function nextStageEnemy(state: CoopBattleState): CoopEnemy | null {
+  return hasNextStage(state) ? getCoopEnemy(dungeonCreatures(state)[state.dungeon!.stage + 1].id) : null;
+}
+
+/** Bisher gewonnene Kämpfe in diesem Dungeon. */
+export function clearedStages(state: CoopBattleState): number {
+  if (!state.dungeon) return 0;
+  return state.dungeon.stage + (state.status === "won" ? 1 : 0);
+}
+
+/** Endboss des Dungeons besiegt? */
+export function dungeonCompleted(state: CoopBattleState): boolean {
+  return state.dungeon !== undefined && clearedStages(state) === dungeonCreatures(state).length;
+}
+
+/**
+ * Nächster Kampf im Dungeon – als neuer Kampf mit eigener Id. Die Lebenspunkte
+ * werden mitgenommen, Gefallene stehen mit DUNGEON_REVIVE_HP wieder auf. Mana,
+ * Abklingzeiten, Tränke, Zustände und Bedrohung beginnen frisch – wie solo.
+ */
+export function nextDungeonStage(state: CoopBattleState, id: string, now: number): CoopBattleState {
+  if (!hasNextStage(state)) throw new Error("Es gibt keinen nächsten Kampf.");
+  const enemy = nextStageEnemy(state)!;
+  return {
+    id,
+    bossId: enemy.id,
+    dungeon: { ...state.dungeon!, stage: state.dungeon!.stage + 1 },
+    round: 1,
+    deadline: now + COOP_TURN_SECONDS * 1000,
+    heroes: state.heroes.map((h) => ({
+      ...h,
+      combatant: {
+        ...h.combatant,
+        hp: h.down ? Math.max(1, Math.round(h.combatant.maxHp * DUNGEON_REVIVE_HP)) : h.combatant.hp,
+      },
+      mana: h.maxMana,
+      cooldowns: {},
+      buffs: {},
+      potionsUsed: [],
+      effects: {},
+      threat: 0,
+      down: false,
+      revived: false,
+    })),
+    boss: coopEnemyStats(enemy, state.heroes.length),
+    bossEffects: {},
+    stunsUsed: 0,
+    status: "active",
+    log: [],
+  };
+}
+
+/**
+ * Truhe eines Spielers: die Beute aller gewonnenen Kämpfe, wie solo. Gewürfelt
+ * mit einem Startwert aus Dungeon-Durchgang, Kampf und Spieler – so zeigt der
+ * Zwischenbildschirm schon den echten Inhalt, und nach dem Neuladen ist er gleich.
+ */
+export function rollCoopDungeonChest(state: CoopBattleState, hero: HeroCombatProfile, playerId: string): DungeonChest {
+  if (!state.dungeon) return EMPTY_CHEST;
+  const { runId } = state.dungeon;
+  const creatures = dungeonCreatures(state);
+  let chest = EMPTY_CHEST;
+  for (let i = 0; i < clearedStages(state); i++) {
+    const rng = seededRng(hash(`${runId}|${i}|${playerId}`));
+    chest = addToChest(chest, rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng));
+  }
+  return chest;
 }
 
 /** Held mit den Werten aktiver Verstärkungen. */
@@ -572,12 +774,23 @@ export function resolveRound(
       events.push({ type: stunned ? "stunned" : "stunResisted" });
     }
     if (!stunned) {
-      const def = getCoopBoss(state.bossId);
-      const special = state.round % def.ability.every === 0 ? def.ability : null;
-      if (special) events.push({ type: "bossAbility", bossId: def.id, name: special.name });
+      const enemy = getCoopEnemy(state.bossId);
+      const special = abilityForRound(enemy.abilities, state.round);
+      if (special) events.push({ type: "bossAbility", bossId: enemy.id, abilityId: special.id ?? enemy.id, name: special.name });
       // Geschwächt (Erdbeben, Fluch): weniger Schaden
-      const attacker = { ...boss, damage: boss.damage * (special?.multiplier ?? 1) * (1 - (bossEffects.weaken?.percent ?? 0)) };
+      // Gruppen-Fähigkeiten der Dungeon-Bosse treffen alle – jeden mit dem Schaden wie solo, ohne den
+      // Gruppenzuschlag. Fähigkeiten gegen ein Ziel haben ihn wie normale Angriffe.
+      const groupScale = special?.aoe && !enemy.raid ? 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1) : 1;
+      const attacker = {
+        ...boss,
+        damage: ((boss.damage * (special?.multiplier ?? 1)) / groupScale) * (1 - (bossEffects.weaken?.percent ?? 0)),
+      };
       const targets = special?.aoe ? heroes.filter((h) => !h.down) : [pickBossTarget(heroes, rng)!];
+      /**
+       * Lebensentzug: Fähigkeit (`drain`) bzw. normale Bisse (`lifesteal`) heilen den Boss. Trifft die
+       * Fähigkeit alle, teilt sich der Entzug auf – sonst heilte sich der Boss zu viert vierfach.
+       */
+      const drain = special ? (special.drain ?? 0) / targets.length : (enemy.lifesteal ?? 0);
       for (const target of targets) {
         if (target.effects.bulwark) {
           // Bollwerk blockt den Angriff samt Zusatzeffekten
@@ -586,41 +799,46 @@ export function resolveRound(
           continue;
         }
         const defender = special?.ignoreArmor ? { ...buffed(target), armor: 0 } : buffed(target);
-        const rolled = rollHit(attacker, defender, rng);
-        // Parade/Vergeltung: nur ein Teil kommt durch, dann Konter bzw. Rückwurf
-        const guard = target.effects.guard;
-        const hit = guard ? { ...rolled, damage: Math.max(1, Math.round(rolled.damage * guard.reduce)) } : rolled;
-        target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
-        events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
-        if (guard) {
-          target.effects.guard = undefined;
-          events.push({ type: "guarded", heroId: target.id, prevented: rolled.damage - hit.damage });
-          let counter = guard.reflect ? Math.round(rolled.damage * guard.reflect) : 0;
-          if (guard.counter && target.combatant.hp > 0) {
-            const own = buffed(target);
-            const armor = Math.round(boss.armor * (1 - (bossEffects.armorBreak ?? 0)));
-            counter += rollHit({ ...own, damage: own.damage * guard.counter }, { ...boss, armor }, rng).damage;
+        for (let i = 0; i < (special?.hits ?? 1) && target.combatant.hp > 0; i++) {
+          const rolled = rollHit(attacker, defender, rng);
+          // Parade/Vergeltung: nur ein Teil kommt durch, dann Konter bzw. Rückwurf (nur beim ersten Treffer)
+          const guard = target.effects.guard;
+          const hit = guard ? { ...rolled, damage: Math.max(1, Math.round(rolled.damage * guard.reduce)) } : rolled;
+          target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
+          events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
+          if (guard) {
+            target.effects.guard = undefined;
+            events.push({ type: "guarded", heroId: target.id, prevented: rolled.damage - hit.damage });
+            let counter = guard.reflect ? Math.round(rolled.damage * guard.reflect) : 0;
+            if (guard.counter && target.combatant.hp > 0) {
+              const own = buffed(target);
+              const armor = Math.round(boss.armor * (1 - (bossEffects.armorBreak ?? 0)));
+              counter += rollHit({ ...own, damage: own.damage * guard.counter }, { ...boss, armor }, rng).damage;
+            }
+            if (counter > 0 && boss.hp > 0) {
+              boss.hp = Math.max(0, boss.hp - counter);
+              target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
+              events.push({ type: "counter", heroId: target.id, damage: counter });
+            }
           }
-          if (counter > 0 && boss.hp > 0) {
-            boss.hp = Math.max(0, boss.hp - counter);
-            target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
-            events.push({ type: "counter", heroId: target.id, damage: counter });
+          if (drain > 0 && boss.hp > 0) {
+            const heal = Math.min(boss.maxHp - boss.hp, Math.round(hit.damage * drain));
+            boss.hp += heal;
+            if (heal > 0) events.push({ type: "drain", heal });
           }
         }
-        if (special?.poison && target.combatant.hp > 0) {
-          const damage = Math.max(1, Math.round(boss.damage * special.poison.percent));
-          target.effects.poison = { damage, roundsLeft: special.poison.rounds };
+        if (target.combatant.hp > 0) {
+          for (const kind of OVER_TIME) {
+            const effect = special?.[kind];
+            if (!effect) continue;
+            const damage = Math.max(1, Math.round((boss.damage / groupScale) * effect.percent));
+            target.effects[kind] = { damage, roundsLeft: effect.rounds };
+          }
         }
         if (special?.manaBurn && target.combatant.hp > 0) {
           const amount = Math.min(target.mana, special.manaBurn);
           target.mana -= amount;
           if (amount > 0) events.push({ type: "manaBurn", heroId: target.id, amount });
-        }
-        if (!special && def.lifesteal) {
-          // Lebensraub: normale Bisse heilen den Boss
-          const heal = Math.min(boss.maxHp - boss.hp, Math.round(hit.damage * def.lifesteal));
-          boss.hp += heal;
-          if (heal > 0) events.push({ type: "drain", heal });
         }
         knockDown(target);
       }
@@ -699,9 +917,9 @@ export function recordCoopWin(stats: CoopStats, bossId: string): CoopStats {
   return { wins: stats.wins + 1, bosses: stats.bosses.includes(bossId) ? stats.bosses : [...stats.bosses, bossId] };
 }
 
-/** Wird der Boss in dieser Runde seine Fähigkeit einsetzen? (für die Ankündigung) */
-export function coopAbilityDue(state: CoopBattleState): boolean {
-  return state.round % getCoopBoss(state.bossId).ability.every === 0;
+/** Die Fähigkeit, die der Gegner in dieser Runde einsetzt – oder null (für die Ankündigung). */
+export function coopAbilityDue(state: CoopBattleState): CoopBossAbility | null {
+  return abilityForRound(getCoopEnemy(state.bossId).abilities, state.round);
 }
 
 /**

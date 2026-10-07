@@ -29,6 +29,7 @@ export interface CoopRow {
   id: string;
   code: string;
   host_id: string;
+  /** Inhalt der Lobby: Id eines Raid-Bosses oder eines Dungeons (siehe `isCoopDungeon`) */
   boss_id: string;
   phase: CoopPhase;
   members: CoopMember[];
@@ -45,7 +46,11 @@ export interface CoopRow {
 }
 
 export type CoopCommand =
+  /** `bossId`: Raid-Boss oder Dungeon */
   | { type: "create"; bossId: string }
+  /** Dungeon nach einem Sieg: nächster Kampf bzw. mit der Truhe aussteigen (entscheidet der Host) */
+  | { type: "next" }
+  | { type: "exit" }
   | { type: "join"; code: string }
   | { type: "ready"; ready: boolean }
   | { type: "leave" }

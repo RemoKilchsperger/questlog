@@ -198,6 +198,8 @@ interface GameState {
   consumePotion: (potionId: string) => void;
   /** Schreibt die eigene Koop-Beute gut und gibt die Truhe für die Anzeige zurück. */
   grantCoopReward: (reward: BattleReward, bossId: string) => ClaimedChest;
+  /** Truhe eines Koop-Dungeons gutschreiben – `completed`: Endboss besiegt (zählt für Erfolge). */
+  grantCoopDungeon: (chest: DungeonChest, dungeonId: string, completed: boolean) => ClaimedChest;
   /** Koop-Siege und besiegte Koop-Bosse (für Charakterbogen und Profil) */
   coopStats: CoopStats;
 }
@@ -815,6 +817,28 @@ export const useGameStore = create<GameState>()(
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
         return { ...chest, ...levels, completed: true };
+      },
+
+      grantCoopDungeon: (chest, dungeonId, completed) => {
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        if (completed) {
+          // Zählt wie ein Solo-Dungeon (Dungeonläufer, besiegter Boss) und als Koop-Sieg –
+          // aber nicht für „Raidbezwinger“, der nur die Raid-Bosse zählt.
+          const { creatures } = getDungeon(dungeonId);
+          const bossId = creatures[creatures.length - 1].id;
+          set((s) => ({
+            coopStats: { ...s.coopStats, wins: s.coopStats.wins + 1 },
+            records: {
+              ...s.records,
+              dungeonsCleared: s.records.dungeonsCleared.includes(dungeonId) ? s.records.dungeonsCleared : [...s.records.dungeonsCleared, dungeonId],
+              bossesDefeated: s.records.bossesDefeated.includes(bossId) ? s.records.bossesDefeated : [...s.records.bossesDefeated, bossId],
+            },
+          }));
+        }
+        if (levels.levelAfter > levels.levelBefore) {
+          EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
+        }
+        return { ...chest, ...levels, completed };
       },
       };
     },

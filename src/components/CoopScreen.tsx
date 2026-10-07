@@ -6,6 +6,7 @@ import { coopReadyBlocker, localDeadline, useCoopStore } from "../coop/coopStore
 import { isLobbyCode } from "../coop/protocol";
 import { getAbility } from "../domain/abilities";
 import {
+  clearedStages,
   COOP_BOSSES,
   COOP_COST,
   COOP_MAX_PLAYERS,
@@ -14,12 +15,26 @@ import {
   coopBossCreature,
   coopAbilityBlocker,
   coopAbilityDue,
+  coopContent,
+  coopCost,
   coopPotionBlocker,
-  getCoopBoss,
+  dungeonCompleted,
+  DUNGEON_REVIVE_HP,
+  getCoopEnemy,
+  hasNextStage,
+  isCoopDungeon,
+  nextStageEnemy,
+  rollCoopDungeonChest,
   type CoopAction,
   type CoopBattleState,
   type CoopEvent,
 } from "../domain/coopCombat";
+import { dungeonDecider } from "../coop/server";
+import { DUNGEONS, getDungeon } from "../domain/creatures";
+import { getItemStats } from "../domain/items";
+import { Gold } from "./Gold";
+import { ItemIcon } from "./ItemIcon";
+import { ItemTooltip } from "./ItemTooltip";
 import { getPotion, POTIONS, potionHeal } from "../domain/potions";
 import { EventBus } from "../game/EventBus";
 import { useGameStore } from "../store/gameStore";
@@ -40,7 +55,56 @@ export const coopLink = (code: string) => `${window.location.origin}${window.loc
 
 /* ───────────────────────── Auswahl im Kampf-Tab ───────────────────────── */
 
-/** Koop-Bosse in der Gebietsauswahl: Lobby erstellen oder mit Code beitreten. */
+/** Einladungscode eingeben und einer Lobby beitreten – im Kampf-Tab links unter den Tränken. */
+export function CoopJoinForm() {
+  const loggedIn = useCloudStore((s) => s.session !== null);
+  const joinLobby = useCoopStore((s) => s.joinLobby);
+  const busy = useCoopStore((s) => s.busy);
+  const joinError = useCoopStore((s) => s.joinError);
+  const clearError = useCoopStore((s) => s.clearError);
+  const [code, setCode] = useState("");
+  const cleanCode = code.trim().toUpperCase();
+  const errorLine = joinError && <p className="mt-1 text-xs text-danger">{joinError}</p>;
+  // Ohne Koop kein Eingabefeld – eine Meldung (z. B. Einladungslink ohne Anmeldung) aber schon
+  if (!availableBackend(loggedIn)) return errorLine ? <div className="w-full border-t border-night-700 pt-3 text-left">{errorLine}</div> : null;
+
+  return (
+    <form
+      className="w-full border-t border-night-700 pt-3 text-left"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (isLobbyCode(cleanCode)) joinLobby(cleanCode);
+      }}
+    >
+      <label htmlFor="coop-code" className="mb-1 block text-xs uppercase tracking-wide text-muted">
+        🤝 Koop-Einladung
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="coop-code"
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            if (joinError) clearError();
+          }}
+          placeholder="Code"
+          maxLength={6}
+          className="num min-w-0 flex-1 rounded-md border-2 border-night-700 bg-night-950 px-2 py-1 uppercase tracking-widest outline-none focus:border-gold"
+        />
+        <button
+          type="submit"
+          disabled={!isLobbyCode(cleanCode) || busy}
+          className="rounded-md border-2 border-gold/70 px-3 py-1 text-sm text-gold hover:bg-gold/15 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Beitreten
+        </button>
+      </div>
+      {errorLine}
+    </form>
+  );
+}
+
+/** Koop-Bosse in der Gebietsauswahl: Lobby erstellen (beitreten geht mit `CoopJoinForm`). */
 export function CoopPanel({ heroLevel }: { heroLevel: number }) {
   const loggedIn = useCloudStore((s) => s.session !== null);
   const createLobby = useCoopStore((s) => s.createLobby);
@@ -50,9 +114,7 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
   const rejoin = useCoopStore((s) => s.rejoin);
   const checkRejoin = useCoopStore((s) => s.checkRejoin);
   const battlePoints = useGameStore((s) => s.character.battlePoints);
-  const [code, setCode] = useState("");
   const kind = availableBackend(loggedIn);
-  const cleanCode = code.trim().toUpperCase();
   // Läuft noch ein Koop-Kampf (z. B. nach dem Neuladen)? Dann zurückkehren anbieten.
   useEffect(() => void checkRejoin(), [checkRejoin, loggedIn]);
 
@@ -79,7 +141,8 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
           {rejoin && (
             <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border-2 border-gold/60 bg-gold/10 p-3">
               <span className="flex-1 text-sm">
-                ⚔️ {rejoin.phase === "lobby" ? "Deine Lobby" : "Dein Kampf"} gegen <b>{getCoopBoss(rejoin.boss_id).name}</b> läuft noch.
+                ⚔️ {rejoin.phase === "lobby" ? "Deine Lobby" : "Dein Kampf"}{" "}
+                {isCoopDungeon(rejoin.boss_id) ? "im Dungeon" : "gegen"} <b>{coopContent(rejoin.boss_id).name}</b> läuft noch.
               </span>
               <motion.button
                 whileTap={{ scale: 0.92 }}
@@ -121,36 +184,75 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
               );
             })}
           </ul>
-          <form
-            className="mt-3 flex flex-wrap items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (isLobbyCode(cleanCode)) joinLobby(cleanCode);
-            }}
-          >
-            <label htmlFor="coop-code" className="text-sm text-muted">
-              Einladung erhalten?
-            </label>
-            <input
-              id="coop-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Code"
-              maxLength={6}
-              className="num w-28 rounded-md border-2 border-night-700 bg-night-950 px-2 py-1 uppercase tracking-widest outline-none focus:border-gold"
-            />
-            <button
-              type="submit"
-              disabled={!isLobbyCode(cleanCode) || busy}
-              className="rounded-md border-2 border-gold/70 px-3 py-1 text-sm text-gold hover:bg-gold/15 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Beitreten
-            </button>
-          </form>
         </>
       )}
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </section>
+  );
+}
+
+/** Dungeons im Koop – im Dungeon-Bereich des Kampf-Tabs, wenn dort „Koop“ gewählt ist. */
+export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
+  const loggedIn = useCloudStore((s) => s.session !== null);
+  const createLobby = useCoopStore((s) => s.createLobby);
+  const error = useCoopStore((s) => s.error);
+  const busy = useCoopStore((s) => s.busy);
+  const battlePoints = useGameStore((s) => s.character.battlePoints);
+  const kind = availableBackend(loggedIn);
+
+  return (
+    <>
+      <p className="mb-4 text-sm text-muted">
+        Zu zweit bis zu viert: Die Gegner sind stärker, je grösser die Gruppe. Zwischen den Kämpfen keine Heilung,
+        Gefallene stehen mit {Math.round(DUNGEON_REVIVE_HP * 100)} % LP wieder auf. Nach jedem Sieg entscheidet der Host:
+        weiter oder mit der Truhe aussteigen. Jeder hat seine eigene Truhe – fällt die Gruppe, ist sie weg. Lobby erstellen,
+        Link teilen – Mitspieler treten über den Link oder mit dem Code links unter den Tränken bei.
+      </p>
+      {!kind ? (
+        <p className="rounded-md bg-night-800 p-3 text-sm text-muted">
+          ☁️ Für Koop-Dungeons musst du mit deinem Cloud-Konto angemeldet sein (oben rechts).
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {DUNGEONS.map((dungeon) => {
+            const cost = coopCost(dungeon.id);
+            const tooLow = heroLevel < dungeon.minLevel;
+            const poor = battlePoints < cost;
+            const boss = dungeon.creatures[dungeon.creatures.length - 1];
+            return (
+              <li
+                key={dungeon.id}
+                className={`flex flex-wrap items-center gap-3 rounded-md border-2 bg-night-800 p-3 ${
+                  tooLow ? "border-night-700 opacity-60" : "border-legendary/60"
+                }`}
+              >
+                <CreatureSprite sprite={boss.sprite} size={56} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-pixel text-lg">
+                    {tooLow ? "🔒" : "🏰"} {dungeon.name}{" "}
+                    <span className="font-sans text-xs text-muted">ab Lv. {dungeon.minLevel}</span>
+                  </p>
+                  <p className="text-xs text-muted">
+                    {dungeon.description} {dungeon.creatures.length} Kämpfe, Endboss: {boss.name}.
+                  </p>
+                  <BossDrops creature={boss} />
+                </div>
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  disabled={tooLow || poor || busy}
+                  onClick={() => createLobby(dungeon.id)}
+                  title={tooLow ? `Ab Level ${dungeon.minLevel}` : poor ? `Du brauchst ${cost} Kampfpunkte` : undefined}
+                  className="font-pixel rounded-md border-2 border-legendary bg-legendary/15 px-3 py-1.5 text-legendary hover:bg-legendary/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Lobby erstellen <span className="num text-xs">−{cost} ⚔️</span>
+                </motion.button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+    </>
   );
 }
 
@@ -159,6 +261,7 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
 export function CoopScreen() {
   const phase = useCoopStore((s) => s.phase);
   const leave = useCoopStore((s) => s.leave);
+  const battleId = useCoopStore((s) => s.row?.state?.id);
 
   if (phase === "joining") {
     return (
@@ -170,7 +273,8 @@ export function CoopScreen() {
       </section>
     );
   }
-  return phase === "lobby" ? <Lobby /> : <CoopBattle />;
+  // Jeder Kampf (im Dungeon: jeder Gegner) bekommt eine frische Ansicht samt Szene.
+  return phase === "lobby" ? <Lobby /> : <CoopBattle key={battleId} />;
 }
 
 function Lobby() {
@@ -181,7 +285,9 @@ function Lobby() {
   const [copied, setCopied] = useState(false);
   if (!row) return null;
   const { code, host_id: hostId, members } = row;
-  const boss = getCoopBoss(row.boss_id);
+  const content = coopContent(row.boss_id);
+  const raid = isCoopDungeon(row.boss_id) ? null : getCoopEnemy(row.boss_id).abilities[0];
+  const cost = coopCost(row.boss_id);
   const isHost = hostId === myId;
   const me = members.find((m) => m.id === myId);
   const others = members.filter((m) => m.id !== hostId);
@@ -196,13 +302,13 @@ function Lobby() {
   return (
     <div className="flex flex-col gap-4">
       <section className="panel flex flex-wrap items-center gap-4 p-5">
-        <CreatureSprite sprite={boss.sprite} size={72} />
+        <CreatureSprite sprite={content.sprite} size={72} />
         <div className="min-w-0 flex-1">
           <h2 className="font-pixel text-2xl">
-            Koop-Lobby · <span className="text-legendary">{boss.name}</span>
+            Koop-Lobby · <span className="text-legendary">{content.name}</span>
           </h2>
           <p className="text-sm text-muted">
-            {boss.ability.icon} {boss.ability.name}: {boss.ability.description}
+            {raid ? `${raid.icon} ${raid.name}: ${raid.description}` : `${content.description} ${getDungeon(row.boss_id).creatures.length} Kämpfe hintereinander.`}
           </p>
         </div>
         <div className="text-center">
@@ -250,7 +356,7 @@ function Lobby() {
           ))}
         </ul>
         <p className="mt-3 text-xs text-muted">
-          Beim Start bezahlt jeder {COOP_COST} Kampfpunkte. Pro Runde hast du 30 Sekunden – wer nicht wählt, greift normal an.
+          Beim Start bezahlt jeder {cost} Kampfpunkte. Pro Runde hast du 30 Sekunden – wer nicht wählt, greift normal an.
         </p>
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
@@ -316,17 +422,25 @@ function CoopBattle() {
     const t = window.setTimeout(() => setAnimated((n) => Math.max(n, logLength)), 8000);
     return () => window.clearTimeout(t);
   }, [logLength]);
-  if (!battle) return null;
-  const boss = getCoopBoss(battle.bossId);
+  if (!battle || !row) return null;
+  const boss = getCoopEnemy(battle.bossId);
   const animating = animated < battle.log.length;
   const finished = battle.status !== "active";
+  const dungeon = battle.dungeon ? getDungeon(battle.dungeon.id) : null;
+  const due = coopAbilityDue(battle);
 
   return (
     <div className="flex flex-col gap-4">
       <section className="panel p-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-pixel text-2xl">
-            Koop · <span className="text-legendary">{boss.name}</span>
+            Koop · {dungeon && <span className="text-muted">{dungeon.name} · </span>}
+            <span className="text-legendary">{boss.name}</span>
+            {dungeon && (
+              <span className="num ml-2 text-sm text-muted">
+                Kampf {battle.dungeon!.stage + 1}/{dungeon.creatures.length}
+              </span>
+            )}
           </h2>
           <span className="font-pixel text-gold">
             Runde <span className="num">{battle.round}</span>
@@ -344,13 +458,17 @@ function CoopBattle() {
       </section>
 
       {finished && !animating ? (
-        <CoopResultPanel battle={battle} onLeave={leave} />
+        row.phase === "battle" && hasNextStage(battle) ? (
+          <DungeonIntermission battle={battle} />
+        ) : (
+          <CoopResultPanel battle={battle} onLeave={leave} />
+        )
       ) : (
         <section className="panel flex flex-col gap-3 p-4">
           <TeamStatus battle={battle} chosen={chosen} away={away} myId={myId} names={Object.fromEntries(members.map((m) => [m.id, m.name]))} />
-          {coopAbilityDue(battle) && !finished && (
+          {due && !finished && (
             <p className="rounded-md bg-danger/15 px-3 py-1.5 text-sm text-danger">
-              ⚠️ {boss.ability.icon} {boss.name} setzt diese Runde <b>{boss.ability.name}</b> ein – {boss.ability.description}
+              ⚠️ {due.icon} {boss.name} setzt diese Runde <b>{due.name}</b> ein{due.aoe && <b> – trifft alle</b>}: {due.description}
             </p>
           )}
           <ActionBar battle={battle} locked={animating || finished} />
@@ -554,20 +672,136 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   );
 }
 
+/** Zwischen zwei Dungeon-Kämpfen: Zustand der Gruppe, eigene Truhe, nächster Gegner – der Host entscheidet. */
+function DungeonIntermission({ battle }: { battle: CoopBattleState }) {
+  const { row, myId, busy, error } = useCoopStore();
+  const continueDungeon = useCoopStore((s) => s.continueDungeon);
+  const exitDungeon = useCoopStore((s) => s.exitDungeon);
+  if (!row) return null;
+  const next = nextStageEnemy(battle)!;
+  const total = getDungeon(battle.dungeon!.id).creatures.length;
+  const decider = dungeonDecider(row);
+  const deciderName = row.members.find((m) => m.id === decider)?.name ?? "Host";
+  const me = row.members.find((m) => m.id === myId);
+  const chest = me ? rollCoopDungeonChest(battle, me.profile, myId) : null;
+
+  return (
+    <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel flex flex-col gap-4 border-gold p-5">
+      <div className="text-center">
+        <h2 className="font-pixel text-3xl text-gold">Sieg über {getCoopEnemy(battle.bossId).name}!</h2>
+        <p className="text-sm text-muted">
+          Kampf {clearedStages(battle)} von {total} geschafft. Keine Heilung bis zum nächsten Kampf – Gefallene stehen mit{" "}
+          {Math.round(DUNGEON_REVIVE_HP * 100)} % LP wieder auf.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md bg-night-800 p-3">
+          <p className="mb-1 text-xs uppercase tracking-wider text-muted">Gruppe</p>
+          <ul className="flex flex-col gap-1 text-sm">
+            {battle.heroes.map((h) => (
+              <li key={h.id} className={`flex justify-between gap-2 ${h.id === myId ? "text-gold" : ""}`}>
+                <span>
+                  {h.down ? "💀" : "❤️"} {h.name}
+                </span>
+                <span className="num text-muted">
+                  {h.down ? `steht mit ${Math.round(h.combatant.maxHp * DUNGEON_REVIVE_HP)}` : h.combatant.hp}/{h.combatant.maxHp}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex items-center gap-3 rounded-md bg-night-800 p-3">
+          <CreatureSprite sprite={next.sprite} size={56} />
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wider text-muted">Nächster Gegner</p>
+            <p className={`font-semibold ${next.boss ? "text-legendary" : ""}`}>
+              {next.boss && "👑 "}
+              {next.name} <span className="text-xs text-muted">Lv. {next.level}</span>
+            </p>
+            {next.abilities.map((a) => (
+              <p key={a.id ?? a.name} className="text-xs text-danger">
+                {a.icon} {a.name}
+                {a.aoe && " (trifft alle)"}: {a.description}
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {chest && <ChestPreview chest={chest} />}
+
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {decider === myId ? (
+        <div className="flex flex-wrap justify-center gap-2">
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            disabled={busy}
+            onClick={exitDungeon}
+            className="font-pixel rounded-md border-2 border-gold/70 px-4 py-1.5 text-gold hover:bg-gold/15 disabled:opacity-40"
+          >
+            🎁 Mit Truhe aussteigen
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            disabled={busy}
+            onClick={continueDungeon}
+            className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-5 py-1.5 text-lg text-danger hover:bg-danger/25 disabled:opacity-40"
+          >
+            ⚔️ Weiter
+          </motion.button>
+        </div>
+      ) : (
+        <p className="text-center text-sm text-muted">⏳ {deciderName} entscheidet: weiter oder mit der Truhe aussteigen …</p>
+      )}
+    </motion.section>
+  );
+}
+
+/** Inhalt der eigenen Truhe bisher – noch nicht gutgeschrieben. */
+function ChestPreview({ chest }: { chest: ReturnType<typeof rollCoopDungeonChest> }) {
+  const potions = Object.entries(chest.potions);
+  return (
+    <div className="rounded-md bg-night-800 p-3">
+      <p className="mb-2 text-xs uppercase tracking-wider text-muted">Deine Truhe – verloren, wenn die Gruppe fällt</p>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-xp">+{chest.xp} XP</span>
+        {chest.gold > 0 && <Gold amount={chest.gold} sign className="text-gold" />}
+        {potions.map(([id, count]) => (
+          <span key={id} title={getPotion(id).name}>
+            {getPotion(id).icon} × {count}
+          </span>
+        ))}
+        {chest.items.map((item) => (
+          <ItemTooltip key={item.uid} stats={getItemStats(item)}>
+            <ItemIcon def={getItemStats(item).def} rarity={item.rarity} size={32} />
+          </ItemTooltip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CoopResultPanel({ battle, onLeave }: { battle: CoopBattleState; onLeave: () => void }) {
   const result = useCoopStore((s) => s.result);
   const won = battle.status === "won";
+  const dungeon = battle.dungeon !== undefined;
+  const title = !won ? "Niederlage" : !dungeon ? "Sieg!" : dungeonCompleted(battle) ? "Dungeon geschafft!" : "Ausgestiegen";
   return (
     <motion.section
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={`panel flex flex-col items-center gap-3 p-5 text-center ${won ? "border-gold" : "border-danger"}`}
     >
-      <h2 className={`font-pixel text-3xl ${won ? "text-gold" : "text-danger"}`}>{won ? "Sieg!" : "Niederlage"}</h2>
+      <h2 className={`font-pixel text-3xl ${won ? "text-gold" : "text-danger"}`}>{title}</h2>
       {won && result?.chest ? (
         <DungeonChest chest={result.chest} />
+      ) : won ? (
+        <p className="max-w-md text-sm text-muted">Beute bekommt nur, wer beim Ende dabei war.</p>
       ) : (
-        <p className="max-w-md text-sm text-muted">Die ganze Gruppe ist gefallen. Diesmal gibt es keine Beute.</p>
+        <p className="max-w-md text-sm text-muted">
+          Die ganze Gruppe ist gefallen. {dungeon ? "Die Truhe ist verloren." : "Diesmal gibt es keine Beute."}
+        </p>
       )}
       <button onClick={onLeave} className="rounded-md border-2 border-night-700 px-4 py-1.5 text-muted hover:text-parchment">
         Zurück zur Gebietskarte
@@ -627,7 +861,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
 }
 
 function CoopLog({ battle, names }: { battle: CoopBattleState; names: Record<string, string> }) {
-  const bossName = getCoopBoss(battle.bossId).name;
+  const bossName = getCoopEnemy(battle.bossId).name;
   const lines = [...battle.log].reverse().slice(0, 30);
   if (lines.length === 0) return null;
   return (

@@ -13,7 +13,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { applyCommand, COOP_ROW_TTL_HOURS, CoopError, memberFromSave, newLobbyCode } from "../_shared/coop-server.js";
 
 // Schlanke Typen für diese Datei – die vollständigen stehen in src/coop/protocol.ts.
-type CoopCommand = { type: "create" | "ready" | "leave" | "start" | "act" | "tick" } | { type: "join"; code: string };
+type CoopCommand = { type: "create" | "ready" | "leave" | "start" | "act" | "tick" | "next" | "exit" } | { type: "join"; code: string };
 type CoopRow = { id: string; version: number; player_ids: string[] };
 type CoopMember = { id: string };
 

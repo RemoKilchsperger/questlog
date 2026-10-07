@@ -3,6 +3,7 @@
 // genau eine. Die Auswahl hängt nur vom Datum ab – sie ist also den ganzen
 // Tag gleich, braucht keinen Speicher und könnte später 1:1 auf dem Server laufen.
 
+import { hash, seededRng } from "./random";
 import { EFFORT_TIERS } from "./rewards";
 import type { Category, Effort } from "./types";
 
@@ -213,27 +214,6 @@ export const BONUS_QUESTS: Record<Effort, readonly BonusQuest[]> = {
 function dayNumber(key: string): number {
   const [y, m, d] = key.split("-").map(Number);
   return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
-}
-
-/** FNV-1a: kleiner, stabiler Hash – gleiche Eingabe, gleiche Zahl. */
-function hash(text: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
-/** Mulberry32: deterministischer Zufall aus einem Startwert. */
-function seededRng(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 /** Gemischte Reihenfolge aller Quests einer Stufe für einen Durchgang (Fisher-Yates). */

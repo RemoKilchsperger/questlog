@@ -169,6 +169,11 @@ Niederlage verloren geht.
 **Koop** (`coopCombat.ts`, Plan in `docs/koop-kampf.md`): 2–4 Spieler gegen Sumpfhydra (20),
 Frostriese (40) oder Weltenverschlinger (60). Der Boss greift nach Bedrohung an,
 Gefallene lassen sich mit einem Heiltrank wiederbeleben, jeder würfelt eigene Beute (×1.5 XP und Gold).
+Auch alle Dungeons gehen im Koop (Plan in `docs/koop-dungeons.md`): Gegner mit Lebenspunkten
+`× n × (1 + 0.1 · (n − 1))` und Schaden `× (1 + 0.4 · (n − 1))`, Gefallene stehen zwischen den Kämpfen
+mit 25 % LP auf, der Host entscheidet nach jedem Sieg über Weiter oder Aussteigen, jeder hat seine eigene Truhe.
+Dungeon-Bosse haben zwei Fähigkeiten im Wechsel (`bossAbilities.ts`): eine gegen ein Ziel, eine gegen die Gruppe.
+Solo treffen beide den Helden, im Koop trifft die zweite alle – jeden mit Solo-Schaden × 0.75.
 
 **Tränke:** Kleiner Heiltrank 30 % LP und Heiltrank 60 % gibt es beim Händler. Grosser Heiltrank 100 %,
 Angriffstrank (+30 % Schaden, 3 Runden) und Rüstungstrank (+100 % Rüstung, 3 Runden) gibt es nur als Beute.

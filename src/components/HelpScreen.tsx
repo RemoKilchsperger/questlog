@@ -12,6 +12,7 @@ import {
   COOP_MIN_PLAYERS,
   COOP_REWARD_FACTOR,
   COOP_TURN_SECONDS,
+  DUNGEON_REVIVE_HP,
   THREAT_DECAY,
 } from "../domain/coopCombat";
 import { AREAS, DUNGEONS } from "../domain/creatures";
@@ -164,7 +165,7 @@ export function HelpScreen() {
           <ul className="list-disc space-y-1 pl-5">
             <li>Erledigte Quests füllen Kampfpunkte auf – je länger die Quest, desto mehr (siehe Quests).</li>
             <li>Alle {REGEN_HOURS} Stunden (0, 6, 12 und 18 Uhr) gibt es einen Punkt geschenkt, auch wenn die App zu ist.</li>
-            <li>Dungeons kosten einen Punkt pro Kampf, Koop-Kämpfe {COOP_COST} Punkte – bezahlt beim Start.</li>
+            <li>Dungeons (solo und Koop) kosten einen Punkt pro Kampf, Koop-Bosse {COOP_COST} Punkte – bezahlt beim Start.</li>
           </ul>
         </Topic>
 
@@ -302,7 +303,8 @@ export function HelpScreen() {
           <H>Boss-Fähigkeiten</H>
           <p>
             Bosse setzen alle paar Runden eine besondere Attacke ein. Sie wird eine Runde vorher angekündigt: Ein Bollwerk
-            (Schild) blockt sie komplett, ein Betäubender Schlag (Streitkolben) verhindert sie.
+            (Schild) blockt sie komplett, ein Betäubender Schlag (Streitkolben) verhindert sie. Dungeon-Bosse haben zwei
+            Fähigkeiten, die sich abwechseln.
           </p>
         </Topic>
 
@@ -332,7 +334,10 @@ export function HelpScreen() {
               <b>Bedrohung:</b> Der Boss greift meist an, wer am meisten Schaden macht. Sie sinkt jede Runde um{" "}
               {pct(THREAT_DECAY)}. Mit Bollwerk zieht ein Schildträger {pct(BULWARK_SHARE)} der Angriffe auf sich.
             </li>
-            <li>Boss-Fähigkeiten treffen die ganze Gruppe.</li>
+            <li>
+              Die Fähigkeiten der Koop-Bosse treffen die ganze Gruppe. Dungeon-Bosse wechseln ab: eine Fähigkeit gegen ein
+              Ziel, eine gegen alle.
+            </li>
             <li>Gefallene Mitspieler belebst du mit einem Heiltrank wieder – jeden höchstens einmal pro Kampf.</li>
             <li>
               Bei einem Sieg würfelt jeder seine eigene Beute ({formatNumber(COOP_REWARD_FACTOR)}-fache XP und Gold eines
@@ -341,6 +346,17 @@ export function HelpScreen() {
             <li>Kosten: {COOP_COST} Kampfpunkte pro Spieler, bezahlt beim Start.</li>
           </ul>
           <Table head={["Koop-Boss", "Level"]} rows={COOP_BOSSES.map((b) => [b.name, `${b.level}`])} />
+          <H>🏰 Koop-Dungeons</H>
+          <p>Alle Dungeons lassen sich auch gemeinsam spielen – mit denselben Gegnern, die mit der Gruppe stärker werden.</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Kosten wie solo: ein Kampfpunkt pro Kampf, bezahlt beim Start.</li>
+            <li>
+              Zwischen den Kämpfen keine Heilung. Gefallene stehen mit {pct(DUNGEON_REVIVE_HP)} ihrer Lebenspunkte wieder
+              auf, Mana ist wieder voll.
+            </li>
+            <li>Nach jedem Sieg entscheidet der Host: weiter zum nächsten Gegner oder mit der Truhe aussteigen.</li>
+            <li>Jeder hat seine eigene Truhe mit der Beute wie solo. Fällt die ganze Gruppe, sind alle Truhen weg.</li>
+          </ul>
         </Topic>
 
         <Topic id="achievements" title="🏆 Erfolge & Rangliste">

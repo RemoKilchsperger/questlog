@@ -1,10 +1,10 @@
-// Phaser-Szene für den Koop-Kampf: 2–4 Helden links, der Koop-Boss rechts.
+// Phaser-Szene für den Koop-Kampf: 2–4 Helden links, der Gegner (Raid-Boss oder Dungeon-Kreatur) rechts.
 // Wie die Solo-Szene rechnet sie nichts selbst – sie spielt nur die
 // Ereignisse ab, die der Koop-Zustand über den EventBus schickt.
 
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
-import { BOSS, getCoopBoss, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
+import { BOSS, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
 import type { CoopMember } from "../coop/protocol";
@@ -35,7 +35,12 @@ const HERO_SCALE = 5;
 const BOSS_SCALE = 10;
 /** Koop-Bosse mit eigenem Bild: deutlich grösser als die Helden */
 const BOSS_IMAGE_SCALE = 1.6;
+/** Normale Dungeon-Gegner: etwas kleiner als Bosse */
+const ENEMY_SCALE = 8;
+const ENEMY_IMAGE_SCALE = 1.3;
 const HERO_BAR = 64;
+/** Boss-Fähigkeiten, deren Treffer erst nach einer längeren Animation landet (siehe `bossHits`) */
+const SLOW_IMPACT = new Set(["ore-king", "high-priestess", "void-lord"]);
 
 /** x-Positionen der Helden – der erste steht vorne, nah am Boss. */
 const HERO_X: Record<number, number[]> = {
@@ -81,14 +86,14 @@ export class CoopBattleScene extends Phaser.Scene {
 
   /** Boss mit eigenem Bild (creatureImages.ts) vorab laden. */
   preload() {
-    const sprite = getCoopBoss(this.setup.state.bossId).sprite;
+    const sprite = getCoopEnemy(this.setup.state.bossId).sprite;
     const url = creatureImage(sprite);
     if (url && !this.textures.exists(`creature-img-${sprite}`)) this.load.image(`creature-img-${sprite}`, url);
   }
 
   create() {
     const { state, members, myId } = this.setup;
-    const def = getCoopBoss(state.bossId);
+    const def = getCoopEnemy(state.bossId);
     this.drawBackground(def.areaId);
 
     const xs = HERO_X[state.heroes.length] ?? HERO_X[4];
@@ -98,7 +103,7 @@ export class CoopBattleScene extends Phaser.Scene {
       const member = members.find((m) => m.id === hero.id);
       this.heroes.set(hero.id, this.addHero(hero.id, xs[index], member, hero.name, hero.combatant.hp, hero.combatant.maxHp, hero.id === myId));
     });
-    this.boss = this.addBoss(def.sprite, def.name, def.level, state.boss.hp, state.boss.maxHp);
+    this.boss = this.addBoss(def.sprite, def.name, def.level, state.boss.hp, state.boss.maxHp, def.boss);
 
     // Wer beim (Wieder-)Einstieg schon gefallen ist, liegt am Boden
     for (const hero of state.heroes) if (hero.down) this.fall(hero.id, true);
@@ -194,14 +199,14 @@ export class CoopBattleScene extends Phaser.Scene {
     return unit;
   }
 
-  private addBoss(spriteKey: string, name: string, level: number, hp: number, maxHp: number): Unit {
+  private addBoss(spriteKey: string, name: string, level: number, hp: number, maxHp: number, isBoss: boolean): Unit {
     const imageKey = `creature-img-${spriteKey}`;
     let object: Phaser.GameObjects.Image;
-    let scale = BOSS_SCALE;
+    let scale = isBoss ? BOSS_SCALE : ENEMY_SCALE;
     if (this.textures.exists(imageKey)) {
       const source = this.textures.get(imageKey).getSourceImage() as HTMLImageElement;
       object = this.add.image(0, 0, imageKey).setOrigin(0.5, (lastOpaqueRow(source) + 1) / source.height);
-      scale = BOSS_IMAGE_SCALE;
+      scale = isBoss ? BOSS_IMAGE_SCALE : ENEMY_IMAGE_SCALE;
     } else {
       object = this.figure(`creature-${spriteKey}`, getCreatureSprite(spriteKey)).object;
     }
@@ -262,27 +267,39 @@ export class CoopBattleScene extends Phaser.Scene {
   private play(events: CoopEvent[], next: CoopBattleState) {
     let delay = 0;
     let aoe = false;
+    /** Nach "bossAbility" gehören die Treffer des Bosses zu dieser Fähigkeit – eigener Effekt pro Fähigkeit */
+    let special: string | null = null;
     for (const event of events) {
-      if (event.type === "bossAbility") aoe = getCoopBoss(next.bossId).ability.aoe === true;
-      this.time.delayedCall(delay, () => this.animate(event));
+      if (event.type === "bossAbility") {
+        const enemy = getCoopEnemy(next.bossId);
+        aoe = enemy.abilities.find((a) => (a.id ?? enemy.id) === event.abilityId)?.aoe === true;
+        special = event.abilityId;
+      }
+      const ability = special;
+      this.time.delayedCall(delay, () => this.animate(event, ability));
       const quick =
         (aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked" || event.type === "manaBurn")) ||
         event.type === "drain";
+      // Steinschlag, Fluchkreis und Strudel treffen erst nach ihrer Animation – dafür Zeit lassen
+      const slowImpact = event.type === "hit" && event.attacker === BOSS && special !== null && SLOW_IMPACT.has(special);
       delay +=
         event.type === "victory" || event.type === "wipe"
           ? 900
-          : quick
-            ? 260
-            : event.type === "ability" || event.type === "bossAbility"
-              ? 600
-              : event.type === "down"
-                ? 500
-                : 700;
+          : slowImpact
+            ? 520
+            : quick
+              ? 260
+              : event.type === "ability" || event.type === "bossAbility"
+                ? 600
+                : event.type === "down"
+                  ? 500
+                  : 700;
     }
     this.time.delayedCall(delay + 200, () => EventBus.emit("coop:animation-done", { logLength: next.log.length }));
   }
 
-  private animate(event: CoopEvent) {
+  /** `bossAbility`: Id des Bosses, dessen Fähigkeit gerade wirkt (für den passenden Treffer-Effekt) */
+  private animate(event: CoopEvent, bossAbility: string | null) {
     switch (event.type) {
       case "potion": {
         const target = this.unit(event.targetId);
@@ -309,7 +326,7 @@ export class CoopBattleScene extends Phaser.Scene {
         break;
       }
       case "hit":
-        if (event.attacker === BOSS) this.bossHits(event);
+        if (event.attacker === BOSS) this.bossHits(event, bossAbility);
         else this.heroHits(event);
         break;
       case "poison":
@@ -325,15 +342,9 @@ export class CoopBattleScene extends Phaser.Scene {
         else sfx.bleed();
         break;
       }
-      case "bossAbility": {
-        this.float(this.boss, `${event.name}!`, "#f0776a", 24, 60);
-        this.tint(this.boss, 0xff6b5a, 400);
-        this.cameras.main.shake(250, 0.006);
-        sfx.roar();
-        // Giftwolke zieht über die ganze Gruppe
-        for (const hero of this.heroes.values()) fx.burst(this, this.center(hero), 0x7dd3a8, 10, 50);
+      case "bossAbility":
+        this.announceBossAbility(event.abilityId, event.name);
         break;
-      }
       case "stunned":
         this.float(this.boss, "BETÄUBT", "#d39bf0", 22, 60);
         sfx.stun();
@@ -744,9 +755,104 @@ export class CoopBattleScene extends Phaser.Scene {
   }
 
   /** Der Boss stürzt sich auf sein Ziel (bei Flächenangriffen schlägt er nur zu). */
-  private bossHits(event: Extract<CoopEvent, { type: "hit" }>) {
+  /**
+   * Ankündigung der Boss-Fähigkeit – mit eigenem Effekt pro Fähigkeit (wie in der Solo-Szene).
+   * Die Ids der Raid-Boss-Fähigkeiten und der ersten Fähigkeit eines Bosses sind die Boss-Ids.
+   */
+  private announceBossAbility(abilityId: string, name: string) {
+    this.float(this.boss, `${name}!`, "#f0776a", 24, 60);
+    this.tint(this.boss, 0xff6b5a, 400);
+    this.cameras.main.shake(250, 0.006);
+    sfx.roar();
+    const at = this.center(this.boss);
+    switch (abilityId) {
+      case "swamp-hydra": // Giftwolke zieht über die ganze Gruppe
+        for (const hero of this.heroes.values()) fx.burst(this, this.center(hero), 0x7dd3a8, 10, 50);
+        break;
+      case "frost-giant": // Eisiger Hauch über die Gruppe
+        for (const hero of this.heroes.values()) fx.burst(this, this.center(hero), 0xe8fbff, 10, 50);
+        break;
+      case "world-eater":
+      case "void-lord":
+      case "void-lord-wave": // Die Leere zieht sich zusammen
+        fx.rise(this, at, 0x5a2a8a, 14, 90);
+        break;
+      case "high-priestess":
+        fx.rise(this, at, 0x3ad6c5, 12, 80);
+        break;
+      case "high-priestess-spear": // Licht sammelt sich
+        fx.rise(this, at, 0xf4c95d, 12, 80);
+        break;
+      case "storm-lord":
+      case "storm-lord-thunder": // Himmel verdunkelt sich
+        fx.flash(this, 0x141e36, 0.5, 400);
+        break;
+      case "ore-king": // Der Boden bebt
+        sfx.quake(0.5);
+        break;
+    }
+  }
+
+  /** Treffer des Bosses: normaler Ausfallschritt – bei Dungeon-Boss-Fähigkeiten deren eigener Effekt am Ziel. */
+  private bossHits(event: Extract<CoopEvent, { type: "hit" }>, bossAbility: string | null) {
     const target = this.unit(event.target);
     const hit = () => this.impact(target, event.damage, event.crit);
+    const at = this.center(target);
+    switch (bossAbility) {
+      case "ore-king": // Erzlawine: Steine prasseln herab
+        fx.rockfall(this, at, [0x8a909a, 0x6a7280, 0xc0602f], hit);
+        sfx.quake(0.6);
+        return;
+      case "ore-king-pick": {
+        // Spitzhackenhieb: Ausfallschritt mit roten Schnitten
+        const reach = Math.max(40, BOSS_X - target.homeX - 150);
+        sfx.swing();
+        this.tweens.add({
+          targets: this.boss.body,
+          x: BOSS_X - reach,
+          duration: 160,
+          ease: "Quad.easeIn",
+          yoyo: true,
+          onYoyo: () => {
+            hit();
+            fx.slashes(this, at, 0xc23a3a, 2, true);
+            sfx.slash();
+          },
+        });
+        return;
+      }
+      case "high-priestess": // Fluch der Mumie: Zeichenkreis zieht sich zusammen
+        fx.curseRing(this, at, 0x3ad6c5, hit);
+        sfx.curse();
+        return;
+      case "high-priestess-spear": // Sonnenspeer: goldener Strahl
+        fx.beam(this, this.center(this.boss), at, 0xf4c95d, 14, 420);
+        sfx.beam();
+        this.time.delayedCall(180, hit);
+        return;
+      case "storm-lord": // Kettenblitz: Blitz von oben
+        fx.lightning(this, at);
+        sfx.thunder();
+        this.time.delayedCall(60, hit);
+        return;
+      case "storm-lord-thunder": // Donnerschlag: ein greller Blitz, die Erde bebt
+        fx.lightning(this, at);
+        fx.flash(this, 0xffffff, 0.35, 150);
+        this.cameras.main.shake(220, 0.012);
+        sfx.thunder();
+        this.time.delayedCall(60, hit);
+        return;
+      case "void-lord": // Leerenschlund: Strudel am Helden
+        fx.vortex(this, at, [0x5a2a8a, 0x4af0ff]);
+        sfx.curse();
+        this.time.delayedCall(320, hit);
+        return;
+      case "void-lord-wave": // Leerenwelle: dunkler Ring
+        fx.ring(this, at, 0x5a2a8a, 70, 380);
+        sfx.curse();
+        this.time.delayedCall(200, hit);
+        return;
+    }
     sfx.swing();
     const reach = Math.max(40, BOSS_X - target.homeX - 150);
     this.tweens.add({ targets: this.boss.body, x: BOSS_X - reach, duration: 160, ease: "Quad.easeIn", yoyo: true, onYoyo: hit });

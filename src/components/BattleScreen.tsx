@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { getAbility, MANA_REGEN } from "../domain/abilities";
-import { getBossAbility, roundsUntilBossAbility } from "../domain/bossAbilities";
+import { getBossAbilities, getBossAbilityById, roundsUntilBossAbility, upcomingBossAbility } from "../domain/bossAbilities";
 import {
   abilityBlocker,
   BOSS_ITEM_DROP_CHANCE,
@@ -39,7 +39,7 @@ import { unlockAudio } from "../game/sfx";
 import { useGameStore } from "../store/gameStore";
 import { useSoundStore } from "../store/soundStore";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { CoopPanel, CoopScreen } from "./CoopScreen";
+import { CoopDungeonList, CoopJoinForm, CoopPanel, CoopScreen } from "./CoopScreen";
 import { useCoopStore } from "../coop/coopStore";
 import { DungeonChest } from "./DungeonChest";
 import { Gold } from "./Gold";
@@ -125,11 +125,58 @@ function AreaPanel({ area, heroLevel }: { area: AreaDef; heroLevel: number }) {
   );
 }
 
-/** Dungeons: mehrere Gegner nacheinander, ohne Heilung dazwischen, Boss mit einzigartiger Beute. */
+/** Dungeons: mehrere Gegner nacheinander, ohne Heilung dazwischen, Boss mit einzigartiger Beute – solo oder im Koop. */
 function DungeonPanel({ heroLevel }: { heroLevel: number }) {
+  const [mode, setMode] = useState<"solo" | "coop">(() => {
+    try {
+      return localStorage.getItem(DUNGEON_MODE_KEY) === "coop" ? "coop" : "solo";
+    } catch {
+      return "solo";
+    }
+  });
+  const choose = (next: "solo" | "coop") => {
+    setMode(next);
+    try {
+      localStorage.setItem(DUNGEON_MODE_KEY, next);
+    } catch {
+      // ohne Speicher gilt die Wahl nur bis zum Neuladen
+    }
+  };
+
   return (
     <section className="panel p-5">
-      <h2 className="font-pixel text-2xl">Dungeons</h2>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-pixel text-2xl">Dungeons</h2>
+        <div className="flex rounded-md border-2 border-night-700 bg-night-900 p-0.5" role="group" aria-label="Dungeon-Modus">
+          {(["solo", "coop"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => choose(m)}
+              aria-pressed={mode === m}
+              className={`font-pixel rounded px-3 py-0.5 transition ${
+                mode === m ? "bg-night-700 text-gold" : "text-muted hover:text-parchment"
+              }`}
+            >
+              {m === "solo" ? "🧍 Solo" : "🤝 Koop"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {mode === "coop" ? (
+        <CoopDungeonList heroLevel={heroLevel} />
+      ) : (
+        <SoloDungeons heroLevel={heroLevel} />
+      )}
+    </section>
+  );
+}
+
+/** Gewählter Dungeon-Modus – nur eine Bequemlichkeit pro Browser. */
+const DUNGEON_MODE_KEY = "questlog-dungeon-mode";
+
+function SoloDungeons({ heroLevel }: { heroLevel: number }) {
+  return (
+    <>
       <p className="mb-4 text-sm text-muted">
         Mehrere Gegner hintereinander und ein Boss am Ende. Die Gegner sind stärker als draussen, und zwischen den
         Kämpfen heilst du nicht – nur dein Mana füllt sich wieder auf. Tränke helfen. Der Boss lässt mit{" "}
@@ -144,7 +191,7 @@ function DungeonPanel({ heroLevel }: { heroLevel: number }) {
           <DungeonCard key={dungeon.id} dungeon={dungeon} heroLevel={heroLevel} />
         ))}
       </ul>
-    </section>
+    </>
   );
 }
 
@@ -154,7 +201,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
   const open = isAreaUnlocked(dungeon, heroLevel);
   const cost = dungeonCost(dungeon.creatures.length);
   const boss = dungeon.creatures.at(-1)!;
-  const bossAbility = getBossAbility(boss.id);
+  const bossAbilities = getBossAbilities(boss.id);
   const blocker = !open
     ? `Ab Level ${dungeon.minLevel}`
     : battlePoints < cost
@@ -195,10 +242,11 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
       </div>
       <p className="mt-1 text-xs">
         <span className="text-legendary">Boss: {boss.name}</span>
-        {bossAbility && (
+        {bossAbilities.length > 0 && (
           <span className="text-danger">
             {" "}
-            · {bossAbility.icon} {bossAbility.name} alle {bossAbility.every} Runden
+            · {bossAbilities.map((a) => `${a.icon} ${a.name}`).join(" und ")}{" "}
+            {bossAbilities.length > 1 ? "im Wechsel" : ""} alle {bossAbilities[0].every} Runden
           </span>
         )}
       </p>
@@ -210,7 +258,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
 function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel: number }) {
   const startBattle = useGameStore((s) => s.startBattle);
   const canFight = useGameStore((s) => s.character.battlePoints >= BATTLE_COST);
-  const bossAbility = getBossAbility(creature.id);
+  const bossAbilities = getBossAbilities(creature.id);
   const stats = getCreatureStats(creature);
   const potionDrop = getCreaturePotionDrop(creature);
   const goldDrop = getCreatureGoldDrop(creature);
@@ -248,12 +296,12 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           </span>
           {dangerText && <span className={danger > 0 ? "text-danger" : "text-xp"}>{dangerText}</span>}
         </div>
-        {bossAbility && (
-          <p className="mt-1 text-xs text-danger">
-            Fähigkeit: {bossAbility.icon} {bossAbility.name} – alle {bossAbility.every} Runden.{" "}
-            {bossAbility.description}
+        {bossAbilities.map((a) => (
+          <p key={a.id} className="mt-1 text-xs text-danger">
+            Fähigkeit: {a.icon} {a.name} – {bossAbilities.length > 1 ? "im Wechsel " : ""}alle {a.every} Runden.{" "}
+            {a.description}
           </p>
-        )}
+        ))}
         <BossDrops creature={creature} />
       </div>
       <motion.button
@@ -336,6 +384,7 @@ function HeroPanel() {
           Kleine und normale Heiltränke gibt es beim Händler, alle anderen nur als Kampfbeute.
         </p>
       </div>
+      <CoopJoinForm />
     </section>
   );
 }
@@ -840,7 +889,7 @@ function DungeonProgress({ area }: { area: AreaDef }) {
 
 /** Kündigt die Boss-Fähigkeit an – diese Runde (rot) oder nächste Runde (gelb). */
 function BossWarning({ battle }: { battle: BattleState }) {
-  const ability = getBossAbility(battle.creatureId);
+  const ability = upcomingBossAbility(battle.creatureId, battle.round);
   const inRounds = roundsUntilBossAbility(battle.creatureId, battle.round);
   if (!ability || inRounds === null || inRounds > 1) return null;
   const now = inRounds === 0;
@@ -962,7 +1011,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "stunned":
       return `${enemy} ist betäubt und kann nicht zurückschlagen.`;
     case "bossAbility":
-      return `${enemy} setzt ${getBossAbility(e.bossId)?.name ?? "einen Spezialangriff"} ein!`;
+      return `${enemy} setzt ${getBossAbilityById(e.abilityId)?.name ?? "einen Spezialangriff"} ein!`;
     case "blocked":
       return `Dein Bollwerk blockt den Angriff von ${enemy} komplett.`;
     case "drain":
