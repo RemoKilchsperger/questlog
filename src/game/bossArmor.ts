@@ -4,18 +4,10 @@
 // auch, legt aber zusätzlich eigene Teile darüber (Schulterstücke, Kragen,
 // Krallen, Flügel …) – so verändert sie die Silhouette und hebt sich klar ab.
 //
-// Zeichen wie in itemSprites.ts (L/m/D Material, t Zierde, j Edelstein, h/H Griff,
-// k/w dunkel/weiss). Dazu l/d: hell/dunkel wie L/D, werden beim Spiegeln aber
-// nicht getauscht (für Muster wie Schuppen).
-//
-// Die meisten Teile sind symmetrisch und nur als linke Hälfte gezeichnet (`sym`).
+// Zeichen und Hilfen zum Zeichnen siehe pixelGrid.ts.
 
-/** Ein Teil der Rüstung im Raster des Helden – `x`/`y` = linke obere Ecke (Held: 0–23). */
-export interface ArmorPiece {
-  x: number;
-  y: number;
-  rows: readonly string[];
-}
+import { BOOTS, BREASTPLATE, GAUNTLETS, GREAVES } from "./armorIcons";
+import { base, half, ICON_SIZE, piece, stamp, sym, type ArmorPiece } from "./pixelGrid";
 
 export interface BossArmorWorn {
   /** liegt über dem Helden */
@@ -23,22 +15,6 @@ export interface BossArmorWorn {
   /** liegt hinter dem Helden (Umhang, Flügel, Kragen) */
   back?: readonly ArmorPiece[];
 }
-
-/** Licht kommt von links: Beim Spiegeln werden L und D getauscht, l und d bleiben. */
-const SWAP: Readonly<Record<string, string>> = { L: "D", D: "L" };
-
-/** Linke Hälfte (auf `half` Zeichen aufgefüllt) mit gespiegelter rechter Hälfte ergänzen. */
-function sym(rows: readonly string[], half = 12): string[] {
-  return rows.map((row) => {
-    const left = row.padEnd(half, ".");
-    return left + [...left].reverse().map((ch) => SWAP[ch] ?? ch).join("");
-  });
-}
-
-const piece = (y: number, rows: readonly string[], x = 0): ArmorPiece => ({ x, y, rows });
-
-/** Symmetrisches Teil, gezeichnet als linke Hälfte des 24er-Rasters. */
-const half = (y: number, rows: readonly string[]) => piece(y, sym(rows));
 
 // --- Helme -------------------------------------------------------------------
 // Wie WORN_HELMETS in itemSprites.ts: 24 Spalten, erste Zeile 4 Pixel über dem Kopf.
@@ -391,111 +367,9 @@ export const BOSS_ARMOR: Readonly<Record<string, BossArmorWorn>> = {
 };
 
 // --- Symbole -------------------------------------------------------------------
-// Boss-Rüstung im Inventar: fein gezeichnete Grundformen (24 × 24), auf die jedes
-// Set seine Motive legt – dieselben wie am Helden. Helme nutzen direkt ihre Form
-// am Helden (siehe getItemSprite).
-
-const ICON_SIZE = 24;
-
-/** Symmetrische Grundform aus linken Hälften, auf 24 Zeilen aufgefüllt (Zeile = y im Symbol). */
-function base(rows: readonly string[]): string[] {
-  const grid = sym(rows);
-  return [...grid, ...Array<string>(ICON_SIZE - grid.length).fill(".".repeat(ICON_SIZE))];
-}
-
-/** Legt Teile über eine Grundform – jedes Zeichen ausser "." ersetzt, was darunter liegt. */
-function stamp(grid: readonly string[], ...pieces: ArmorPiece[]): string[] {
-  const rows = grid.map((row) => [...row]);
-  for (const { x, y, rows: part } of pieces)
-    part.forEach((row, dy) =>
-      [...row].forEach((ch, dx) => {
-        if (ch !== "." && rows[y + dy]?.[x + dx] !== undefined) rows[y + dy][x + dx] = ch;
-      }),
-    );
-  return rows.map((row) => row.join(""));
-}
-
-const BREASTPLATE = base([
-  "",
-  "",
-  "....Lmmm",
-  "..LLmmmmm",
-  ".Lmmmmmmmm",
-  ".Lmmmmmmmmmm",
-  ".Lmmmmmmmmmm",
-  "..Lmmmmmmmmm",
-  "...Lmmmmmmmm",
-  "...Lmmmmmmmm",
-  "...Lmmmmmmmm",
-  "...Lmmmmmmmm",
-  "...Lmmmmmmmm",
-  "...Lmmmmmmmm",
-  "....Lmmmmmmm",
-  "....Lmmmmmmm",
-  "....tttttttt",
-  "....Lmmmmmmm",
-  "....DDDDDDDD",
-]);
-
-const GAUNTLETS = base([
-  "",
-  "",
-  "",
-  "..tttttt",
-  "..LmmmmD",
-  "..LmmmmD",
-  "..LmmmmD",
-  "..LmmmmD",
-  "..LmmmmD",
-  "..tttttt",
-  "..LmmmmmD",
-  ".LmmmmmmD",
-  ".LmmmmmmD",
-  ".LmmmmmmD",
-  ".LmDmDmD",
-  ".LmDmDmD",
-  "..D.D.D",
-]);
-
-const GREAVES = base([
-  "",
-  "",
-  "...tttttt",
-  "...LmmmmD",
-  "...LmmmmD",
-  "...tttttt",
-  "...LmmmmD",
-  "...LmmmmD",
-  "...LmmmmD",
-  "...LmmmmD",
-  "...LmmmmD",
-  "....LmmD",
-  "....LmmD",
-  "....LmmD",
-  "....LmmD",
-  "....LmmmD",
-  "....LmmmmD",
-  "....DDDDDD",
-]);
-
-const BOOTS = base([
-  "",
-  "",
-  "",
-  "",
-  "",
-  "....tttt",
-  "....LmmD",
-  "....LmmD",
-  "....LmmD",
-  "....LmmD",
-  "....LmmD",
-  "....LmmD",
-  "...LmmmD",
-  "..LmmmmD",
-  ".LmmmmmD",
-  ".DDDDDDD",
-]);
+// Boss-Rüstung im Inventar: die Grundformen schwerer Rüstung (armorIcons.ts), auf
+// die jedes Set seine Motive legt – dieselben wie am Helden. Helme nutzen direkt
+// ihre Form am Helden (siehe getItemSprite).
 
 /** Blitz (Sturmfürst), wie auf der Brust am Helden. */
 const BOLT = [".............t", "............t", "...........ttt", "............t", "...........t"].map((r) =>
