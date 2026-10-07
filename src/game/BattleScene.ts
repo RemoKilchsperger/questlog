@@ -47,7 +47,8 @@ const BAR_WIDTH = 160;
 /** Lebensbalken weit oben, damit grosse Gegner darunter Platz haben */
 const BAR_Y = 34;
 /** Grössen: Held etwas kleiner, Gegner-Bilder grösser, Bosse am grössten */
-const HERO_SCALE = 7;
+/** Held im 24er-Raster – ganzzahlig, damit alle Pixel gleich gross sind */
+const HERO_SCALE = 4;
 const ENEMY_IMAGE_SCALE = 1.3;
 const BOSS_IMAGE_SCALE = 1.55;
 
@@ -196,16 +197,16 @@ export class BattleScene extends Phaser.Scene {
     let weapon: Phaser.GameObjects.Image | null = null;
     if (held) {
       const weaponImage = this.makeTexture(`${key}-weapon`, held.sprite);
-      // +1 wegen des Umrisses, +0.5 für die Pixelmitte
-      const handX = held.hand.x + 1.5 - image.width / 2;
-      const handY = held.hand.y + 1.5 - (lastRow + 1);
+      // +1 wegen des Umrisses, + halber Block für die Mitte der Hand
+      const handX = held.hand.x + 1 + held.pixel / 2 - image.width / 2;
+      const handY = held.hand.y + 1 + held.pixel / 2 - (lastRow + 1);
       weapon = this.add
         .image(handX, handY, `${key}-weapon`)
-        .setOrigin((held.grip.x + 1.5) / weaponImage.width, (held.grip.y + 1.5) / weaponImage.height);
+        .setOrigin((held.grip.x + 1 + held.pixel / 2) / weaponImage.width, (held.grip.y + 1 + held.pixel / 2) / weaponImage.height);
     }
 
-    // Bögen vor dem Körper, alle anderen Waffen dahinter (wie in heroSprite.ts)
-    const images = weapon ? (held?.type === "bow" ? [figure, weapon] : [weapon, figure]) : [figure];
+    // Waffen vor dem Körper – die Hand scheint durch die freie Griffstelle (wie in heroSprite.ts)
+    const images = weapon ? [figure, weapon] : [figure];
     const body = this.add.container(x, GROUND_Y + 4, images).setScale(scale);
     return { body, images, weapon };
   }

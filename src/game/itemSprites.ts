@@ -11,6 +11,7 @@
 
 import { getItemParts } from "../domain/items";
 import type { ArmorSlot, ItemDef, ItemType, WeaponType } from "../domain/types";
+import { BOSS_HELD } from "./bossWeapons";
 import type { SpriteDef } from "./sprites";
 
 /** Farben pro Materialstufe [hell, mittel, dunkel, Zierde] – Reihenfolge wie die Namensanfänge. */
@@ -2060,15 +2061,63 @@ const CLASS_ICONS: Record<"light" | "medium", Record<ArmorSlot, readonly IconSha
   },
 };
 
-/** Kopfbedeckungen leichter und mittlerer Rüstung am Helden (wie WORN_HELMETS). */
+/** Kopfbedeckungen leichter und mittlerer Rüstung am Helden (wie WORN_HELMETS, im 24er-Raster). */
 const CLASS_WORN_HEADS: Record<"light" | "medium", readonly (readonly string[])[]> = {
   light: [
-    ["............", "....LmmD....", "...LmmmmD...", "..LmmmmmmD..", "..Lm....mD..", "..Lm....mD.."], // Kapuze
-    ["....Lm......", "...LmmD.....", "..LmmmmD....", ".tttttttttt.", "LmmmmmmmmmmD"], // Spitzhut
+    [ // Kapuze
+      "........................",
+      "........................",
+      ".........LmmmmD.........",
+      "........LmmmmmmD........",
+      "......LmmmmmmmmmmD......",
+      "......LmmmmmmmmmmD......",
+      "....LmmmmmmmmmmmmmmD....",
+      "....LmmmmmmmmmmmmmmD....",
+      "....LmmD........LmmD....",
+      "....LmmD........LmmD....",
+      "....Lmm..........mmD....",
+      "....Lmm..........mmD....",
+    ],
+    [ // Spitzhut
+      "........Lm..............",
+      "........LmD.............",
+      "......LLmmD.............",
+      "......LmmmmD............",
+      ".....LmmmmmmD...........",
+      "....LmmmmmmmmD..........",
+      "..ttttttttjjtttttttttt..",
+      "..tttttttttttttttttttt..",
+      "LLmmmmmmmmmmmmmmmmmmmmDD",
+      ".DDDDDDDDDDDDDDDDDDDDDD.",
+    ],
   ],
   medium: [
-    ["............", "............", "...LmmmmD...", "..LmmmmmmD..", "..tmtmmtmt.."], // Lederkappe
-    ["............", "....LmmD....", "...LmmmmD...", "..LmmjjmmD..", "..tttttttt..", "..Lm....mD.."], // Haube
+    [ // Lederkappe
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "......LmmmmmmmmmmD......",
+      "......LmmmmmmmmmmD......",
+      "....LmmmmmmmmmmmmmmD....",
+      "....LmmmmmmmmmmmmmmD....",
+      "....ttmmttmmmmttmmtt....",
+      "....DDDDDDDDDDDDDDDD....",
+    ],
+    [ // Haube
+      "........................",
+      "........................",
+      "........LmmmmmmD........",
+      "........LmmmmmmD........",
+      "......LmmmmmmmmmmD......",
+      "......LmmmmmmmmmmD......",
+      "....LmmmmmmjjmmmmmmD....",
+      "....LmmmmmmjjmmmmmmD....",
+      "....tttttttttttttttt....",
+      "....tttttttttttttttt....",
+      "....LmmD........LmmD....",
+      "....LmmD........LmmD....",
+    ],
   ],
 };
 
@@ -2137,77 +2186,344 @@ export function getItemSprite(def: ItemDef): SpriteDef {
 // --- Am Helden getragene Ausrüstung -----------------------------------------
 
 /**
- * Waffen in der Hand des Helden, aufrecht. `G` liegt unter der Hand.
- * Bei Bögen hält die Hand die Sehne (wie beim Spannen); die Wölbung zeigt nach vorn zum Gegner.
+ * Waffen in der Hand des Helden, aufrecht – im 24er-Raster des Helden. `GG` liegt
+ * unter der Hand (2 × 2 Pixel, die linke obere Ecke zählt). Bei Bögen hält die Hand
+ * die Sehne (wie beim Spannen); die Wölbung zeigt nach vorn zum Gegner.
  */
 const WORN_WEAPONS: Record<Exclude<WeaponType, "shield">, readonly string[]> = {
-  dagger: [".L.", ".Lm", ".Lm", "tjt", ".G.", ".h.", ".t."],
-  sword: [".L.", ".Lm", ".Lm", ".Lm", ".Lm", ".LD", "tjt", ".G.", ".h.", ".t."],
-  greatsword: ["..L..", ".LmD.", ".LmD.", ".LmD.", ".LmD.", ".LmD.", "ttjtt", "..G..", "..h..", "..h..", "..t.."],
-  axe: [".t..", ".hmL", ".hjL", ".h..", ".h..", ".G..", ".h..", ".t.."],
-  greataxe: ["..t..", "LmhmL", "LmjmL", ".mhm.", "..h..", "..h..", "..h..", "..G..", "..h..", "..h..", "..t.."],
-  staff: [".j.", "jwj", "mjm", ".h.", ".h.", ".h.", ".h.", ".G.", ".h.", ".h.", ".h."],
-  scepter: [".j.", "tmt", ".m.", ".m.", ".G.", ".m.", ".t."],
-  mace: [".t.", "LmD", "LjD", "LmD", ".h.", ".h.", ".G.", ".h.", ".t."],
-  greathammer: ["LmmmD", "LmjmD", "LmmmD", "..h..", "..h..", "..h..", "..h..", "..G..", "..h..", "..h..", "..t.."],
-  bow: ["wL..", "w.m.", "w.mD", "w..m", "w..m", "w..h", "G..j", "w..h", "w.mD", "w.m.", "wL.."],
+  dagger: [
+    "..L...",
+    "..Lm..",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    "ttjjtt",
+    ".tttt.",
+    "..GG..",
+    "..GG..",
+    "..hH..",
+    "..hH..",
+    ".tttt.",
+    "..tt..",
+  ],
+  sword: [
+    "..L...",
+    "..Lm..",
+    ".LLmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmmD.",
+    ".LmDD.",
+    "tttttt",
+    "ttjjtt",
+    "..GG..",
+    "..GG..",
+    "..hH..",
+    "..hH..",
+    ".tttt.",
+    "..tt..",
+  ],
+  greatsword: [
+    "....LD....",
+    "...LmmD...",
+    "..LLmmDD..",
+    "..LmmmmD..",
+    "..LmmmmD..",
+    "..LmmmmD..",
+    "..LmmmmD..",
+    "..LmmmmD..",
+    "..LmmmmD..",
+    "..LmmmmD..",
+    "..LmmmmD..",
+    "..LmmmDD..",
+    "tttttttttt",
+    "ttttjjtttt",
+    "....GG....",
+    "....GG....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "...tttt...",
+    "....tt....",
+  ],
+  axe: [
+    "..tt....",
+    "..tt..L.",
+    "..hHDmmL",
+    "..hHmmmL",
+    "..hHmjjL",
+    "..hHDmmL",
+    "..hH..L.",
+    "..hH....",
+    "..hH....",
+    "..hH....",
+    "..GG....",
+    "..GG....",
+    "..hH....",
+    "..hH....",
+    "..tt....",
+    "..tt....",
+  ],
+  greataxe: [
+    "....tt....",
+    "....tt....",
+    "LLmmhHmmLL",
+    "LmmmhHmmmL",
+    "LmmmjjmmmL",
+    "LmmmjjmmmL",
+    ".mmmhHmmm.",
+    "..mmhHmm..",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....GG....",
+    "....GG....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....tt....",
+    "....tt....",
+  ],
+  staff: [
+    "..jj..",
+    ".jwjj.",
+    "jwwjjj",
+    "jjjjjj",
+    "mjjjjm",
+    ".mjjm.",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..GG..",
+    "..GG..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+  ],
+  scepter: [
+    "..jj..",
+    ".jjjj.",
+    "tmjjmt",
+    "tmmmmt",
+    ".tmmt.",
+    "..mm..",
+    "..mD..",
+    "..mD..",
+    "..GG..",
+    "..GG..",
+    "..mD..",
+    "..mD..",
+    ".tttt.",
+    "..tt..",
+  ],
+  mace: [
+    "..tt..",
+    ".tLDt.",
+    "tLmmDt",
+    "LmmmmD",
+    "LmjjmD",
+    "LmjjmD",
+    "tLmmDt",
+    ".tDDt.",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..hH..",
+    "..GG..",
+    "..GG..",
+    "..hH..",
+    "..hH..",
+    ".tttt.",
+    "..tt..",
+  ],
+  greathammer: [
+    "LLmmmmmmDD",
+    "LmmmmmmmmD",
+    "LmmmjjmmmD",
+    "LmmmjjmmmD",
+    "LmmmmmmmmD",
+    "DDDDDDDDDD",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....GG....",
+    "....GG....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "....hH....",
+    "...tttt...",
+    "....tt....",
+  ],
+  bow: [
+    ".wL.....",
+    ".w.L....",
+    ".w.Lm...",
+    ".w..Lm..",
+    ".w..LmD.",
+    ".w...mD.",
+    ".w...mmD",
+    ".w....mD",
+    ".w....mD",
+    ".w....hH",
+    ".w....hH",
+    ".w....jj",
+    "GG....jj",
+    "GG....hH",
+    ".w....hH",
+    ".w....mD",
+    ".w....mD",
+    ".w...mmD",
+    ".w...mD.",
+    ".w..LmD.",
+    ".w.Lm...",
+    ".wL.....",
+  ],
 };
 
-/** Schilde vor der Hand, eine Form pro Namensform. */
+/** Schilde vor der Hand, eine Form pro Namensform (24er-Raster). */
 const WORN_SHIELDS: readonly (readonly string[])[] = [
-  ["ttttt", "tLmDt", "tLjDt", "tmmDt", ".tDt.", "..t.."], // Schild
-  [".ttt.", "tLmDt", "tmjmt", "tmmDt", ".ttt."], // Rundschild
-  ["ttttt", "tLmDt", "tLjDt", "tLmDt", "tLmDt", "tDDDt"], // Turmschild
+  [ // Schild
+    "tttttttttt",
+    "tLLmmmmDDt",
+    "tLmmmmmmDt",
+    "tLmmjjmmDt",
+    "tLmmjjmmDt",
+    "tLmmmmmmDt",
+    "tmmmmmmmDt",
+    ".tmmmmmDt.",
+    ".tmmmmDDt.",
+    "..tmmDDt..",
+    "...tDDt...",
+    "....tt....",
+  ],
+  [ // Rundschild
+    "...tttt...",
+    ".ttLLmmtt.",
+    ".tLLmmmDt.",
+    "tLmmmmmmDt",
+    "tLmmjjmmDt",
+    "tmmmjjmmDt",
+    "tmmmmmmmDt",
+    ".tmmmmmDt.",
+    ".ttmmDDtt.",
+    "...tttt...",
+  ],
+  [ // Turmschild
+    "tttttttttt",
+    "tLLmmmmmDt",
+    "tLmmmmmmDt",
+    "tLmmjjmmDt",
+    "tLmmjjmmDt",
+    "tLmmmmmmDt",
+    "tLmmmmmmDt",
+    "tLmmmmmmDt",
+    "tLmmmmmmDt",
+    "tLmmmmmmDt",
+    "tDDDDDDDDt",
+    "tttttttttt",
+  ],
 ];
 
-/** Kopfbedeckungen im Heldenraster, oberste Zeile liegt zwei Pixel über dem Kopf. */
+/** Kopfbedeckungen im Heldenraster (24er), oberste Zeile liegt vier Pixel über dem Kopf. */
 const WORN_HELMETS: readonly (readonly string[])[] = [
   [ // Helm mit Federbusch und Wangenschutz
-    ".....jj.....",
-    "...LmmmmD...",
-    "..LmmmmmmD..",
-    "..LmmmmmmD..",
-    "..tttttttt..",
-    "..mm....mm..",
+    "...........jj...........",
+    "..........jjjj..........",
+    "........LmmmmmmD........",
+    "......LLmmmmmmmmDD......",
+    "....LLmmmmmmmmmmmmDD....",
+    "....LmmmmmmmmmmmmmmD....",
+    "....LmmmmmmmmmmmmmmD....",
+    "....LmmmmmmmmmmmmmDD....",
+    "....tttttttjjttttttt....",
+    "....tttttttttttttttt....",
+    "....mmmD........Lmmm....",
+    "....mmD..........Lmm....",
   ],
   [ // Haube mit breiter Krempe
-    "............",
-    "....LmmD....",
-    "...LmmmmD...",
-    ".LmmjjmmmmD.",
+    "........................",
+    "........................",
+    "........LmmmmmmD........",
+    "........LLmmmmDD........",
+    "......LmmmmmmmmmmD......",
+    "......LmmmmmmmmmmD......",
+    "..LLmmmmmjjmmmmmmmmmDD..",
+    "..DDDDDDDDDDDDDDDDDDDD..",
   ],
 ];
+
+/** Fein gezeichnete Grafiken passen direkt ins 24er-Raster des Helden, alte (Boss-Items) werden verdoppelt. */
+const FINE = 1;
+const COARSE = 2;
 
 export interface WornSprite {
   sprite: SpriteDef;
-  /** Griffstelle im Raster (nur Waffen). */
+  /** Griffstelle im Raster (nur Waffen) – linke obere Ecke der Hand. */
   grip: { x: number; y: number };
+  /** Vergrösserung bis zum 24er-Raster des Helden: 1 = fein gezeichnet, 2 = altes 12er-Raster (Boss-Items) */
+  scale: number;
 }
 
-/** Position von `G`; Schilde haben keins und werden mittig knapp unter dem oberen Rand gehalten. */
-function findGrip(grid: readonly string[]): { x: number; y: number } {
+/**
+ * Position von `G` (linke obere Ecke). Schilde haben keins und werden mittig knapp
+ * unter dem oberen Rand gehalten – fein gezeichnet mit der Hand (2 × 2) in der Mitte.
+ */
+function findGrip(grid: readonly string[], scale: number): { x: number; y: number } {
   const y = grid.findIndex((row) => row.includes("G"));
-  return y < 0 ? { x: Math.floor(grid[0].length / 2), y: 1 } : { x: grid[y].indexOf("G"), y };
+  if (y >= 0) return { x: grid[y].indexOf("G"), y };
+  return scale === FINE ? { x: grid[0].length / 2 - 1, y: 2 } : { x: Math.floor(grid[0].length / 2), y: 1 };
 }
 
-/** Getragene Waffe, auf Wunsch gespiegelt (für die linke Hand). */
+/**
+ * Getragene Waffe, auf Wunsch gespiegelt (für die linke Hand). Boss-Waffen haben
+ * eine eigene Form im 24er-Raster (bossWeapons.ts); ältere Boss-Formen aus dem
+ * 12er-Raster werden verdoppelt.
+ */
 export function getWornWeapon(def: ItemDef, mirrored = false): WornSprite {
-  const bossWorn = def.bossId ? BOSS_LOOKS[def.id].worn : undefined;
+  const bossHeld = def.bossId ? BOSS_HELD[def.id] : undefined;
+  const bossWorn = def.bossId && !bossHeld ? BOSS_LOOKS[def.id].worn : undefined;
   const base =
+    bossHeld ??
     bossWorn ??
     (def.type === "shield"
       ? WORN_SHIELDS[def.bossId ? 0 : getItemParts(def).noun]
       : WORN_WEAPONS[def.type as keyof typeof WORN_WEAPONS]);
+  const scale = bossWorn ? COARSE : FINE;
   const grid = mirrored ? base.map((row) => [...row].reverse().join("")) : base;
-  return { sprite: { grid, palette: itemPalette(def) }, grip: findGrip(grid) };
+  return { sprite: { grid, palette: itemPalette(def) }, grip: findGrip(grid, scale), scale };
 }
 
-export function getWornHelmet(def: ItemDef): SpriteDef {
+/** Kopfbedeckung am Helden – `scale` wie bei `WornSprite`. */
+export function getWornHelmet(def: ItemDef): { sprite: SpriteDef; scale: number } {
   const cls = def.armorClass === "light" || def.armorClass === "medium" ? def.armorClass : null;
-  const grid = def.bossId
-    ? (BOSS_LOOKS[def.id].worn ?? WORN_HELMETS[0])
-    : cls
-      ? CLASS_WORN_HEADS[cls][getItemParts(def).noun]
-      : WORN_HELMETS[getItemParts(def).noun];
-  return { grid, palette: itemPalette(def) };
+  const bossWorn = def.bossId ? BOSS_LOOKS[def.id].worn : undefined;
+  const grid =
+    bossWorn ??
+    (def.bossId ? WORN_HELMETS[0] : cls ? CLASS_WORN_HEADS[cls][getItemParts(def).noun] : WORN_HELMETS[getItemParts(def).noun]);
+  return { sprite: { grid, palette: itemPalette(def) }, scale: bossWorn ? COARSE : FINE };
 }

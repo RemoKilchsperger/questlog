@@ -31,7 +31,8 @@ const FONT = '"Pixelify Sans", monospace';
 const NUMBER_FONT = '"Inter", sans-serif';
 const GROUND_Y = 250;
 const BOSS_X = 560;
-const HERO_SCALE = 5;
+/** Held im 24er-Raster – ganzzahlig, damit alle Pixel gleich gross sind */
+const HERO_SCALE = 3;
 const BOSS_SCALE = 10;
 /** Koop-Bosse mit eigenem Bild: deutlich grösser als die Helden */
 const BOSS_IMAGE_SCALE = 1.6;
@@ -165,10 +166,11 @@ export class CoopBattleScene extends Phaser.Scene {
     if (held) {
       const weaponImage = this.texture(`${key}-weapon`, held.sprite);
       weapon = this.add
-        .image(held.hand.x + 1.5 - image.width / 2, held.hand.y + 1.5 - (lastRow + 1), `${key}-weapon`)
-        .setOrigin((held.grip.x + 1.5) / weaponImage.width, (held.grip.y + 1.5) / weaponImage.height);
+        .image(held.hand.x + 1 + held.pixel / 2 - image.width / 2, held.hand.y + 1 + held.pixel / 2 - (lastRow + 1), `${key}-weapon`)
+        .setOrigin((held.grip.x + 1 + held.pixel / 2) / weaponImage.width, (held.grip.y + 1 + held.pixel / 2) / weaponImage.height);
     }
-    const images = weapon ? (held?.type === "bow" ? [figure, weapon] : [weapon, figure]) : [figure];
+    // Waffen vor dem Körper – die Hand scheint durch die freie Griffstelle (wie in heroSprite.ts)
+    const images = weapon ? [figure, weapon] : [figure];
     const body = this.add.container(x, GROUND_Y + 4, images).setScale(HERO_SCALE);
     const idle = this.tweens.add({ targets: body, y: body.y - 3, duration: 900 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
 

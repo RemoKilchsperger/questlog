@@ -54,6 +54,16 @@ export function renderSprite(def: SpriteDef, outline = true, pad = outline ? 1 :
   return { width, height, pixels };
 }
 
+/** Vergrössert eine Grafik um einen ganzzahligen Faktor: jedes Pixel wird zu factor × factor Pixeln. */
+export function scaleSprite(def: SpriteDef, factor: number): SpriteDef {
+  if (factor === 1) return def;
+  const grid = def.grid.flatMap((row) => {
+    const wide = [...row].map((ch) => ch.repeat(factor)).join("");
+    return Array<string>(factor).fill(wide);
+  });
+  return { grid, palette: def.palette };
+}
+
 export interface SpriteLayer {
   sprite: SpriteDef;
   /** Position der linken oberen Ecke im Gesamtbild */
