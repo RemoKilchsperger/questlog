@@ -61,16 +61,16 @@ describe("Schmied: Verbessern", () => {
   const shield = () => createItem("shield-100", "rare", "sh");
 
   it("Waffen gewinnen Angriff, Rüstungen und Schilde Rüstung", () => {
-    for (const make of [sword, helmet, shield]) {
-      const before = getItemStats(make());
-      const after = getItemStats({ ...make(), upgrade: 1 });
-      if (before.attack > 0) {
-        expect(after.attack).toBeGreaterThan(before.attack);
-        expect(after.armor).toBe(before.armor);
-      } else {
-        expect(after.armor).toBeGreaterThan(before.armor);
-        expect(after.attack).toBe(0);
-      }
+    const upgraded = (make: typeof sword) => ({ before: getItemStats(make()), after: getItemStats({ ...make(), upgrade: 1 }) });
+
+    const w = upgraded(sword);
+    expect(w.after.attack).toBeGreaterThan(w.before.attack);
+    expect(w.after.armor).toBe(w.before.armor);
+
+    for (const make of [helmet, shield]) {
+      const { before, after } = upgraded(make);
+      expect(after.armor).toBeGreaterThan(before.armor);
+      expect(after.attack).toBe(before.attack);
     }
   });
 

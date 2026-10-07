@@ -466,11 +466,13 @@ export function getItemStats(owned: OwnedItem): ItemStats {
   const upgrade = owned.upgrade ?? 0;
   const armor = Math.round(def.armor * statMultiplier);
   const attack = Math.round(def.attack * statMultiplier);
+  // Schilde haben Angriff und Rüstung – ihr Hauptwert ist die Rüstung.
+  const upgradesArmor = def.type === "shield" || attack <= 0;
   return {
     def,
     rarity: owned.rarity,
-    armor: attack > 0 ? armor : upgradedValue(armor, upgrade),
-    attack: upgradedValue(attack, upgrade),
+    armor: upgradesArmor ? upgradedValue(armor, upgrade) : armor,
+    attack: upgradesArmor ? attack : upgradedValue(attack, upgrade),
     bonuses: owned.bonuses,
     upgrade,
   };
