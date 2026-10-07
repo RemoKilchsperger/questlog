@@ -7,7 +7,7 @@ import { ActiveSets } from "./BossSetInfo";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
-import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
+import { bonusText, itemName, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { HeroClassPanel } from "./HeroClassInfo";
 import { gearScore } from "../domain/gearScore";
 
@@ -131,7 +131,11 @@ function SlotTile({ slot, className }: { slot: EquipSlot; className: string }) {
         <span className={`w-full truncate text-[10px] leading-tight ${RARITY_TEXT[stats.rarity]}`}>
           {itemName(stats)}
         </span>
-        <span className="num text-[10px] leading-none">{mainStatText(stats)}</span>
+        {mainStatParts(stats).map((part) => (
+          <span key={part.kind} className="num text-[10px] leading-none">
+            {part.text}
+          </span>
+        ))}
       </button>
     </ItemTooltip>
   );

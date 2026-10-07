@@ -5,7 +5,7 @@ import { getItemStats } from "../domain/items";
 import type { CombatStats, Equipment, ItemStats } from "../domain/types";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
-import { bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
+import { bonusText, itemName, MAIN_STAT_TEXT, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 /** Eine Item-Zeile mit Werten, Vergleich zum Angelegten und Aktions-Buttons. */
 export function ItemRow({
@@ -44,7 +44,11 @@ export function ItemRow({
         </p>
         <div className="flex flex-wrap gap-x-2 text-xs">
           <span className="text-muted">{typeText(def)}</span>
-          <span className={stats.attack > 0 ? "text-strength" : "text-intellect"}>{mainStatText(stats)}</span>
+          {mainStatParts(stats).map((part) => (
+            <span key={part.kind} className={MAIN_STAT_TEXT[part.kind]}>
+              {part.text}
+            </span>
+          ))}
           {deltas.map(
             ([value, label]) =>
               value !== 0 && (

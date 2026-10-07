@@ -7,7 +7,7 @@ import type { ItemStats } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { BossSetInfo } from "./BossSetInfo";
 import { ItemIcon } from "./ItemIcon";
-import { armorClassPerkText, bonusText, itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
+import { armorClassPerkText, bonusText, itemName, MAIN_STAT_TEXT, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 const CARD_WIDTH = 232;
 const GAP = 8;
@@ -89,7 +89,14 @@ function TooltipCard({ stats, hint, anchor }: { stats: ItemStats; hint?: string;
         {rarity !== "common" && <span className={RARITY_TEXT[rarity]}>{rarityLabel(rarity)} · </span>}
         {typeText(def)}
       </p>
-      <p className={`num text-base ${stats.attack > 0 ? "text-strength" : "text-intellect"}`}>{mainStatText(stats)}</p>
+      <p className="num text-base">
+        {mainStatParts(stats).map((part, i) => (
+          <span key={part.kind} className={MAIN_STAT_TEXT[part.kind]}>
+            {i > 0 && <span className="text-muted"> · </span>}
+            {part.text}
+          </span>
+        ))}
+      </p>
       {bonuses && <p className="text-sm text-xp">{bonuses}</p>}
       {armorClassPerkText(def) && <p className="text-xs text-intellect">{armorClassPerkText(def)} (Rüstungsklasse)</p>}
       {def.bossId && (

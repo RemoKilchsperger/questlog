@@ -23,10 +23,22 @@ export function rarityLabel(rarity: Rarity): string {
   return getRarity(rarity).label;
 }
 
-/** "+5 Angriff" bzw. "+4 Rüstung" (Schilde geben Rüstung). */
-export function mainStatText(stats: ItemStats): string {
-  return stats.attack > 0 ? `+${stats.attack} Angriff` : `+${stats.armor} Rüstung`;
+/** Hauptwerte einzeln: Waffen Angriff, Rüstungsteile Rüstung, Schilde beides. */
+export function mainStatParts(stats: ItemStats): { kind: "attack" | "armor"; text: string }[] {
+  const parts: { kind: "attack" | "armor"; text: string }[] = [];
+  if (stats.attack > 0) parts.push({ kind: "attack", text: `+${stats.attack} Angriff` });
+  if (stats.armor > 0 || stats.attack <= 0) parts.push({ kind: "armor", text: `+${stats.armor} Rüstung` });
+  return parts;
 }
+
+/** "+5 Angriff", "+4 Rüstung" bzw. bei Schilden "+5 Angriff · +4 Rüstung". */
+export function mainStatText(stats: ItemStats): string {
+  return mainStatParts(stats)
+    .map((p) => p.text)
+    .join(" · ");
+}
+
+export const MAIN_STAT_TEXT = { attack: "text-strength", armor: "text-intellect" } as const;
 
 /** Name samt Verbesserungsstufe beim Schmied: "Eisenschwert +2". */
 export function itemName(stats: ItemStats): string {
