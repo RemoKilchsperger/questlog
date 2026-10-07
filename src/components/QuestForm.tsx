@@ -3,6 +3,7 @@ import { MAX_INTERVAL, recurrenceLabel, WEEKDAY_LABELS, type Recurrence } from "
 import { CATEGORIES, EFFORT_TIERS, STAT_LABELS, getCategory } from "../domain/rewards";
 import type { Category, Effort } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
+import { Hint } from "./HoverCard";
 
 export function QuestForm() {
   const addQuest = useGameStore((s) => s.addQuest);
@@ -70,9 +71,9 @@ export function QuestForm() {
             >
               <span className="mr-1">{c.icon}</span>
               {c.label}
-              <span className="block text-xs text-muted" title="Epische Quests geben 1 Punkt auf dieses Attribut">
-                trainiert {STAT_LABELS[c.stat]}
-              </span>
+              <Hint text="Epische Quests geben 1 Punkt auf dieses Attribut." className="block">
+                <span className="block text-xs text-muted">trainiert {STAT_LABELS[c.stat]}</span>
+              </Hint>
             </button>
           ))}
         </div>
@@ -100,9 +101,9 @@ export function QuestForm() {
               <span className="tabular-nums">
                 <span className="text-xp">+{t.xp} XP</span>
                 <span className="ml-2 text-gold">+{t.gold} 🪙</span>
-                <span className="ml-2 text-strength" title="Kampfpunkte">
-                  +{t.battlePoints} ⚔️
-                </span>
+                <Hint heading="Kampfpunkte" text="So viele Kampfpunkte füllt die Quest auf." className="ml-2 inline-flex">
+                  <span className="text-strength">+{t.battlePoints} ⚔️</span>
+                </Hint>
               </span>
             </button>
           ))}

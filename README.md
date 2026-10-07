@@ -92,7 +92,8 @@ supabase/            Datenbankschema, Migrationen, Edge Functions
 - Level-Kurve: Für Level *n* → *n+1* braucht es `100 + 25 · (n − 1)` XP. Maximallevel 60 nach 48’675 XP.
 - Pro Level-up: 2 Attributpunkte und 1 Skillpunkt.
 - **Skills:** pro Waffentyp (inkl. Schild) 5 Ränge à +2 % Waffenschaden (Schild: +2 % Schild-Rüstung).
-  Nach Rang 5 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei.
+  Ab Rang 3 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei –
+  unabhängig voneinander.
   Zurücksetzen kostet `25 · Level · (1 + Level / 10)` Gold.
 - **Kampfpunkte:** Start 5, Maximum 20. Jeder Kampf kostet 1, Dungeons 1 pro Kampf, Koop 3.
   Quests füllen auf, dazu gibt es alle 6 Stunden einen Punkt geschenkt.

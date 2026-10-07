@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { AbilityDef, Guard } from "../domain/abilities";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
 import { BUFF_LABELS, type BuffKind } from "../domain/potions";
+import { Hint } from "./HoverCard";
 
 export interface StatusChip {
   key: string;
@@ -116,10 +117,12 @@ export function StatusSide({ title, chips, children }: { title: string; chips: S
           <span className="text-xs text-muted/70">Keine Effekte</span>
         ) : (
           chips.map((chip) => (
-            <span key={chip.key} title={chip.title} className={`rounded border px-1.5 py-0.5 text-xs ${TONES[chip.tone]}`}>
-              {chip.icon} {chip.text}
-              {chip.rounds !== undefined && <span className="num opacity-80"> · {chip.rounds}R</span>}
-            </span>
+            <Hint key={chip.key} text={chip.title}>
+              <span className={`rounded border px-1.5 py-0.5 text-xs ${TONES[chip.tone]}`}>
+                {chip.icon} {chip.text}
+                {chip.rounds !== undefined && <span className="num opacity-80"> · {chip.rounds}R</span>}
+              </span>
+            </Hint>
           ))
         )}
       </div>

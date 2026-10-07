@@ -2,6 +2,7 @@ import { getArmorClass } from "../domain/armorClasses";
 import { CLASS_ARMOR_PIECES, detectHeroClass, getHeroClass, HERO_CLASSES } from "../domain/heroClasses";
 import type { ArmorClass, Equipment } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
+import { Hint } from "./HoverCard";
 
 /** „3 Teile leichter Rüstung“ usw. – für die Voraussetzung einer Klasse */
 const ARMOR_ADJECTIVE: Record<ArmorClass, string> = { light: "leichter", medium: "mittlerer", heavy: "schwerer" };
@@ -12,9 +13,11 @@ export function HeroClassBadge({ equipment }: { equipment: Equipment }) {
   if (!id) return null;
   const cls = getHeroClass(id);
   return (
-    <span className="rounded-md border-2 border-legendary/60 bg-legendary/10 px-2 py-0.5 text-sm text-legendary" title={cls.bonus}>
-      {cls.icon} {cls.name}
-    </span>
+    <Hint heading={`${cls.icon} ${cls.name}`} text={cls.bonus}>
+      <span className="rounded-md border-2 border-legendary/60 bg-legendary/10 px-2 py-0.5 text-sm text-legendary">
+        {cls.icon} {cls.name}
+      </span>
+    </Hint>
   );
 }
 

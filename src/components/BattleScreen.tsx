@@ -53,6 +53,7 @@ import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
 import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
 import { useNow } from "./useNow";
 import { classAbility } from "../domain/heroClasses";
+import { Hint } from "./HoverCard";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
 const PhaserBattle = lazy(() => import("../game/PhaserBattle"));
@@ -232,12 +233,14 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
         {dungeon.creatures.map((creature, i) => (
-          <div key={creature.id} className="flex flex-col items-center text-center" title={creature.name}>
-            <CreatureSprite sprite={creature.sprite} size={creature.boss ? 48 : 36} />
-            <span className={`text-[10px] leading-tight ${creature.boss ? "text-legendary" : "text-muted"}`}>
-              {i + 1}. Lv. {creature.level}
-            </span>
-          </div>
+          <Hint key={creature.id} text={`${i + 1}. Kampf: ${creature.name}${creature.boss ? " (Boss)" : ""} · Lv. ${creature.level}`}>
+            <div className="flex flex-col items-center text-center">
+              <CreatureSprite sprite={creature.sprite} size={creature.boss ? 48 : 36} />
+              <span className={`text-[10px] leading-tight ${creature.boss ? "text-legendary" : "text-muted"}`}>
+                {i + 1}. Lv. {creature.level}
+              </span>
+            </div>
+          </Hint>
         ))}
       </div>
       <p className="mt-1 text-xs">
@@ -291,9 +294,9 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           <span className="text-xp">
             {getPotion(potionDrop.potionId).icon} {creature.boss ? `${potionDrop.count}× garantiert` : "25 %"}
           </span>
-          <span className="text-strength" title="Seltene Chance auf einen Angriffs- oder Rüstungstrank">
-            🔥/🪨 {Math.round(BUFF_POTION_DROP_CHANCE * 100)} %
-          </span>
+          <Hint text="Seltene Chance auf einen Angriffs- oder Rüstungstrank.">
+            <span className="text-strength">🔥/🪨 {Math.round(BUFF_POTION_DROP_CHANCE * 100)} %</span>
+          </Hint>
           {dangerText && <span className={danger > 0 ? "text-danger" : "text-xp"}>{dangerText}</span>}
         </div>
         {bossAbilities.map((a) => (
@@ -468,19 +471,21 @@ function Battle({ battle }: { battle: BattleState }) {
           {/* Zustand: links du, rechts der Gegner */}
           <div className="grid gap-2 sm:grid-cols-2">
             <StatusSide title="Du" chips={heroStatusChips(battle.buffs, battle.heroEffects)}>
-              <div className="flex items-center gap-2 text-sm" title={`+${MANA_REGEN} Mana pro Runde`}>
-                <span className="text-intellect">💧</span>
-                <div className="h-2.5 flex-1 overflow-hidden rounded-sm bg-night-700">
-                  <motion.div
-                    className="h-full bg-intellect"
-                    initial={false}
-                    animate={{ width: `${(battle.mana / battle.maxMana) * 100}%` }}
-                  />
+              <Hint text={`Mana für Fähigkeiten – füllt sich um ${MANA_REGEN} pro Runde auf.`} className="block">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-intellect">💧</span>
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-sm bg-night-700">
+                    <motion.div
+                      className="h-full bg-intellect"
+                      initial={false}
+                      animate={{ width: `${(battle.mana / battle.maxMana) * 100}%` }}
+                    />
+                  </div>
+                  <span className="num text-xs text-intellect">
+                    {battle.mana}/{battle.maxMana}
+                  </span>
                 </div>
-                <span className="num text-xs text-intellect">
-                  {battle.mana}/{battle.maxMana}
-                </span>
-              </div>
+              </Hint>
             </StatusSide>
             <StatusSide title={battle.enemy.name} chips={enemyStatusChips(battle.enemyEffects)} />
           </div>
@@ -508,7 +513,7 @@ function Battle({ battle }: { battle: BattleState }) {
             </div>
             {battle.abilities.length === 0 && (
               <p className="text-xs text-muted">
-                Fähigkeiten schaltest du im Skilltree frei, sobald du eine Waffe gemeistert hast – im Kampf brauchst du
+                Fähigkeiten schaltest du im Skilltree frei, sobald eine Waffe Rang 3 hat – im Kampf brauchst du
                 dann die passende Waffe.
               </p>
             )}
@@ -952,9 +957,11 @@ export function BossDrops({ creature }: { creature: CreatureDef }) {
             </span>
           </ItemTooltip>
         ) : (
-          <span key={def.id} className="rounded bg-night-950/70 p-0.5" title="Noch nicht gefunden">
-            <ItemIcon def={def} size={24} className="opacity-40 brightness-0" />
-          </span>
+          <Hint key={def.id} text="Noch nicht gefunden">
+            <span className="rounded bg-night-950/70 p-0.5">
+              <ItemIcon def={def} size={24} className="opacity-40 brightness-0" />
+            </span>
+          </Hint>
         ),
       )}
     </div>

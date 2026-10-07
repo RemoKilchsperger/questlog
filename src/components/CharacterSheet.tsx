@@ -25,6 +25,7 @@ import { PixelAvatar } from "./PixelAvatar";
 import { AchievementsPanel, AvatarFrame, CosmeticsPicker, TitleBadge } from "./Achievements";
 import { XpBar } from "./XpBar";
 import { ClassCodex, HeroClassBadge } from "./HeroClassInfo";
+import { Hint } from "./HoverCard";
 
 const STAT_COLORS: Record<StatKey, string> = {
   strength: "bg-strength",
@@ -262,9 +263,11 @@ export function BossCollection({ collection }: { collection?: string[] }) {
                       </span>
                     </ItemTooltip>
                   ) : (
-                    <span key={def.id} className="rounded bg-night-950/70 p-0.5" title="Noch nicht gefunden">
-                      <ItemIcon def={def} size={36} className="opacity-40 brightness-0" />
-                    </span>
+                    <Hint key={def.id} text="Noch nicht gefunden">
+                      <span className="rounded bg-night-950/70 p-0.5">
+                        <ItemIcon def={def} size={36} className="opacity-40 brightness-0" />
+                      </span>
+                    </Hint>
                   ),
                 )}
               </div>

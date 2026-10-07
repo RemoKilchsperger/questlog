@@ -124,7 +124,7 @@ interface GameState {
   tickBattlePoints: () => void;
   /** Steigert einen Waffen-Skill um einen Rang (kostet einen Skillpunkt). */
   learnSkill: (weapon: SkillWeapon) => void;
-  /** Schaltet die Fähigkeit eines gemeisterten Waffentyps frei (kostet einen Skillpunkt). */
+  /** Schaltet eine Fähigkeit frei – ab Rang 3 im Waffentyp (kostet Skillpunkte, siehe skills.ts). */
   unlockAbility: (id: AbilityId) => void;
   /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`). */
   resetSkills: () => void;

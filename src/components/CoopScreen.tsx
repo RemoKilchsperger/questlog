@@ -46,6 +46,7 @@ import { CreatureSprite } from "./CreatureSprite";
 import { POTION_BUTTONS } from "./potionUi";
 import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
 import { classAbility } from "../domain/heroClasses";
+import { Hint } from "./HoverCard";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
 const PhaserCoopBattle = lazy(() => import("../game/PhaserCoopBattle"));
@@ -336,7 +337,11 @@ function Lobby() {
               <PixelAvatar size={48} equipment={m.equipment} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">
-                  {m.id === hostId && <span title="Host">👑 </span>}
+                  {m.id === hostId && (
+                    <Hint text="Host – startet den Kampf und entscheidet im Dungeon über Weiter oder Aussteigen.">
+                      <span>👑&nbsp;</span>
+                    </Hint>
+                  )}
                   {m.name}
                   {m.username && <span className="ml-1 text-xs text-muted">@{m.username}</span>}
                 </p>
@@ -525,16 +530,19 @@ function TeamStatus({
       {battle.heroes.map((h) => {
         const status = h.down ? "💀" : h.effects.frozen ? "❄️" : away.includes(h.id) ? "🚪" : chosen.includes(h.id) ? "✓" : "⏳";
         return (
-          <span
+          <Hint
             key={h.id}
-            className={`rounded-md px-2 py-0.5 ${h.id === myId ? "bg-gold/15 text-gold" : "bg-night-800"} ${h.down ? "opacity-60" : ""}`}
-            title={h.down ? "Gefallen" : away.includes(h.id) ? "Hat den Kampf verlassen – greift automatisch an" : chosen.includes(h.id) ? "Hat gewählt" : "Wählt noch"}
+            text={h.down ? "Gefallen" : away.includes(h.id) ? "Hat den Kampf verlassen – greift automatisch an" : chosen.includes(h.id) ? "Hat gewählt" : "Wählt noch"}
           >
-            {status} {names[h.id] ?? h.name}
-            <span className="num ml-1 text-xs text-muted">
-              {h.combatant.hp}/{h.combatant.maxHp}
+            <span
+              className={`rounded-md px-2 py-0.5 ${h.id === myId ? "bg-gold/15 text-gold" : "bg-night-800"} ${h.down ? "opacity-60" : ""}`}
+            >
+              {status} {names[h.id] ?? h.name}
+              <span className="num ml-1 text-xs text-muted">
+                {h.combatant.hp}/{h.combatant.maxHp}
+              </span>
             </span>
-          </span>
+          </Hint>
         );
       })}
     </div>
@@ -768,9 +776,11 @@ function ChestPreview({ chest }: { chest: ReturnType<typeof rollCoopDungeonChest
         <span className="text-xp">+{chest.xp} XP</span>
         {chest.gold > 0 && <Gold amount={chest.gold} sign className="text-gold" />}
         {potions.map(([id, count]) => (
-          <span key={id} title={getPotion(id).name}>
-            {getPotion(id).icon} × {count}
-          </span>
+          <Hint key={id} text={getPotion(id).name}>
+            <span>
+              {getPotion(id).icon} × {count}
+            </span>
+          </Hint>
         ))}
         {chest.items.map((item) => (
           <ItemTooltip key={item.uid} stats={getItemStats(item)}>

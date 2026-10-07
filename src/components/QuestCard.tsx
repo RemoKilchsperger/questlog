@@ -4,6 +4,7 @@ import { calculateReward, dropChance, getCategory, getEffortTier } from "../doma
 import type { Quest } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
+import { Hint } from "./HoverCard";
 
 export function QuestCard({ quest }: { quest: Quest }) {
   const completeQuest = useGameStore((s) => s.completeQuest);
@@ -49,13 +50,15 @@ export function QuestCard({ quest }: { quest: Quest }) {
         {recurring && (
           <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs">
             <span className="text-intellect">🔁 {recurrenceLabel(quest.recurrence!)}</span>
-            <span
-              className={streak > 0 ? "text-legendary" : "text-muted"}
-              title={`Serie: pünktlich erledigte Termine in Folge (Rekord: ${quest.bestStreak ?? 0})`}
+            <Hint
+              heading="Serie"
+              text={`Pünktlich erledigte Termine in Folge – jede Stufe über 1 gibt mehr XP und Gold.\nRekord: ${quest.bestStreak ?? 0}`}
             >
-              🔥 {streak}
-              {missed && (quest.streak ?? 0) > 0 && " · Serie gerissen"}
-            </span>
+              <span className={streak > 0 ? "text-legendary" : "text-muted"}>
+                🔥 {streak}
+                {missed && (quest.streak ?? 0) > 0 && " · Serie gerissen"}
+              </span>
+            </Hint>
             {!waiting && nextStreak > 1 && (
               <span className="text-legendary">+{Math.round(streakBonus(nextStreak) * 100)} % Serienbonus</span>
             )}
@@ -72,14 +75,14 @@ export function QuestCard({ quest }: { quest: Quest }) {
           <span className="text-xp tabular-nums">+{reward.xp} XP</span>
           <Gold amount={reward.gold} sign className="text-gold" />
           {reward.battlePoints !== undefined && (
-            <span className="text-strength tabular-nums" title="Kampfpunkte">
-              +{reward.battlePoints} ⚔️
-            </span>
+            <Hint heading="Kampfpunkte" text="So viele Kampfpunkte füllt die Quest auf.">
+              <span className="text-strength tabular-nums">+{reward.battlePoints} ⚔️</span>
+            </Hint>
           )}
           {!isDone && (
-            <span className="text-epic tabular-nums" title="Chance auf einen Item-Drop">
-              🎁 {Math.round(dropChance(quest.effort, quest.bonus) * 100)}%
-            </span>
+            <Hint text="Chance auf einen Item-Drop beim Erledigen.">
+              <span className="text-epic tabular-nums">🎁 {Math.round(dropChance(quest.effort, quest.bonus) * 100)}%</span>
+            </Hint>
           )}
           {quest.dueDate && !isDone && (
             <span className={overdue || missed ? "text-danger" : "text-muted"}>

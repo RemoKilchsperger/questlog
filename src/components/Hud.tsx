@@ -5,6 +5,7 @@ import { getLevelProgress, unspentPoints } from "../domain/leveling";
 import { useGameStore } from "../store/gameStore";
 import { Essence, Gold } from "./Gold";
 import { CloudButton } from "./CloudAccount";
+import { Hint } from "./HoverCard";
 import { PixelAvatar } from "./PixelAvatar";
 import { AvatarFrame } from "./Achievements";
 import { useNow } from "./useNow";
@@ -36,12 +37,11 @@ export function Hud({ onOpenCharacter }: { onOpenCharacter: () => void }) {
           <PixelAvatar size={44} />
         </AvatarFrame>
         {unspent > 0 && (
-          <span
-            className="num absolute -right-2 -top-2 rounded-full border-2 border-night-900 bg-xp px-1.5 text-xs leading-4 text-night-950"
-            title={`${unspent} Attributpunkte zu verteilen`}
-          >
-            +{unspent}
-          </span>
+          <Hint text={`${unspent} Attributpunkte zu verteilen – im Charakter-Tab.`} className="absolute -right-2 -top-2 inline-flex">
+            <span className="num rounded-full border-2 border-night-900 bg-xp px-1.5 text-xs leading-4 text-night-950">
+              +{unspent}
+            </span>
+          </Hint>
         )}
       </button>
       <div className="min-w-0 flex-1">
@@ -53,20 +53,21 @@ export function Hud({ onOpenCharacter }: { onOpenCharacter: () => void }) {
         </div>
         <XpBar totalXp={character.totalXp} size="sm" />
       </div>
-      <div
-        className={`num shrink-0 rounded-md bg-night-800 px-3 py-2 ${character.battlePoints > 0 ? "text-strength" : "text-muted"}`}
-        title={`Kampfpunkte – jeder Kampf kostet einen, Quests füllen sie wieder auf.\n${regenText}`}
-      >
-        <span aria-hidden>⚔️</span> {character.battlePoints}/{MAX_BATTLE_POINTS}
-        <span className="sr-only"> Kampfpunkte</span>
-      </div>
+      <Hint heading="Kampfpunkte" text={`Jeder Kampf kostet einen, Quests füllen sie wieder auf.\n${regenText}`}>
+        <div className={`num rounded-md bg-night-800 px-3 py-2 ${character.battlePoints > 0 ? "text-strength" : "text-muted"}`}>
+          <span aria-hidden>⚔️</span> {character.battlePoints}/{MAX_BATTLE_POINTS}
+          <span className="sr-only"> Kampfpunkte</span>
+        </div>
+      </Hint>
       <div className="shrink-0 rounded-md bg-night-800 px-3 py-2 text-gold">
         <Gold amount={character.gold} className="font-bold" />
       </div>
       {character.essence > 0 && (
-        <div className="shrink-0 rounded-md bg-night-800 px-3 py-2 text-essence" title="Essenz – beim Schmied aus Items gewonnen">
-          <Essence amount={character.essence} className="font-bold" />
-        </div>
+        <Hint heading="Essenz" text="Gewinnst du beim Schmied, wenn du Items zerlegst. Damit verbesserst du deine Ausrüstung.">
+          <div className="rounded-md bg-night-800 px-3 py-2 text-essence">
+            <Essence amount={character.essence} className="font-bold" />
+          </div>
+        </Hint>
       )}
       <CloudButton />
     </header>

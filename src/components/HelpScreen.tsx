@@ -26,6 +26,7 @@ import { BONUS_MULTIPLIER, CATEGORIES, EFFORT_TIERS, STAT_LABELS } from "../doma
 import { STREAK_MAX_BONUS, STREAK_STEP } from "../domain/recurrence";
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
 import {
+  ABILITY_UNLOCK_RANK,
   MAX_SKILL_RANK,
   SECOND_ABILITY_COST,
   SECOND_ABILITY_LEVEL,
@@ -186,9 +187,10 @@ export function HelpScreen() {
           </p>
           <H>Fähigkeiten</H>
           <p>
-            Hast du einen Waffentyp gemeistert (Rang {MAX_SKILL_RANK}), schaltest du für einen weiteren Skillpunkt seine
-            erste Kampf-Fähigkeit frei. Ab Level {SECOND_ABILITY_LEVEL} gibt es für {SECOND_ABILITY_COST} Skillpunkte die
-            zweite. Im Kampf stehen die Fähigkeiten der gerade angelegten Waffen bereit.
+            Ab Rang {ABILITY_UNLOCK_RANK} in einem Waffentyp schaltest du für einen weiteren Skillpunkt seine erste
+            Kampf-Fähigkeit frei. Ab Level {SECOND_ABILITY_LEVEL} gibt es für {SECOND_ABILITY_COST} Skillpunkte die zweite – auch ohne die erste. Im
+            Skilltree zeigt ein Symbol pro Fähigkeit, was sie kann, wenn du darüberfährst. Im Kampf stehen die Fähigkeiten der
+            gerade angelegten Waffen bereit.
           </p>
           <ul className="list-disc space-y-1 pl-5">
             <li>Eine Fähigkeit ersetzt den normalen Angriff einer Runde und kostet Mana.</li>

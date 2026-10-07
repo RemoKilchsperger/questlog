@@ -17,6 +17,7 @@ import {
 } from "../domain/achievements";
 import { dateKey } from "../domain/calendar";
 import { useGameStore } from "../store/gameStore";
+import { Hint } from "./HoverCard";
 
 /** Rahmen um einen Avatar – \`frame\` ist die Id aus FRAMES. */
 export function AvatarFrame({ frame, className = "", children }: { frame?: string; className?: string; children: ReactNode }) {
@@ -125,7 +126,11 @@ export function AchievementsPanel() {
                   {cat.icon} {cat.label}
                 </span>
                 <span className="ml-auto flex items-center gap-3 text-xs text-muted">
-                  {gold > 0 && <span title="Erfolge in Gold">🥇 {gold}</span>}
+                  {gold > 0 && (
+                    <Hint text="Erfolge in Gold – jeder schaltet einen Titel frei.">
+                      <span>🥇 {gold}</span>
+                    </Hint>
+                  )}
                   <span>
                     <span className="num text-legendary">{reached}</span> / <span className="num">{max}</span> Stufen
                   </span>
@@ -158,13 +163,15 @@ function AchievementCard({ def, tier, value }: { def: AchievementDef; tier: numb
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <span className={`font-semibold ${complete ? "text-legendary" : ""}`}>{def.name}</span>
-          <span className="shrink-0 text-sm" title={tier > 0 ? tierName(def, tier) : "Noch keine Stufe"}>
-            {def.tiers.map((_, i) => (
-              <span key={i} className={i < tier ? "" : "opacity-25 grayscale"}>
-                {tierIcon(def, i + 1)}
-              </span>
-            ))}
-          </span>
+          <Hint text={tier > 0 ? `Erreicht: ${tierName(def, tier)}` : "Noch keine Stufe"}>
+            <span className="text-sm">
+              {def.tiers.map((_, i) => (
+                <span key={i} className={i < tier ? "" : "opacity-25 grayscale"}>
+                  {tierIcon(def, i + 1)}
+                </span>
+              ))}
+            </span>
+          </Hint>
         </div>
         <p className="text-xs text-muted">{describe(def, tier)}</p>
         {!complete && (

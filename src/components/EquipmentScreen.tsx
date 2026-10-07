@@ -11,6 +11,8 @@ import { ItemTooltip } from "./ItemTooltip";
 import { bonusText, itemName, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { HeroClassPanel } from "./HeroClassInfo";
 import { gearScore } from "../domain/gearScore";
+import { Hint } from "./HoverCard";
+import type { ReactNode } from "react";
 
 /** Position der Slots im „Paper-Doll“-Raster (Spalte / Zeile). */
 const SLOT_LAYOUT: { slot: EquipSlot; className: string }[] = [
@@ -52,13 +54,16 @@ export function EquipmentScreen() {
             accent="text-strength"
           />
         </div>
-        <div
-          className="rounded-md bg-night-800 p-2 text-center"
-          title="Durchschnitt aller 7 Plätze aus Item-Level × Seltenheit, +2 % pro Schmied-Stufe. Zweihandwaffen zählen doppelt."
+        <Hint
+          heading="Gear Score"
+          text="Durchschnitt aller 7 Plätze aus Item-Level × Seltenheit, +2 % pro Schmied-Stufe. Zweihandwaffen zählen doppelt."
+          className="block"
         >
-          <div className="num text-2xl text-legendary">{gearScore(equipment)}</div>
-          <div className="text-xs text-muted">Gear Score</div>
-        </div>
+          <div className="rounded-md bg-night-800 p-2 text-center">
+            <div className="num text-2xl text-legendary">{gearScore(equipment)}</div>
+            <div className="text-xs text-muted">Gear Score</div>
+          </div>
+        </Hint>
         <div className="rounded-md bg-night-800 p-2 text-center text-sm">
           <div className="text-xs text-muted">Attributboni</div>
           <div className="text-xp">{bonuses || "–"}</div>
@@ -106,27 +111,27 @@ function SlotTile({ slot, className }: { slot: EquipSlot; className: string }) {
   if (slot === "weapon2" && isOffHandBlocked(equipment)) {
     const main = getItemStats(equipment.weapon1!);
     return (
-      <div
-        title={`Belegt durch ${itemName(main)} (Zweihand)`}
-        className={`${className} flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed p-1 text-center ${RARITY_BORDER[main.rarity]} bg-night-950/60`}
-      >
-        <ItemIcon def={main.def} rarity={main.rarity} size={32} className="opacity-40" />
-        <span className="text-[10px] leading-tight text-muted">Zweihand</span>
-      </div>
+      <Hint text={`Belegt durch ${itemName(main)} – eine Zweihandwaffe braucht beide Hände.`} className={`${className} flex`}>
+        <div
+          className={`flex aspect-square w-full flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed p-1 text-center ${RARITY_BORDER[main.rarity]} bg-night-950/60`}
+        >
+          <ItemIcon def={main.def} rarity={main.rarity} size={32} className="opacity-40" />
+          <span className="text-[10px] leading-tight text-muted">Zweihand</span>
+        </div>
+      </Hint>
     );
   }
 
   if (!stats) {
     return (
-      <div
-        title={`${SLOT_LABELS[slot]} – leer`}
-        className={`${className} flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed border-night-600 bg-night-950/60 p-1 text-center`}
-      >
-        <span className="text-2xl opacity-30 grayscale" aria-hidden>
-          {SLOT_ICONS[slot]}
-        </span>
-        <span className="w-full truncate text-[10px] leading-tight text-muted">{SLOT_LABELS[slot]}</span>
-      </div>
+      <Hint text={`${SLOT_LABELS[slot]} – leer. Lege ein passendes Item aus dem Inventar an.`} className={`${className} flex`}>
+        <div className="flex aspect-square w-full flex-col items-center justify-center gap-0.5 rounded-md border-2 border-dashed border-night-600 bg-night-950/60 p-1 text-center">
+          <span className="text-2xl opacity-30 grayscale" aria-hidden>
+            {SLOT_ICONS[slot]}
+          </span>
+          <span className="w-full truncate text-[10px] leading-tight text-muted">{SLOT_LABELS[slot]}</span>
+        </div>
+      </Hint>
     );
   }
 
@@ -173,6 +178,17 @@ function Inventory() {
   );
 }
 
+/** Hover-Karte nur, wenn es etwas zu erklären gibt. */
+function OptionalHint({ heading, text, children }: { heading: string; text?: string; children: ReactNode }) {
+  return text ? (
+    <Hint heading={heading} text={text} className="block">
+      {children}
+    </Hint>
+  ) : (
+    <>{children}</>
+  );
+}
+
 /** Kennzahl der Ausrüstung – `extra`: was aus anderen Quellen dazukommt, in Klammern. */
 function CombatTile({
   label,
@@ -188,17 +204,19 @@ function CombatTile({
   accent: string;
 }) {
   return (
-    <div className="rounded-md bg-night-800 p-2 text-center" title={title}>
-      <div className={`num text-2xl ${accent}`}>
-        {value}
-        {extra !== undefined && extra !== 0 && (
-          <span className="ml-1 text-sm text-muted">
-            ({extra > 0 ? "+" : "−"}
-            {Math.abs(extra)})
-          </span>
-        )}
+    <OptionalHint heading={label} text={title}>
+      <div className="rounded-md bg-night-800 p-2 text-center">
+        <div className={`num text-2xl ${accent}`}>
+          {value}
+          {extra !== undefined && extra !== 0 && (
+            <span className="ml-1 text-sm text-muted">
+              ({extra > 0 ? "+" : "−"}
+              {Math.abs(extra)})
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-muted">{label}</div>
       </div>
-      <div className="text-xs text-muted">{label}</div>
-    </div>
+    </OptionalHint>
   );
 }

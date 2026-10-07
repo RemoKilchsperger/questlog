@@ -5,6 +5,7 @@ import { getItem, getItemType } from "../domain/items";
 import { getLevel } from "../domain/leveling";
 import {
   ABILITY_COST,
+  ABILITY_UNLOCK_RANK,
   abilityCost,
   abilityUnlockBlocker,
   hasAbility,
@@ -24,6 +25,7 @@ import {
 import { useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Gold } from "./Gold";
+import { HoverCard } from "./HoverCard";
 import { ItemIcon } from "./ItemIcon";
 
 const percent = (value: number) => `${Math.round(value * 100)} %`;
@@ -41,9 +43,9 @@ export function SkillTree() {
           <p className="text-sm text-muted">
             Pro Level-up erhältst du {SKILL_POINTS_PER_LEVEL} Skillpunkt. Jeder Rang erhöht den Schaden aller Waffen
             dieses Typs um {percent(SKILL_BONUS_PER_RANK)} (höchstens {MAX_SKILL_RANK} Ränge), beim Schild dessen
-            Rüstung. Jeder Waffentyp – auch Zweihandwaffen – lässt sich unabhängig lernen. Hast du eine Waffe gemeistert (Rang {MAX_SKILL_RANK}), kannst du für {ABILITY_COST}{" "}
-            Skillpunkt ihre erste Kampf-Fähigkeit freischalten – ab Level {SECOND_ABILITY_LEVEL} für {SECOND_ABILITY_COST}{" "}
-            Skillpunkte auch die zweite.
+            Rüstung. Jeder Waffentyp – auch Zweihandwaffen – lässt sich unabhängig lernen. Ab Rang {ABILITY_UNLOCK_RANK} kannst du für{" "}
+            {ABILITY_COST} Skillpunkt die erste Kampf-Fähigkeit der Waffe freischalten – ab Level {SECOND_ABILITY_LEVEL} für{" "}
+            {SECOND_ABILITY_COST} Skillpunkte auch die zweite, unabhängig von der ersten. Fahre über ein Symbol, um zu sehen, was es kann.
           </p>
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -63,12 +65,12 @@ export function SkillTree() {
         {SKILL_TREE.map((node) => (
           <section key={node.weapon} className="panel flex flex-col items-stretch gap-2 p-4">
             <SkillCard node={node} />
-            <div className="text-center text-xs text-muted" aria-hidden>
-              │<br />▼ gemeistert
+            <div className="flex items-center gap-2">
+              <span className="flex-1 text-xs text-muted">Fähigkeiten ab Rang {ABILITY_UNLOCK_RANK}</span>
+              {abilitiesOf(node.weapon).map((ability) => (
+                <AbilityIcon key={ability.id} ability={ability} />
+              ))}
             </div>
-            {abilitiesOf(node.weapon).map((ability) => (
-              <AbilityCard key={ability.id} ability={ability} />
-            ))}
           </section>
         ))}
       </div>
@@ -175,59 +177,87 @@ function SkillCard({ node }: { node: SkillNode }) {
 }
 
 /**
- * Knoten unter jedem Waffen-Skill: die beiden Kampf-Fähigkeiten. Die erste nach
- * dem Meistern, die zweite danach ab Level 25.
+ * Symbol einer Kampf-Fähigkeit unter dem Waffen-Skill: freigeschaltet, jetzt
+ * freischaltbar (Klick) oder noch gesperrt. Beim Überfahren erklärt eine Karte,
+ * was die Fähigkeit kann und was sie braucht.
  */
-function AbilityCard({ ability }: { ability: AbilityDef }) {
+function AbilityIcon({ ability }: { ability: AbilityDef }) {
   const character = useGameStore((s) => s.character);
   const unlock = useGameStore((s) => s.unlockAbility);
-  const { weapon } = ability;
   const learned = hasAbility(character, ability.id);
-  const mastered = skillRank(character, weapon) >= MAX_SKILL_RANK;
   const blocker = abilityUnlockBlocker(character, ability.id);
-  const cost = abilityCost(ability.id);
-  const costText = `${cost} Skillpunkt${cost > 1 ? "e" : ""}`;
-  // Zweite Fähigkeit: braucht die erste und Level 25
-  const ready = ability.tier === 1 ? mastered : mastered && hasAbility(character, weapon) && getLevel(character.totalXp) >= SECOND_ABILITY_LEVEL;
+  const ready = !learned && blocker === null;
+  const look = learned
+    ? "border-intellect bg-intellect/15"
+    : ready
+      ? "border-xp bg-xp/10 hover:bg-xp/20"
+      : "border-night-700 bg-night-900";
 
   return (
-    <div
-      className={`rounded-md border-2 border-dashed bg-night-800 p-3 ${
-        learned ? "border-intellect/70" : ready ? "border-night-600" : "border-night-700 opacity-60"
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <span aria-hidden className={`text-2xl ${learned || ready ? "" : "grayscale"}`}>
+    <HoverCard card={<AbilityCardContent ability={ability} learned={learned} blocker={blocker} />} border={learned ? "border-intellect/70" : "border-night-700"}>
+      <motion.button
+        whileTap={ready ? { scale: 0.85 } : undefined}
+        onClick={() => ready && unlock(ability.id)}
+        aria-label={`${ability.name}${learned ? " (freigeschaltet)" : ready ? " freischalten" : " (gesperrt)"}`}
+        className={`relative flex h-11 w-11 items-center justify-center rounded-md border-2 text-2xl ${look} ${ready ? "cursor-pointer" : "cursor-default"}`}
+      >
+        <span aria-hidden className={learned || ready ? "" : "opacity-40 grayscale"}>
           {ability.icon}
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-intellect">{ability.name}</p>
-          <p className="text-xs text-muted">
-            {ability.manaCost} Mana · ⏳ {ability.cooldown} {ability.cooldown === 1 ? "Runde" : "Runden"} · {ability.description}
-          </p>
-        </div>
-        {!learned && (
-          <motion.button
-            whileTap={{ scale: 0.85 }}
-            disabled={blocker !== null}
-            onClick={() => unlock(ability.id)}
-            title={blocker ?? `Für ${costText} freischalten`}
-            aria-label={`${ability.name} freischalten`}
-            className="num h-8 w-8 shrink-0 rounded-md border-2 border-intellect bg-intellect/15 text-lg leading-none text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-30"
-          >
+        {ready && (
+          <span aria-hidden className="num absolute -right-1.5 -top-1.5 rounded-full bg-xp px-1 text-xs leading-4 text-night-950">
             +
-          </motion.button>
+          </span>
         )}
+        {!learned && !ready && (
+          <span aria-hidden className="absolute -bottom-1 -right-1 text-xs">
+            🔒
+          </span>
+        )}
+      </motion.button>
+    </HoverCard>
+  );
+}
+
+/** Inhalt der Hover-Karte einer Fähigkeit. */
+function AbilityCardContent({ ability, learned, blocker }: { ability: AbilityDef; learned: boolean; blocker: string | null }) {
+  const cost = abilityCost(ability.id);
+  const costText = `${cost} Skillpunkt${cost > 1 ? "e" : ""}`;
+  const weapon = getItemType(ability.weapon).label;
+  const needs =
+    ability.tier === 1
+      ? `${weapon} auf Rang ${ABILITY_UNLOCK_RANK}`
+      : `${weapon} auf Rang ${ABILITY_UNLOCK_RANK} und Level ${SECOND_ABILITY_LEVEL}`;
+
+  return (
+    <>
+      <div className="rounded-md bg-night-950/60 px-4 py-2 text-5xl" aria-hidden>
+        {ability.icon}
       </div>
-      <p className="mt-1 text-right text-xs text-muted">
-        {learned
-          ? "✨ Freigeschaltet"
-          : ready
-            ? `Freischalten: ${costText}`
-            : !mastered
-              ? `🔒 ${getItemType(weapon).label} meistern (Rang ${MAX_SKILL_RANK})`
-              : `🔒 ${blocker ?? ""}`}
+      <p className="font-pixel text-lg leading-tight text-intellect">{ability.name}</p>
+      <p className="text-xs text-muted">
+        {ability.tier === 1 ? "Erste" : "Zweite"} Fähigkeit · {weapon}
       </p>
-    </div>
+      <p className="num text-sm">
+        <span className="text-intellect">💧 {ability.manaCost} Mana</span>
+        <span className="text-muted"> · </span>
+        <span className="text-gold">
+          ⏳ {ability.cooldown} {ability.cooldown === 1 ? "Runde" : "Runden"}
+        </span>
+      </p>
+      <p className="text-sm">{ability.description}</p>
+      {learned ? (
+        <p className="mt-1 text-xs text-xp">✨ Freigeschaltet</p>
+      ) : blocker === null ? (
+        <p className="mt-1 text-xs text-gold">Klicken zum Freischalten: {costText}</p>
+      ) : (
+        <>
+          <p className="mt-1 text-xs text-muted">
+            Braucht: {needs} · {costText}
+          </p>
+          <p className="text-xs text-danger">🔒 {blocker}</p>
+        </>
+      )}
+    </>
   );
 }

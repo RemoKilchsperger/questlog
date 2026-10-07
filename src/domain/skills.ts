@@ -2,9 +2,9 @@
 // Waffentyp erhöht den Schaden aller Waffen dieses Typs um 2 % (max. 5 Ränge
 // = +10 %), beim Schild stattdessen dessen Rüstung. Alle Waffentypen sind
 // unabhängig voneinander lernbar – auch Zweihandwaffen.
-// Wer einen Waffentyp gemeistert hat (Rang 5), kann für einen weiteren
-// Skillpunkt dessen erste Kampf-Fähigkeit freischalten – ab Level 25 für zwei
-// Skillpunkte auch die zweite.
+// Ab Rang 3 in einem Waffentyp kann man für einen weiteren Skillpunkt dessen
+// erste Kampf-Fähigkeit freischalten – ab Level 25 für zwei Skillpunkte die
+// zweite, unabhängig von der ersten.
 // Gegen viel Gold lassen sich alle Skillpunkte zurücksetzen.
 
 import { getAbility, type AbilityId } from "./abilities";
@@ -19,6 +19,8 @@ export type SkillRanks = Partial<Record<SkillWeapon, number>>;
 
 export const SKILL_POINTS_PER_LEVEL = 1;
 export const MAX_SKILL_RANK = 5;
+/** Ab diesem Rang lassen sich die Fähigkeiten eines Waffentyps freischalten. */
+export const ABILITY_UNLOCK_RANK = 3;
 export const SKILL_BONUS_PER_RANK = 0.02;
 /** Skillpunkte für das Freischalten der ersten bzw. zweiten Fähigkeit einer Waffe. */
 export const ABILITY_COST = 1;
@@ -78,11 +80,10 @@ export function hasAbility(character: Character, id: AbilityId): boolean {
 export function abilityUnlockBlocker(character: Character, id: AbilityId): string | null {
   const ability = getAbility(id);
   if (hasAbility(character, id)) return "Bereits freigeschaltet.";
-  if (skillRank(character, ability.weapon) < MAX_SKILL_RANK) {
-    return `Erst ${getItemType(ability.weapon).label} meistern (Rang ${MAX_SKILL_RANK}).`;
+  if (skillRank(character, ability.weapon) < ABILITY_UNLOCK_RANK) {
+    return `Erst ${getItemType(ability.weapon).label} auf Rang ${ABILITY_UNLOCK_RANK} bringen.`;
   }
   if (ability.tier === 2) {
-    if (!hasAbility(character, ability.weapon)) return `Erst ${getAbility(ability.weapon).name} freischalten.`;
     if (getLevel(character.totalXp) < SECOND_ABILITY_LEVEL) return `Ab Level ${SECOND_ABILITY_LEVEL}.`;
   }
   const cost = abilityCost(id);

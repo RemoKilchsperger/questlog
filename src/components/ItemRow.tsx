@@ -8,6 +8,7 @@ import { useGameStore } from "../store/gameStore";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { bonusText, itemName, MAIN_STAT_TEXT, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
+import { Hint } from "./HoverCard";
 
 /** Eine Item-Zeile mit Werten, Vergleich zum Angelegten und Aktions-Buttons. */
 export function ItemRow({
@@ -51,17 +52,14 @@ export function ItemRow({
             </span>
           ))}
           {delta.damage !== 0 && (
-            <span
-              className={trend(delta.damage)}
-              title="Schaden pro Treffer gegenüber jetzt – mit Attribut-Skalierung, Klasse, Skills und Set-Bonus"
-            >
-              {arrow(delta.damage)} Schaden
-            </span>
+            <Hint text="Schaden pro Treffer gegenüber jetzt – mit Attribut-Skalierung, Klasse, Skills und Set-Bonus.">
+              <span className={trend(delta.damage)}>{arrow(delta.damage)} Schaden</span>
+            </Hint>
           )}
           {delta.armor !== 0 && (
-            <span className={trend(delta.armor)} title="Rüstung gegenüber jetzt">
-              {arrow(delta.armor)} Rüstung
-            </span>
+            <Hint text="Rüstung der Ausrüstung gegenüber jetzt.">
+              <span className={trend(delta.armor)}>{arrow(delta.armor)} Rüstung</span>
+            </Hint>
           )}
           <span className={tooLow ? "text-danger" : "text-muted"}>ab Lv. {def.requiredLevel}</span>
         </div>

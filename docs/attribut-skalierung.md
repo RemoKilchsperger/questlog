@@ -35,8 +35,9 @@ Status: **umgesetzt.** Edge Function muss neu deployt werden (Koop rechnet die K
   - **Paladin: +20 % statt +40 % Schaden** – der Bonus stammte aus der Zeit, als er seine Punkte auf
     Stärke und Ausdauer aufteilen musste.
 - Ergebnis: Vorher kamen nur Stärke-Builds durch die Dungeons (Kleriker und Waldläufer 0 %), jetzt liegen
-  die meisten Builds nah beieinander. Hexer und Assassine bleiben schwach – das lag schon vorher an
-  Zepter und Dolch selbst, nicht an den Attributen.
+  die meisten Builds nah beieinander. Hexer und Assassine wirkten zuerst schwach – aber nur, weil die
+  Simulation ihnen eine einzige Einhandwaffe gab. Mit zwei Zeptern bzw. Dolchen gehören sie zu den
+  stärksten Builds. Einhand-Builds immer mit zweiter Waffe (oder Schild) simulieren.
 
 ## 3. Anzeige
 

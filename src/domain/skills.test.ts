@@ -5,6 +5,7 @@ import { createItem, getItemStats } from "./items";
 import { xpForNextLevel } from "./leveling";
 import {
   ABILITY_COST,
+  ABILITY_UNLOCK_RANK,
   abilityUnlockBlocker,
   learnSkill,
   MAX_SKILL_RANK,
@@ -80,13 +81,13 @@ describe("Skilltree", () => {
     );
   });
 
-  it("Fähigkeiten gibt es erst nach dem Meistern – für einen weiteren Skillpunkt", () => {
+  it("Fähigkeiten gibt es ab Rang 3 – für einen weiteren Skillpunkt", () => {
     const sword = createItem("sword-30", "common", "s");
     const equipment: Equipment = { ...EMPTY_EQUIPMENT, weapon1: sword };
     expect(getHeroCombatProfile(heroAt(20), equipment).abilities).toEqual([]);
 
-    const trained = learnTimes(heroAt(20), "sword", MAX_SKILL_RANK - 1);
-    expect(abilityUnlockBlocker(trained, "sword")).toMatch(/meistern/);
+    const trained = learnTimes(heroAt(20), "sword", ABILITY_UNLOCK_RANK - 1);
+    expect(abilityUnlockBlocker(trained, "sword")).toMatch(/Rang 3/);
 
     const master = learnSkill(trained, "sword");
     expect(abilityUnlockBlocker(master, "sword")).toBeNull();

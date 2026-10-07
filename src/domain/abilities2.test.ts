@@ -58,16 +58,17 @@ const enemyDamage = (events: ReturnType<typeof attackRound>["events"]) =>
   events.reduce((sum, e) => sum + (e.type === "hit" && e.attacker === "enemy" ? e.damage : 0), 0);
 
 describe("Zweite Fähigkeiten: Freischalten", () => {
-  it("braucht die erste Fähigkeit, Level 25 und 2 Skillpunkte", () => {
+  it("braucht Rang 3, Level 25 und 2 Skillpunkte – unabhängig von der ersten Fähigkeit", () => {
     const low = master(heroAt(SECOND_ABILITY_LEVEL - 1), "sword");
-    expect(abilityUnlockBlocker(low, "sword-2")).toMatch(/Schwertwirbel freischalten/);
-    expect(abilityUnlockBlocker(unlockAbility(low, "sword"), "sword-2")).toMatch(/Level 25/);
+    expect(abilityUnlockBlocker(low, "sword-2")).toMatch(/Level 25/);
 
-    const ready = unlockAbility(master(heroAt(SECOND_ABILITY_LEVEL), "sword"), "sword");
+    // Die zweite geht auch ohne die erste
+    const ready = master(heroAt(SECOND_ABILITY_LEVEL), "sword");
     expect(abilityUnlockBlocker(ready, "sword-2")).toBeNull();
-    const both = unlockAbility(ready, "sword-2");
-    expect(unspentSkillPoints(both)).toBe(unspentSkillPoints(ready) - SECOND_ABILITY_COST);
-    expect(abilityUnlockBlocker(master(heroAt(30), "axe"), "sword-2")).toMatch(/meistern/);
+    const second = unlockAbility(ready, "sword-2");
+    expect(unspentSkillPoints(second)).toBe(unspentSkillPoints(ready) - SECOND_ABILITY_COST);
+    expect(abilityUnlockBlocker(second, "sword")).toBeNull();
+    expect(abilityUnlockBlocker(master(heroAt(30), "axe"), "sword-2")).toMatch(/Rang 3/);
   });
 
   it("im Kampf stehen pro Waffe beide Fähigkeiten zur Wahl", () => {

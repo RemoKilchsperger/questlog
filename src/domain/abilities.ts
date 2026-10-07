@@ -1,7 +1,7 @@
 // Kampf-Fähigkeiten: Jeder Waffentyp (auch der Schild) bringt zwei Fähigkeiten
 // mit, die Mana kosten und den normalen Angriff einer Runde ersetzen. Sie müssen
-// im Skilltree freigeschaltet werden: die erste nach dem Meistern der Waffe, die
-// zweite danach ab Level 25 (siehe skills.ts). Verfügbar sind die
+// im Skilltree freigeschaltet werden: beide ab Rang 3 in der Waffe, die zweite
+// zusätzlich ab Level 25 – unabhängig voneinander (siehe skills.ts). Verfügbar sind die
 // freigeschalteten Fähigkeiten aller angelegten Waffen.
 //
 // Abklingzeit: Nach dem Einsatz ist eine Fähigkeit 1–4 Runden gesperrt – je

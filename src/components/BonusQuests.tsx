@@ -5,6 +5,7 @@ import { BONUS_MULTIPLIER, calculateReward, dropChance, getCategory, getEffortTi
 import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { useNow } from "./useNow";
+import { Hint } from "./HoverCard";
 
 /** Die fünf Bonusquests des Tages – eine pro Aufwandsstufe, mit besserer Belohnung. */
 export function BonusQuests() {
@@ -49,9 +50,11 @@ function BonusQuestRow({ quest, done }: { quest: BonusQuest; done: boolean }) {
         done ? "border-night-700 bg-night-950/60 opacity-60" : "border-gold/40 bg-night-800"
       }`}
     >
-      <span className="text-2xl" aria-hidden title={category.label}>
-        {category.icon}
-      </span>
+      <Hint text={`Bereich ${category.label} – trainiert ${STAT_LABELS[category.stat]}.`}>
+        <span className="text-2xl" aria-hidden>
+          {category.icon}
+        </span>
+      </Hint>
       <div className="min-w-0 flex-1">
         <p className={`font-semibold break-words ${done ? "text-muted line-through" : ""}`}>{quest.title}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -60,17 +63,17 @@ function BonusQuestRow({ quest, done }: { quest: BonusQuest; done: boolean }) {
           </span>
           <span className="text-xp tabular-nums">+{reward.xp} XP</span>
           <Gold amount={reward.gold} sign className="text-gold" />
-          <span className="text-strength tabular-nums" title="Kampfpunkte">
-            +{reward.battlePoints} ⚔️
-          </span>
+          <Hint heading="Kampfpunkte" text="So viele Kampfpunkte füllt die Quest auf.">
+            <span className="text-strength tabular-nums">+{reward.battlePoints} ⚔️</span>
+          </Hint>
           {reward.statPoints > 0 && (
             <span className="tabular-nums">
               +{reward.statPoints} {STAT_LABELS[reward.stat]}
             </span>
           )}
-          <span className="text-epic tabular-nums" title="Chance auf einen Item-Drop">
-            🎁 {Math.round(dropChance(quest.effort, true) * 100)}%
-          </span>
+          <Hint text="Chance auf einen Item-Drop beim Erledigen – bei Bonusquests höher.">
+            <span className="text-epic tabular-nums">🎁 {Math.round(dropChance(quest.effort, true) * 100)}%</span>
+          </Hint>
         </div>
       </div>
       {done ? (

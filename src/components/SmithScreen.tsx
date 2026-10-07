@@ -19,6 +19,7 @@ import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemRow } from "./ItemRow";
 import { itemName, mainStatText, RARITY_TEXT, rarityLabel } from "./itemUi";
+import { Hint } from "./HoverCard";
 
 type View = "upgrade" | "salvage";
 
@@ -72,9 +73,9 @@ export function SmithScreen() {
                 Zerlegen <Essence amount={essenceYield(owned)} sign />
               </motion.button>
             ) : (
-              <span className="text-xs text-muted" title="Erst ab der Seltenheit „selten“">
-                nicht zerlegbar
-              </span>
+              <Hint text="Zerlegen geht erst ab der Seltenheit „selten“.">
+                <span className="text-xs text-muted">nicht zerlegbar</span>
+              </Hint>
             )
           }
         />
