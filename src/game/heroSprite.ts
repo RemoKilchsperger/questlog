@@ -1,16 +1,14 @@
 // Pixel-Grafik des Helden (eigene Grafik), genutzt vom React-Avatar und von
 // der Phaser-Kampfszene.
 //
-// Der Held ist 24 × 24 Pixel gross, seine Hände sind 2 × 2-Blöcke. Helme, Waffen
-// und Schilde sind im selben Raster gezeichnet; die Grafiken der Boss-Items stammen
-// noch aus dem halb so feinen 12er-Raster und werden verdoppelt (`scale` in
-// itemSprites.ts). Deshalb hat der Held genau die doppelten Proportionen des alten
-// 12er-Helden: Kopf, Hände und Füsse liegen dort, wo die Items sie erwarten.
+// Der Held ist 24 × 24 Pixel gross, seine Hände sind 2 × 2-Blöcke. Helme, Waffen,
+// Schilde und die eigenen Teile der Boss-Rüstungen (bossArmor.ts) sind im selben
+// Raster gezeichnet.
 
 import { getItem } from "../domain/items";
 import type { ArmorSlot, Equipment, ItemDef, ItemType } from "../domain/types";
-import { bossGlowColor, getWornHelmet, getWornWeapon, itemPalette } from "./itemSprites";
-import { composeSprites, scaleSprite, type SpriteDef, type SpriteLayer } from "./sprites";
+import { bossGlowColor, getWornBossArmor, getWornHelmet, getWornWeapon, itemPalette } from "./itemSprites";
+import { composeSprites, type SpriteDef, type SpriteLayer } from "./sprites";
 
 /** Grösse des Helden-Rasters */
 const SIZE = 24;
@@ -84,15 +82,13 @@ const WIDTH = SIZE + SIDE_MARGIN * 2;
 const HEIGHT = SIZE + TOP_MARGIN;
 
 /**
- * Getragenes Item im Raster des Helden: bei Bedarf vergrössert, Griffstelle mitgerechnet.
- * Waffen liegen vor dem Körper – die Griffstelle (`G`) bleibt frei, damit die Hand
- * dahinter durchscheint und den Griff zu umschliessen scheint.
+ * Getragene Waffe im Raster des Helden. Waffen liegen vor dem Körper – die
+ * Griffstelle (`G`) bleibt frei, damit die Hand dahinter durchscheint und den
+ * Griff zu umschliessen scheint.
  */
 function wornWeapon(def: ItemDef, mirrored = false) {
-  const worn = getWornWeapon(def, mirrored);
-  const scaled = scaleSprite(worn.sprite, worn.scale);
-  const sprite = { ...scaled, grid: scaled.grid.map((row) => row.replaceAll("G", ".")) };
-  return { sprite, grip: { x: worn.grip.x * worn.scale, y: worn.grip.y * worn.scale } };
+  const { sprite, grip } = getWornWeapon(def, mirrored);
+  return { sprite: { ...sprite, grid: sprite.grid.map((row) => row.replaceAll("G", ".")) }, grip };
 }
 
 /** Was der Held in den Händen hält: Hauptwaffe rechts, Schild bzw. Zweitwaffe links. */
@@ -192,17 +188,28 @@ function heroLayers(equipment: Equipment, withoutMainWeapon: boolean, glow: bool
   };
   const { main, shield, offHand } = heldItems(equipment);
 
-  // Alles liegt vor dem Körper: erst der Helm, dann Waffen und Schild. Die Hände
-  // scheinen durch die frei gelassene Griffstelle der Waffen (siehe `wornWeapon`).
+  // Eigene Teile der Boss-Rüstung: Umhang und Flügel hinter dem Körper, der Rest
+  // darüber – Beine und Schuhe zuerst, Arme zuletzt (sie liegen seitlich auf der Brust).
+  const back: SpriteLayer[] = [];
   const front: SpriteLayer[] = [];
+  for (const slot of ["legs", "feet", "chest", "arms"] as const) {
+    const owned = equipment[slot];
+    const def = owned && getItem(owned.itemId);
+    const worn = def && getWornBossArmor(def);
+    if (!worn) continue;
+    back.push(...worn.back.map((l) => at(paint(l.sprite, def), l.x, l.y)));
+    front.push(...worn.front.map((l) => at(paint(l.sprite, def), l.x, l.y)));
+  }
+
+  // Dann Helm, Waffen und Schild. Die Hände scheinen durch die frei gelassene
+  // Griffstelle der Waffen (siehe `wornWeapon`).
   if (equipment.head) {
     const helmet = getItem(equipment.head.itemId);
-    const worn = getWornHelmet(helmet);
-    front.push(at(paint(scaleSprite(worn.sprite, worn.scale), helmet), 0, -TOP_MARGIN));
+    front.push(at(paint(getWornHelmet(helmet), helmet), 0, -TOP_MARGIN));
   }
   if (offHand) front.push(inHand(offHand, LEFT_HAND, true));
   if (shield) front.push(inHand(shield, LEFT_HAND, false));
   if (main && !withoutMainWeapon) front.push(inHand(main, RIGHT_HAND, false));
 
-  return [at(armoredBody(equipment, glow), 0, 0), ...front];
+  return [...back, at(armoredBody(equipment, glow), 0, 0), ...front];
 }

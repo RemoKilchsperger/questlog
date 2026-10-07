@@ -11,8 +11,9 @@
 
 import { getItemParts } from "../domain/items";
 import type { ArmorSlot, ItemDef, ItemType, WeaponType } from "../domain/types";
+import { BOSS_ARMOR, BOSS_HELMETS, type ArmorPiece } from "./bossArmor";
 import { BOSS_HELD } from "./bossWeapons";
-import type { SpriteDef } from "./sprites";
+import type { SpriteDef, SpriteLayer } from "./sprites";
 
 /** Farben pro Materialstufe [hell, mittel, dunkel, Zierde] – Reihenfolge wie die Namensanfänge. */
 const MATERIALS: readonly (readonly [string, string, string, string])[] = [
@@ -748,13 +749,12 @@ const ICONS: Record<ItemType, readonly IconShape[]> = {
 
 // --- Boss-Items --------------------------------------------------------------
 // Einzigartige Stücke mit eigener Form und Farbe, passend zu ihrem Boss –
-// als Symbol und am Helden (Helm am Kopf, Waffe in der Hand).
+// als Symbol. Am Helden haben sie eigene Formen: Waffen in bossWeapons.ts,
+// Helme und Rüstung in bossArmor.ts.
 
 interface BossLook {
   palette: Record<string, string>;
   icon: IconShape;
-  /** Form am Helden: Helme wie WORN_HELMETS, Waffen wie WORN_WEAPONS (mit `G` als Griff) */
-  worn?: readonly string[];
 }
 
 /** Material hell/mittel/dunkel, Zierde, Edelstein, Griff hell/dunkel. */
@@ -780,7 +780,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       ".H.....",
       ".w.....",
     ]),
-    worn: [".t...", ".hmmL", ".hjm.", ".hmmL", ".hDDL", ".h...", ".G...", ".h...", ".w..."],
   },
   "boss-goblin-chief-mace": {
     palette: bossPalette("#b07a45", "#7a4f2a", "#4a2e18", "#efe6d2", "#7fbf4a", "#5c3a1c", "#3e2612"),
@@ -798,7 +797,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "..h..",
       "..t..",
     ]),
-    worn: [".t.t.", "tLmDt", ".LjD.", "tLmDt", ".LmD.", "..h..", "..G..", "..h..", "..t.."],
   },
   "boss-goblin-chief-head": {
     palette: bossPalette("#f5f2ea", "#e0d6bd", "#9c8f6e", "#7fbf4a", "#e04848", "#5c3a1c", "#3e2612"),
@@ -818,15 +816,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [
-      "..L..LL..L..",
-      "..Lm.mm.mD..",
-      "..tttttttt..",
-      "..tjttttjt..",
-      "..L......L..",
-      "..L......L..",
-      "...L....L...",
-    ],
   },
   "boss-goblin-chief-chest": {
     palette: bossPalette("#b5aa9a", "#8a7f70", "#4a4239", "#efe6d2", "#7fbf4a", "#5c3a1c", "#3e2612"),
@@ -866,7 +855,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "...h...",
       "..tjt..",
     ]),
-    worn: ["...L", "..Lm", ".LmD", ".LmD", "LmD.", "LmD.", "tjt.", ".G..", ".h..", ".j.."],
   },
   "boss-ancient-lizard-greataxe": {
     palette: bossPalette("#a8d08a", "#5f8f45", "#2f4f2a", "#c9b458", "#f4c95d", "#5c3a1c", "#3e2612"),
@@ -887,7 +875,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       ".h.....",
       ".t.....",
     ]),
-    worn: [".t...", ".hLL.", ".hmmL", ".hmDL", ".hjmL", ".hmmL", ".hLL.", ".h...", ".G...", ".h...", ".h...", ".t..."],
   },
   "boss-ancient-lizard-head": {
     palette: bossPalette("#a8d08a", "#5f8f45", "#2f4f2a", "#f5f2ea", "#f4c95d", "#5c3a1c", "#3e2612"),
@@ -907,15 +894,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [
-      "....LmmD....",
-      "...LmDmmD...",
-      "..LmmmmDmD..",
-      "..LjmmmmjD..",
-      "..DtDttDtD..",
-      "..Lm....mD..",
-      "..D......D..",
-    ],
   },
   "boss-ancient-lizard-chest": {
     palette: bossPalette("#a8d08a", "#5f8f45", "#2f4f2a", "#c9b458", "#f4c95d", "#5c3a1c", "#3e2612"),
@@ -956,7 +934,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "..h..",
       "..t..",
     ]),
-    worn: [".mmm.", "mwjwm", "mjkjm", "mwjwm", ".mmm.", "t.h.t", "..h..", "..h..", "..G..", "..h..", "..h..", "..t.."],
   },
   "boss-cave-eye-sword": {
     palette: bossPalette("#e8fbff", "#6ff2ff", "#3a8fb0", "#a07ae0", "#ff4d6d", "#3d3a5c", "#25223d"),
@@ -975,7 +952,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "...H...",
       "..tjt..",
     ]),
-    worn: [".L.", ".Lm", "LmD", ".Lm", "LmD", ".Lm", "tjt", ".G.", ".h.", ".t."],
   },
   "boss-cave-eye-head": {
     palette: bossPalette("#e6d9ff", "#a07ae0", "#5a3d8c", "#6ff2ff", "#ff4d6d", "#3d3a5c", "#25223d"),
@@ -995,13 +971,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [
-      "..t..tt..t..",
-      "..LmmwwmmD..",
-      "..LmjkkjmD..",
-      "..LmmwwmmD..",
-      "..tttttttt..",
-    ],
   },
   "boss-cave-eye-chest": {
     palette: bossPalette("#e6d9ff", "#a07ae0", "#5a3d8c", "#6ff2ff", "#ff4d6d", "#3d3a5c", "#25223d"),
@@ -1043,7 +1012,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "....H....",
       "...tjt...",
     ]),
-    worn: ["....L", "...Lm", "..LmD", "..LmD", ".LmD.", ".LmD.", ".LmD.", "ttjtt", "..G..", "..h..", "..H..", "..t.."],
   },
   "boss-primal-mammoth-greathammer": {
     palette: bossPalette("#f2fdff", "#9ad9f0", "#4a8db0", "#ffffff", "#4fb0e8", "#6b5a4a", "#4a3e33"),
@@ -1062,20 +1030,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "...h...",
       "...t...",
     ]),
-    worn: [
-      ".t.t.t.",
-      "LLmmmmD",
-      "LmmjmmD",
-      "LmmmmmD",
-      "D.DhD.D",
-      "...h...",
-      "...h...",
-      "...h...",
-      "...G...",
-      "...h...",
-      "...h...",
-      "...t...",
-    ],
   },
   "boss-primal-mammoth-head": {
     palette: bossPalette("#b5aa9a", "#8a7f70", "#4a4239", "#fffaf0", "#4fb0e8", "#6b5a4a", "#4a3e33"),
@@ -1095,13 +1049,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [
-      ".t..LmmD..t.",
-      "..tLmmmmDt..",
-      "..LmmjjmmD..",
-      ".LmmmmmmmmD.",
-      "..D......D..",
-    ],
   },
   "boss-primal-mammoth-chest": {
     palette: bossPalette("#c9bfae", "#8a7f70", "#4a4239", "#fffaf0", "#4fb0e8", "#6b5a4a", "#4a3e33"),
@@ -1141,7 +1088,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "...h...",
       "..tjt..",
     ]),
-    worn: [".L.", "LmD", "LtD", "LmD", "LtD", "LmD", "tjt", ".G.", ".h.", ".j."],
   },
   "boss-lich-king-scepter": {
     palette: bossPalette("#f5f2ea", "#d9cfae", "#8a7f70", "#b07cff", "#7dd3a8", "#4f4266", "#251d33"),
@@ -1159,7 +1105,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "..t..",
       "..j..",
     ]),
-    worn: [".LmD.", "LjmjD", "LmkmD", ".tDt.", "..h..", "..h..", "..G..", "..h..", "..j.."],
   },
   "boss-lich-king-head": {
     palette: bossPalette("#6d5a8c", "#2e2540", "#140f1c", "#b4f5c8", "#7dd3a8", "#4f4266", "#251d33"),
@@ -1179,13 +1124,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [
-      "..t..tt..t..",
-      "..L..LD..D..",
-      "..LmLmmDmD..",
-      "..LjmjjmjD..",
-      "..tttttttt..",
-    ],
   },
   "boss-lich-king-chest": {
     palette: bossPalette("#4f4266", "#2e2540", "#140f1c", "#e8e1d4", "#7dd3a8", "#4f4266", "#251d33"),
@@ -1227,7 +1165,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "....h....",
       "...tjt...",
     ]),
-    worn: ["..L..", ".LL..", ".LmD.", "LmmD.", ".LmmD", "LmmD.", ".LmmD", "ttjtt", "..G..", "..h..", "..H..", ".tjt."],
   },
   "boss-ignaroth-greataxe": {
     palette: bossPalette("#ff9d8c", "#c23a3a", "#621a22", "#f4c95d", "#ffe28f", "#3a0f14", "#1b0a0c"),
@@ -1248,7 +1185,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       ".h.....",
       ".t.....",
     ]),
-    worn: [".t....", ".hmL..", ".hmmL.", ".hmD.L", ".hjmL.", ".hmD.L", ".hmmL.", ".hmL..", ".G....", ".h....", ".h....", ".t...."],
   },
   "boss-ignaroth-head": {
     palette: bossPalette("#ff9d8c", "#c23a3a", "#621a22", "#f4c95d", "#ffe28f", "#3a0f14", "#1b0a0c"),
@@ -1268,14 +1204,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [
-      ".t..LmmD..t.",
-      "..tLmmmmDt..",
-      "..LjmmmmjD..",
-      "..LmmmmmmD..",
-      "..tDtDDtDt..",
-      "..Lm....mD..",
-    ],
   },
   "boss-ignaroth-chest": {
     palette: bossPalette("#ff9d8c", "#c23a3a", "#621a22", "#f4c95d", "#ffe28f", "#3a0f14", "#1b0a0c"),
@@ -1317,13 +1245,11 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: ["tL..", "w.m.", "w.mD", "w.tD", "w..h", "w..j", "G..h", "w.tD", "w.mD", "w.m.", "tL.."],
   },
   "boss-ancient-lizard-dagger": {
     // Ein Giftzahn als Klinge
     palette: bossPalette("#a8d08a", "#5f8f45", "#2f4f2a", "#f5f2ea", "#7dd3a8", "#5c3a1c", "#3e2612"),
     icon: weaponShape(2, ["..w..", "..wL.", ".wwL.", ".wLm.", ".LmD.", "tLjDt", ".ttt.", "..h..", "..H..", "..t.."]),
-    worn: ["..w", ".wL", "wLm", "LmD", "tjt", ".G.", ".h.", ".t."],
   },
   "boss-cave-eye-shield": {
     // Kristallspiegel mit dem Auge in der Mitte
@@ -1344,7 +1270,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [".ttt.", "tLjDt", "tjkjt", "tLjDt", ".ttt."],
   },
   "boss-primal-mammoth-bow": {
     // Elfenbein mit Frostkristallen an den Enden
@@ -1365,7 +1290,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: ["jL...", ".wLm.", ".w.mD", ".w..m", ".w..h", ".w..j", ".G..h", ".w..m", ".w.mD", ".wLm.", "jL..."],
   },
   "boss-lich-king-greathammer": {
     // Grabstein als Hammerkopf, Totenkopf-Zierde
@@ -1385,7 +1309,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "...h...",
       "...j...",
     ]),
-    worn: ["LmmmD", "LktkD", "LmmmD", ".DhD.", "..h..", "..t..", "..h..", "..G..", "..h..", "..t..", "..j.."],
   },
   "boss-ignaroth-mace": {
     // Glühender Morgenstern
@@ -1404,7 +1327,6 @@ const BOSS_LOOKS: Record<string, BossLook> = {
       "...H...",
       "...t...",
     ]),
-    worn: ["t.t.t", ".LmD.", "tLjDt", ".LmD.", "t.t.t", "..h..", "..G..", "..h..", "..t.."],
   },
 };
 
@@ -1437,7 +1359,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
   "boss-ore-king-dagger": {
     palette: bossPalette("#e0e4ea", "#9aa0aa", "#50545e", "#c0602f", "#ffcc40", "#6b4a2b", "#4a3020"),
     icon: weaponShape(2, ["..L..", "..LD.", ".LmD.", ".LmD.", ".LmD.", "tLmDt", "ttjtt", "..h..", "..H..", "..t.."]),
-    worn: [".L.", ".LD", "LmD", "LmD", "tjt", ".G.", ".h.", ".t."],
   },
   "boss-ore-king-shield": {
     palette: bossPalette("#c0c8d0", "#7a808a", "#4a4e58", "#c0602f", "#ffcc40", "#6b4a2b", "#4a3020"),
@@ -1457,7 +1378,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: ["ttttt", "tLjDt", "tmjmt", "tLmDt", ".tDt.", "..t.."],
   },
   "boss-ore-king-head": {
     palette: bossPalette("#c8cdd5", "#8a909a", "#4c505a", "#c0602f", "#ffe66b", "#6b4a2b", "#4a3020"),
@@ -1477,7 +1397,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [".....jj.....", "....tjjt....", "...LmmmmD...", ".LmmmmmmmmD."],
   },
   ...dungeonArmor("ore-king", MINE, { chest: 0, arms: 1, legs: 0, feet: 0 }),
 
@@ -1498,12 +1417,10 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
       "...m...",
       "...t...",
     ]),
-    worn: [".t.", "jjj", "jLj", "jjj", ".m.", ".m.", ".G.", ".m.", ".t."],
   },
   "boss-high-priestess-mace": {
     palette: bossPalette("#7af0e0", "#3ad6c5", "#1a7a70", "#f4c95d", "#3a6ad0", "#f4c95d", "#a8781e"),
     icon: weaponShape(2, [".t.t.", ".LmD.", "LmjmD", "LmmmD", "tLmDt", ".tmt.", "..h..", "..h..", "..H..", "..h..", "..t.."]),
-    worn: [".t.t.", "LmjmD", "LmmmD", "tLmDt", "..h..", "..G..", "..h..", "..t.."],
   },
   "boss-high-priestess-head": {
     palette: bossPalette("#fff1a8", "#f4c95d", "#a8781e", "#3a6ad0", "#3ad6c5", "#3a6ad0", "#22457a"),
@@ -1523,15 +1440,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [
-      ".....jj.....",
-      "....LmmD....",
-      "...LtmtmD...",
-      "..LmtmtmtD..",
-      "..Lt....tD..",
-      "..Lm....mD..",
-      "..Lt....tD..",
-    ],
   },
   ...dungeonArmor(
     "high-priestess",
@@ -1557,7 +1465,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
       ".h.....",
       ".t.....",
     ]),
-    worn: [".t...", ".hmL.", ".hjmL", ".htmL", ".hmL.", ".h...", ".G...", ".h...", ".t..."],
   },
   "boss-storm-lord-staff": {
     palette: bossPalette("#ffffff", "#ffe66b", "#c0a020", "#5a8ad0", "#b8e3ff", "#2a4a8a", "#1a2a5a"),
@@ -1576,7 +1483,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
       "..h..",
       "..t..",
     ]),
-    worn: ["m...m", ".m.m.", ".jLj.", "..j..", ".tht.", "..h..", "..h..", "..h..", "..G..", "..h..", "..h..", "..t.."],
   },
   "boss-storm-lord-head": {
     palette: bossPalette("#e0e8f5", "#5a8ad0", "#2a4a8a", "#ffe66b", "#ffffff", "#3b4252", "#22262e"),
@@ -1596,7 +1502,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: ["L....jj....L", "LL..LmmD..LL", ".LLLmmmmDLL.", "..LmmmmmmD..", "..tttttttt..", "..mm....mm.."],
   },
   ...dungeonArmor("storm-lord", STORM, { chest: 1, arms: 1, legs: 0, feet: 0 }),
 
@@ -1604,7 +1509,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
   "boss-void-lord-dagger": {
     palette: VOID,
     icon: weaponShape(2, ["...L.", "..LD.", "..mD.", ".LmD.", ".LD..", ".LmD.", "tLmDt", ".tjt.", "..h..", "..H..", "..j.."]),
-    worn: ["..L", ".LD", ".mD", "LmD", "tjt", ".G.", ".h.", ".j."],
   },
   "boss-void-lord-shield": {
     palette: VOID,
@@ -1624,7 +1528,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
         ".....tt.....",
       ],
     },
-    worn: ["ttttt", "tLmDt", "twjwt", "tLkDt", "tmmDt", ".tDt."],
   },
   "boss-void-lord-head": {
     palette: VOID,
@@ -1644,7 +1547,6 @@ const DUNGEON_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: ["..j..jj..j..", "..t..tt..t..", "..LmmmmmmD..", "..LjmmmmjD..", "..t......t..", "..t......t.."],
   },
   ...dungeonArmor("void-lord", VOID, { chest: 1, arms: 2, legs: 0, feet: 0 }),
 };
@@ -1664,7 +1566,6 @@ const RAID_LOOKS: Record<string, BossLook> = {
   "boss-swamp-hydra-scepter": {
     palette: HYDRA_SET,
     icon: weaponShape(2, [".j.j.", "jmjmj", ".LmD.", "..m..", "..t..", "..m..", "..m..", "..H..", "..m..", "..t..", "..j.."]),
-    worn: [".jmj.", "jLmDj", "..m..", "..t..", "..G..", "..m..", "..j.."],
   },
   "boss-swamp-hydra-axe": {
     palette: HYDRA_SET,
@@ -1681,7 +1582,6 @@ const RAID_LOOKS: Record<string, BossLook> = {
       ".h.....",
       ".t.....",
     ]),
-    worn: [".t...", ".hmmL", ".hjmL", ".hmmD", ".h...", ".G...", ".h...", ".t..."],
   },
   "boss-swamp-hydra-head": {
     palette: HYDRA_SET,
@@ -1701,7 +1601,6 @@ const RAID_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [".j...j...j..", ".mm.mmm.mm..", "..LmmmmmmD..", "..LmmmmmmD..", "..tttttttt..", "..mm....mm.."],
   },
   ...dungeonArmor("swamp-hydra", HYDRA_SET, { chest: 2, arms: 0, legs: 1, feet: 1 }),
 
@@ -1723,7 +1622,6 @@ const RAID_LOOKS: Record<string, BossLook> = {
       "....h....",
       "....t....",
     ]),
-    worn: ["..j..", "LmhmL", "wmhmw", "LmhmL", "..h..", "..h..", "..h..", "..G..", "..h..", "..t.."],
   },
   "boss-frost-giant-bow": {
     palette: FROST_SET,
@@ -1743,7 +1641,6 @@ const RAID_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: ["wL..", "w.mj", "w.mD", "w.mD", "w..h", "w..j", "G..h", "w.mD", "w.mD", "w.mj", "wL.."],
   },
   "boss-frost-giant-head": {
     palette: FROST_SET,
@@ -1763,7 +1660,6 @@ const RAID_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: ["..j.j..j.j..", "..LmLmmDmD..", "..LmmmmmmD..", "..tttttttt..", "..mm....mm.."],
   },
   ...dungeonArmor("frost-giant", FROST_SET, { chest: 0, arms: 2, legs: 1, feet: 0 }),
 
@@ -1771,12 +1667,10 @@ const RAID_LOOKS: Record<string, BossLook> = {
   "boss-world-eater-greatsword": {
     palette: WORLD_SET,
     icon: weaponShape(2, ["..j..", ".LmD.", ".LkD.", ".LmD.", ".LkD.", ".LmD.", ".LkD.", "ttjtt", "..h..", "..H..", "..j.."]),
-    worn: ["..j..", ".LmD.", ".LkD.", ".LmD.", ".LkD.", "ttjtt", "..G..", "..h..", "..j.."],
   },
   "boss-world-eater-staff": {
     palette: WORLD_SET,
     icon: weaponShape(2, [".j.j.", "j.k.j", ".jkj.", "..m..", "..D..", "..m..", "..D..", "..m..", "..D..", "..m..", "..j.."]),
-    worn: [".j.j.", "j.k.j", ".jkj.", "..m..", "..D..", "..m..", "..G..", "..m..", "..j.."],
   },
   "boss-world-eater-head": {
     palette: WORLD_SET,
@@ -1796,7 +1690,6 @@ const RAID_LOOKS: Record<string, BossLook> = {
         "............",
       ],
     },
-    worn: [".t..t..t..t.", ".tt.tttt.tt.", "..LmjmmjmD..", "..LmmmmmmD..", "..tttttttt..", "..mm....mm.."],
   },
   ...dungeonArmor("world-eater", WORLD_SET, { chest: 2, arms: 1, legs: 0, feet: 1 }),
 };
@@ -2477,53 +2370,57 @@ const WORN_HELMETS: readonly (readonly string[])[] = [
   ],
 ];
 
-/** Fein gezeichnete Grafiken passen direkt ins 24er-Raster des Helden, alte (Boss-Items) werden verdoppelt. */
-const FINE = 1;
-const COARSE = 2;
-
 export interface WornSprite {
   sprite: SpriteDef;
   /** Griffstelle im Raster (nur Waffen) – linke obere Ecke der Hand. */
   grip: { x: number; y: number };
-  /** Vergrösserung bis zum 24er-Raster des Helden: 1 = fein gezeichnet, 2 = altes 12er-Raster (Boss-Items) */
-  scale: number;
 }
 
 /**
  * Position von `G` (linke obere Ecke). Schilde haben keins und werden mittig knapp
- * unter dem oberen Rand gehalten – fein gezeichnet mit der Hand (2 × 2) in der Mitte.
+ * unter dem oberen Rand gehalten – mit der Hand (2 × 2) in der Mitte.
  */
-function findGrip(grid: readonly string[], scale: number): { x: number; y: number } {
+function findGrip(grid: readonly string[]): { x: number; y: number } {
   const y = grid.findIndex((row) => row.includes("G"));
   if (y >= 0) return { x: grid[y].indexOf("G"), y };
-  return scale === FINE ? { x: grid[0].length / 2 - 1, y: 2 } : { x: Math.floor(grid[0].length / 2), y: 1 };
+  return { x: grid[0].length / 2 - 1, y: 2 };
 }
 
 /**
- * Getragene Waffe, auf Wunsch gespiegelt (für die linke Hand). Boss-Waffen haben
- * eine eigene Form im 24er-Raster (bossWeapons.ts); ältere Boss-Formen aus dem
- * 12er-Raster werden verdoppelt.
+ * Getragene Waffe im 24er-Raster des Helden, auf Wunsch gespiegelt (für die linke
+ * Hand). Boss-Waffen haben eine eigene Form (bossWeapons.ts).
  */
 export function getWornWeapon(def: ItemDef, mirrored = false): WornSprite {
-  const bossHeld = def.bossId ? BOSS_HELD[def.id] : undefined;
-  const bossWorn = def.bossId && !bossHeld ? BOSS_LOOKS[def.id].worn : undefined;
   const base =
-    bossHeld ??
-    bossWorn ??
+    (def.bossId ? BOSS_HELD[def.id] : undefined) ??
     (def.type === "shield"
       ? WORN_SHIELDS[def.bossId ? 0 : getItemParts(def).noun]
       : WORN_WEAPONS[def.type as keyof typeof WORN_WEAPONS]);
-  const scale = bossWorn ? COARSE : FINE;
   const grid = mirrored ? base.map((row) => [...row].reverse().join("")) : base;
-  return { sprite: { grid, palette: itemPalette(def) }, grip: findGrip(grid, scale), scale };
+  return { sprite: { grid, palette: itemPalette(def) }, grip: findGrip(grid) };
 }
 
-/** Kopfbedeckung am Helden – `scale` wie bei `WornSprite`. */
-export function getWornHelmet(def: ItemDef): { sprite: SpriteDef; scale: number } {
+/** Kopfbedeckung am Helden (24 Spalten, erste Zeile 4 Pixel über dem Kopf). */
+export function getWornHelmet(def: ItemDef): SpriteDef {
   const cls = def.armorClass === "light" || def.armorClass === "medium" ? def.armorClass : null;
-  const bossWorn = def.bossId ? BOSS_LOOKS[def.id].worn : undefined;
   const grid =
-    bossWorn ??
-    (def.bossId ? WORN_HELMETS[0] : cls ? CLASS_WORN_HEADS[cls][getItemParts(def).noun] : WORN_HELMETS[getItemParts(def).noun]);
-  return { sprite: { grid, palette: itemPalette(def) }, scale: bossWorn ? COARSE : FINE };
+    (def.bossId ? BOSS_HELMETS[def.id] : undefined) ??
+    (cls ? CLASS_WORN_HEADS[cls][getItemParts(def).noun] : WORN_HELMETS[def.bossId ? 0 : getItemParts(def).noun]);
+  return { grid, palette: armorPalette(def) };
+}
+
+/** Eigene Teile einer Boss-Rüstung (Brust, Arme, Beine, Schuhe) am Helden – null bei normaler Rüstung. */
+export function getWornBossArmor(def: ItemDef): { front: SpriteLayer[]; back: SpriteLayer[] } | null {
+  const worn = def.bossId ? BOSS_ARMOR[def.id] : undefined;
+  if (!worn) return null;
+  const palette = armorPalette(def);
+  const layers = (pieces: readonly ArmorPiece[] = []) =>
+    pieces.map(({ x, y, rows }) => ({ sprite: { grid: rows, palette }, x, y }));
+  return { front: layers(worn.front), back: layers(worn.back) };
+}
+
+/** Farben am Helden: wie `itemPalette`, dazu l/d (hell/dunkel, beim Spiegeln nicht getauscht, siehe bossArmor.ts). */
+function armorPalette(def: ItemDef): Record<string, string> {
+  const palette = itemPalette(def);
+  return { ...palette, l: palette.L, d: palette.D };
 }

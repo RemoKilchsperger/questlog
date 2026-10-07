@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import { BOSS_ITEMS, createItem, getItem, ITEMS } from "../domain/items";
 import { getHeroSprite, getMainWeapon, HERO_SPRITE } from "./heroSprite";
-import { getItemSprite, getWornHelmet, getWornWeapon } from "./itemSprites";
+import { BOSS_ARMOR, BOSS_HELMETS } from "./bossArmor";
+import { getItemSprite, getWornBossArmor, getWornHelmet, getWornWeapon } from "./itemSprites";
 import { composeSprites, renderSprite } from "./sprites";
 
 const own = (itemId: string) => createItem(itemId, "common", itemId);
@@ -46,7 +47,6 @@ describe("Item-Grafiken", () => {
     for (const def of weapons) {
       const worn = getWornWeapon(def);
       const { grid } = worn.sprite;
-      expect(worn.scale, def.id).toBe(1);
       expect(new Set(grid.map((r) => r.length)).size, def.id).toBe(1);
       // Jedes Zeichen hat eine Farbe (Boss-Palette oder gemeinsame Farben)
       const known = new Set([...Object.keys(worn.sprite.palette), "k", "w", "."]);
@@ -68,7 +68,6 @@ describe("Item-Grafiken", () => {
     for (const id of [...held, "shield-0", "shield-1", "shield-2"]) {
       const worn = getWornWeapon(getItem(id));
       const { grid } = worn.sprite;
-      expect(worn.scale, id).toBe(1);
       expect(new Set(grid.map((r) => r.length)).size, id).toBe(1);
       // Die Hand ist ein 2 × 2-Block – bei Waffen liegt darunter der Griff
       if (!id.startsWith("shield")) {
@@ -80,9 +79,37 @@ describe("Item-Grafiken", () => {
       expect(grid.length - worn.grip.y - 2, id).toBeLessThanOrEqual(8);
     }
     for (const id of ["head-0", "head-1", "head-light-0", "head-light-1", "head-medium-0", "head-medium-1"]) {
-      const worn = getWornHelmet(getItem(id));
-      expect(worn.scale, id).toBe(1);
-      expect(worn.sprite.grid.every((r) => r.length === 24), id).toBe(true);
+      expect(getWornHelmet(getItem(id)).grid.every((r) => r.length === 24), id).toBe(true);
+    }
+  });
+
+  it("jeder Boss-Helm und jedes Boss-Rüstungsteil hat eine eigene, fein gezeichnete Form", () => {
+    const armor = BOSS_ITEMS.filter((d) => d.kind === "armor");
+    for (const def of armor) {
+      const parts = def.type === "head" ? [{ x: 0, rows: BOSS_HELMETS[def.id] }] : [...(BOSS_ARMOR[def.id]?.front ?? []), ...(BOSS_ARMOR[def.id]?.back ?? [])];
+      expect(parts.length, def.id).toBeGreaterThan(0);
+      const palette = def.type === "head" ? getWornHelmet(def).palette : getWornBossArmor(def)!.front[0].sprite.palette;
+      for (const { x, rows } of parts) {
+        // gleich breite Zeilen, die ins Heldenbild passen (24 Spalten plus 6 Pixel Rand pro Seite)
+        expect(new Set(rows.map((r) => r.length)).size, def.id).toBe(1);
+        expect(x, def.id).toBeGreaterThanOrEqual(-6);
+        expect(x + rows[0].length, def.id).toBeLessThanOrEqual(30);
+        const unknown = [...rows.join("")].filter((ch) => ch !== "." && !palette[ch] && ch !== "k" && ch !== "w");
+        expect(unknown, def.id).toEqual([]);
+      }
+    }
+    // Alle Formen sind verschieden
+    const looks = armor.map((d) => JSON.stringify(d.type === "head" ? BOSS_HELMETS[d.id] : BOSS_ARMOR[d.id]));
+    expect(new Set(looks).size).toBe(armor.length);
+  });
+
+  it("Boss-Rüstung verändert die Silhouette des Helden, normale Rüstung nicht", () => {
+    const outline = (equipment = EMPTY_EQUIPMENT) =>
+      renderSprite(getHeroSprite(equipment)).pixels.map((row) => row.map((c) => (c ? "#" : ".")).join("")).join("\n");
+    const bare = outline();
+    expect(outline({ ...EMPTY_EQUIPMENT, chest: own("chest-160") })).toBe(bare);
+    for (const def of BOSS_ITEMS.filter((d) => d.kind === "armor" && d.type !== "head")) {
+      expect(outline({ ...EMPTY_EQUIPMENT, [def.type]: own(def.id) }), def.id).not.toBe(bare);
     }
   });
 
