@@ -5,6 +5,7 @@ import { CharacterSheet, type CharacterView } from "./components/CharacterSheet"
 import { CloudDialogs } from "./components/CloudAccount";
 import { Leaderboard } from "./components/Leaderboard";
 import { EquipmentScreen } from "./components/EquipmentScreen";
+import { HelpScreen } from "./components/HelpScreen";
 import { Hud } from "./components/Hud";
 import { QuestBoard } from "./components/QuestBoard";
 import { QuestForm } from "./components/QuestForm";
@@ -18,7 +19,7 @@ import { useGameStore } from "./store/gameStore";
 import { useCoopStore } from "./coop/coopStore";
 import { isLobbyCode } from "./coop/protocol";
 
-type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard";
+type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard" | "help";
 /** Untermenü des Dorfs */
 type VillageView = "merchant" | "smith";
 
@@ -110,6 +111,9 @@ export default function App() {
         <TabButton active={tab === "leaderboard"} onClick={() => setTab("leaderboard")}>
           🏆 Rangliste
         </TabButton>
+        <TabButton active={tab === "help"} onClick={() => setTab("help")}>
+          ❓ Hilfe
+        </TabButton>
       </nav>
 
       {tab === "character" && (
@@ -153,6 +157,7 @@ export default function App() {
         {tab === "village" && (villageView === "merchant" ? <ShopScreen /> : <SmithScreen />)}
         {tab === "battle" && <BattleScreen />}
         {tab === "leaderboard" && <Leaderboard username={profileName} />}
+        {tab === "help" && <HelpScreen />}
       </main>
 
       <RewardToast />
