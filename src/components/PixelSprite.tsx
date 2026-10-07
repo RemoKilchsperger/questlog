@@ -1,7 +1,8 @@
-import { useId, useMemo } from "react";
-import { renderSprite, type SpriteDef } from "../game/sprites";
+import { useMemo } from "react";
+import type { SpriteDef } from "../game/sprites";
+import { haloUrl, spriteUrl } from "./spriteImage";
 
-/** Zeichnet eine Pixel-Grafik als SVG (scharf in jeder Grösse). */
+/** Zeichnet eine Pixel-Grafik als Bild (scharf in jeder Grösse, siehe spriteImage.ts). */
 export function PixelSprite({
   sprite,
   size = 96,
@@ -13,58 +14,42 @@ export function PixelSprite({
   outline?: boolean;
   className?: string;
 }) {
-  const image = useMemo(() => renderSprite(sprite, outline), [sprite, outline]);
+  const url = useMemo(() => spriteUrl(sprite, outline), [sprite, outline]);
   return (
-    <svg
-      viewBox={`0 0 ${image.width} ${image.height}`}
+    <img
+      src={url}
       width={size}
       height={size}
-      className={`pixelated ${className}`}
-      shapeRendering="crispEdges"
+      alt=""
       aria-hidden
-    >
-      {image.pixels.flatMap((row, y) =>
-        row.map((color, x) =>
-          color ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill={color} /> : null,
-        ),
-      )}
-    </svg>
+      draggable={false}
+      className={`pixelated object-contain ${className}`}
+    />
   );
 }
 
 /**
  * Leuchtschicht über einer Pixel-Grafik (gleiches Raster, gleicher Rand wie
  * `PixelSprite` mit Umriss): ein weicher, pulsierender Schein hinter der
- * Grafik und ein leichter Schimmer darüber.
+ * Grafik und ein leichter Schimmer darüber. Beide sind fertige Bilder, animiert
+ * wird nur die Deckkraft – das kann der Browser ohne Neuzeichnen.
  */
 export function GlowSprite({ sprite, size = 96 }: { sprite: SpriteDef; size?: number }) {
-  const image = useMemo(() => renderSprite(sprite, false, 1), [sprite]);
-  const filterId = `glow-${useId().replace(/:/g, "")}`;
-  const pixels = image.pixels.flatMap((row, y) =>
-    row.map((color, x) => (color ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill={color} /> : null)),
-  );
-  const box = `0 0 ${image.width} ${image.height}`;
+  const halo = useMemo(() => haloUrl(sprite), [sprite]);
+  const shimmer = useMemo(() => spriteUrl(sprite, false, 1), [sprite]);
+  const style = "pointer-events-none absolute inset-0 object-contain";
   return (
     <>
-      <svg viewBox={box} width={size} height={size} className="boss-halo pointer-events-none absolute inset-0" aria-hidden>
-        <defs>
-          <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
-            <feMorphology operator="dilate" radius="0.6" />
-            <feGaussianBlur stdDeviation="0.9" />
-          </filter>
-        </defs>
-        <g filter={`url(#${filterId})`}>{pixels}</g>
-      </svg>
-      <svg
-        viewBox={box}
+      <img src={halo} width={size} height={size} alt="" aria-hidden draggable={false} className={`boss-halo ${style}`} />
+      <img
+        src={shimmer}
         width={size}
         height={size}
-        shapeRendering="crispEdges"
-        className="boss-shimmer pixelated pointer-events-none absolute inset-0"
+        alt=""
         aria-hidden
-      >
-        {pixels}
-      </svg>
+        draggable={false}
+        className={`boss-shimmer pixelated ${style}`}
+      />
     </>
   );
 }

@@ -13,7 +13,6 @@ import { HeroClassPanel } from "./HeroClassInfo";
 import { gearScore } from "../domain/gearScore";
 import { Hint } from "./HoverCard";
 import { useState, type ReactNode } from "react";
-import { motion } from "motion/react";
 import { AvatarFrame } from "./Achievements";
 import { PixelAvatar } from "./PixelAvatar";
 
@@ -70,17 +69,12 @@ export function EquipmentScreen() {
             {showHero ? "🧙 Held ausblenden" : "🧙 Held zeigen"}
           </button>
         </div>
-        {/* Der Held mit allem, was er gerade trägt – wie im Charakter-Tab */}
+        {/* Der Held mit allem, was er gerade trägt. Anders als im Charakter-Tab schwebt er
+            nicht: Zusammen mit vielen leuchtenden Items liess das den Tab schwarz flackern. */}
         {showHero && (
-          <motion.div
-            className="self-center"
-            animate={{ y: [0, -4, 0] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <AvatarFrame frame={frame} className="rounded-lg bg-night-800 p-4">
-              <PixelAvatar size={144} />
-            </AvatarFrame>
-          </motion.div>
+          <AvatarFrame frame={frame} className="self-center rounded-lg bg-night-800 p-4">
+            <PixelAvatar size={144} />
+          </AvatarFrame>
         )}
         <div className="grid grid-cols-3 gap-2">
           {SLOT_LAYOUT.map(({ slot, className }) => (

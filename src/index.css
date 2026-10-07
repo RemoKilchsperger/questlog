@@ -46,23 +46,21 @@
     filter: drop-shadow(0 0 3px var(--color-epic));
   }
   .glow-legendary {
-    animation: legendary-pulse 1.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 4px var(--color-legendary));
   }
-  /* Boss-Items leuchten in ihren eigenen Rüstungsfarben (--glow, siehe bossGlowColor). */
+  /* Boss-Items leuchten in ihren eigenen Rüstungsfarben (--glow, siehe bossGlowColor) – ruhig,
+     ohne Pulsieren (wie legendäre Items): Viele pulsierende Schatten liessen den Ausrüstungs-Tab
+     schwarz flackern. Das Funkeln (.sparkle) bleibt. */
   .glow-boss {
-    animation: boss-pulse 2.2s ease-in-out infinite;
+    filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 1px var(--glow));
   }
-  @keyframes boss-pulse {
-    0%, 100% { filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 1px var(--glow)); }
-    50% { filter: drop-shadow(0 0 7px var(--glow)) drop-shadow(0 0 2px var(--glow)); }
-  }
-  /* Leuchtschicht am Helden (GlowSprite): Schein dahinter, Schimmer darüber. */
+  /* Leuchtschicht am Helden (GlowSprite): Schein dahinter, Schimmer darüber.
+     Nur Deckkraft animieren und keine Mischmodi – sonst flackert der schwebende Held schwarz. */
   .boss-halo {
     animation: boss-halo 2.2s ease-in-out infinite;
   }
   .boss-shimmer {
     z-index: 1;
-    mix-blend-mode: screen;
     animation: boss-shimmer 2.2s ease-in-out infinite;
   }
   @keyframes boss-halo {
@@ -71,7 +69,7 @@
   }
   @keyframes boss-shimmer {
     0%, 100% { opacity: 0; }
-    50% { opacity: 0.35; }
+    50% { opacity: 0.25; }
   }
   /* Lichtschein aus der geöffneten Dungeon-Truhe */
   .chest-light {
@@ -94,10 +92,6 @@
     0%, 55%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
     70% { transform: scale(1) rotate(45deg); opacity: 1; }
     85% { transform: scale(0.4) rotate(90deg); opacity: 0.6; }
-  }
-  @keyframes legendary-pulse {
-    0%, 100% { filter: drop-shadow(0 0 2px var(--color-legendary)); }
-    50% { filter: drop-shadow(0 0 6px var(--color-legendary)); }
   }
   /* Avatar-Rahmen aus Erfolgen (achievements.ts) */
   .frame { border: 3px solid transparent; }
@@ -138,8 +132,6 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .sparkle { display: none; }
-    .glow-legendary { animation: none; filter: drop-shadow(0 0 4px var(--color-legendary)); }
-    .glow-boss { animation: none; filter: drop-shadow(0 0 4px var(--glow)); }
     .boss-halo { animation: none; opacity: 0.8; }
     .boss-shimmer { animation: none; opacity: 0.15; }
     .chest-light { animation: none; }

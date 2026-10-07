@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
-import { BOSS_ITEMS, createItem, getItem, ITEMS } from "../domain/items";
+import { BOSS_ITEMS, createItem, getItem, getItemParts, ITEMS } from "../domain/items";
 import { getHeroSprite, getMainWeapon, HERO_SPRITE } from "./heroSprite";
 import { BOSS_ARMOR, BOSS_HELMETS } from "./bossArmor";
 import { getItemSprite, getWornBossArmor, getWornHelmet, getWornWeapon } from "./itemSprites";
@@ -63,9 +63,10 @@ describe("Item-Grafiken", () => {
     }
   });
 
-  it("normale Waffen, Schilde und Helme sind im 24er-Raster des Helden gezeichnet", () => {
-    const held = ["dagger", "sword", "greatsword", "axe", "greataxe", "staff", "scepter", "mace", "greathammer", "bow"].map((t) => `${t}-0`);
-    for (const id of [...held, "shield-0", "shield-1", "shield-2"]) {
+  it("normale Waffen (jede Namensform), Schilde und Helme sind im 24er-Raster des Helden gezeichnet", () => {
+    // Index 0–2 deckt alle Namensformen ab (höchstens drei pro Typ)
+    const types = ["dagger", "sword", "greatsword", "axe", "greataxe", "staff", "scepter", "mace", "greathammer", "bow", "shield"];
+    for (const id of types.flatMap((t) => [0, 1, 2].map((i) => `${t}-${i}`))) {
       const worn = getWornWeapon(getItem(id));
       const { grid } = worn.sprite;
       expect(new Set(grid.map((r) => r.length)).size, id).toBe(1);
@@ -113,9 +114,19 @@ describe("Item-Grafiken", () => {
     }
   });
 
-  it("Schwert, Klinge und Säbel haben verschiedene Formen", () => {
-    const grids = ["sword-0", "sword-1", "sword-2"].map((id) => getItemSprite(getItem(id)).grid.join("\n"));
-    expect(new Set(grids).size).toBe(3);
+  it("jede Namensform einer Waffe hat eine eigene Form – im Inventar und in der Hand", () => {
+    const weapons = ITEMS.filter((d) => d.kind === "weapon");
+    const byNoun = [...new Map(weapons.map((d) => [`${d.type}-${getItemParts(d).noun}`, d])).values()];
+    expect(new Set(byNoun.map((d) => getItemSprite(d).grid.join("\n"))).size).toBe(byNoun.length);
+    expect(new Set(byNoun.map((d) => getWornWeapon(d).sprite.grid.join("\n"))).size).toBe(byNoun.length);
+  });
+
+  it("Waffensymbole sind fein gezeichnet und quadratisch", () => {
+    for (const def of [...ITEMS, ...BOSS_ITEMS].filter((d) => d.kind === "weapon")) {
+      const { grid } = getItemSprite(def);
+      expect(grid.every((r) => r.length === grid.length), def.id).toBe(true);
+      expect(grid.length, def.id).toBeGreaterThanOrEqual(10);
+    }
   });
 });
 

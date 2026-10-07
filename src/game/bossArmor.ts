@@ -389,3 +389,242 @@ export const BOSS_ARMOR: Readonly<Record<string, BossArmorWorn>> = {
   "boss-world-eater-legs": { front: [half(20, ["....tjm", ".....t"])] },
   "boss-world-eater-feet": { front: [half(22, ["...tLmmm", "..t.dddd"])] },
 };
+
+// --- Symbole -------------------------------------------------------------------
+// Boss-Rüstung im Inventar: fein gezeichnete Grundformen (24 × 24), auf die jedes
+// Set seine Motive legt – dieselben wie am Helden. Helme nutzen direkt ihre Form
+// am Helden (siehe getItemSprite).
+
+const ICON_SIZE = 24;
+
+/** Symmetrische Grundform aus linken Hälften, auf 24 Zeilen aufgefüllt (Zeile = y im Symbol). */
+function base(rows: readonly string[]): string[] {
+  const grid = sym(rows);
+  return [...grid, ...Array<string>(ICON_SIZE - grid.length).fill(".".repeat(ICON_SIZE))];
+}
+
+/** Legt Teile über eine Grundform – jedes Zeichen ausser "." ersetzt, was darunter liegt. */
+function stamp(grid: readonly string[], ...pieces: ArmorPiece[]): string[] {
+  const rows = grid.map((row) => [...row]);
+  for (const { x, y, rows: part } of pieces)
+    part.forEach((row, dy) =>
+      [...row].forEach((ch, dx) => {
+        if (ch !== "." && rows[y + dy]?.[x + dx] !== undefined) rows[y + dy][x + dx] = ch;
+      }),
+    );
+  return rows.map((row) => row.join(""));
+}
+
+const BREASTPLATE = base([
+  "",
+  "",
+  "....Lmmm",
+  "..LLmmmmm",
+  ".Lmmmmmmmm",
+  ".Lmmmmmmmmmm",
+  ".Lmmmmmmmmmm",
+  "..Lmmmmmmmmm",
+  "...Lmmmmmmmm",
+  "...Lmmmmmmmm",
+  "...Lmmmmmmmm",
+  "...Lmmmmmmmm",
+  "...Lmmmmmmmm",
+  "...Lmmmmmmmm",
+  "....Lmmmmmmm",
+  "....Lmmmmmmm",
+  "....tttttttt",
+  "....Lmmmmmmm",
+  "....DDDDDDDD",
+]);
+
+const GAUNTLETS = base([
+  "",
+  "",
+  "",
+  "..tttttt",
+  "..LmmmmD",
+  "..LmmmmD",
+  "..LmmmmD",
+  "..LmmmmD",
+  "..LmmmmD",
+  "..tttttt",
+  "..LmmmmmD",
+  ".LmmmmmmD",
+  ".LmmmmmmD",
+  ".LmmmmmmD",
+  ".LmDmDmD",
+  ".LmDmDmD",
+  "..D.D.D",
+]);
+
+const GREAVES = base([
+  "",
+  "",
+  "...tttttt",
+  "...LmmmmD",
+  "...LmmmmD",
+  "...tttttt",
+  "...LmmmmD",
+  "...LmmmmD",
+  "...LmmmmD",
+  "...LmmmmD",
+  "...LmmmmD",
+  "....LmmD",
+  "....LmmD",
+  "....LmmD",
+  "....LmmD",
+  "....LmmmD",
+  "....LmmmmD",
+  "....DDDDDD",
+]);
+
+const BOOTS = base([
+  "",
+  "",
+  "",
+  "",
+  "",
+  "....tttt",
+  "....LmmD",
+  "....LmmD",
+  "....LmmD",
+  "....LmmD",
+  "....LmmD",
+  "....LmmD",
+  "...LmmmD",
+  "..LmmmmD",
+  ".LmmmmmD",
+  ".DDDDDDD",
+]);
+
+/** Blitz (Sturmfürst), wie auf der Brust am Helden. */
+const BOLT = [".............t", "............t", "...........ttt", "............t", "...........t"].map((r) =>
+  r.padEnd(ICON_SIZE, "."),
+);
+
+export const BOSS_ARMOR_ICONS: Readonly<Record<string, readonly string[]>> = {
+  "boss-goblin-chief-chest": stamp(
+    BREASTPLATE,
+    half(1, [".t...t", ".tLmmt", "LmmmmmD", "mdmdmdm..t.t", "d.d.d...t.tw", "...........w"]),
+  ),
+  "boss-ancient-lizard-chest": stamp(
+    BREASTPLATE,
+    half(0, ["...t", "..tLt", "..LmmD", "..dmdm"]),
+    half(8, ["....d.d.d.d", ".....d.d.d.d", "....d.d.d.d", ".....d.d.d.j", "....d.d.d.d", ".....d.d.d.d"]),
+  ),
+  "boss-cave-eye-chest": stamp(
+    BREASTPLATE,
+    half(0, ["..w", "..tw", "..ttw", ".Ltttw", ".LmmmD"]),
+    half(8, ["..........Lw", ".........wjk", "..........Lw"]),
+  ),
+  "boss-primal-mammoth-chest": stamp(
+    BREASTPLATE,
+    half(0, ["..t", "...t", "...LmLmLm", "..Lmmmmmmmmm", "..dmdmdmdmtw", "...........t"]),
+    half(17, ["....hHhHhHhH", "....H.H.H.H."]),
+  ),
+  "boss-lich-king-chest": stamp(
+    BREASTPLATE,
+    half(1, [".tttt", "tkttkt", ".tttt", "..tkt"]),
+    half(8, ["..........t", "...........j", "...........d"]),
+    half(17, ["....HHHHHHHH", "....H.HH.H.H", "....H..H...H"]),
+  ),
+  "boss-ignaroth-chest": stamp(
+    BREASTPLATE,
+    half(0, ["..t", "..tt", ".LtmmD", ".LmmmD"]),
+    half(8, ["...........j", "..........jt", ".........tjj", "..........tt"]),
+  ),
+
+  "boss-ore-king-chest": stamp(
+    BREASTPLATE,
+    piece(2, [
+      ".tttttt..........tttttt.",
+      ".LmkmmD..........LmmkmD.",
+      ".LmmmkD........h.LkmmmD.",
+      ".DDDDDD.......hH.DDDDDD.",
+      "...........thH..........",
+      "..........hH............",
+      ".........hH.............",
+      "........hH..............",
+    ]),
+  ),
+  "boss-ore-king-arms": stamp(GAUNTLETS, half(3, ["..tttttt", "..tktktk"]), half(14, [".LkmkmkD"])),
+  "boss-ore-king-legs": stamp(GREAVES, half(8, ["..LmmmmmD", "..LkmmkmD", "..DDDDDDD"])),
+  "boss-ore-king-feet": stamp(BOOTS, half(12, ["...Ll", "..Lll", ".Llll"])),
+
+  "boss-high-priestess-chest": stamp(
+    BREASTPLATE,
+    half(2, ["...ttttttttt", "..thhhhhhhhh", "...tjjjjjjjj", ".....ttttttt"]),
+  ),
+  "boss-high-priestess-arms": stamp(GAUNTLETS, half(4, ["..tttttt", "..jjjjjj", "..tttttt"]), half(10, ["..tjtjtjt"])),
+  "boss-high-priestess-legs": stamp(
+    GREAVES,
+    half(0, ["..tttttttttt", "..Lmmmmmmmmm", "..Lmmmmmmmtj", "...Lmmmmmmtj", "...Lmmmmmmtj", "....Lmmmmmtj"]),
+  ),
+  "boss-high-priestess-feet": base([
+    "",
+    "",
+    "",
+    "....tt",
+    "....tj",
+    "....tt",
+    "....t.t",
+    "....t.t",
+    "...t..t",
+    "...tttt",
+    "..t.t.t",
+    ".t..t.t",
+    ".tttttt",
+    "Lmmmmmmm",
+    "DDDDDDDD",
+  ]),
+
+  "boss-storm-lord-chest": stamp(BREASTPLATE, half(0, ["..L", ".LmL", ".LmtmD", ".LtmmD", "..DDD"]), piece(7, BOLT)),
+  "boss-storm-lord-arms": stamp(
+    GAUNTLETS,
+    half(0, ["t"]),
+    half(2, [".LmmmmmmD", ".tttttttt"]),
+    half(5, ["....t", "...t", "...tt", "....t", "...t"]),
+    half(15, ["j", "", ".t"]),
+  ),
+  "boss-storm-lord-legs": stamp(GREAVES, half(7, [".t", ".Lmt", "..mt"]), half(11, [".....t", "....t", ".....t"])),
+  "boss-storm-lord-feet": stamp(BOOTS, half(5, ["..L", ".LL", ".LLm", "..Lm"])),
+
+  "boss-void-lord-chest": stamp(
+    BREASTPLATE,
+    half(0, ["..L", "..Lm.L", ".LmmLmD", ".LmmmmD", "..tdtd"]),
+    half(7, ["...........t", "..........tk", ".........tkk", "..........tk", "...........t"]),
+  ),
+  "boss-void-lord-arms": stamp(GAUNTLETS, half(4, ["....t", "...t", "....t", "...t"]), half(16, [".l.l.l", ".t.t.t"])),
+  "boss-void-lord-legs": stamp(GREAVES, half(0, ["...L..L", "..LmLLm"]), half(6, ["....t", ".....t", "....t", ".....t", "....t"])),
+  "boss-void-lord-feet": stamp(BOOTS, half(11, ["t", "L", "dL"])),
+
+  "boss-swamp-hydra-chest": stamp(
+    BREASTPLATE,
+    half(1, ["..Lmm", ".Lmjmm", "wwmmmmD", ".w.Lmm"]),
+    half(8, ["......d.d.d", ".......d.d.d", "......d.d.d", ".......d.d.d"]),
+  ),
+  "boss-swamp-hydra-arms": stamp(GAUNTLETS, half(3, ["t", "tt", "ttt", ".tt", "..t"]), half(10, ["...d.d.d", "..d.d.d."])),
+  "boss-swamp-hydra-legs": stamp(GREAVES, half(6, ["....d.d", "...d.d.d", "....d.d", "...d.d.d"]), half(18, ["....j.j.j"])),
+  "boss-swamp-hydra-feet": stamp(BOOTS, half(13, ["t", "", "t"])),
+
+  "boss-frost-giant-chest": stamp(
+    BREASTPLATE,
+    half(1, ["..L..L", ".LmL.Lm", ".LmmmmmD", ".dmmmmd", ".l.l.l", "...l"]),
+    half(9, ["...........j"]),
+  ),
+  "boss-frost-giant-arms": stamp(
+    GAUNTLETS,
+    half(9, ["Lmmmmmmmm", "Lmmmmmmmm", "LmjmmmmmD", "LmmmmmmmD", "LmmmmmmmD", "LmmmmmmmD", ".dddddddd"]),
+  ),
+  "boss-frost-giant-legs": stamp(GREAVES, half(0, ["...L..L", "..Lm.Lm"]), half(6, ["...l.l.l"])),
+  "boss-frost-giant-feet": stamp(BOOTS, half(11, ["...LmmmD", "..LmmmmmD", ".LmmmmmmD", "LmmmmmmmD", "ddddddddd"])),
+
+  "boss-world-eater-chest": stamp(
+    BREASTPLATE,
+    half(0, [".t", ".tt", "..tLmD", ".LmmmmD", ".dtmmtd"]),
+    half(8, ["........wdwd", "........jjjj", "........dwdw"]),
+  ),
+  "boss-world-eater-arms": stamp(GAUNTLETS, half(5, ["....j"]), half(16, [".t.t.t", ".t.t.t"])),
+  "boss-world-eater-legs": stamp(GREAVES, half(7, [".t", ".tt", "..tLjjmD"])),
+  "boss-world-eater-feet": stamp(BOOTS, half(12, ["t", ".t"]), half(14, ["t"])),
+};
