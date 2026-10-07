@@ -12,7 +12,10 @@ import { bonusText, itemName, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityL
 import { HeroClassPanel } from "./HeroClassInfo";
 import { gearScore } from "../domain/gearScore";
 import { Hint } from "./HoverCard";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { motion } from "motion/react";
+import { AvatarFrame } from "./Achievements";
+import { PixelAvatar } from "./PixelAvatar";
 
 /** Position der Slots im „Paper-Doll“-Raster (Spalte / Zeile). */
 const SLOT_LAYOUT: { slot: EquipSlot; className: string }[] = [
@@ -25,9 +28,28 @@ const SLOT_LAYOUT: { slot: EquipSlot; className: string }[] = [
   { slot: "feet", className: "col-start-2 row-start-4" },
 ];
 
+/** Held im Ausrüstungs-Screen zeigen oder ausblenden – nur eine Bequemlichkeit pro Browser. */
+const SHOW_HERO_KEY = "questlog-equipment-hero";
+
 export function EquipmentScreen() {
   const equipment = useGameStore((s) => s.equipment);
   const character = useGameStore((s) => s.character);
+  const frame = useGameStore((s) => s.cosmetics.frame);
+  const [showHero, setShowHero] = useState(() => {
+    try {
+      return localStorage.getItem(SHOW_HERO_KEY) !== "hidden";
+    } catch {
+      return true;
+    }
+  });
+  const toggleHero = () => {
+    setShowHero(!showHero);
+    try {
+      localStorage.setItem(SHOW_HERO_KEY, showHero ? "hidden" : "shown");
+    } catch {
+      // ohne Speicher gilt die Wahl nur bis zum Neuladen
+    }
+  };
   const { armor, attack } = getCombatStats(equipment);
   // Schaden pro Treffer mit allem – was nicht aus dem Angriff der Items kommt, steht in Klammern
   const damage = Math.round(getHeroCombatProfile(character, equipment).damage);
@@ -38,7 +60,28 @@ export function EquipmentScreen() {
   return (
     <div className="grid gap-4 md:grid-cols-[320px_1fr]">
       <section className="panel flex flex-col gap-4 self-start p-5">
-        <h2 className="font-pixel text-2xl">Ausrüstung</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-pixel text-2xl">Ausrüstung</h2>
+          <button
+            onClick={toggleHero}
+            aria-pressed={showHero}
+            className="rounded-md border-2 border-night-700 px-2 py-0.5 text-xs text-muted hover:text-parchment"
+          >
+            {showHero ? "🧙 Held ausblenden" : "🧙 Held zeigen"}
+          </button>
+        </div>
+        {/* Der Held mit allem, was er gerade trägt – wie im Charakter-Tab */}
+        {showHero && (
+          <motion.div
+            className="self-center"
+            animate={{ y: [0, -4, 0] }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <AvatarFrame frame={frame} className="rounded-lg bg-night-800 p-4">
+              <PixelAvatar size={144} />
+            </AvatarFrame>
+          </motion.div>
+        )}
         <div className="grid grid-cols-3 gap-2">
           {SLOT_LAYOUT.map(({ slot, className }) => (
             <SlotTile key={slot} slot={slot} className={className} />
