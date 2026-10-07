@@ -146,11 +146,17 @@ Fähigkeit**, danach Gift/Feuer/Bluten und der Gegenangriff. Jeder Kampf beginnt
 | Wert | Formel (in `combat.ts`) |
 |---|---|
 | Lebenspunkte | `80 + 12 · (Level − 1) + 1.5 · Ausdauer` |
-| Schaden | `5 + Angriff + Skill-Bonus + 0.25 · Stärke`, ±15 % Streuung |
-| Kritisch | `5 % + 0.2 % · Intelligenz` (max. 30 %), ×1.5 Schaden |
+| Schaden | `5 + Angriff + Skill-Bonus + Attributbonus der Waffen`, ±15 % Streuung |
+| Attributbonus | `0.25 · Attribut der Waffe` (Ausdauer 0.15), bei zwei Waffen nach Anteil am Angriff |
+| Kritisch | `5 % + 0.2 % · Charisma` (max. 30 %), ×1.5 Schaden |
 | Mana | `40 + 2 · (Level − 1) + Intelligenz`, +6 pro Runde |
 | Rüstung | fängt `Rüstung / (Rüstung + 50 + 10 · Angreifer-Level)` des Schadens ab |
 | Gold-Bonus | `+0.5 % · Charisma` (max. +100 %) |
+
+**Waffen skalieren mit Attributen** (`weaponScaling.ts`, Plan in `docs/attribut-skalierung.md`):
+Stärke – Schwert, Zweihandschwert, Axt, Grossaxt, Grosshammer · Intelligenz – Stab, Zepter ·
+Ausdauer – Streitkolben, Schild (auch `+0.1 · Ausdauer` Rüstung pro Schild) · Charisma – Dolch, Bogen.
+Attributpunkte lassen sich zurücksetzen: das erste Mal kostenlos, danach `50 · Level · (1 + Level / 10)` Gold.
 
 Klassen, Boss-Sets und leichte Rüstung kommen jeweils noch dazu.
 

@@ -64,8 +64,13 @@ export interface Character {
   /** Essenz aus zerlegten Items (src/domain/forge.ts). */
   essence: number;
   stats: Stats;
-  /** Bereits verteilte Level-up-Punkte (verfügbar: siehe `unspentPoints`). */
+  /**
+   * Bereits verteilte Level-up-Punkte (verfügbar: siehe `unspentPoints`). Nach dem
+   * Zurücksetzen der Attribute negativ, wenn auch Punkte aus epischen Quests frei wurden.
+   */
   spentPoints: number;
+  /** Wie oft die Attributpunkte schon zurückgesetzt wurden – das erste Mal ist kostenlos. */
+  attributeResets?: number;
   /** Verfügbare Kampfpunkte – jeder Kampf kostet einen (src/domain/battlePoints.ts). */
   battlePoints: number;
   /** Zuletzt gutgeschriebener 6-Stunden-Abschnitt der Gratis-Kampfpunkte (siehe `regenSlot`). */

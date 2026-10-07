@@ -1,27 +1,49 @@
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { BOSS_SETS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, getHeroCombatProfile } from "../domain/combat";
 import { bossName } from "../domain/bosses";
-import { BOSS_ITEMS, getBossItems, getItemStats } from "../domain/items";
+import { BOSS_ITEMS, getBossItems, getItemStats, getItemType } from "../domain/items";
 import { getCombatStats, getStatBonuses } from "../domain/equipment";
-import { getLevelProgress, POINTS_PER_LEVEL, unspentPoints } from "../domain/leveling";
+import {
+  attributeResetBlocker,
+  attributeResetCost,
+  getLevelProgress,
+  POINTS_PER_LEVEL,
+  resettablePoints,
+  unspentPoints,
+} from "../domain/leveling";
+import { WEAPON_STAT } from "../domain/weaponScaling";
 import { STAT_LABELS } from "../domain/rewards";
-import type { StatKey } from "../domain/types";
+import type { StatKey, WeaponType } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
-import { formatNumber } from "./Gold";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { formatNumber, Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { PixelAvatar } from "./PixelAvatar";
 import { AchievementsPanel, AvatarFrame, CosmeticsPicker, TitleBadge } from "./Achievements";
 import { XpBar } from "./XpBar";
-import { HeroClassBadge } from "./HeroClassInfo";
+import { ClassCodex, HeroClassBadge } from "./HeroClassInfo";
 
 const STAT_COLORS: Record<StatKey, string> = {
   strength: "bg-strength",
   intellect: "bg-intellect",
   endurance: "bg-endurance",
   charisma: "bg-charisma",
+};
+
+/** Was jedes Attribut bewirkt – die Waffen kommen aus der Zuordnung in weaponScaling.ts. */
+const weaponsOf = (stat: StatKey) =>
+  (Object.keys(WEAPON_STAT) as WeaponType[])
+    .filter((type) => WEAPON_STAT[type] === stat)
+    .map((type) => getItemType(type).label)
+    .join(", ");
+const ATTRIBUTE_EFFECTS: Record<StatKey, string> = {
+  strength: `Schaden mit ${weaponsOf("strength")}`,
+  intellect: `Schaden mit ${weaponsOf("intellect")} · Mana`,
+  endurance: `Lebenspunkte · Schaden mit ${weaponsOf("endurance")} · Rüstung des Schilds`,
+  charisma: `Kritische Treffer · Schaden mit ${weaponsOf("charisma")} · Gold nach Kämpfen`,
 };
 
 export type CharacterView = "details" | "achievements" | "collection";
@@ -120,11 +142,14 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
 
         {/* Attribute – Basis für das spätere Kampfsystem */}
         <section className="panel p-5">
-          <h2 className="font-pixel mb-1 text-2xl">Attribute</h2>
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-pixel text-2xl">Attribute</h2>
+            <AttributeReset />
+          </div>
           <p className="mb-4 text-sm text-muted">
-            Bestimmen deine Stärke im Kampf. Pro Level-up verteilst du {POINTS_PER_LEVEL} Punkte frei, epische
-            Quests trainieren zusätzlich das Attribut ihres Bereichs. Seltene Ausrüstung gibt weitere Boni (heller Teil
-            des Balkens).
+            Bestimmen deine Stärke im Kampf – jede Waffe macht mehr Schaden mit ihrem Attribut. Pro Level-up verteilst du{" "}
+            {POINTS_PER_LEVEL} Punkte frei, epische Quests trainieren zusätzlich das Attribut ihres Bereichs. Seltene
+            Ausrüstung gibt weitere Boni (heller Teil des Balkens).
           </p>
           {unspent > 0 && (
             <motion.p
@@ -138,7 +163,7 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
           )}
           <ul className="flex flex-col gap-3">
             {statEntries.map(([key, value]) => (
-              <li key={key} className="grid grid-cols-[100px_1fr_64px_28px] items-center gap-3">
+              <li key={key} className="grid grid-cols-[100px_1fr_64px_28px] items-center gap-x-3 gap-y-0.5">
                 <span className="text-sm">{STAT_LABELS[key]}</span>
                 <div className="flex h-3 overflow-hidden rounded-sm bg-night-700">
                   <motion.div
@@ -168,10 +193,13 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
                 ) : (
                   <span />
                 )}
+                <span className="col-span-4 text-xs text-muted">{ATTRIBUTE_EFFECTS[key]}</span>
               </li>
             ))}
           </ul>
         </section>
+
+        <ClassCodex />
 
         <button
           onClick={() => {
@@ -245,6 +273,53 @@ export function BossCollection({ collection }: { collection?: string[] }) {
         })}
       </ul>
     </section>
+  );
+}
+
+/** Alle Attributpunkte zurücksetzen – das erste Mal kostenlos, danach teuer. Mit Rückfrage. */
+function AttributeReset() {
+  const character = useGameStore((s) => s.character);
+  const reset = useGameStore((s) => s.resetAttributes);
+  const [confirm, setConfirm] = useState(false);
+  const close = useCallback(() => setConfirm(false), []);
+  const cost = attributeResetCost(character);
+  const blocker = attributeResetBlocker(character);
+  const points = resettablePoints(character);
+
+  return (
+    <>
+      <motion.button
+        whileTap={{ scale: 0.95 }}
+        disabled={blocker !== null}
+        onClick={() => setConfirm(true)}
+        title={blocker ?? "Alle Attributpunkte zurücksetzen und neu verteilen"}
+        className="rounded-md border-2 border-danger/70 bg-danger/10 px-3 py-1 text-sm text-danger hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        ↺ Zurücksetzen {cost === 0 ? <span className="font-bold text-xp">kostenlos</span> : <Gold amount={cost} className="font-bold" />}
+      </motion.button>
+      <ConfirmDialog
+        open={confirm}
+        title="Attributpunkte zurücksetzen?"
+        confirmLabel="Zurücksetzen"
+        onCancel={close}
+        onConfirm={() => {
+          reset();
+          setConfirm(false);
+        }}
+      >
+        <p>
+          Alle Attribute fallen auf 1 zurück, und du kannst <b>{points} Punkte</b> neu verteilen – auch die aus epischen
+          Quests.{" "}
+          {cost === 0 ? (
+            <>Das erste Mal ist kostenlos, danach kostet es viel Gold.</>
+          ) : (
+            <>
+              Kosten: <Gold amount={cost} className="font-bold text-gold" />.
+            </>
+          )}
+        </p>
+      </ConfirmDialog>
+    </>
   );
 }
 

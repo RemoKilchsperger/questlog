@@ -148,13 +148,22 @@ export function HelpScreen() {
           <Table
             head={["Attribut", "Wirkung im Kampf"]}
             rows={[
-              [STAT_LABELS.strength, "+0,25 Schaden pro Punkt"],
-              [STAT_LABELS.endurance, "+1,5 Lebenspunkte pro Punkt"],
-              [STAT_LABELS.intellect, "+0,2 % Krit-Chance (max. 30 %) und +1 Mana pro Punkt"],
-              [STAT_LABELS.charisma, "+0,5 % Gold aus Kämpfen pro Punkt (max. +100 %)"],
+              [STAT_LABELS.strength, "Schaden mit Schwert, Zweihandschwert, Axt, Grossaxt, Grosshammer (+0,25 pro Punkt)"],
+              [STAT_LABELS.intellect, "Schaden mit Stab und Zepter (+0,25 pro Punkt), +1 Mana pro Punkt"],
+              [
+                STAT_LABELS.endurance,
+                "+1,5 Lebenspunkte pro Punkt, Schaden mit Streitkolben und Schild (+0,15 pro Punkt), mehr Schild-Rüstung",
+              ],
+              [
+                STAT_LABELS.charisma,
+                "Schaden mit Dolch und Bogen (+0,25 pro Punkt), +0,2 % Krit-Chance (max. 30 %), +0,5 % Gold aus Kämpfen pro Punkt",
+              ],
             ]}
           />
-          <p>Attributboni auf Items und aus Boss-Sets zählen genauso wie verteilte Punkte.</p>
+          <p>
+            Attributboni auf Items und aus Boss-Sets zählen genauso wie verteilte Punkte. Im Charakter-Tab kannst du alle
+            Attributpunkte zurücksetzen und neu verteilen – das erste Mal kostenlos, danach gegen viel Gold.
+          </p>
         </Topic>
 
         <Topic id="battle-points" title="⚔️ Kampfpunkte">
@@ -224,7 +233,8 @@ export function HelpScreen() {
           <p>
             Trägst du mindestens {CLASS_ARMOR_PIECES} Rüstungsteile derselben Rüstungsklasse und die passende Waffe, wirst
             du zu einer Klasse mit eigenem Bonus – zum Beispiel leichte Rüstung und Stab: 🔮 Magier. Es gibt elf Klassen;
-            welche Kombination was ergibt, findest du selbst heraus (oder schaust bei anderen Helden in der Rangliste).
+            welche Kombination was ergibt, findest du selbst heraus (oder schaust bei anderen Helden in der Rangliste). Entdeckte
+            Klassen stehen im Charakter-Tab – mit dem, was sie brauchen.
           </p>
           <H>Boss-Items & Sets</H>
           <p>

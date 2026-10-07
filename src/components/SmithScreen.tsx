@@ -109,7 +109,7 @@ function UpgradeInfo({ onUpgrade }: { onUpgrade: (owned: OwnedItem) => ReactNode
           {equipped.map((owned) => {
             const stats = getItemStats(owned);
             return (
-              <ItemRow key={owned.uid} stats={stats} equipment={equipment} tooLow={level < stats.def.requiredLevel}>
+              <ItemRow key={owned.uid} owned={owned} stats={stats} equipment={equipment} tooLow={level < stats.def.requiredLevel}>
                 {onUpgrade(owned)}
               </ItemRow>
             );

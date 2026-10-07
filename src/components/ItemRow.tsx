@@ -1,30 +1,31 @@
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
+import { getHeroCombatProfile } from "../domain/combat";
 import { displacedSlots, slotsFor } from "../domain/equipment";
 import { getItemStats } from "../domain/items";
-import type { CombatStats, Equipment, ItemStats } from "../domain/types";
+import type { Character, Equipment, ItemStats, OwnedItem } from "../domain/types";
+import { useGameStore } from "../store/gameStore";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { bonusText, itemName, MAIN_STAT_TEXT, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 /** Eine Item-Zeile mit Werten, Vergleich zum Angelegten und Aktions-Buttons. */
 export function ItemRow({
+  owned,
   stats,
   equipment,
   tooLow,
   children,
 }: {
+  owned: OwnedItem;
   stats: ItemStats;
   equipment: Equipment;
   tooLow: boolean;
   children: ReactNode;
 }) {
   const { def, rarity } = stats;
-  const delta = compareToEquipped(stats, equipment);
-  const deltas: [number, string][] = [
-    [delta.attack, "Angriff"],
-    [delta.armor, "Rüstung"],
-  ];
+  const character = useGameStore((s) => s.character);
+  const delta = compareToEquipped(owned, stats, equipment, character);
   const bonuses = bonusText(stats.bonuses);
   return (
     <motion.li
@@ -49,13 +50,18 @@ export function ItemRow({
               {part.text}
             </span>
           ))}
-          {deltas.map(
-            ([value, label]) =>
-              value !== 0 && (
-                <span key={label} className={value > 0 ? "text-xp" : "text-danger"} title={`${label} gegenüber jetzt`}>
-                  {value > 0 ? `▲ ${value}` : `▼ ${-value}`} {label}
-                </span>
-              ),
+          {delta.damage !== 0 && (
+            <span
+              className={trend(delta.damage)}
+              title="Schaden pro Treffer gegenüber jetzt – mit Attribut-Skalierung, Klasse, Skills und Set-Bonus"
+            >
+              {arrow(delta.damage)} Schaden
+            </span>
+          )}
+          {delta.armor !== 0 && (
+            <span className={trend(delta.armor)} title="Rüstung gegenüber jetzt">
+              {arrow(delta.armor)} Rüstung
+            </span>
           )}
           <span className={tooLow ? "text-danger" : "text-muted"}>ab Lv. {def.requiredLevel}</span>
         </div>
@@ -66,22 +72,37 @@ export function ItemRow({
   );
 }
 
+const trend = (value: number) => (value > 0 ? "text-xp" : value < 0 ? "text-danger" : "text-muted");
+const arrow = (value: number) => (value > 0 ? `▲ ${value}` : value < 0 ? `▼ ${-value}` : "± 0");
+
+interface Comparison {
+  /** Rüstung der Ausrüstung – die Werte auf den Items */
+  armor: number;
+  /** Schaden pro Treffer mit allem: Attribut-Skalierung, Klasse, Skills, Set-Bonus */
+  damage: number;
+}
+
 /**
- * Veränderung von Angriff und Rüstung, wenn das Item angelegt wird – inklusive
- * allem, was dafür weichen müsste (z. B. ein Zweihänder für einen Schild).
+ * Veränderung, wenn das Item angelegt wird – inklusive allem, was dafür weichen
+ * müsste (z. B. ein Zweihänder für einen Schild). Der Schaden wird mit dem ganzen
+ * Helden vorher und nachher berechnet, die Rüstung zählt nur die Werte der Items.
  * Bei mehreren möglichen Slots zählt der günstigste.
  */
-function compareToEquipped(stats: ItemStats, equipment: Equipment): CombatStats {
+function compareToEquipped(owned: OwnedItem, stats: ItemStats, equipment: Equipment, character: Character): Comparison {
+  // Schon angelegt (z. B. beim Schmied) – nichts zu vergleichen
+  if (Object.values(equipment).some((o) => o?.uid === owned.uid)) return { armor: 0, damage: 0 };
+  const before = getHeroCombatProfile(character, equipment).damage;
   const options = slotsFor(stats.def).map((slot) => {
-    const delta = { attack: stats.attack, armor: stats.armor };
+    let armor = stats.armor;
+    const after: Equipment = { ...equipment };
     for (const s of displacedSlots(stats.def, slot, equipment)) {
-      const owned = equipment[s];
-      if (!owned) continue;
-      const lost = getItemStats(owned);
-      delta.attack -= lost.attack;
-      delta.armor -= lost.armor;
+      const current = equipment[s];
+      after[s] = null;
+      if (!current) continue;
+      armor -= getItemStats(current).armor;
     }
-    return delta;
+    after[slot] = owned;
+    return { armor, damage: Math.round(getHeroCombatProfile(character, after).damage - before) };
   });
-  return options.reduce((best, d) => (d.attack + d.armor > best.attack + best.armor ? d : best));
+  return options.reduce((best, d) => (d.damage + d.armor > best.damage + best.armor ? d : best));
 }

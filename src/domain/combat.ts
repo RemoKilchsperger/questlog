@@ -38,6 +38,10 @@ import {
   type HeroClassId,
 } from "./heroClasses";
 import type { Character, Equipment, Loot, OwnedItem } from "./types";
+import { attributeDamage, shieldArmorBonus } from "./weaponScaling";
+
+/** Kritische Trefferchance pro Charisma-Punkt (bis zur Obergrenze von 30 %). */
+export const CRIT_PER_CHARISMA = 0.002;
 
 /** Kampfwerte des Helden, abgeleitet aus Level, Attributen und Ausrüstung. */
 export interface HeroCombatProfile {
@@ -67,11 +71,13 @@ export function availableAbilities(character: Character, equipment: Equipment): 
 }
 
 /**
- * Was die Attribute im Kampf bewirken:
- * - Stärke:      +0.25 Schaden pro Punkt
- * - Ausdauer:    +1.5 Lebenspunkte pro Punkt
- * - Intelligenz: +0.2 % kritische Trefferchance und +1 Mana pro Punkt
- * - Charisma:    +0.5 % Gold pro Sieg pro Punkt (max. +100 %)
+ * Was die Attribute im Kampf bewirken (weaponScaling.ts):
+ * - Jede Waffe: +0.25 Schaden pro Punkt in ihrem Attribut – Stärke (Schwerter,
+ *   Äxte, Grosshammer), Intelligenz (Stab, Zepter), Ausdauer (Streitkolben,
+ *   Schild), Charisma (Dolch, Bogen)
+ * - Ausdauer:    +1.5 Lebenspunkte pro Punkt, Schilde +0.25 Rüstung pro Punkt
+ * - Intelligenz: +1 Mana pro Punkt
+ * - Charisma:    +0.2 % kritische Trefferchance und +0.5 % Gold pro Sieg pro Punkt (max. +100 %)
  * Dazu kommt der Skilltree: +2 % Waffenschaden pro Rang im jeweiligen Waffentyp,
  * beim Schild +2 % Schild-Rüstung pro Rang – und der Ausgleich leichter und
  * mittlerer Rüstung (mehr Mana und Krit, siehe armorClasses.ts).
@@ -86,10 +92,10 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
   return {
     level,
     maxHp: Math.round((80 + (level - 1) * 12 + stats.endurance * 1.5) * getSetHpMultiplier(equipment) * (1 + bonus.hp)),
-    damage: (5 + gear.attack + skillDamageBonus(character, equipment) + stats.strength * 0.25) * (1 + bonus.damage),
-    armor: Math.round((gear.armor + skillArmorBonus(character, equipment)) * (1 + bonus.armor)),
+    damage: (5 + gear.attack + skillDamageBonus(character, equipment) + attributeDamage(stats, equipment)) * (1 + bonus.damage),
+    armor: Math.round((gear.armor + skillArmorBonus(character, equipment) + shieldArmorBonus(stats, equipment)) * (1 + bonus.armor)),
     // Die Klassen-Krit-Chance kommt über die normale Obergrenze hinaus dazu
-    critChance: Math.min(0.3, 0.05 + stats.intellect * 0.002 + armorClasses.crit) + bonus.crit,
+    critChance: Math.min(0.3, 0.05 + stats.charisma * CRIT_PER_CHARISMA + armorClasses.crit) + bonus.crit,
     goldBonus: Math.min(1, stats.charisma * 0.005) + bonus.gold,
     maxMana: maxManaFor(level, stats.intellect) + armorClasses.mana,
     abilities: availableAbilities(character, equipment),

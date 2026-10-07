@@ -51,7 +51,7 @@ import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon }
 import type { AbilityId } from "../domain/abilities";
 import { dateKey } from "../domain/calendar";
 import { calculateReward } from "../domain/rewards";
-import { allocatePoint, getLevel } from "../domain/leveling";
+import { allocatePoint, getLevel, resetAttributes } from "../domain/leveling";
 import { buyOffer, EMPTY_SHOP, rerollShop, rollShopStock, shopSlot, type ShopStock } from "../domain/shop";
 import type {
   Category,
@@ -118,6 +118,8 @@ interface GameState {
   renameCharacter: (name: string) => void;
   /** Verteilt einen Level-up-Punkt auf ein Attribut. */
   allocatePoint: (stat: StatKey) => void;
+  /** Alle Attributpunkte zurücksetzen – das erste Mal kostenlos, danach teuer. */
+  resetAttributes: () => void;
   /** Schreibt die Gratis-Kampfpunkte (alle 6 Stunden einer) gut, falls welche fällig sind. */
   tickBattlePoints: () => void;
   /** Steigert einen Waffen-Skill um einen Rang (kostet einen Skillpunkt). */
@@ -566,6 +568,8 @@ export const useGameStore = create<GameState>()(
         set((s) => ({ character: { ...s.character, name: name.trim() || s.character.name } })),
 
       allocatePoint: (stat) => attempt(() => set((s) => ({ character: allocatePoint(s.character, stat) }))),
+
+      resetAttributes: () => attempt(() => set((s) => ({ character: resetAttributes(s.character) }))),
 
       learnSkill: (weapon) => attempt(() => set((s) => ({ character: learnSkill(s.character, weapon) }))),
 

@@ -179,7 +179,7 @@ function WareOffers() {
             const tooLow = level < stats.def.requiredLevel;
             const tooPoor = gold < price;
             return (
-              <ItemRow key={offer.uid} stats={stats} equipment={equipment} tooLow={tooLow}>
+              <ItemRow key={offer.uid} owned={offer} stats={stats} equipment={equipment} tooLow={tooLow}>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
                   disabled={tooLow || tooPoor}

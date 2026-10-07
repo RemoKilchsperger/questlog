@@ -54,7 +54,7 @@ export const HERO_CLASSES: readonly HeroClassDef[] = [
   { id: "duelist", name: "Duellant", icon: "⚔️", armorClass: "medium", weapons: "zwei Schwerter", bonus: "+10 % Schaden, 35 % Chance auf einen zweiten Schlag bei jedem normalen Angriff", matches: (w) => w.filter((t) => t === "sword").length === 2 },
   { id: "plunderer", name: "Plünderer", icon: "🪓", armorClass: "medium", weapons: "Axt", bonus: "+20 % Schaden, kritische Treffer lassen den Gegner 2 Runden bluten, +25 % Gold", matches: has("axe") },
   { id: "cleric", name: "Kleriker", icon: "✨", armorClass: "medium", weapons: "Streitkolben", bonus: "Heilt sich jede Runde um 3 % der Lebenspunkte, Heiltränke wirken 30 % stärker", matches: has("mace") },
-  { id: "paladin", name: "Paladin", icon: "🛡️", armorClass: "heavy", weapons: "Streitkolben und Schild", bonus: "+40 % Schaden, +20 % Rüstung, Bollwerk kostet die Hälfte, im Koop doppelte Bedrohung", matches: (w) => w.includes("mace") && w.includes("shield") },
+  { id: "paladin", name: "Paladin", icon: "🛡️", armorClass: "heavy", weapons: "Streitkolben und Schild", bonus: "+20 % Schaden, +20 % Rüstung, Bollwerk kostet die Hälfte, im Koop doppelte Bedrohung", matches: (w) => w.includes("mace") && w.includes("shield") },
   { id: "berserker", name: "Berserker", icon: "💢", armorClass: "heavy", weapons: "Grossaxt", bonus: "Unter 50 % Lebenspunkten +30 % Schaden", matches: has("greataxe") },
   { id: "champion", name: "Champion", icon: "👑", armorClass: "heavy", weapons: "Zweihandschwert", bonus: "+15 % Schaden und +10 % Lebenspunkte", matches: has("greatsword") },
   { id: "warden", name: "Wächter", icon: "🏔️", armorClass: "heavy", weapons: "Grosshammer", bonus: "+15 % Lebenspunkte und +10 % Rüstung", matches: has("greathammer") },
@@ -93,7 +93,7 @@ export function classStatBonus(id: HeroClassId | null): ClassStatBonus {
   if (id === "duelist") return { ...bonus, damage: 0.1 };
   if (id === "warlock") return { ...bonus, damage: 0.05 };
   if (id === "plunderer") return { ...bonus, damage: 0.2, gold: 0.25 };
-  if (id === "paladin") return { ...bonus, armor: 0.2, damage: 0.4 };
+  if (id === "paladin") return { ...bonus, armor: 0.2, damage: 0.2 };
   if (id === "champion") return { ...bonus, damage: 0.15, hp: 0.1 };
   if (id === "warden") return { ...bonus, hp: 0.15, armor: 0.1 };
   return bonus;

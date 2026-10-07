@@ -136,7 +136,7 @@ export function InventoryPanel({
             {visible.map(({ owned, stats }) => {
               const tooLow = level < stats.def.requiredLevel;
               return (
-                <ItemRow key={owned.uid} stats={stats} equipment={equipment} tooLow={tooLow}>
+                <ItemRow key={owned.uid} owned={owned} stats={stats} equipment={equipment} tooLow={tooLow}>
                   {actions(owned, stats, tooLow)}
                 </ItemRow>
               );

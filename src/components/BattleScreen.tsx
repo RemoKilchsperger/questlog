@@ -364,9 +364,9 @@ function HeroPanel() {
         />
       </div>
       <p className="text-xs text-muted">
-        Stärke erhöht den Schaden, Ausdauer die Lebenspunkte, Intelligenz die kritische Trefferchance und das Mana,
-        Charisma das Gold nach einem Sieg (+{Math.round(hero.goldBonus * 100)} %). Jede angelegte Waffe bringt eine
-        Fähigkeit mit, die im Kampf Mana kostet.
+        Jede Waffe macht mehr Schaden mit ihrem Attribut (siehe Charakter-Tab). Ausdauer gibt dazu Lebenspunkte,
+        Intelligenz Mana, Charisma kritische Treffer und Gold nach einem Sieg (+{Math.round(hero.goldBonus * 100)} %).
+        Jede angelegte Waffe bringt eine Fähigkeit mit, die im Kampf Mana kostet.
       </p>
       <div className="w-full border-t border-night-700 pt-3 text-left">
         <h3 className="mb-1 text-xs uppercase tracking-wide text-muted">Tränke</h3>

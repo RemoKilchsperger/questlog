@@ -1,4 +1,5 @@
 import { ARMOR_CLASSES } from "../domain/armorClasses";
+import { getHeroCombatProfile } from "../domain/combat";
 import { getArmorClassSummary, getCombatStats, getStatBonuses, isOffHandBlocked, slotsFor } from "../domain/equipment";
 import { getItemStats, SLOT_ICONS, SLOT_LABELS } from "../domain/items";
 import type { EquipSlot, Equipment } from "../domain/types";
@@ -24,7 +25,10 @@ const SLOT_LAYOUT: { slot: EquipSlot; className: string }[] = [
 
 export function EquipmentScreen() {
   const equipment = useGameStore((s) => s.equipment);
+  const character = useGameStore((s) => s.character);
   const { armor, attack } = getCombatStats(equipment);
+  // Schaden pro Treffer mit allem – was nicht aus dem Angriff der Items kommt, steht in Klammern
+  const damage = Math.round(getHeroCombatProfile(character, equipment).damage);
   const bonuses = bonusText(
     Object.fromEntries(Object.entries(getStatBonuses(equipment)).filter(([, v]) => v > 0)),
   );
@@ -39,8 +43,14 @@ export function EquipmentScreen() {
           ))}
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <CombatTile label="Rüstung" value={armor} icon="🛡️" accent="text-intellect" />
-          <CombatTile label="Angriff" value={attack} icon="⚔️" accent="text-strength" />
+          <CombatTile label="Rüstung" value={armor} accent="text-intellect" />
+          <CombatTile
+            label="Schaden"
+            value={attack}
+            extra={damage - attack}
+            title={`${attack} aus dem Angriff der Items, ${damage - attack >= 0 ? "+" : "−"}${Math.abs(damage - attack)} aus Grundschaden, Attribut-Skalierung, Klasse, Skills und Set-Bonus – zusammen ${damage} Schaden pro Treffer`}
+            accent="text-strength"
+          />
         </div>
         <div
           className="rounded-md bg-night-800 p-2 text-center"
@@ -163,11 +173,30 @@ function Inventory() {
   );
 }
 
-function CombatTile({ label, value, icon, accent }: { label: string; value: number; icon: string; accent: string }) {
+/** Kennzahl der Ausrüstung – `extra`: was aus anderen Quellen dazukommt, in Klammern. */
+function CombatTile({
+  label,
+  value,
+  extra,
+  title,
+  accent,
+}: {
+  label: string;
+  value: number;
+  extra?: number;
+  title?: string;
+  accent: string;
+}) {
   return (
-    <div className="rounded-md bg-night-800 p-2 text-center">
+    <div className="rounded-md bg-night-800 p-2 text-center" title={title}>
       <div className={`num text-2xl ${accent}`}>
-        <span aria-hidden>{icon}</span> {value}
+        {value}
+        {extra !== undefined && extra !== 0 && (
+          <span className="ml-1 text-sm text-muted">
+            ({extra > 0 ? "+" : "−"}
+            {Math.abs(extra)})
+          </span>
+        )}
       </div>
       <div className="text-xs text-muted">{label}</div>
     </div>

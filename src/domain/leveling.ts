@@ -48,6 +48,49 @@ export function unspentPoints(character: Character): number {
   return Math.max(0, (getLevel(character.totalXp) - 1) * POINTS_PER_LEVEL - character.spentPoints);
 }
 
+/** Startwert jedes Attributs – tiefer fällt es auch beim Zurücksetzen nicht. */
+export const BASE_STAT = 1;
+
+/**
+ * Gold für das Zurücksetzen der Attributpunkte: das erste Mal kostenlos, danach
+ * 50 × Level × (1 + Level/10) – doppelt so viel wie bei den Skillpunkten. Lv. 20 → 3000.
+ */
+export function attributeResetCost(character: Character): number {
+  if ((character.attributeResets ?? 0) === 0) return 0;
+  const level = getLevel(character.totalXp);
+  return Math.round(50 * level * (1 + level / 10));
+}
+
+/** Punkte, die das Zurücksetzen frei machen würde: alles über dem Startwert. */
+export function resettablePoints(character: Character): number {
+  return Object.values(character.stats).reduce((sum, value) => sum + Math.max(0, value - BASE_STAT), 0);
+}
+
+/** Warum die Attributpunkte gerade nicht zurückgesetzt werden können – oder null. */
+export function attributeResetBlocker(character: Character): string | null {
+  if (resettablePoints(character) === 0) return "Du hast noch keine Punkte verteilt.";
+  if (character.gold < attributeResetCost(character)) return "Nicht genug Gold.";
+  return null;
+}
+
+/**
+ * Setzt alle Attribute auf den Startwert zurück – jeder Punkt darüber wird frei,
+ * auch die aus epischen Quests (welcher woher kam, lässt sich nicht sicher sagen,
+ * weil erledigte Quests gelöscht werden können). Dafür sinkt `spentPoints` um alle
+ * frei gewordenen Punkte und kann negativ werden: `unspentPoints` zählt sie dann mit.
+ */
+export function resetAttributes(character: Character): Character {
+  const blocker = attributeResetBlocker(character);
+  if (blocker) throw new Error(blocker);
+  return {
+    ...character,
+    gold: character.gold - attributeResetCost(character),
+    stats: { strength: BASE_STAT, intellect: BASE_STAT, endurance: BASE_STAT, charisma: BASE_STAT },
+    spentPoints: character.spentPoints - resettablePoints(character),
+    attributeResets: (character.attributeResets ?? 0) + 1,
+  };
+}
+
 /** Verteilt einen Level-up-Punkt auf ein Attribut. */
 export function allocatePoint(character: Character, stat: StatKey): Character {
   if (unspentPoints(character) <= 0) throw new Error("Keine Attributpunkte zum Verteilen.");

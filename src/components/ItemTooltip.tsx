@@ -3,7 +3,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { getActiveSets } from "../domain/bossSets";
 import { bossName, isCoopBoss } from "../domain/bosses";
-import type { ItemStats } from "../domain/types";
+import { STAT_LABELS } from "../domain/rewards";
+import type { ItemStats, WeaponType } from "../domain/types";
+import { weaponStat } from "../domain/weaponScaling";
 import { useGameStore } from "../store/gameStore";
 import { BossSetInfo } from "./BossSetInfo";
 import { ItemIcon } from "./ItemIcon";
@@ -97,6 +99,9 @@ function TooltipCard({ stats, hint, anchor }: { stats: ItemStats; hint?: string;
           </span>
         ))}
       </p>
+      {def.kind === "weapon" && (
+        <p className="text-xs text-muted">skaliert mit {STAT_LABELS[weaponStat(def.type as WeaponType)]}</p>
+      )}
       {bonuses && <p className="text-sm text-xp">{bonuses}</p>}
       {armorClassPerkText(def) && <p className="text-xs text-intellect">{armorClassPerkText(def)} (Rüstungsklasse)</p>}
       {def.bossId && (
