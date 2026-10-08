@@ -2,15 +2,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
 import { getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
-import { STAT_LABELS } from "../domain/rewards";
 import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
-import { streakBonus } from "../domain/recurrence";
 import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
 
-/** Belohnungs-Popup nach Abschluss einer Quest, mit grossem Level-up-Banner. */
+/** Belohnungs-Popup nach dem Abgeben einer Quest, mit grossem Level-up-Banner. */
 export function RewardToast() {
   const event = useGameStore((s) => s.lastReward);
   const dismiss = useGameStore((s) => s.dismissReward);
@@ -55,26 +53,13 @@ export function RewardToast() {
                 Skillpunkt{event.levelAfter - event.levelBefore > 1 ? "e" : ""}
               </p>
             )}
-            <p className={`text-sm ${event.bonus ? "text-gold" : "text-muted"}`}>
-              {event.bonus ? "⭐ Bonusquest abgeschlossen" : "Quest abgeschlossen"}
-              {(event.reward.streak ?? 0) > 1 && (
-                <span className="ml-2 text-legendary">
-                  🔥 Serie {event.reward.streak} (+{Math.round(streakBonus(event.reward.streak!) * 100)} %)
-                </span>
-              )}
+            <p className={`text-sm ${event.daily ? "text-gold" : "text-muted"}`}>
+              {event.daily ? "⭐ Tagesauftrag abgegeben" : "📜 Quest abgegeben"}
             </p>
             <p className="truncate font-semibold">{event.questTitle}</p>
             <div className="num mt-2 flex justify-center gap-4 text-base">
-              <span className="text-xp">+{event.reward.xp} XP</span>
-              <Gold amount={event.reward.gold} sign className="text-base font-bold text-gold" />
-              {(event.reward.battlePoints ?? 0) > 0 && (
-                <span className="text-strength">+{event.reward.battlePoints} ⚔️</span>
-              )}
-              {event.reward.statPoints > 0 && (
-                <span>
-                  +{event.reward.statPoints} {STAT_LABELS[event.reward.stat]}
-                </span>
-              )}
+              <span className="text-xp">+{event.xp} XP</span>
+              <Gold amount={event.gold} sign className="text-base font-bold text-gold" />
             </div>
             {loot && (
               <motion.div

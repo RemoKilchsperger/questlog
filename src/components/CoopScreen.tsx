@@ -2,13 +2,12 @@ import { motion } from "motion/react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useCloudStore } from "../cloud/cloudStore";
 import { availableBackend } from "../coop/backend";
-import { coopReadyBlocker, localDeadline, useCoopStore } from "../coop/coopStore";
+import { localDeadline, useCoopStore } from "../coop/coopStore";
 import { isLobbyCode } from "../coop/protocol";
 import { getAbility } from "../domain/abilities";
 import {
   clearedStages,
   COOP_BOSSES,
-  COOP_COST,
   COOP_MAX_PLAYERS,
   COOP_MIN_PLAYERS,
   COOP_REWARD_FACTOR,
@@ -16,7 +15,6 @@ import {
   coopAbilityBlocker,
   coopAbilityDue,
   coopContent,
-  coopCost,
   coopPotionBlocker,
   dungeonCompleted,
   DUNGEON_REVIVE_HP,
@@ -114,7 +112,6 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
   const busy = useCoopStore((s) => s.busy);
   const rejoin = useCoopStore((s) => s.rejoin);
   const checkRejoin = useCoopStore((s) => s.checkRejoin);
-  const battlePoints = useGameStore((s) => s.character.battlePoints);
   const kind = availableBackend(loggedIn);
   // Läuft noch ein Koop-Kampf (z. B. nach dem Neuladen)? Dann zurückkehren anbieten.
   useEffect(() => void checkRejoin(), [checkRejoin, loggedIn]);
@@ -125,8 +122,7 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
       <p className="mb-3 text-sm text-muted">
         {COOP_MIN_PLAYERS}–{COOP_MAX_PLAYERS} Helden gegen einen gemeinsamen Boss: Jede Runde wählen alle gleichzeitig,
         danach schlägt der Boss zurück – meist den, der ihm am meisten zusetzt. Gefallene lassen sich mit einem Heiltrank
-        wiederbeleben. Jeder bezahlt {COOP_COST} Kampfpunkte und würfelt seine eigene Beute (×{COOP_REWARD_FACTOR} XP und
-        Gold).
+        wiederbeleben. Jeder würfelt seine eigene Beute (×{COOP_REWARD_FACTOR} XP und Gold).
       </p>
       {!kind ? (
         <p className="rounded-md bg-night-800 p-3 text-sm text-muted">
@@ -158,7 +154,6 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
           <ul className="flex flex-col gap-2">
             {COOP_BOSSES.map((boss) => {
               const tooLow = heroLevel < boss.level;
-              const poor = battlePoints < COOP_COST;
               return (
                 <li key={boss.id} className="flex flex-wrap items-center gap-3 rounded-md border-2 border-legendary/40 bg-night-800 p-3">
                   <CreatureSprite sprite={boss.sprite} size={56} />
@@ -174,12 +169,12 @@ export function CoopPanel({ heroLevel }: { heroLevel: number }) {
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.92 }}
-                    disabled={tooLow || poor || busy}
+                    disabled={tooLow || busy}
                     onClick={() => createLobby(boss.id)}
-                    title={tooLow ? `Ab Level ${boss.level}` : poor ? `Du brauchst ${COOP_COST} Kampfpunkte` : undefined}
+                    title={tooLow ? `Ab Level ${boss.level}` : undefined}
                     className="font-pixel rounded-md border-2 border-legendary bg-legendary/15 px-3 py-1.5 text-legendary hover:bg-legendary/25 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Lobby erstellen <span className="num text-xs">−{COOP_COST} ⚔️</span>
+                    Lobby erstellen
                   </motion.button>
                 </li>
               );
@@ -198,7 +193,6 @@ export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
   const createLobby = useCoopStore((s) => s.createLobby);
   const error = useCoopStore((s) => s.error);
   const busy = useCoopStore((s) => s.busy);
-  const battlePoints = useGameStore((s) => s.character.battlePoints);
   const kind = availableBackend(loggedIn);
 
   return (
@@ -216,9 +210,7 @@ export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
       ) : (
         <ul className="flex flex-col gap-3">
           {DUNGEONS.map((dungeon) => {
-            const cost = coopCost(dungeon.id);
             const tooLow = heroLevel < dungeon.minLevel;
-            const poor = battlePoints < cost;
             const boss = dungeon.creatures[dungeon.creatures.length - 1];
             return (
               <li
@@ -240,12 +232,12 @@ export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
                 </div>
                 <motion.button
                   whileTap={{ scale: 0.92 }}
-                  disabled={tooLow || poor || busy}
+                  disabled={tooLow || busy}
                   onClick={() => createLobby(dungeon.id)}
-                  title={tooLow ? `Ab Level ${dungeon.minLevel}` : poor ? `Du brauchst ${cost} Kampfpunkte` : undefined}
+                  title={tooLow ? `Ab Level ${dungeon.minLevel}` : undefined}
                   className="font-pixel rounded-md border-2 border-legendary bg-legendary/15 px-3 py-1.5 text-legendary hover:bg-legendary/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Lobby erstellen <span className="num text-xs">−{cost} ⚔️</span>
+                  Lobby erstellen
                 </motion.button>
               </li>
             );
@@ -288,17 +280,15 @@ function Lobby() {
   const { code, host_id: hostId, members } = row;
   const content = coopContent(row.boss_id);
   const raid = isCoopDungeon(row.boss_id) ? null : getCoopEnemy(row.boss_id).abilities[0];
-  const cost = coopCost(row.boss_id);
   const isHost = hostId === myId;
   const me = members.find((m) => m.id === myId);
   const others = members.filter((m) => m.id !== hostId);
-  const readyBlocker = coopReadyBlocker();
   const startBlocker =
     members.length < COOP_MIN_PLAYERS
       ? `Warte auf Mitspieler (mindestens ${COOP_MIN_PLAYERS}).`
       : others.some((m) => !m.ready)
         ? "Noch nicht alle sind bereit."
-        : readyBlocker;
+        : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -361,7 +351,7 @@ function Lobby() {
           ))}
         </ul>
         <p className="mt-3 text-xs text-muted">
-          Beim Start bezahlt jeder {cost} Kampfpunkte. Pro Runde hast du 30 Sekunden – wer nicht wählt, greift normal an.
+          Pro Runde hast du 30 Sekunden – wer nicht wählt, greift normal an.
         </p>
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
@@ -381,9 +371,8 @@ function Lobby() {
           ) : (
             <motion.button
               whileTap={{ scale: 0.92 }}
-              disabled={(!me?.ready && readyBlocker !== null) || busy}
+              disabled={busy}
               onClick={() => setReady(!me?.ready)}
-              title={!me?.ready ? (readyBlocker ?? undefined) : undefined}
               className={`font-pixel rounded-md border-2 px-5 py-1.5 text-lg disabled:cursor-not-allowed disabled:opacity-40 ${
                 me?.ready ? "border-night-600 text-muted" : "border-xp bg-xp/15 text-xp hover:bg-xp/25"
               }`}

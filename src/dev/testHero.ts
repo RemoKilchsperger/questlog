@@ -4,7 +4,6 @@
 // Mit Cloud-Konto angemeldet geht es nicht: Der Testheld würde sonst hochgeladen
 // und stünde in der öffentlichen Rangliste.
 
-import { MAX_BATTLE_POINTS } from "../domain/battlePoints";
 import { BOSS_ITEMS, createItem } from "../domain/items";
 import { MAX_LEVEL, xpForNextLevel } from "../domain/leveling";
 import { SAVE_KEY, useGameStore } from "../store/gameStore";
@@ -45,7 +44,6 @@ function createTestHero() {
       totalXp,
       gold: 100_000,
       essence: 5_000,
-      battlePoints: MAX_BATTLE_POINTS,
     },
     inventory: [...s.inventory, ...bossItems],
     bossCollection: BOSS_ITEMS.map((def) => def.id),

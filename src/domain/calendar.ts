@@ -1,4 +1,4 @@
-// Zeitabschnitte für alles, was regelmässig wechselt (Bonusquests, Händler).
+// Zeitabschnitte für alles, was regelmässig wechselt (Tagesaufträge, Händler).
 // Alles in Ortszeit, damit Wechsel zu „runden“ Uhrzeiten passieren.
 
 /** Lokales Datum als "yyyy-mm-dd". */

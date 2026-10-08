@@ -26,11 +26,10 @@ import {
   type AreaDef,
   type CreatureDef,
 } from "../domain/creatures";
-import { BATTLE_COST, dungeonCost, MAX_BATTLE_POINTS, REGEN_HOURS } from "../domain/battlePoints";
-import { formatCountdown, nextBoundary } from "../domain/calendar";
+import { dateKey } from "../domain/calendar";
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
-import { EFFORT_TIERS } from "../domain/rewards";
+import { questsForCreature, trackedQuests } from "../domain/quests";
 import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
 import { getPotion, POTIONS, potionEffectText, potionHeal } from "../domain/potions";
@@ -51,9 +50,9 @@ import { PixelAvatar } from "./PixelAvatar";
 import { AvatarFrame } from "./Achievements";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
 import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
-import { useNow } from "./useNow";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
+import { QuestProgressChips } from "./QuestScreen";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
 const PhaserBattle = lazy(() => import("../game/PhaserBattle"));
@@ -198,16 +197,10 @@ function SoloDungeons({ heroLevel }: { heroLevel: number }) {
 
 function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: number }) {
   const startDungeon = useGameStore((s) => s.startDungeon);
-  const battlePoints = useGameStore((s) => s.character.battlePoints);
   const open = isAreaUnlocked(dungeon, heroLevel);
-  const cost = dungeonCost(dungeon.creatures.length);
   const boss = dungeon.creatures.at(-1)!;
   const bossAbilities = getBossAbilities(boss.id);
-  const blocker = !open
-    ? `Ab Level ${dungeon.minLevel}`
-    : battlePoints < cost
-      ? `Du brauchst ${cost} Kampfpunkte`
-      : null;
+  const questActive = useGameStore((s) => `dungeon-${dungeon.id}` in s.questLog.active);
 
   return (
     <li
@@ -220,15 +213,16 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
             <span className="font-sans text-xs text-muted">ab Lv. {dungeon.minLevel}</span>
           </p>
           <p className="text-xs text-muted">{dungeon.description}</p>
+          {questActive && <p className="text-xs text-gold">📜 Quest läuft: Schliesse den Dungeon ab</p>}
         </div>
         <motion.button
           whileTap={{ scale: 0.92 }}
-          disabled={blocker !== null}
+          disabled={!open}
           onClick={() => startDungeon(dungeon.id)}
-          title={blocker ?? `Kostet ${cost} Kampfpunkte (einen pro Kampf)`}
+          title={open ? undefined : `Ab Level ${dungeon.minLevel}`}
           className="font-pixel shrink-0 rounded-md border-2 border-legendary bg-legendary/15 px-3 py-1 text-legendary hover:bg-legendary/25 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Betreten <span className="num text-xs">−{cost} ⚔️</span>
+          Betreten
         </motion.button>
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
@@ -260,7 +254,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
 
 function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel: number }) {
   const startBattle = useGameStore((s) => s.startBattle);
-  const canFight = useGameStore((s) => s.character.battlePoints >= BATTLE_COST);
+  const quests = useCreatureQuests(creature.id);
   const bossAbilities = getBossAbilities(creature.id);
   const stats = getCreatureStats(creature);
   const potionDrop = getCreaturePotionDrop(creature);
@@ -276,9 +270,10 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
     >
       <CreatureSprite sprite={creature.sprite} size={creature.boss ? 64 : 52} className="shrink-0" />
       <div className="min-w-0 flex-1">
-        <p className="font-semibold">
+        <p className="flex flex-wrap items-center gap-x-2 font-semibold">
           {creature.name}
-          {creature.boss && <span className="ml-2 text-xs text-legendary">BOSS</span>}
+          {creature.boss && <span className="text-xs text-legendary">BOSS</span>}
+          <QuestProgressChips quests={quests} />
         </p>
         <div className="flex flex-wrap gap-x-3 text-xs text-muted">
           <span>Lv. {creature.level}</span>
@@ -309,15 +304,20 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
       </div>
       <motion.button
         whileTap={{ scale: 0.9 }}
-        disabled={!canFight}
         onClick={() => startBattle(creature.id)}
-        title={canFight ? `Kostet ${BATTLE_COST} Kampfpunkt` : "Keine Kampfpunkte – erledige Quests"}
-        className="font-pixel shrink-0 rounded-md border-2 border-danger bg-danger/15 px-3 py-1 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
+        className="font-pixel shrink-0 rounded-md border-2 border-danger bg-danger/15 px-3 py-1 text-danger hover:bg-danger/25"
       >
-        Kämpfen <span className="num text-xs">−{BATTLE_COST} ⚔️</span>
+        Kämpfen
       </motion.button>
     </li>
   );
+}
+
+/** Laufende Quests und Tagesaufträge, die ein Sieg gegen diese Kreatur voranbringt. */
+function useCreatureQuests(creatureId: string) {
+  const questLog = useGameStore((s) => s.questLog);
+  const dailyQuests = useGameStore((s) => s.dailyQuests);
+  return questsForCreature(trackedQuests(questLog, dailyQuests, dateKey()), creatureId);
 }
 
 function HeroPanel() {
@@ -325,7 +325,6 @@ function HeroPanel() {
   const equipment = useGameStore((s) => s.equipment);
   const potions = useGameStore((s) => s.potions);
   const hero = getHeroCombatProfile(character, equipment);
-  const now = useNow();
   const frame = useGameStore((s) => s.cosmetics.frame);
 
   return (
@@ -335,24 +334,6 @@ function HeroPanel() {
       </AvatarFrame>
       <p className="font-pixel text-2xl">{character.name}</p>
       <p className="text-sm text-muted">Level {hero.level}</p>
-      <div
-        className={`w-full rounded-md border-2 p-2 ${
-          character.battlePoints > 0 ? "border-strength/50 bg-strength/10" : "border-danger/60 bg-danger/10"
-        }`}
-      >
-        <p className="num text-xl text-strength">
-          ⚔️ {character.battlePoints}/{MAX_BATTLE_POINTS}
-        </p>
-        <p className="text-xs text-muted">
-          Kampfpunkte – jeder Kampf kostet {BATTLE_COST}. Erledigte Quests füllen sie auf:{" "}
-          {EFFORT_TIERS.map((t) => `${t.label} +${t.battlePoints}`).join(" · ")}. Dazu alle {REGEN_HOURS} Stunden
-          einer gratis
-          {character.battlePoints < MAX_BATTLE_POINTS && (
-            <> – der nächste in {formatCountdown(now, nextBoundary(now, REGEN_HOURS))}</>
-          )}
-          .
-        </p>
-      </div>
       <div className="grid w-full grid-cols-2 gap-2">
         <Value label="Lebenspunkte" value={hero.maxHp} icon="❤️" accent="text-xp" />
         <Value label="Schaden" value={Math.round(hero.damage)} icon="⚔️" accent="text-strength" />
@@ -636,8 +617,8 @@ function BattleResult({ battle }: { battle: BattleState }) {
   const reward = useGameStore((s) => s.battleReward);
   const startBattle = useGameStore((s) => s.startBattle);
   const leave = useGameStore((s) => s.leaveBattle);
-  const battlePoints = useGameStore((s) => s.character.battlePoints);
   const dungeon = useGameStore((s) => s.dungeon);
+  const quests = useCreatureQuests(battle.creatureId);
   const won = battle.status === "won";
   // Im Dungeon geht die Beute in die Truhe – hier nur ein kurzer Hinweis, was dazukam.
   const toChest = dungeon !== null;
@@ -736,6 +717,11 @@ function BattleResult({ battle }: { battle: BattleState }) {
           Du wurdest besiegt. Bessere Ausrüstung, mehr Ausdauer oder ein paar Heiltränke helfen beim nächsten Versuch.
         </p>
       )}
+      {won && quests.length > 0 && (
+        <p className="flex flex-wrap items-center justify-center gap-2 text-sm text-muted">
+          Quest-Fortschritt <QuestProgressChips quests={quests} />
+        </p>
+      )}
       {dungeon ? (
         <DungeonResultActions battle={battle} won={won} />
       ) : (
@@ -748,11 +734,9 @@ function BattleResult({ battle }: { battle: BattleState }) {
           </button>
           <button
             onClick={() => startBattle(battle.creatureId)}
-            disabled={battlePoints < BATTLE_COST}
-            title={battlePoints < BATTLE_COST ? "Keine Kampfpunkte – erledige Quests" : undefined}
-            className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-4 py-1.5 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
+            className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-4 py-1.5 text-danger hover:bg-danger/25"
           >
-            Nochmal kämpfen <span className="num text-xs">−{BATTLE_COST} ⚔️ ({battlePoints} übrig)</span>
+            Nochmal kämpfen
           </button>
         </div>
       )}
@@ -832,8 +816,8 @@ function DungeonResultActions({ battle, won }: { battle: BattleState; won: boole
         </p>
       ) : (
         <p className="text-sm text-danger">
-          Der Dungeon ist gescheitert. Die Kampfpunkte sind verbraucht
-          {collected > 0 ? ` und die Truhe mit ${collected} Beutestück${collected === 1 ? "" : "en"} ist verloren.` : "."}
+          Der Dungeon ist gescheitert
+          {collected > 0 ? ` – die Truhe mit ${collected} Beutestück${collected === 1 ? "" : "en"} ist verloren.` : "."}
         </p>
       )}
       {won && !finished && collected > 0 && (

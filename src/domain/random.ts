@@ -1,5 +1,5 @@
 // Wiederholbarer Zufall: gleicher Startwert, gleiche Zahlenfolge. Für Dinge, die
-// auf jedem Gerät und nach dem Neuladen gleich ausfallen sollen (Bonusquests,
+// auf jedem Gerät und nach dem Neuladen gleich ausfallen sollen (z. B.
 // Beute in Koop-Dungeons).
 
 /** FNV-1a: kleiner, stabiler Hash – gleiche Eingabe, gleiche Zahl. */

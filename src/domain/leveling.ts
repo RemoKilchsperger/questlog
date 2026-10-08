@@ -6,8 +6,7 @@ export const MAX_LEVEL = 60;
 /**
  * Level-Kurve: XP, die nötig sind, um von `level` auf `level + 1` zu kommen.
  * Linear: Level 1→2 braucht 100 XP, jedes weitere Level 25 XP mehr
- * (100, 125, 150 … 1550). Bis Level 60 sind es insgesamt rund 48’700 XP –
- * etwa 190 epische oder 890 mittlere Quests.
+ * (100, 125, 150 … 1550). Bis Level 60 sind es insgesamt rund 48’700 XP.
  */
 export function xpForNextLevel(level: number): number {
   return 100 + 25 * (level - 1);
@@ -75,8 +74,7 @@ export function attributeResetBlocker(character: Character): string | null {
 
 /**
  * Setzt alle Attribute auf den Startwert zurück – jeder Punkt darüber wird frei,
- * auch die aus epischen Quests (welcher woher kam, lässt sich nicht sicher sagen,
- * weil erledigte Quests gelöscht werden können). Dafür sinkt `spentPoints` um alle
+ * auch die, die früher epische Quests gaben. Dafür sinkt `spentPoints` um alle
  * frei gewordenen Punkte und kann negativ werden: `unspentPoints` zählt sie dann mit.
  */
 export function resetAttributes(character: Character): Character {

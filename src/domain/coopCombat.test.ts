@@ -4,13 +4,10 @@ import {
   BOSS,
   clearedStages,
   coopAbilityDue,
-  COOP_COST,
-  coopCost,
   DUNGEON_REVIVE_HP,
   dungeonCompleted,
   getCoopEnemy,
   hasNextStage,
-  isCoopDungeon,
   nextDungeonStage,
   rollCoopDungeonChest,
   COOP_BOSSES,
@@ -258,13 +255,6 @@ describe("Koop-Dungeons", () => {
     const four = startMine([player("a"), player("b"), player("c"), player("d")]);
     expect(four.boss.maxHp).toBe(Math.round(base.maxHp * 4 * 1.3));
     expect(four.boss.damage).toBeCloseTo(base.damage * 2.2);
-  });
-
-  it("Kosten wie solo: ein Kampfpunkt pro Kampf; Raid-Bosse pauschal", () => {
-    expect(coopCost(MINE)).toBe(getDungeon(MINE).creatures.length);
-    expect(coopCost(HYDRA)).toBe(COOP_COST);
-    expect(isCoopDungeon(MINE)).toBe(true);
-    expect(isCoopDungeon(HYDRA)).toBe(false);
   });
 
   it("nach einem Sieg wartet der nächste Gegner – LP bleiben, Gefallene stehen mit 25 % auf, Mana ist voll", () => {

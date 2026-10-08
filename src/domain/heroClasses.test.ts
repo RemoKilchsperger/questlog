@@ -16,8 +16,6 @@ const hero: Character = {
   essence: 0,
   stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
   spentPoints: 0,
-  battlePoints: 5,
-  battlePointSlot: 0,
   skills: {},
   abilities: ["staff", "bow", "shield", "greathammer", "scepter", "mace"],
 };

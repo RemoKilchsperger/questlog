@@ -1,7 +1,7 @@
-# Questlog – gamifizierte To-do-App
+# Questlog – Pixel-RPG mit Questbuch
 
-To-dos sind Quests: Je nach Zeitaufwand bringen sie unterschiedlich viel **XP**, **Gold** und
-**Kampfpunkte**. Mit dem Helden geht es in rundenbasierte Kämpfe, Dungeons und Koop-Raids.
+Ein Held, ein Questbuch und rundenbasierte Kämpfe: Quests wie „Töte 6 Grauwölfe“ oder „Besiege den
+Gebietsboss“ annehmen, im Kampf erfüllen und für **XP**, **Gold** und Items abgeben. Dazu Dungeons und Koop-Raids.
 Eine Erklärung für Spieler gibt es in der App im Tab **❓ Hilfe**.
 
 ## Starten
@@ -30,11 +30,9 @@ Motion (Animationen) · Phaser 3 (Kampfszene) · Supabase (Cloud, Rangliste, Koo
 src/
   domain/            Reine Spiellogik ohne UI – getestet, kann 1:1 auf den Server
     types.ts         Quest, Character, Item, Stats …
-    rewards.ts       Belohnungstabelle (Aufwand → XP/Gold/Kampfpunkte), Bereiche → Attribute
-    recurrence.ts    Wiederkehrende Quests und Serien
-    bonusQuests.ts   Tägliche Bonusquests
+    quests.ts        Questbuch (Jagd-, Boss- und Dungeon-Quests) und Tagesaufträge, Belohnungen
+    stats.ts         Namen der Attribute
     leveling.ts      Level-Kurve, Attributpunkte
-    battlePoints.ts  Kampfpunkte: Kosten, Auffüllen, Gratispunkte
     skills.ts        Skilltree pro Waffentyp, Freischalten von Fähigkeiten
     abilities.ts     Kampf-Fähigkeiten (zwei pro Waffentyp), Mana
     items.ts         Item-Katalog, Seltenheit, Boss-Items, Verbesserungsstufen
@@ -43,7 +41,7 @@ src/
     bossSets.ts      Set-Boni für Boss-Items
     gearScore.ts     Gear Score
     equipment.ts     Anlegen/Ablegen, Kampfwerte der Ausrüstung
-    loot.ts          Item-Drops bei Quests und Kämpfen
+    loot.ts          Item-Drops bei Quests und Kämpfen (Seltenheit nach Gewichten)
     shop.ts          Händler mit wechselndem Angebot
     forge.ts         Schmied: Zerlegen und Verbessern
     potions.ts       Heil- und Verstärkungstränke
@@ -66,28 +64,23 @@ supabase/            Datenbankschema, Migrationen, Edge Functions
 
 ### Quests
 
-| Aufwand | Dauer | XP | Gold | Kampfpunkte | Item-Dropchance |
-|---|---|---|---|---|---|
-| Schnell | ≤ 15 Min | 10 | 2 | 1 | 5 % |
-| Kurz | ~ 30 Min | 25 | 5 | 2 | 12 % |
-| Mittel | ~ 1 Std | 55 | 12 | 3 | 25 % |
-| Lang | ~ 2 Std | 120 | 25 | 4 | 45 % |
-| Episch | 4+ Std | 260 | 55 | 6 | 75 % |
+Das **Questbuch** (`quests.ts`) hat pro Gebiet eine Jagd pro Kreatur (5, 6, 6 und 8 Siege), eine Boss-Quest
+und pro Dungeon eine Quest „bis zum Endboss abschliessen“ (solo oder Koop) – jede Quest gibt es einmal.
+Annehmen ab dem Mindest-Level des Gebiets, nur Siege nach dem Annehmen zählen, abgegeben wird im Quest-Tab.
 
-- Nur epische Quests geben einen Attributpunkt (als Bonusquest zwei) – auf das Attribut ihres Bereichs.
-- Längere Quests droppen auch seltenere Items (Gewichte in `loot.ts`).
-- **Bonusquests:** täglich eine pro Aufwandsstufe, +50 % XP, Gold und Dropchance.
-- **Wiederkehrende Quests:** Wer pünktlich erledigt, verlängert die Serie. Jede Stufe über 1 gibt
-  +5 % XP und Gold, höchstens +50 %.
+| Quest | Einheiten | Item beim Abgeben |
+|---|---|---|
+| Jagd | Anzahl Siege | 50 % |
+| Boss | 8 | garantiert, eher selten |
+| Dungeon | 12 | garantiert, mindestens selten |
 
-| Bereich | Attribut |
-|---|---|
-| ⚔️ Körper | Stärke |
-| 📜 Geist | Intelligenz |
-| 🛡️ Alltag | Ausdauer |
-| 🎭 Sozial | Charisma |
+Belohnung pro Einheit: `6 % · XP bis zum nächsten Level` und `0.6 · (3 + Level)` Gold – Level der Kreatur
+bzw. des Dungeons. Das Item hat das Level des Helden.
 
-### Level, Skills und Kampfpunkte
+**Tagesaufträge:** 3 pro Tag, je 3–6 Siege gegen verschiedene Kreaturen passend zum Level (keine Bosse).
+Sie laufen ohne Annehmen, geben dieselbe Belohnung pro Sieg und 35 % auf ein Item. Um Mitternacht verfallen sie.
+
+### Level und Skills
 
 - Level-Kurve: Für Level *n* → *n+1* braucht es `100 + 25 · (n − 1)` XP. Maximallevel 60 nach 48’675 XP.
 - Pro Level-up: 2 Attributpunkte und 1 Skillpunkt.
@@ -95,8 +88,6 @@ supabase/            Datenbankschema, Migrationen, Edge Functions
   Ab Rang 3 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei –
   unabhängig voneinander.
   Zurücksetzen kostet `25 · Level · (1 + Level / 10)` Gold.
-- **Kampfpunkte:** Start 5, Maximum 20. Jeder Kampf kostet 1, Dungeons 1 pro Kampf, Koop 3.
-  Quests füllen auf, dazu gibt es alle 6 Stunden einen Punkt geschenkt.
 
 ### Items
 

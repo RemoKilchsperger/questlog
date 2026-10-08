@@ -1,6 +1,3 @@
-import { useEffect } from "react";
-import { MAX_BATTLE_POINTS, REGEN_HOURS } from "../domain/battlePoints";
-import { formatCountdown, nextBoundary } from "../domain/calendar";
 import { getLevelProgress, unspentPoints } from "../domain/leveling";
 import { useGameStore } from "../store/gameStore";
 import { Essence, Gold } from "./Gold";
@@ -8,7 +5,6 @@ import { CloudButton } from "./CloudAccount";
 import { Hint } from "./HoverCard";
 import { PixelAvatar } from "./PixelAvatar";
 import { AvatarFrame } from "./Achievements";
-import { useNow } from "./useNow";
 import { XpBar } from "./XpBar";
 
 /** Kompakte Statusleiste oben – immer sichtbar wie ein Spiel-HUD. */
@@ -17,14 +13,6 @@ export function Hud({ onOpenCharacter }: { onOpenCharacter: () => void }) {
   const frame = useGameStore((s) => s.cosmetics.frame);
   const { level } = getLevelProgress(character.totalXp);
   const unspent = unspentPoints(character);
-  const tickBattlePoints = useGameStore((s) => s.tickBattlePoints);
-  const now = useNow();
-  // Das HUD ist immer sichtbar – hier werden die Gratis-Kampfpunkte (alle 6 Std.) gutgeschrieben.
-  useEffect(() => tickBattlePoints(), [now, tickBattlePoints]);
-  const full = character.battlePoints >= MAX_BATTLE_POINTS;
-  const regenText = full
-    ? "Kampfpunkte voll"
-    : `Nächster Gratis-Kampfpunkt in ${formatCountdown(now, nextBoundary(now, REGEN_HOURS))}`;
 
   return (
     <header className="panel flex items-center gap-3 p-3 sm:gap-4">
@@ -53,12 +41,6 @@ export function Hud({ onOpenCharacter }: { onOpenCharacter: () => void }) {
         </div>
         <XpBar totalXp={character.totalXp} size="sm" />
       </div>
-      <Hint heading="Kampfpunkte" text={`Jeder Kampf kostet einen, Quests füllen sie wieder auf.\n${regenText}`}>
-        <div className={`num rounded-md bg-night-800 px-3 py-2 ${character.battlePoints > 0 ? "text-strength" : "text-muted"}`}>
-          <span aria-hidden>⚔️</span> {character.battlePoints}/{MAX_BATTLE_POINTS}
-          <span className="sr-only"> Kampfpunkte</span>
-        </div>
-      </Hint>
       <div className="shrink-0 rounded-md bg-night-800 px-3 py-2 text-gold">
         <Gold amount={character.gold} className="font-bold" />
       </div>

@@ -2,7 +2,7 @@
 
 import { getArmorClass } from "../domain/armorClasses";
 import { getItemType, getRarity } from "../domain/items";
-import { STAT_LABELS } from "../domain/rewards";
+import { STAT_LABELS } from "../domain/stats";
 import type { ItemDef, ItemStats, Rarity, StatKey, Stats } from "../domain/types";
 
 export const RARITY_TEXT: Record<Rarity, string> = {

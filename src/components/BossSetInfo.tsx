@@ -1,6 +1,6 @@
 import { getActiveSets, getBossSet, setStatBonus, type SetTier } from "../domain/bossSets";
 import { getBossItems } from "../domain/items";
-import { STAT_LABELS } from "../domain/rewards";
+import { STAT_LABELS } from "../domain/stats";
 import type { Equipment } from "../domain/types";
 
 /** Name, Fortschritt und alle Bonusstufen eines Boss-Sets – erfüllte Stufen hervorgehoben. */

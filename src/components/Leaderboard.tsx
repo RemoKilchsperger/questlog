@@ -5,7 +5,7 @@ import { fetchLeaderboard, fetchProfile, fetchRank, LEADERBOARD_SIZE } from "../
 import type { PublicProfile } from "../cloud/publicProfile";
 import { cloudEnabled } from "../cloud/supabase";
 import { getItemStats, SLOT_ICONS, SLOT_LABELS } from "../domain/items";
-import { STAT_LABELS } from "../domain/rewards";
+import { STAT_LABELS } from "../domain/stats";
 import type { EquipSlot, StatKey } from "../domain/types";
 import { CoopRecord } from "./CoopRecord";
 import { ItemIcon } from "./ItemIcon";

@@ -22,8 +22,7 @@ import {
   RARITIES,
 } from "./items";
 import { MAX_LEVEL } from "./leveling";
-import { lootPool, RARITY_WEIGHTS, rollLoot, rollRarity } from "./loot";
-import { EFFORT_TIERS } from "./rewards";
+import { lootPool, rollDrop, rollRarity } from "./loot";
 import {
   buyOffer,
   rerollCost,
@@ -300,22 +299,16 @@ describe("Seltenheit und Attributboni", () => {
 });
 
 describe("Beute", () => {
-  it("längere Quests haben eine höhere Dropchance", () => {
-    for (let i = 1; i < EFFORT_TIERS.length; i++) {
-      expect(EFFORT_TIERS[i].dropChance).toBeGreaterThan(EFFORT_TIERS[i - 1].dropChance);
-    }
-  });
-
   it("droppt nur, wenn der Wurf unter der Dropchance liegt", () => {
-    expect(rollLoot("quick", 1, "x", sequence(0.5))).toBeNull();
-    expect(rollLoot("epic", 1, "x", sequence(0.5))).not.toBeNull();
+    const weights = { common: 100, rare: 0, epic: 0, legendary: 0 };
+    expect(rollDrop(0.4, weights, 1, "x", sequence(0.5))).toBeNull();
+    expect(rollDrop(0.6, weights, 1, "x", sequence(0.5))).not.toBeNull();
   });
 
-  it("längere Quests droppen eher seltene Items", () => {
-    // Derselbe Wurf landet bei epischen Quests in einer höheren Stufe.
+  it("andere Gewichte, andere Seltenheit beim selben Wurf", () => {
     const order = RARITIES.map((r) => r.key);
-    expect(order.indexOf(rollRarity(RARITY_WEIGHTS.epic, () => 0.5))).toBeGreaterThan(
-      order.indexOf(rollRarity(RARITY_WEIGHTS.quick, () => 0.5)),
+    expect(order.indexOf(rollRarity({ common: 20, rare: 50, epic: 25, legendary: 5 }, () => 0.5))).toBeGreaterThan(
+      order.indexOf(rollRarity({ common: 80, rare: 18, epic: 2, legendary: 0 }, () => 0.5)),
     );
   });
 

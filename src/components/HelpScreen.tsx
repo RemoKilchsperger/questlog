@@ -1,13 +1,11 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { MANA_REGEN } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
-import { BATTLE_COST, MAX_BATTLE_POINTS, REGEN_HOURS, START_BATTLE_POINTS } from "../domain/battlePoints";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
   BULWARK_SHARE,
   COOP_BOSSES,
-  COOP_COST,
   COOP_MAX_PLAYERS,
   COOP_MIN_PLAYERS,
   COOP_REWARD_FACTOR,
@@ -22,8 +20,8 @@ import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
 import { MAX_UPGRADE, RARITIES, UPGRADE_STEP } from "../domain/items";
 import { MAX_LEVEL, POINTS_PER_LEVEL, xpForNextLevel } from "../domain/leveling";
 import { POTIONS, potionEffectText } from "../domain/potions";
-import { BONUS_MULTIPLIER, CATEGORIES, EFFORT_TIERS, STAT_LABELS } from "../domain/rewards";
-import { STREAK_MAX_BONUS, STREAK_STEP } from "../domain/recurrence";
+import { DAILY_DROP_CHANCE, DAILY_QUEST_COUNT, KILL_QUEST_DROP_CHANCE, QUESTS } from "../domain/quests";
+import { STAT_LABELS } from "../domain/stats";
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
 import {
   ABILITY_UNLOCK_RANK,
@@ -45,7 +43,6 @@ const XP_TO_MAX = Array.from({ length: MAX_LEVEL - 1 }, (_, i) => xpForNextLevel
 const TOPICS = [
   "quests",
   "character",
-  "battle-points",
   "skills",
   "equipment",
   "village",
@@ -77,8 +74,8 @@ export function HelpScreen() {
           <div>
             <h2 className="font-pixel text-2xl">❓ Hilfe</h2>
             <p className="mt-1 text-muted">
-              Erledige deine Aufgaben im echten Leben als Quests – damit wird dein Held stärker. Klapp ein Thema auf, um
-              zu sehen, wie es funktioniert.
+              Nimm Quests an, kämpf dich durch Gebiete und Dungeons und mach deinen Helden stärker. Klapp ein Thema auf,
+              um zu sehen, wie es funktioniert.
             </p>
           </div>
           <button
@@ -91,48 +88,29 @@ export function HelpScreen() {
 
         <Topic id="quests" title="📜 Quests">
           <p>
-            Jede Aufgabe wird zur Quest. Du wählst, wie lange sie ungefähr dauert und zu welchem Bereich sie gehört. Beim
-            Abschluss gibt es XP, Gold, Kampfpunkte und mit etwas Glück ein Item.
+            Im <b>Questbuch</b> stehen Aufträge für jedes Gebiet: Jage eine bestimmte Anzahl einer Kreatur, besiege den
+            Gebietsboss oder schliesse einen Dungeon ab. Insgesamt gibt es {QUESTS.length} Quests, jede einmal.
           </p>
-          <Table
-            head={["Aufwand", "Dauer", "XP", "Gold", "Kampfpunkte", "Item-Chance"]}
-            rows={EFFORT_TIERS.map((t) => [
-              t.label,
-              t.duration,
-              formatNumber(t.xp),
-              formatNumber(t.gold),
-              `+${t.battlePoints}`,
-              pct(t.dropChance),
-            ])}
-          />
-          <p>
-            Längere Quests droppen nicht nur öfter, sondern auch seltenere Items. Epische Quests geben zusätzlich einen
-            Attributpunkt.
-          </p>
-          <H>Bereiche</H>
-          <p>Jeder Bereich trainiert ein Attribut – der Attributpunkt einer epischen Quest landet dort.</p>
-          <ul className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
-              <li key={c.key} className="rounded-md bg-night-800 px-3 py-1">
-                {c.icon} {c.label} → <span className="text-gold">{STAT_LABELS[c.stat]}</span>
-              </li>
-            ))}
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Quests eines Gebiets kannst du annehmen, sobald das Gebiet offen ist.</li>
+            <li>Nur Siege nach dem Annehmen zählen. Der Fortschritt steht im Quest-Tab und im Kampf-Tab bei der Kreatur.</li>
+            <li>Ist das Ziel erreicht, gibst du die Quest im Quest-Tab ab und bekommst die Belohnung.</li>
+            <li>Brichst du eine Quest ab, geht ihr Fortschritt verloren – du kannst sie später neu annehmen.</li>
           </ul>
-          <H>⭐ Bonusquests</H>
+          <Table
+            head={["Quest", "Ziel", "Item beim Abgeben"]}
+            rows={[
+              ["Jagd", "5–8 Siege gegen eine Kreatur", pct(KILL_QUEST_DROP_CHANCE)],
+              ["Boss", "Den Gebietsboss besiegen", "garantiert, eher selten"],
+              ["Dungeon", "Den Dungeon bis zum Endboss abschliessen (solo oder Koop)", "garantiert, mindestens selten"],
+            ]}
+          />
+          <p>XP und Gold hängen vom Level der Kreatur bzw. des Dungeons ab – je schwieriger, desto mehr.</p>
+          <H>⭐ Tagesaufträge</H>
           <p>
-            Jeden Tag gibt es fünf vorgegebene Bonusquests, eine pro Aufwandsstufe. Sie geben{" "}
-            {pct(BONUS_MULTIPLIER - 1)} mehr XP, Gold und Item-Chance, epische auch mehr Attributpunkte. Um Mitternacht
-            kommen neue.
-          </p>
-          <H>🔁 Wiederkehrende Quests & Serien</H>
-          <p>
-            Eine Quest kann sich täglich, an bestimmten Wochentagen oder alle paar Tage wiederholen. Sie bleibt im Questlog
-            und ist ab ihrem Termin erledigbar, danach springt sie zum nächsten Termin.
-          </p>
-          <p>
-            Erledigst du sie pünktlich am Termin, wächst die <b>Serie</b> um 1. Jede Stufe über 1 gibt{" "}
-            {pct(STREAK_STEP)} mehr XP und Gold, höchstens {pct(STREAK_MAX_BONUS)}. Verpasst du einen Termin, beginnt die
-            Serie wieder bei 1.
+            Jeden Tag gibt es {DAILY_QUEST_COUNT} neue Jagdaufträge passend zu deinem Level. Sie laufen sofort, ohne
+            Annehmen, und geben XP, Gold und mit {pct(DAILY_DROP_CHANCE)} ein Item. Um Mitternacht kommen neue – was bis
+            dahin nicht abgegeben ist, verfällt.
           </p>
         </Topic>
 
@@ -165,18 +143,6 @@ export function HelpScreen() {
             Attributboni auf Items und aus Boss-Sets zählen genauso wie verteilte Punkte. Im Charakter-Tab kannst du alle
             Attributpunkte zurücksetzen und neu verteilen – das erste Mal kostenlos, danach gegen viel Gold.
           </p>
-        </Topic>
-
-        <Topic id="battle-points" title="⚔️ Kampfpunkte">
-          <p>
-            Kämpfe sind begrenzt: Jeder Kampf kostet {BATTLE_COST} Kampfpunkt. Du startest mit {START_BATTLE_POINTS}{" "}
-            und kannst höchstens {MAX_BATTLE_POINTS} haben (Anzeige oben rechts).
-          </p>
-          <ul className="list-disc space-y-1 pl-5">
-            <li>Erledigte Quests füllen Kampfpunkte auf – je länger die Quest, desto mehr (siehe Quests).</li>
-            <li>Alle {REGEN_HOURS} Stunden (0, 6, 12 und 18 Uhr) gibt es einen Punkt geschenkt, auch wenn die App zu ist.</li>
-            <li>Dungeons (solo und Koop) kosten einen Punkt pro Kampf, Koop-Bosse {COOP_COST} Punkte – bezahlt beim Start.</li>
-          </ul>
         </Topic>
 
         <Topic id="skills" title="🌳 Skills & Fähigkeiten">
@@ -322,8 +288,8 @@ export function HelpScreen() {
 
         <Topic id="dungeons" title="🗝️ Dungeons">
           <p>
-            Mehrere stärkere Gegner nacheinander, ohne Heilung dazwischen – am Ende wartet ein Boss mit eigenem Set. Du
-            bezahlst alle Kampfpunkte beim Betreten.
+            Mehrere stärkere Gegner nacheinander, ohne Heilung dazwischen – am Ende wartet ein Boss mit eigenem Set. Kämpfe
+            kosten nichts – du kannst so oft antreten, wie du willst.
           </p>
           <p>
             Die Beute sammelt sich in einer <b>Truhe</b> und wird erst am Ende gutgeschrieben. Du kannst zwischen zwei
@@ -355,13 +321,11 @@ export function HelpScreen() {
               Bei einem Sieg würfelt jeder seine eigene Beute ({formatNumber(COOP_REWARD_FACTOR)}-fache XP und Gold eines
               Solo-Bosses) – auch wer gefallen ist. Fallen alle, gibt es nichts.
             </li>
-            <li>Kosten: {COOP_COST} Kampfpunkte pro Spieler, bezahlt beim Start.</li>
           </ul>
           <Table head={["Koop-Boss", "Level"]} rows={COOP_BOSSES.map((b) => [b.name, `${b.level}`])} />
           <H>🏰 Koop-Dungeons</H>
           <p>Alle Dungeons lassen sich auch gemeinsam spielen – mit denselben Gegnern, die mit der Gruppe stärker werden.</p>
           <ul className="list-disc space-y-1 pl-5">
-            <li>Kosten wie solo: ein Kampfpunkt pro Kampf, bezahlt beim Start.</li>
             <li>
               Zwischen den Kämpfen keine Heilung. Gefallene stehen mit {pct(DUNGEON_REVIVE_HP)} ihrer Lebenspunkte wieder
               auf, Mana ist wieder voll.
@@ -373,7 +337,7 @@ export function HelpScreen() {
 
         <Topic id="achievements" title="🏆 Erfolge & Rangliste">
           <p>
-            Erfolge gibt es für Meilensteine in Quests, Serien, Kampf, Sammeln und Koop – meist in den Stufen Bronze,
+            Erfolge gibt es für Meilensteine in Quests, Charakter, Kampf, Sammeln und Koop – meist in den Stufen Bronze,
             Silber und Gold. Jede Gold-Stufe schaltet einen <b>Titel</b> frei, den du unter deinem Namen zeigen kannst.
           </p>
           <p>

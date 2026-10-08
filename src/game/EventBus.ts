@@ -1,14 +1,16 @@
 // Kleiner, typisierter Event-Bus zwischen App (React) und Spielwelt.
 // Später hört die Phaser-Kampfszene hier mit (z. B. auf "quest:completed",
-// um einen Kampf oder eine Belohnungs-Animation zu starten), ohne dass
+// um eine Belohnungs-Animation zu starten), ohne dass
 // React und Phaser direkt voneinander wissen müssen.
 
 import type { BattleEvent, BattleState } from "../domain/combat";
 import type { CoopBattleState, CoopEvent } from "../domain/coopCombat";
-import type { CombatStats, Loot, Quest, Reward } from "../domain/types";
+import type { QuestDef } from "../domain/quests";
+import type { CombatStats, Loot } from "../domain/types";
 
 export interface GameEvents {
-  "quest:completed": { quest: Quest; reward: Reward; loot: Loot };
+  /** Eine Quest wurde abgegeben (Questbuch oder Tagesauftrag). */
+  "quest:completed": { quest: QuestDef; loot: Loot };
   "character:levelup": { from: number; to: number };
   "equipment:changed": CombatStats;
   /** React → Phaser: ein neuer Kampf beginnt. */

@@ -1,14 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BattleScreen } from "./components/BattleScreen";
-import { BonusQuests } from "./components/BonusQuests";
 import { CharacterSheet, type CharacterView } from "./components/CharacterSheet";
 import { CloudDialogs } from "./components/CloudAccount";
 import { Leaderboard } from "./components/Leaderboard";
 import { EquipmentScreen } from "./components/EquipmentScreen";
 import { HelpScreen } from "./components/HelpScreen";
 import { Hud } from "./components/Hud";
-import { QuestBoard } from "./components/QuestBoard";
-import { QuestForm } from "./components/QuestForm";
+import { QuestScreen, useReadyQuestCount } from "./components/QuestScreen";
 import { RewardToast } from "./components/RewardToast";
 import { AchievementToast } from "./components/Achievements";
 import { ShopScreen } from "./components/ShopScreen";
@@ -45,6 +43,7 @@ export default function App() {
   const [characterView, setCharacterView] = useState<CharacterView>("details");
   const newAchievements = useGameStore((s) => s.achievementQueue.length);
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
+  const readyQuests = useReadyQuestCount();
 
   // Einladungslink: der Lobby beitreten und die Adresse wieder aufräumen
   useEffect(() => {
@@ -89,6 +88,9 @@ export default function App() {
       <nav className="mt-6 flex flex-wrap gap-2" aria-label="Bereiche">
         <TabButton active={tab === "quests"} onClick={() => setTab("quests")}>
           📜 Quests
+          {readyQuests > 0 && (
+            <span className="num ml-1.5 rounded-full bg-xp px-1.5 text-sm text-night-950">{readyQuests}</span>
+          )}
         </TabButton>
         <TabButton active={tab === "character"} onClick={() => setTab("character")}>
           🧙 Charakter
@@ -142,15 +144,7 @@ export default function App() {
       )}
 
       <main className="mt-4">
-        {tab === "quests" && (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_1fr]">
-            <QuestForm />
-            <div className="flex min-w-0 flex-col gap-4">
-              <BonusQuests />
-              <QuestBoard />
-            </div>
-          </div>
-        )}
+        {tab === "quests" && <QuestScreen />}
         {tab === "character" && <CharacterSheet view={characterView} />}
         {tab === "skills" && <SkillTree />}
         {tab === "equipment" && <EquipmentScreen />}

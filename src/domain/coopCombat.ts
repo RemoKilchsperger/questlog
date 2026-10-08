@@ -40,7 +40,6 @@ import {
   type HeroCombatProfile,
 } from "./combat";
 import { abilityForRound, getBossAbilities } from "./bossAbilities";
-import { dungeonCost } from "./battlePoints";
 import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
@@ -50,8 +49,6 @@ export const COOP_MIN_PLAYERS = 2;
 export const COOP_MAX_PLAYERS = 4;
 /** Zeit pro Spielerphase – wer nicht wählt, greift normal an. */
 export const COOP_TURN_SECONDS = 30;
-/** Kampfpunkte pro Spieler, bezahlt beim Start. */
-export const COOP_COST = 3;
 /** XP und Gold eines Koop-Sieges im Vergleich zu einem Solo-Boss gleichen Levels. */
 export const COOP_REWARD_FACTOR = 1.5;
 /**
@@ -274,11 +271,6 @@ export function coopContent(id: string): { name: string; level: number; sprite: 
   }
   const boss = getCoopBoss(id);
   return { name: boss.name, level: boss.level, sprite: boss.sprite, description: boss.description };
-}
-
-/** Kampfpunkte pro Spieler: Raid-Boss pauschal, Dungeon wie solo einer pro Kampf. */
-export function coopCost(id: string): number {
-  return isCoopDungeon(id) ? dungeonCost(getDungeon(id).creatures.length) : COOP_COST;
 }
 
 type OverTimeKind = "poison" | "burn" | "bleed";

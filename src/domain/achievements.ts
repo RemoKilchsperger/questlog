@@ -1,20 +1,20 @@
-// Erfolge: Stufen (Bronze, Silber, Gold) für Meilensteine in Quests, Serien,
+// Erfolge: Stufen (Bronze, Silber, Gold) für Meilensteine in Quests,
 // Charakter, Kampf, Sammeln und Koop. Belohnt wird kosmetisch: Jede Gold-Stufe
 // (bzw. jeder einstufige Erfolg) schaltet einen Titel frei, dazu gibt es
 // Avatar-Rahmen für die Gesamtzahl der Stufen und für besondere Erfolge.
 //
-// Was sich aus dem Spielstand ablesen lässt (Quests, Level, Serien …), zählt
-// rückwirkend. Kämpfe, besiegte Bosse und Dungeons werden erst ab Einführung
-// der Erfolge in `records` mitgezählt.
+// Was sich aus dem Spielstand ablesen lässt (Questbuch, Level, Boss-Items …),
+// zählt rückwirkend. Kämpfe, besiegte Bosse und Dungeons werden erst ab
+// Einführung der Erfolge in `records` mitgezählt.
 
 import { BOSS_SETS } from "./bossSets";
 import { BOSS_ITEMS } from "./items";
 import { AREAS, DUNGEONS } from "./creatures";
 import { COOP_BOSSES, type CoopStats } from "./coopCombat";
-import { currentStreak } from "./recurrence";
 import { getLevel } from "./leveling";
+import { QUESTS, type QuestLog } from "./quests";
 import type { HeroClassId } from "./heroClasses";
-import type { Category, Character, Quest } from "./types";
+import type { Character } from "./types";
 
 /** Zähler, die das Spiel ab jetzt mitführt (im Spielstand). */
 export interface Records {
@@ -23,7 +23,11 @@ export interface Records {
   bossesDefeated: string[];
   /** Ids abgeschlossener Dungeons */
   dungeonsCleared: string[];
-  /** Tage, an denen alle Bonusquests erledigt wurden */
+  /** Abgegebene Quests insgesamt (Questbuch und Tagesaufträge, dazu die To-dos alter Spielstände) */
+  questsCompleted: number;
+  /** Abgegebene Tagesaufträge (dazu die Bonusquests alter Spielstände) */
+  dailyQuestsCompleted: number;
+  /** Tage, an denen alle Tagesaufträge (früher Bonusquests) abgegeben wurden */
   perfectBonusDays: number;
   /** Ein Kampf mit unter 5 % LP gewonnen */
   closeCall: boolean;
@@ -43,6 +47,8 @@ export const EMPTY_RECORDS: Records = {
   battlesWon: 0,
   bossesDefeated: [],
   dungeonsCleared: [],
+  questsCompleted: 0,
+  dailyQuestsCompleted: 0,
   perfectBonusDays: 0,
   closeCall: false,
   classesWorn: [],
@@ -55,19 +61,16 @@ export const EMPTY_RECORDS: Records = {
 /** Alles, woraus sich der Fortschritt berechnet. */
 export interface AchievementInput {
   character: Character;
-  quests: Quest[];
+  questLog: QuestLog;
   bossCollection: string[];
   coopStats: CoopStats;
   records: Records;
-  /** Datum "yyyy-mm-dd" (für laufende Serien) */
-  today: string;
 }
 
-export type AchievementCategory = "quests" | "streaks" | "character" | "combat" | "collection" | "sets" | "coop";
+export type AchievementCategory = "quests" | "character" | "combat" | "collection" | "sets" | "coop";
 
 export const ACHIEVEMENT_CATEGORIES: readonly { key: AchievementCategory; label: string; icon: string }[] = [
   { key: "quests", label: "Quests", icon: "📜" },
-  { key: "streaks", label: "Serien", icon: "🔥" },
   { key: "character", label: "Charakter", icon: "🧙" },
   { key: "combat", label: "Kampf", icon: "⚔️" },
   { key: "collection", label: "Sammeln", icon: "💎" },
@@ -90,7 +93,6 @@ export interface AchievementDef {
 }
 
 const BOSS_ITEM_BOSS = new Map(BOSS_ITEMS.map((i) => [i.id, i.bossId]));
-const done = (quests: Quest[]) => quests.filter((q) => q.status === "done");
 const areaBossIds = AREAS.map((a) => a.creatures.find((c) => c.boss)!.id);
 const dungeonBossToDungeon = new Map(DUNGEONS.map((d) => [d.creatures.find((c) => c.boss)!.id, d.id]));
 
@@ -140,20 +142,14 @@ const SET_ACHIEVEMENTS: AchievementDef[] = BOSS_SETS.map((set) => {
 
 export const ACHIEVEMENTS: readonly AchievementDef[] = [
   // Quests
-  { id: "quest-master", name: "Questmeister", icon: "📜", category: "quests", description: "{n} Quests erledigt", tiers: [10, 100, 500], title: "Questmeister", progress: (i) => done(i.quests).length },
-  { id: "epic-quests", name: "Mammutaufgabe", icon: "🏔️", category: "quests", description: "{n} epische Quests erledigt", tiers: [1, 10, 50], title: "Titan", progress: (i) => done(i.quests).filter((q) => q.effort === "epic").length },
+  { id: "quest-master", name: "Questmeister", icon: "📜", category: "quests", description: "{n} Quests abgegeben", tiers: [10, 100, 500], title: "Questmeister", progress: (i) => i.records.questsCompleted },
+  { id: "adventurer", name: "Abenteurer", icon: "🗺️", category: "quests", description: "{n} Quests aus dem Questbuch abgegeben", tiers: [5, 15, QUESTS.length], title: "Abenteurer", progress: (i) => i.questLog.completed.length },
   {
-    id: "all-rounder", name: "Allrounder", icon: "🧭", category: "quests", description: "Je {n} Quests in allen vier Bereichen", tiers: [5, 25, 100], title: "Allrounder",
-    progress: (i) => Math.min(...(["body", "mind", "daily", "social"] as Category[]).map((c) => done(i.quests).filter((q) => q.category === c).length)),
+    id: "liberator", name: "Befreier", icon: "🏳️", category: "quests", description: "In {n} Gebieten alle Quests abgegeben", tiers: [1, 3, AREAS.length], title: "Befreier des Landes",
+    progress: (i) => AREAS.filter((a) => QUESTS.filter((q) => q.areaId === a.id).every((q) => i.questLog.completed.includes(q.id))).length,
   },
-  { id: "bonus-hunter", name: "Bonusjäger", icon: "⭐", category: "quests", description: "{n} Bonusquests erledigt", tiers: [5, 50, 100], title: "Bonusjäger", progress: (i) => done(i.quests).filter((q) => q.bonus).length },
-  { id: "perfect-day", name: "Perfekter Tag", icon: "🌟", category: "quests", description: "{n}-mal alle Bonusquests eines Tages erledigt", tiers: [1, 10, 30], title: "Perfektionist", progress: (i) => i.records.perfectBonusDays },
-  // Serien
-  { id: "tireless", name: "Unermüdlich", icon: "🔥", category: "streaks", description: "Eine Serie von {n} Terminen", tiers: [7, 30, 100], title: "Unermüdlich", progress: (i) => Math.max(0, ...i.quests.map((q) => q.bestStreak ?? 0)) },
-  {
-    id: "habits", name: "Gewohnheitstier", icon: "🔁", category: "streaks", description: "{n} laufende Serien ab 7 gleichzeitig", tiers: [2, 4, 6], title: "Gewohnheitstier",
-    progress: (i) => i.quests.filter((q) => q.recurrence && q.status === "open" && currentStreak(q, i.today) >= 7).length,
-  },
+  { id: "bonus-hunter", name: "Kopfgeldjäger", icon: "⭐", category: "quests", description: "{n} Tagesaufträge abgegeben", tiers: [5, 50, 100], title: "Kopfgeldjäger", progress: (i) => i.records.dailyQuestsCompleted },
+  { id: "perfect-day", name: "Perfekter Tag", icon: "🌟", category: "quests", description: "{n}-mal alle Tagesaufträge eines Tages abgegeben", tiers: [1, 10, 30], title: "Perfektionist", progress: (i) => i.records.perfectBonusDays },
   // Charakter
   { id: "climber", name: "Aufsteiger", icon: "⬆️", category: "character", description: "Level {n} erreicht", tiers: [10, 30, 60], title: "Legende", progress: (i) => getLevel(i.character.totalXp) },
   { id: "scholar", name: "Gelehrter", icon: "📖", category: "character", description: "{n} Fähigkeiten freigeschaltet", tiers: [1, 8, 22], title: "Gelehrter", progress: (i) => i.character.abilities.length },
@@ -212,7 +208,7 @@ export function describe(def: AchievementDef, tier: number): string {
 export type AchievementTiers = Partial<Record<string, number>>;
 
 /**
- * Neuer Stand: Stufen fallen nie zurück (eine gerissene Serie nimmt nichts weg).
+ * Neuer Stand: Stufen fallen nie zurück (weniger Fortschritt nimmt nichts weg).
  * Liefert auch, was in diesem Schritt neu dazukam.
  */
 export function evaluateAchievements(
@@ -261,7 +257,7 @@ export const FRAMES: readonly FrameDef[] = [
   { id: "silver", name: "Silber", condition: "15 Erfolgsstufen", unlocked: (t) => totalTiers(t) >= 15 },
   { id: "gold", name: "Gold", condition: "30 Erfolgsstufen", unlocked: (t) => totalTiers(t) >= 30 },
   { id: "royal", name: "Königlich", condition: "Questmeister in Gold", unlocked: gold("quest-master") },
-  { id: "flame", name: "Flammen", condition: "Unermüdlich in Gold", unlocked: gold("tireless") },
+  { id: "flame", name: "Flammen", condition: "Kämpfer in Gold", unlocked: gold("fighter") },
   { id: "crystal", name: "Kristall", condition: "Schatzjäger in Gold", unlocked: gold("treasure-hunter") },
   { id: "dragon", name: "Drachen", condition: "Drachentöter", unlocked: gold("dragon-slayer") },
   { id: "forged", name: "Meisterschmiede", condition: "Gut gerüstet in Gold (Gear Score 100)", unlocked: gold("gear-score") },

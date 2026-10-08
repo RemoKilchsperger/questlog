@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { dungeonCost, spendBattlePoint } from "./battlePoints";
 import { bossAbilityDue, getBossAbilities, getBossAbility, upcomingBossAbility } from "./bossAbilities";
 import { getHeroCombatProfile, rollBossLoot, startBattle } from "./combat";
 import { AREAS, DUNGEONS, getCreature, getCreatureStats, getDungeon } from "./creatures";
@@ -14,8 +13,6 @@ const hero: Character = {
   essence: 0,
   stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
   spentPoints: 0,
-  battlePoints: 10,
-  battlePointSlot: 0,
   skills: {},
   abilities: [],
 };
@@ -79,13 +76,6 @@ describe("Dungeons", () => {
     expect(battle.hero.maxHp).toBe(profile.maxHp);
     expect(battle.mana).toBe(profile.maxMana); // Mana füllt sich wieder auf
     expect(startBattle("b", "Held", profile, second, 0).hero.hp).toBe(1); // nie mit 0 LP starten
-  });
-
-  it("kostet einen Kampfpunkt pro Kampf, beim Betreten bezahlt", () => {
-    const fights = getDungeon("abandoned-mine").creatures.length;
-    expect(dungeonCost(fights)).toBe(fights);
-    expect(spendBattlePoint(hero, dungeonCost(fights)).battlePoints).toBe(10 - fights);
-    expect(() => spendBattlePoint({ ...hero, battlePoints: fights - 1 }, dungeonCost(fights))).toThrow(/Kampfpunkte/);
   });
 
   it("die Beute gibt es nur beim Dungeon-Boss, mit 10 % Chance", () => {

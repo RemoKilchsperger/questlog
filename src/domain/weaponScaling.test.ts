@@ -25,8 +25,6 @@ const hero = (overrides: Partial<Character> = {}): Character => ({
   essence: 0,
   stats: stats(),
   spentPoints: 0,
-  battlePoints: 0,
-  battlePointSlot: 0,
   skills: {},
   abilities: [],
   ...overrides,

@@ -16,8 +16,6 @@ const hero: Character = {
   essence: 0,
   stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
   spentPoints: 0,
-  battlePoints: 5,
-  battlePointSlot: 0,
   skills: {},
   // Fähigkeiten-Tests: alle freigeschaltet (das Freischalten selbst testet skills.test.ts)
   abilities: ABILITIES.filter((a) => a.tier === 1).map((a) => a.id),

@@ -15,7 +15,6 @@ import {
   unlockedTitles,
   type AchievementDef,
 } from "../domain/achievements";
-import { dateKey } from "../domain/calendar";
 import { useGameStore } from "../store/gameStore";
 import { Hint } from "./HoverCard";
 
@@ -91,11 +90,10 @@ export function AchievementsPanel() {
   const state = useGameStore((s) => s);
   const input = {
     character: state.character,
-    quests: state.quests,
+    questLog: state.questLog,
     bossCollection: state.bossCollection,
     coopStats: state.coopStats,
     records: state.records,
-    today: dateKey(),
   };
   const done = totalTiers(state.achievements);
 

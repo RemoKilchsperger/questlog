@@ -1,59 +1,13 @@
 import type { AbilityId } from "./abilities";
-import type { Recurrence } from "./recurrence";
 // Zentrale Datentypen. Bewusst frei von React/Zustand, damit dieselben
 // Typen später im Backend (Supabase Edge Function) und im Kampfsystem
 // (Phaser) wiederverwendet werden können.
-
-/** Geschätzter Zeitaufwand einer Quest. Bestimmt die Belohnung. */
-export type Effort = "quick" | "short" | "medium" | "long" | "epic";
-
-/** Lebensbereich einer Quest. Jeder Bereich trainiert ein Attribut. */
-export type Category = "body" | "mind" | "daily" | "social";
 
 /** Attribute des Charakters – Grundlage für das spätere Kampfsystem. */
 export type StatKey = "strength" | "intellect" | "endurance" | "charisma";
 export type Stats = Record<StatKey, number>;
 
-export type QuestStatus = "open" | "done";
-
-export interface Quest {
-  id: string;
-  title: string;
-  description?: string;
-  effort: Effort;
-  category: Category;
-  dueDate?: string; // ISO-Datum (yyyy-mm-dd)
-  status: QuestStatus;
-  createdAt: string;
-  completedAt?: string;
-  /** Tatsächlich erhaltene Belohnung, wird beim Abschluss gespeichert. */
-  reward?: Reward;
-  /** Tägliche Bonusquest (src/domain/bonusQuests.ts) – gibt mehr Belohnung. */
-  bonus?: boolean;
-  /** Wiederkehrende Quest (recurrence.ts): `dueDate` ist dann der nächste Termin. */
-  recurrence?: Recurrence;
-  /** Aktuelle Serie pünktlich erledigter Termine */
-  streak?: number;
-  /** Längste Serie bisher */
-  bestStreak?: number;
-  /** Datum des letzten Erledigens ("yyyy-mm-dd") */
-  lastDone?: string;
-  /** Eintrag unter „Erledigt“: Id der wiederkehrenden Quest, aus der er stammt */
-  recurringId?: string;
-}
-
-export interface Reward {
-  xp: number;
-  gold: number;
-  stat: StatKey;
-  statPoints: number;
-  /** Aufgefüllte Kampfpunkte (fehlt bei Quests, die vor den Kampfpunkten erledigt wurden) */
-  battlePoints?: number;
-  /** Serie, mit der eine wiederkehrende Quest erledigt wurde (XP und Gold enthalten den Bonus) */
-  streak?: number;
-}
-
-/** Zufällige Item-Belohnung einer Quest (oder null, wenn nichts gedroppt ist). */
+/** Zufällige Item-Belohnung (oder null, wenn nichts gedroppt ist). */
 export type Loot = OwnedItem | null;
 
 export interface Character {
@@ -66,15 +20,12 @@ export interface Character {
   stats: Stats;
   /**
    * Bereits verteilte Level-up-Punkte (verfügbar: siehe `unspentPoints`). Nach dem
-   * Zurücksetzen der Attribute negativ, wenn auch Punkte aus epischen Quests frei wurden.
+   * Zurücksetzen der Attribute negativ, wenn mehr Punkte frei wurden, als verteilt waren
+   * (früher gaben auch epische Quests Attributpunkte).
    */
   spentPoints: number;
   /** Wie oft die Attributpunkte schon zurückgesetzt wurden – das erste Mal ist kostenlos. */
   attributeResets?: number;
-  /** Verfügbare Kampfpunkte – jeder Kampf kostet einen (src/domain/battlePoints.ts). */
-  battlePoints: number;
-  /** Zuletzt gutgeschriebener 6-Stunden-Abschnitt der Gratis-Kampfpunkte (siehe `regenSlot`). */
-  battlePointSlot: number;
   /** Ränge im Skilltree pro Waffentyp (src/domain/skills.ts). */
   skills: Partial<Record<WeaponType, number>>;
   /** Freigeschaltete Kampf-Fähigkeiten – ab Rang 3 im Waffentyp (src/domain/skills.ts). */
@@ -122,7 +73,7 @@ export interface ItemDef {
   armorClass?: ArmorClass;
   price: number;
   requiredLevel: number;
-  /** Einzigartiges Boss-Item: nur als Beute dieses Bosses erhältlich (nie beim Händler oder aus Quests). */
+  /** Einzigartiges Boss-Item: nur als Beute dieses Bosses erhältlich (nie beim Händler oder als Quest-Belohnung). */
   bossId?: string;
 }
 

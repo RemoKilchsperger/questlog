@@ -14,7 +14,7 @@ import {
   unspentPoints,
 } from "../domain/leveling";
 import { WEAPON_STAT } from "../domain/weaponScaling";
-import { STAT_LABELS } from "../domain/rewards";
+import { STAT_LABELS } from "../domain/stats";
 import type { StatKey, WeaponType } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -52,7 +52,7 @@ export type CharacterView = "details" | "achievements" | "collection";
 /** Charakter-Tab: `details` (Porträt, Kennzahlen, Attribute), `achievements` (Erfolge) oder `collection` (Boss-Sammlung). */
 export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
   const character = useGameStore((s) => s.character);
-  const quests = useGameStore((s) => s.quests);
+  const questsDone = useGameStore((s) => s.records.questsCompleted);
   const renameCharacter = useGameStore((s) => s.renameCharacter);
   const resetGame = useGameStore((s) => s.resetGame);
   const allocatePoint = useGameStore((s) => s.allocatePoint);
@@ -67,7 +67,6 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
   const [nameDraft, setNameDraft] = useState(character.name);
 
   const { level } = getLevelProgress(character.totalXp);
-  const doneCount = quests.filter((q) => q.status === "done").length;
   const statEntries = Object.entries(character.stats) as [StatKey, number][];
   const maxStat = Math.max(10, ...statEntries.map(([key, v]) => v + bonuses[key]));
 
@@ -135,7 +134,7 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
         <section className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           <StatTile label="Gold" value={character.gold} icon="🪙" accent="text-gold" />
           <StatTile label="Gesamt-XP" value={character.totalXp} icon="✨" accent="text-xp" />
-          <StatTile label="Quests" value={doneCount} icon="📜" accent="text-parchment" />
+          <StatTile label="Quests" value={questsDone} icon="📜" accent="text-parchment" />
           <StatTile label="Lebenspunkte" value={maxHp} icon="❤️" accent="text-xp" />
           <StatTile label="Rüstung" value={combat.armor} icon="🛡️" accent="text-intellect" />
           <StatTile label="Angriff" value={combat.attack} icon="⚔️" accent="text-strength" />
@@ -149,7 +148,7 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
           </div>
           <p className="mb-4 text-sm text-muted">
             Bestimmen deine Stärke im Kampf – jede Waffe macht mehr Schaden mit ihrem Attribut. Pro Level-up verteilst du{" "}
-            {POINTS_PER_LEVEL} Punkte frei, epische Quests trainieren zusätzlich das Attribut ihres Bereichs. Seltene
+            {POINTS_PER_LEVEL} Punkte frei. Seltene
             Ausrüstung gibt weitere Boni (heller Teil des Balkens).
           </p>
           {unspent > 0 && (
@@ -311,8 +310,7 @@ function AttributeReset() {
         }}
       >
         <p>
-          Alle Attribute fallen auf 1 zurück, und du kannst <b>{points} Punkte</b> neu verteilen – auch die aus epischen
-          Quests.{" "}
+          Alle Attribute fallen auf 1 zurück, und du kannst <b>{points} Punkte</b> neu verteilen.{" "}
           {cost === 0 ? (
             <>Das erste Mal ist kostenlos, danach kostet es viel Gold.</>
           ) : (

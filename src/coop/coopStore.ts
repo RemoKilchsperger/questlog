@@ -2,12 +2,11 @@
 // Der Server (Edge Function bzw. lokaler Testmodus) rechnet alles; der
 // Browser schickt nur Befehle und übernimmt den Stand, den er zurückbekommt –
 // als Antwort oder live über Realtime. Hier passiert nur, was zum eigenen
-// Spielstand gehört: Kampfpunkte zahlen, Tränke abziehen, eigene Beute würfeln.
+// Spielstand gehört: Tränke abziehen, eigene Beute würfeln.
 
 import { create } from "zustand";
 import { useCloudStore } from "../cloud/cloudStore";
 import {
-  coopCost,
   dungeonCompleted,
   rollCoopDungeonChest,
   rollCoopReward,
@@ -73,14 +72,6 @@ function currentPlayerId(): string {
   return id;
 }
 
-/** Warum man nicht bereit sein bzw. starten kann – oder null. Die Kosten hängen vom Inhalt der Lobby ab. */
-export function coopReadyBlocker(): string | null {
-  const row = useCoopStore.getState().row;
-  const cost = row ? coopCost(row.boss_id) : 0;
-  const points = useGameStore.getState().character.battlePoints;
-  return points < cost ? `Du brauchst ${cost} Kampfpunkte (du hast ${points}).` : null;
-}
-
 /** Ende der Spielerphase in eigener Uhrzeit. */
 export function localDeadline(state: CoopBattleState, clockOffset: number): number {
   return state.deadline - clockOffset;
@@ -100,8 +91,7 @@ function claimReward(row: CoopRow, state: CoopBattleState, myId: string): Claime
 // Ausserhalb von React: Abo der Änderungen, Timer für den Zeitablauf
 let unsubscribe: (() => void) | null = null;
 let tickTimer: number | undefined;
-/** Kämpfe, für die schon bezahlt bzw. Beute gewürfelt wurde (nie doppelt) */
-const paid = new Set<string>();
+/** Kämpfe, für die schon Beute gewürfelt wurde (nie doppelt) */
 const rewarded = new Set<string>();
 
 export const useCoopStore = create<CoopState>()((set, get) => {
@@ -123,16 +113,6 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     if (prev && prev.id === next.id && next.version <= prev.version) return;
     const myId = get().myId;
     if (!next.player_ids.includes(myId)) return reset("Du bist nicht mehr Teil dieser Lobby.");
-
-    // Kampfstart erlebt: jetzt die Kampfpunkte zahlen (nur einmal pro Kampf)
-    if (prev?.phase === "lobby" && next.phase !== "lobby" && next.state && !paid.has(next.state.id)) {
-      paid.add(next.state.id);
-      try {
-        useGameStore.getState().payCoop(coopCost(next.boss_id));
-      } catch {
-        // zu wenig Kampfpunkte – die Bereit-Prüfung verhindert das eigentlich
-      }
-    }
 
     // Neue Runde: eigene Tränke abziehen, Szene animieren. Verglichen wird innerhalb desselben
     // Kampfs – im Dungeon beginnt jeder Kampf mit eigener Id und leerem Protokoll.
@@ -237,13 +217,10 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     },
 
     setReady: async (ready) => {
-      if (ready && coopReadyBlocker()) return set({ error: coopReadyBlocker() });
       await send({ type: "ready", ready });
     },
 
     startBattle: async () => {
-      const blocker = coopReadyBlocker();
-      if (blocker) return set({ error: blocker });
       await send({ type: "start" });
     },
 

@@ -1,16 +1,17 @@
 // Reine Hilfsfunktionen für die Online-Funktionen – ohne Netzwerk, gut testbar.
 //
 // Öffentlich wird nur, was zum Spiel gehört (Level, Ausrüstung, Attribute,
-// Sammlung). Quest-Titel und -Beschreibungen sind echte Aufgaben aus dem Leben
-// und bleiben privat: Sie stehen nur im privaten Spielstand (Tabelle "saves").
+// Sammlung, Anzahl Quests). Gold, Inventar und der Rest des Spielstands bleiben
+// privat in der Tabelle "saves".
 
-import { totalTiers, type AchievementTiers } from "../domain/achievements";
+import { totalTiers, type AchievementTiers, type Records } from "../domain/achievements";
 import { EMPTY_COOP_STATS, type CoopStats } from "../domain/coopCombat";
 import { getEffectiveStats } from "../domain/equipment";
 import { getLevel } from "../domain/leveling";
-import type { Character, Equipment, Quest, Stats, WeaponType } from "../domain/types";
+import type { QuestLog } from "../domain/quests";
+import type { Character, Equipment, Stats, WeaponType } from "../domain/types";
 
-/** Was ein öffentliches Profil zeigt – ohne Quest-Inhalte. */
+/** Was ein öffentliches Profil zeigt. */
 export interface ProfileSnapshot {
   /** Früherer Level-Titel – wird nicht mehr geschrieben und nicht mehr angezeigt */
   title?: string;
@@ -47,20 +48,21 @@ export interface PublicProfile extends PublicProfileRow {
 interface GameData {
   character: Character;
   equipment: Equipment;
-  quests: Quest[];
+  records?: Pick<Records, "questsCompleted">;
+  questLog?: QuestLog;
   bossCollection: string[];
   coopStats?: CoopStats;
   achievements?: AchievementTiers;
   cosmetics?: { title: string | null; frame: string };
 }
 
-export function buildPublicProfile({ character, equipment, quests, bossCollection, coopStats, achievements, cosmetics }: GameData): PublicProfileRow {
+export function buildPublicProfile({ character, equipment, records, bossCollection, coopStats, achievements, cosmetics }: GameData): PublicProfileRow {
   const level = getLevel(character.totalXp);
   return {
     hero_name: character.name,
     level,
     total_xp: character.totalXp,
-    quests_done: quests.filter((q) => q.status === "done").length,
+    quests_done: records?.questsCompleted ?? 0,
     boss_items: bossCollection.length,
     snapshot: {
       stats: getEffectiveStats(character.stats, equipment),
@@ -89,15 +91,25 @@ export interface SaveSummary {
   bossItems: number;
 }
 
+/** To-dos aus Spielständen vor v14 – Cloud-Stände sind beim Herunterladen noch nicht migriert. */
+function legacyQuests(state: PersistedSave["state"]): { status?: string }[] {
+  return Array.isArray(state.quests) ? state.quests : [];
+}
+
+/** Abgegebene Quests – bei alten Spielständen die erledigten To-dos. */
+function questsDone(state: PersistedSave["state"]): number {
+  return state.records?.questsCompleted ?? legacyQuests(state).filter((q) => q.status === "done").length;
+}
+
 /** Kurzfassung eines Spielstands – für die Frage „Welchen Stand behalten?“. */
 export function summarizeSave(save: PersistedSave): SaveSummary {
-  const { character, quests = [], bossCollection = [] } = save.state;
+  const { character, bossCollection = [] } = save.state;
   const totalXp = character?.totalXp ?? 0;
   return {
     heroName: character?.name ?? "Held",
     level: getLevel(totalXp),
     totalXp,
-    questsDone: quests.filter((q) => q.status === "done").length,
+    questsDone: questsDone(save.state),
     bossItems: bossCollection.length,
   };
 }
@@ -105,8 +117,9 @@ export function summarizeSave(save: PersistedSave): SaveSummary {
 /** Noch nichts gespielt? Dann kann ein Cloud-Stand ohne Rückfrage übernommen werden. */
 export function isFreshSave(save: PersistedSave | null): boolean {
   if (!save) return true;
-  const { character, quests = [] } = save.state;
-  return (character?.totalXp ?? 0) === 0 && quests.length === 0;
+  const { character, questLog } = save.state;
+  const started = Object.keys(questLog?.active ?? {}).length > 0 || legacyQuests(save.state).length > 0;
+  return (character?.totalXp ?? 0) === 0 && questsDone(save.state) === 0 && !started;
 }
 
 /** Benutzername für die Profil-Adresse: 3–20 Zeichen, a–z, 0–9, _ und -. */

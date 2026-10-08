@@ -45,8 +45,6 @@ const heroAt = (level: number): Character => ({
   essence: 0,
   stats: { strength: level, intellect: level, endurance: level, charisma: level },
   spentPoints: 0,
-  battlePoints: 5,
-  battlePointSlot: 0,
   skills: {},
   abilities: [],
 });

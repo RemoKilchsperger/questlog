@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { getActiveSets } from "../domain/bossSets";
 import { bossName, isCoopBoss } from "../domain/bosses";
-import { STAT_LABELS } from "../domain/rewards";
+import { STAT_LABELS } from "../domain/stats";
 import type { ItemStats, WeaponType } from "../domain/types";
 import { weaponStat } from "../domain/weaponScaling";
 import { useGameStore } from "../store/gameStore";

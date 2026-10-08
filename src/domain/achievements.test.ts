@@ -15,7 +15,8 @@ import {
 } from "./achievements";
 import { EMPTY_COOP_STATS } from "./coopCombat";
 import { xpForNextLevel } from "./leveling";
-import type { Character, Quest } from "./types";
+import { EMPTY_QUEST_LOG, QUESTS } from "./quests";
+import type { Character } from "./types";
 
 const character = (level = 1): Character => {
   let totalXp = 0;
@@ -23,19 +24,15 @@ const character = (level = 1): Character => {
   return {
     name: "Held", totalXp, gold: 0, essence: 0,
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
-    spentPoints: 0, battlePoints: 5, battlePointSlot: 0, skills: {}, abilities: [],
+    spentPoints: 0, skills: {}, abilities: [],
   };
 };
-const doneQuest = (i: number, overrides: Partial<Quest> = {}): Quest => ({
-  id: `q${i}`, title: "x", effort: "short", category: "body", status: "done", createdAt: "2026-10-01", ...overrides,
-});
 const input = (overrides: Partial<AchievementInput> = {}): AchievementInput => ({
   character: character(),
-  quests: [],
+  questLog: EMPTY_QUEST_LOG,
   bossCollection: [],
   coopStats: EMPTY_COOP_STATS,
   records: EMPTY_RECORDS,
-  today: "2026-10-07",
   ...overrides,
 });
 
@@ -59,16 +56,30 @@ describe("Erfolge", () => {
   });
 
   it("rechnen rückwirkend aus dem Spielstand – und fallen nie zurück", () => {
-    const quests = Array.from({ length: 12 }, (_, i) => doneQuest(i, { effort: i === 0 ? "epic" : "short" }));
-    const first = evaluateAchievements(input({ quests, character: character(10) }), {});
+    const darkwood = QUESTS.filter((q) => q.areaId === "darkwood").map((q) => q.id);
+    const first = evaluateAchievements(
+      input({
+        questLog: { active: {}, completed: darkwood },
+        records: { ...EMPTY_RECORDS, questsCompleted: 12 },
+        character: character(10),
+      }),
+      {},
+    );
     expect(first.tiers["quest-master"]).toBe(1);
-    expect(first.tiers["epic-quests"]).toBe(1);
+    expect(first.tiers.adventurer).toBe(1);
+    expect(first.tiers.liberator).toBe(1);
     expect(first.tiers.climber).toBe(1);
     expect(first.unlocked).toContainEqual({ id: "quest-master", tier: 1 });
-    // Weniger Quests (gelöscht) – die Stufe bleibt
+    // Weniger Fortschritt (z. B. neuer Spielstand) – die Stufe bleibt
     const later = evaluateAchievements(input(), first.tiers);
     expect(later.tiers["quest-master"]).toBe(1);
     expect(later.unlocked).toHaveLength(0);
+  });
+
+  it("ein Gebiet zählt erst als befreit, wenn alle seine Quests abgegeben sind", () => {
+    const darkwood = QUESTS.filter((q) => q.areaId === "darkwood").map((q) => q.id);
+    const { tiers } = evaluateAchievements(input({ questLog: { active: {}, completed: darkwood.slice(1) } }), {});
+    expect(tiers.liberator).toBeUndefined();
   });
 
   it("Boss-Items zählen rückwirkend als besiegte Bosse und abgeschlossene Dungeons", () => {
@@ -118,7 +129,7 @@ describe("Erfolge im Spielstand", () => {
   beforeEach(() => useGameStore.getState().resetGame());
 
   it("werden nach Änderungen automatisch freigeschaltet und eingeblendet", () => {
-    useGameStore.setState({ quests: Array.from({ length: 10 }, (_, i) => doneQuest(i)), achievementQueue: [] });
+    useGameStore.setState({ records: { ...EMPTY_RECORDS, questsCompleted: 10 }, achievementQueue: [] });
     const s = useGameStore.getState();
     expect(s.achievements["quest-master"]).toBe(1);
     expect(s.achievementQueue).toContainEqual({ id: "quest-master", tier: 1 });

@@ -55,8 +55,6 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
     essence: raw.essence ?? 0,
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1, ...raw.stats },
     spentPoints: raw.spentPoints ?? 0,
-    battlePoints: raw.battlePoints ?? 0,
-    battlePointSlot: raw.battlePointSlot ?? 0,
     skills: raw.skills ?? {},
     abilities: raw.abilities ?? [],
   };

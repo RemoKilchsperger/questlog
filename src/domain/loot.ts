@@ -2,21 +2,7 @@
 // damit die Logik testbar bleibt und später serverseitig laufen kann.
 
 import { createItem, ITEMS, RARITIES } from "./items";
-import { dropChance } from "./rewards";
-import type { Effort, ItemDef, Loot, Rarity } from "./types";
-
-/**
- * Gewichte der Seltenheitsstufen je Aufwand (gewöhnlich, selten, episch, legendär;
- * Summe 100 = Prozent). Längere Quests droppen nicht nur öfter, sondern auch
- * seltenere Items – epische und legendäre bleiben aber etwas Besonderes.
- */
-export const RARITY_WEIGHTS: Record<Effort, Record<Rarity, number>> = {
-  quick: { common: 80, rare: 18.5, epic: 1.5, legendary: 0 },
-  short: { common: 72, rare: 25, epic: 2.7, legendary: 0.3 },
-  medium: { common: 64, rare: 31, epic: 4.5, legendary: 0.5 },
-  long: { common: 55, rare: 37, epic: 7, legendary: 1 },
-  epic: { common: 42, rare: 43, epic: 12, legendary: 3 },
-};
+import type { ItemDef, Loot, Rarity } from "./types";
 
 /** Wie viele Level unter dem Helden ein Drop höchstens liegen darf. */
 const LOOT_LEVEL_RANGE = 6;
@@ -64,15 +50,4 @@ export function rollDrop(
   if (rng() >= dropChance) return null;
   const def = pickFromPool(lootPool(level), rng);
   return createItem(def.id, rollRarity(weights, rng), uid, rng);
-}
-
-/** Würfelt aus, ob und was eine Quest droppt. Bonusquests droppen öfter. */
-export function rollLoot(
-  effort: Effort,
-  level: number,
-  uid: string,
-  rng: () => number = Math.random,
-  bonus = false,
-): Loot {
-  return rollDrop(dropChance(effort, bonus), RARITY_WEIGHTS[effort], level, uid, rng);
 }
