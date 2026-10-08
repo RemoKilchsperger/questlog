@@ -13,7 +13,7 @@ import {
   DUNGEON_REVIVE_HP,
   THREAT_DECAY,
 } from "../domain/coopCombat";
-import { AREAS, DUNGEONS } from "../domain/creatures";
+import { AREAS, DUNGEONS, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
 import { FRAMES } from "../domain/achievements";
 import { UPGRADE_REFUND } from "../domain/forge";
 import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
@@ -116,9 +116,13 @@ export function HelpScreen() {
 
         <Topic id="character" title="🧙 Level & Attribute">
           <p>
-            Für ein Level-up braucht es {formatNumber(xpForNextLevel(1))} XP, danach jedes Level{" "}
-            {formatNumber(xpForNextLevel(2) - xpForNextLevel(1))} XP mehr. Das Maximallevel {MAX_LEVEL} erreichst du nach
-            insgesamt {formatNumber(XP_TO_MAX)} XP. XP gibt es aus Quests und Kämpfen.
+            Für das erste Level-up braucht es {formatNumber(xpForNextLevel(1))} XP, für Level 30 schon{" "}
+            {formatNumber(xpForNextLevel(30))} XP. Das Maximallevel {MAX_LEVEL} erreichst du nach insgesamt{" "}
+            {formatNumber(XP_TO_MAX)} XP. XP gibt es aus Quests und Kämpfen – höhere Level brauchen deutlich mehr Siege.
+          </p>
+          <p>
+            Gegner, die mehr als {XP_PENALTY_FREE_LEVELS} Level unter dir liegen, geben weniger Erfahrung: pro Level 15 %
+            weniger, höchstens bis auf 10 %. Im Kampf-Tab steht bei jedem Gegner, wie viel er dir noch bringt.
           </p>
           <p>
             Jedes Level-up bringt <b>{POINTS_PER_LEVEL} Attributpunkte</b> (im Charakter-Tab frei verteilen) und{" "}

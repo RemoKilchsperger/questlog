@@ -3,6 +3,7 @@ import { addToChest, EMPTY_CHEST, startBattle, type BattleState, type HeroCombat
 import { getCreature, getDungeon } from "../domain/creatures";
 import { dateKey } from "../domain/calendar";
 import { getQuest } from "../domain/quests";
+import { convertLinearCurveXp } from "../domain/leveling";
 import { migrateSave, useGameStore } from "./gameStore";
 
 const hero: HeroCombatProfile = {
@@ -116,7 +117,7 @@ describe("Migration auf v14", () => {
     expect(state.bonusDone).toBeUndefined();
     expect(state.character.battlePoints).toBeUndefined();
     expect(state.character.battlePointSlot).toBeUndefined();
-    expect(state.character.totalXp).toBe(500);
+    expect(state.character.totalXp).toBe(convertLinearCurveXp(500));
     expect(state.records).toMatchObject({ battlesWon: 4, questsCompleted: 2, dailyQuestsCompleted: 1 });
     expect(state.questLog).toEqual({ active: {}, completed: [] });
   });

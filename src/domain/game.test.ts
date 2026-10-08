@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   allocatePoint,
+  convertLinearCurveXp,
+  getLevel,
   getLevelProgress,
   MAX_LEVEL,
   POINTS_PER_LEVEL,
+  totalXpForLevel,
   unspentPoints,
   xpForNextLevel,
+  xpRewardBase,
 } from "./leveling";
 import type { Character } from "./types";
-import { getCreature, getCreatureXp } from "./creatures";
+import { getCreature, getCreatureXp, xpLevelFactor } from "./creatures";
 
 describe("Kampf-Erfahrung", () => {
   it("Siege geben Erfahrung – Bosse und höhere Level mehr", () => {
@@ -17,7 +21,24 @@ describe("Kampf-Erfahrung", () => {
     const chief = getCreature("goblin-chief").creature;
     expect(getCreatureXp(rat)).toBe(8);
     expect(getCreatureXp(wolf)).toBeGreaterThan(getCreatureXp(rat));
-    expect(getCreatureXp(chief)).toBe(3 * Math.round(xpForNextLevel(10) * 0.08));
+    expect(getCreatureXp(chief)).toBe(Math.round(xpRewardBase(10) * 0.08 * 1.25));
+  });
+
+  it("zu leichte Gegner geben weniger – bis 3 Level darunter voll, nie unter 10 %", () => {
+    expect(xpLevelFactor(10, 13)).toBe(1);
+    expect(xpLevelFactor(10, 14)).toBeCloseTo(0.85);
+    expect(xpLevelFactor(10, 18)).toBeCloseTo(0.25);
+    expect(xpLevelFactor(1, 60)).toBe(0.1);
+    expect(xpLevelFactor(30, 10)).toBe(1); // stärkere Gegner: kein Abzug
+    const rat = getCreature("giant-rat").creature;
+    expect(getCreatureXp(rat, 10)).toBe(1); // 8 XP × 10 % – mindestens 1
+  });
+
+  it("spätere Level brauchen deutlich mehr Siege als frühe", () => {
+    const winsFor = (level: number) => xpForNextLevel(level) / (xpRewardBase(level) * 0.08);
+    expect(winsFor(1)).toBeCloseTo(12.5);
+    expect(winsFor(30)).toBeGreaterThan(30);
+    expect(winsFor(59)).toBeGreaterThan(50);
   });
 });
 
@@ -38,10 +59,9 @@ describe("Leveling", () => {
     expect(getLevelProgress(10_000).level).toBeGreaterThan(5);
   });
 
-  it("flache Kurve: Level 60 ist mit rund 48’700 XP erreichbar", () => {
-    let total = 0;
-    for (let level = 1; level < MAX_LEVEL; level++) total += xpForNextLevel(level);
-    expect(total).toBe(48_675);
+  it("Level 60 ist mit rund 148’800 XP erreichbar", () => {
+    const total = totalXpForLevel(MAX_LEVEL);
+    expect(total).toBe(148_783);
     expect(getLevelProgress(total).level).toBe(MAX_LEVEL);
     expect(getLevelProgress(total - 1).level).toBe(MAX_LEVEL - 1);
   });
@@ -91,4 +111,26 @@ describe("Leveling", () => {
     expect(unspentPoints(hero)).toBe(0);
   });
 
+});
+
+describe("Umrechnung der alten Level-Kurve", () => {
+  const oldTotal = (level: number) => {
+    let total = 0;
+    for (let l = 1; l < level; l++) total += xpRewardBase(l);
+    return total;
+  };
+
+  it("das Level bleibt gleich, der Fortschritt im Level auch", () => {
+    for (const level of [1, 2, 10, 30, 59]) {
+      expect(getLevel(convertLinearCurveXp(oldTotal(level)))).toBe(level);
+      expect(convertLinearCurveXp(oldTotal(level))).toBe(totalXpForLevel(level));
+    }
+    // Halb durch Level 10
+    const half = convertLinearCurveXp(oldTotal(10) + xpRewardBase(10) / 2);
+    expect(getLevelProgress(half).level).toBe(10);
+    expect(getLevelProgress(half).ratio).toBeCloseTo(0.5, 2);
+    // Maximallevel bleibt Maximallevel
+    expect(getLevel(convertLinearCurveXp(48_675))).toBe(MAX_LEVEL);
+    expect(convertLinearCurveXp(0)).toBe(0);
+  });
 });

@@ -302,12 +302,12 @@ describe("Koop-Dungeons", () => {
   it("die Truhe enthält die Beute aller gewonnenen Kämpfe – und ist beim Neuwürfeln gleich", () => {
     const won = win(startMine());
     const chest = rollCoopDungeonChest(won, profile(), "a");
-    expect(chest.xp).toBe(getCreatureXp(getDungeon(MINE).creatures[0]));
+    expect(chest.xp).toBe(getCreatureXp(getDungeon(MINE).creatures[0], profile().level));
     expect(rollCoopDungeonChest(won, profile(), "a")).toEqual(chest);
     // Zwei Kämpfe: XP beider Gegner
     const second = win(nextDungeonStage(won, "k2", 0));
     const [c1, c2] = getDungeon(MINE).creatures;
-    expect(rollCoopDungeonChest(second, profile(), "a").xp).toBe(getCreatureXp(c1) + getCreatureXp(c2));
+    expect(rollCoopDungeonChest(second, profile(), "a").xp).toBe(getCreatureXp(c1, profile().level) + getCreatureXp(c2, profile().level));
     // Verloren: der laufende Kampf zählt nicht
     expect(clearedStages({ ...second, status: "lost" })).toBe(1);
   });

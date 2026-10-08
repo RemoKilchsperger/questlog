@@ -23,6 +23,7 @@ import {
   getCreatureStats,
   getCreatureXp,
   isAreaUnlocked,
+  xpLevelFactor,
   type AreaDef,
   type CreatureDef,
 } from "../domain/creatures";
@@ -277,7 +278,15 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
         </p>
         <div className="flex flex-wrap gap-x-3 text-xs text-muted">
           <span>Lv. {creature.level}</span>
-          <span className="text-xp">+{getCreatureXp(creature)} XP</span>
+          {xpLevelFactor(creature.level, heroLevel) < 1 ? (
+            <Hint text="Dieser Gegner ist für dich zu leicht – er gibt weniger Erfahrung.">
+              <span className="text-muted">
+                +{getCreatureXp(creature, heroLevel)} XP ({Math.round(xpLevelFactor(creature.level, heroLevel) * 100)} %)
+              </span>
+            </Hint>
+          ) : (
+            <span className="text-xp">+{getCreatureXp(creature, heroLevel)} XP</span>
+          )}
           <span className="text-xp">{stats.maxHp} LP</span>
           <span className="text-strength">~{Math.round(stats.damage)} Schaden</span>
           <span className="text-intellect">{stats.armor} Rüstung</span>

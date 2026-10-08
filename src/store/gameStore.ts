@@ -57,7 +57,7 @@ import {
 import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon } from "../domain/skills";
 import type { AbilityId } from "../domain/abilities";
 import { dateKey } from "../domain/calendar";
-import { allocatePoint, getLevel, resetAttributes } from "../domain/leveling";
+import { allocatePoint, convertLinearCurveXp, getLevel, resetAttributes } from "../domain/leveling";
 import { buyOffer, EMPTY_SHOP, rerollShop, rollShopStock, shopSlot, type ShopStock } from "../domain/shop";
 import type { Character, EquipSlot, Equipment, Loot, OwnedItem, StatKey } from "../domain/types";
 import { EventBus } from "../game/EventBus";
@@ -385,6 +385,10 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
         dailyQuestsCompleted: done.filter((q) => q.bonus).length,
       },
     };
+  }
+  // v14 → v15: steilere Level-Kurve – die XP werden umgerechnet, das Level bleibt gleich.
+  if (version < 15) {
+    state = { ...state, character: { ...state.character, totalXp: convertLinearCurveXp(state.character.totalXp) } };
   }
   return state;
 }
@@ -857,7 +861,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 14,
+      version: 15,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,

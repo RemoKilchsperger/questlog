@@ -12,7 +12,7 @@ const saveAt = (level: number, name = "Held") => {
   let totalXp = 0;
   for (let l = 1; l < level; l++) totalXp += xpForNextLevel(l);
   return {
-    version: 13,
+    version: 15,
     state: {
       character: { name, totalXp, stats: { strength: 10, intellect: 5, endurance: 10, charisma: 1 }, skills: {}, abilities: [] },
       equipment: { ...EMPTY_EQUIPMENT, weapon1: createItem("sword-60", "common", "w") },

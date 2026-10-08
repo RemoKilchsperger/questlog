@@ -2,7 +2,7 @@
 // Kreaturen plus einen Boss. Die Kampfwerte werden aus Level und Boss-Status
 // berechnet, damit die Balance an einer Stelle angepasst werden kann.
 
-import { xpForNextLevel } from "./leveling";
+import { xpRewardBase } from "./leveling";
 import type { Rarity } from "./types";
 
 export interface CreatureDef {
@@ -249,13 +249,30 @@ export function getCreaturePotionDrop(creature: CreatureDef): { chance: number; 
   return creature.boss ? { chance: 1, potionId, count: 2 } : { chance: 0.25, potionId, count: 1 };
 }
 
+/** Bosse geben nur etwas mehr Erfahrung als normale Kreaturen gleichen Levels. */
+export const BOSS_XP_FACTOR = 1.25;
+
+/** Ab so vielen Leveln unter dem Helden gibt eine Kreatur weniger Erfahrung … */
+export const XP_PENALTY_FREE_LEVELS = 3;
+/** … pro weiterem Level 15 % weniger, aber nie unter 10 %. */
+const XP_PENALTY_STEP = 0.15;
+const XP_PENALTY_MIN = 0.1;
+
+/** Anteil der Erfahrung, den eine Kreatur dem Helden noch gibt – zu leichte Gegner lohnen sich kaum. */
+export function xpLevelFactor(creatureLevel: number, heroLevel: number): number {
+  const below = heroLevel - creatureLevel - XP_PENALTY_FREE_LEVELS;
+  return below <= 0 ? 1 : Math.max(XP_PENALTY_MIN, 1 - XP_PENALTY_STEP * below);
+}
+
 /**
- * Erfahrung für einen Sieg: 8 % dessen, was auf dem Level der Kreatur bis zum
- * nächsten Level fehlt – Bosse geben das Dreifache. Lv. 1 → 8 XP, Lv. 30 → 66 XP,
- * Boss Lv. 60 → 378 XP. Niederlagen und Fluchten geben nichts.
+ * Erfahrung für einen Sieg: 8 % des Belohnungs-Grundwerts auf dem Level der
+ * Kreatur – Bosse ×1.25. Lv. 1 → 8 XP, Lv. 30 → 66 XP, Boss Lv. 60 → 158 XP.
+ * Mit `heroLevel` sinkt sie für Kreaturen weit unter dem Helden (siehe
+ * `xpLevelFactor`). Niederlagen und Fluchten geben nichts.
  */
-export function getCreatureXp(creature: CreatureDef): number {
-  return Math.round(xpForNextLevel(creature.level) * 0.08 * (creature.boss ? 3 : 1));
+export function getCreatureXp(creature: CreatureDef, heroLevel: number = creature.level): number {
+  const base = xpRewardBase(creature.level) * 0.08 * (creature.boss ? BOSS_XP_FACTOR : 1);
+  return Math.max(1, Math.round(base * xpLevelFactor(creature.level, heroLevel)));
 }
 
 /**

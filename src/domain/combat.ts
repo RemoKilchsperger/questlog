@@ -686,7 +686,7 @@ export function rollBattleReward(
   const { dropChance, weights } = getCreatureLoot(creature);
   const potionDrop = getCreaturePotionDrop(creature);
   return {
-    xp: getCreatureXp(creature),
+    xp: getCreatureXp(creature, hero.level),
     loot: rollDrop(dropChance, weights, creature.level, uid, rng),
     potions: rng() < potionDrop.chance ? { potionId: potionDrop.potionId, count: potionDrop.count } : null,
     bossLoot: rollBossLoot(creature, `${uid}-boss`, rng),

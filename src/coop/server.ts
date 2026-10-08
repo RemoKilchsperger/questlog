@@ -17,7 +17,7 @@ import {
   startCoopBattle,
 } from "../domain/coopCombat";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
-import { getLevel } from "../domain/leveling";
+import { convertLinearCurveXp, getLevel } from "../domain/leveling";
 import type { Character, Equipment } from "../domain/types";
 import type { CoopCommand, CoopMember, CoopRow } from "./protocol";
 
@@ -45,12 +45,14 @@ export const COOP_ROW_TTL_HOURS = 24;
  * mit neutralen Werten ergänzt.
  */
 export function memberFromSave(id: string, save: unknown, username: string | null): CoopMember {
-  const state = (save as { state?: { character?: Partial<Character>; equipment?: Partial<Equipment> } } | null)?.state;
+  const saved = save as { state?: { character?: Partial<Character>; equipment?: Partial<Equipment> }; version?: number } | null;
+  const state = saved?.state;
   if (!state?.character) throw new CoopError("Kein Cloud-Spielstand gefunden – bitte einmal online speichern.");
   const raw = state.character;
   const character: Character = {
     name: raw.name ?? "Held",
-    totalXp: raw.totalXp ?? 0,
+    // Stände vor v15 (lineare Level-Kurve) sind noch nicht umgerechnet
+    totalXp: typeof saved?.version === "number" && saved.version < 15 ? convertLinearCurveXp(raw.totalXp ?? 0) : (raw.totalXp ?? 0),
     gold: raw.gold ?? 0,
     essence: raw.essence ?? 0,
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1, ...raw.stats },

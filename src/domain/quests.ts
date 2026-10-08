@@ -4,7 +4,7 @@
 // Gold und eine Chance auf ein Item. Reine Logik ohne UI – wie der Rest von
 // src/domain auch später serverseitig nutzbar.
 
-import { xpForNextLevel } from "./leveling";
+import { xpRewardBase } from "./leveling";
 import { rollDrop } from "./loot";
 import { AREAS, DUNGEONS, getCreature, isAreaUnlocked, type AreaDef, type CreatureDef } from "./creatures";
 import type { Loot, Rarity } from "./types";
@@ -48,7 +48,7 @@ export type QuestEvent = { kind: "kill"; creatureId: string } | { kind: "dungeon
 
 /* ───────────── Belohnungen ───────────── */
 
-/** Pro „Einheit“ einer Quest: Anteil der XP bis zum nächsten Level … */
+/** Pro „Einheit“ einer Quest: Anteil des Belohnungs-Grundwerts (`xpRewardBase`) … */
 const XP_PER_UNIT = 0.06;
 /** … und Gold als Vielfaches des Kreatur-Grundwerts `3 + Level`. */
 const GOLD_PER_UNIT = 0.6;
@@ -68,7 +68,7 @@ export const DAILY_DROP_CHANCE = 0.35;
 
 function questReward(level: number, units: number, dropChance: number, weights: Record<Rarity, number>): QuestReward {
   return {
-    xp: Math.round(xpForNextLevel(level) * XP_PER_UNIT * units),
+    xp: Math.round(xpRewardBase(level) * XP_PER_UNIT * units),
     gold: Math.round((3 + level) * GOLD_PER_UNIT * units),
     dropChance,
     weights,

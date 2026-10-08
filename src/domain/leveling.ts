@@ -4,12 +4,48 @@ import type { Character, StatKey } from "./types";
 export const MAX_LEVEL = 60;
 
 /**
+ * Grundwert für Belohnungen: Kampf- und Quest-XP rechnen damit. Wächst linear
+ * (100 auf Level 1, +25 pro Level) – langsamer als die Level-Kurve, damit
+ * spätere Level mehr Siege brauchen.
+ */
+export function xpRewardBase(level: number): number {
+  return 100 + 25 * (level - 1);
+}
+
+/** Krümmung der Level-Kurve – je grösser, desto zäher die hohen Level. */
+const LEVEL_CURVE = 1.5;
+
+/**
  * Level-Kurve: XP, die nötig sind, um von `level` auf `level + 1` zu kommen.
- * Linear: Level 1→2 braucht 100 XP, jedes weitere Level 25 XP mehr
- * (100, 125, 150 … 1550). Bis Level 60 sind es insgesamt rund 48’700 XP.
+ * `100 + 25·n + 1.5·n²` mit n = Level − 1: Level 1→2 braucht 100 XP, Level 30
+ * 2087, Level 59 6596. Bis Level 60 sind es insgesamt rund 148’800 XP – mit
+ * gleichstarken Gegnern anfangs etwa 13 Siege pro Level, gegen Ende über 50.
  */
 export function xpForNextLevel(level: number): number {
-  return 100 + 25 * (level - 1);
+  const n = level - 1;
+  return Math.round(100 + 25 * n + LEVEL_CURVE * n * n);
+}
+
+/**
+ * Rechnet Gesamt-XP der früheren, linearen Kurve (`100 + 25·n` pro Level) auf
+ * die heutige um – gleiches Level, gleicher Anteil am nächsten Level.
+ */
+export function convertLinearCurveXp(oldTotalXp: number): number {
+  let level = 1;
+  let remaining = Math.max(0, Math.floor(oldTotalXp));
+  while (level < MAX_LEVEL && remaining >= xpRewardBase(level)) {
+    remaining -= xpRewardBase(level);
+    level++;
+  }
+  if (level === MAX_LEVEL) return totalXpForLevel(MAX_LEVEL);
+  return totalXpForLevel(level) + Math.floor((remaining / xpRewardBase(level)) * xpForNextLevel(level));
+}
+
+/** Gesamt-XP, um `level` zu erreichen (Level 1 = 0). */
+export function totalXpForLevel(level: number): number {
+  let total = 0;
+  for (let l = 1; l < Math.min(level, MAX_LEVEL); l++) total += xpForNextLevel(l);
+  return total;
 }
 
 export interface LevelProgress {

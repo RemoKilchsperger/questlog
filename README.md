@@ -74,7 +74,7 @@ Annehmen ab dem Mindest-Level des Gebiets, nur Siege nach dem Annehmen zählen, 
 | Boss | 8 | garantiert, eher selten |
 | Dungeon | 12 | garantiert, mindestens selten |
 
-Belohnung pro Einheit: `6 % · XP bis zum nächsten Level` und `0.6 · (3 + Level)` Gold – Level der Kreatur
+Belohnung pro Einheit: `6 % · xpRewardBase(Level)` und `0.6 · (3 + Level)` Gold – Level der Kreatur
 bzw. des Dungeons. Das Item hat das Level des Helden.
 
 **Tagesaufträge:** 3 pro Tag, je 3–6 Siege gegen verschiedene Kreaturen passend zum Level (keine Bosse).
@@ -82,7 +82,10 @@ Sie laufen ohne Annehmen, geben dieselbe Belohnung pro Sieg und 35 % auf ein Ite
 
 ### Level und Skills
 
-- Level-Kurve: Für Level *n* → *n+1* braucht es `100 + 25 · (n − 1)` XP. Maximallevel 60 nach 48’675 XP.
+- Level-Kurve: Für Level *n* → *n+1* braucht es `100 + 25 · m + 1.5 · m²` XP mit m = n − 1. Maximallevel 60 nach 148’783 XP.
+- Belohnungen rechnen mit dem linearen Grundwert `100 + 25 · m` (`xpRewardBase`) – so brauchen hohe Level mehr Siege:
+  gegen gleichstarke Gegner anfangs ~13 pro Level, auf Level 30 ~32, gegen Ende ~53.
+- Gegner mehr als 3 Level unter dem Helden geben 15 % weniger XP pro Level, mindestens 10 %.
 - Pro Level-up: 2 Attributpunkte und 1 Skillpunkt.
 - **Skills:** pro Waffentyp (inkl. Schild) 5 Ränge à +2 % Waffenschaden (Schild: +2 % Schild-Rüstung).
   Ab Rang 3 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei –
@@ -152,7 +155,7 @@ Attributpunkte lassen sich zurücksetzen: das erste Mal kostenlos, danach `50 ·
 
 Klassen, Boss-Sets und leichte Rüstung kommen jeweils noch dazu.
 
-- **Sieg:** XP (8 % des Levelbedarfs der Kreatur, Bosse ×3), 40 % Chance auf Gold, 35 % auf ein Item,
+- **Sieg:** XP (8 % des Grundwerts auf dem Level der Kreatur, Bosse ×1.25, Abzug für zu leichte Gegner), 40 % Chance auf Gold, 35 % auf ein Item,
   25 % auf einen Heiltrank, 6 % auf einen Verstärkungstrank. Bosse geben immer Gold (×4), ein Item und
   zwei Tränke. Bosse setzen alle paar Runden eine angekündigte Fähigkeit ein.
 - **Flucht:** jederzeit möglich, kostet die durchschnittliche Gold-Beute der Kreatur.
