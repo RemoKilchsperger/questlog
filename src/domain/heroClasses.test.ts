@@ -4,7 +4,7 @@ import { attackRound, drinkPotion, getHeroCombatProfile, startBattle, type Battl
 import { resolveRound, startCoopBattle } from "./coopCombat";
 import { getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { classAbility, detectHeroClass, HERO_CLASSES } from "./heroClasses";
+import { classAbility, CLERIC_POTION_FACTOR, CLERIC_REGEN, detectHeroClass, HERO_CLASSES, PLUNDERER_LIFESTEAL } from "./heroClasses";
 import { createItem } from "./items";
 import { getPotion } from "./potions";
 import type { ArmorClass, Character, Equipment } from "./types";
@@ -86,6 +86,13 @@ describe("Klassen: Werte und Fähigkeiten", () => {
     const paladin = profile(gear("heavy", "mace-90", "shield-90"));
     expect(paladin.heroClass).toBe("paladin");
     expect(paladin.armor).toBeGreaterThan(profile(gear("heavy", "mace-90", "shield-90", 2)).armor);
+    expect(paladin.damage).toBeCloseTo(profile(gear("heavy", "mace-90", "shield-90", 2)).damage * 1.1);
+  });
+
+  it("Waldläufer: +12 % Schaden", () => {
+    const ranger = profile(gear("medium", "bow-90"));
+    expect(ranger.heroClass).toBe("ranger");
+    expect(ranger.damage).toBeCloseTo(profile(gear("medium", "bow-90", null, 2)).damage * 1.12);
   });
 
   it("Assassine: +20 % Krit, Krits 2,25-fach; Plünderer: +25 % Gold", () => {
@@ -102,6 +109,8 @@ describe("Klassen: Werte und Fähigkeiten", () => {
     expect(classAbility("bow", "ranger").hits).toBe(5);
     expect(classAbility("shield", "paladin").manaCost).toBe(10);
     expect(classAbility("greathammer", "warden").stun).toBeUndefined();
+    expect(classAbility("greathammer-2", "warden").weaken).toEqual({ percent: 0.4, rounds: 3 });
+    expect(classAbility("greathammer-2", null).weaken).toEqual({ percent: 0.4, rounds: 2 });
     expect(classAbility("scepter", "warlock").poison).toEqual({ percent: expect.closeTo(0.6), rounds: 4 });
     expect(classAbility("staff", null)).toEqual(getAbility("staff"));
   });
@@ -127,14 +136,25 @@ describe("Klassen: Kampfmechanik", () => {
     expect(state.enemyEffects.bleed?.roundsLeft).toBe(1);
   });
 
+  it("Plünderer heilt sich um 10 % des verursachten Schadens", () => {
+    const state = battle(gear("medium", "axe-90"));
+    const hurt = { ...state, hero: { ...state.hero, hp: 10 } };
+    const { events } = attackRound(hurt, rng(0.5));
+    const dealt = events.filter((e) => e.type === "hit" && e.attacker === "hero").reduce((sum, e) => sum + (e as { damage: number }).damage, 0);
+    expect(events).toContainEqual({ type: "selfHeal", heal: Math.round(dealt * PLUNDERER_LIFESTEAL) });
+    // Ohne Klasse kein Lebensraub
+    const plain = battle(gear("medium", "axe-90", null, 2));
+    expect(attackRound({ ...plain, hero: { ...plain.hero, hp: 10 } }, rng(0.5)).events.some((e) => e.type === "selfHeal")).toBe(false);
+  });
+
   it("Kleriker regeneriert jede Runde und heilt mit Tränken stärker", () => {
     const hurt = (s: BattleState): BattleState => ({ ...s, hero: { ...s.hero, hp: Math.round(s.hero.maxHp / 2) } });
     const cleric = hurt(battle(gear("medium", "mace-90")));
-    expect(attackRound(cleric, rng(0.5)).events).toContainEqual({ type: "regen", heal: Math.round(cleric.hero.maxHp * 0.03) });
+    expect(attackRound(cleric, rng(0.5)).events).toContainEqual({ type: "regen", heal: Math.round(cleric.hero.maxHp * CLERIC_REGEN) });
     const plain = hurt(battle(gear("medium", "mace-90", null, 2)));
     const potion = getPotion("small");
     const healed = (s: BattleState) => drinkPotion(s, potion).state.hero.hp - s.hero.hp;
-    expect(healed(cleric) / healed(plain)).toBeCloseTo(1.3, 1);
+    expect(healed(cleric) / healed(plain)).toBeCloseTo(CLERIC_POTION_FACTOR, 1);
   });
 
   it("Berserker wird unter 50 % LP stärker", () => {

@@ -14,6 +14,8 @@ export interface CreatureDef {
   boss: boolean;
   /** Faktor auf Lebenspunkte und Schaden – Dungeon-Gegner sind stärker (Standard 1) */
   power?: number;
+  /** Nur Bosse: eigene Faktoren auf Lebenspunkte und Schaden statt BOSS_HP_FACTOR / BOSS_DAMAGE_FACTOR */
+  bossFactors?: { hp: number; damage: number };
 }
 
 export interface AreaDef {
@@ -29,13 +31,30 @@ export interface AreaDef {
   dungeon?: boolean;
 }
 
+/**
+ * Gebietsbosse sind schwächer als Dungeon- und Raid-Bosse: Man trifft sie allein,
+ * ohne Gruppe. Per Simulation über alle Klassen abgestimmt: Ein gut gespielter Held
+ * auf dem Level des Bosses (aktive Klasse, gewöhnliche Ausrüstung, Fähigkeiten)
+ * verliert ohne Heiltränke meistens und gewinnt mit Heiltränken meistens.
+ */
+export const AREA_BOSS_FACTORS = { hp: 2, damage: 1 };
+
+/**
+ * Dungeon-Bosse kommen nach drei Kämpfen ohne Heilung dazwischen und haben zwei
+ * Fähigkeiten im Wechsel – Lebenspunkte und Schaden gegenüber einer normalen Kreatur
+ * gleichen Levels. Abgestimmt wie die Gebietsbosse, aber für den ganzen Dungeon:
+ * Mit Heiltränken schaffen ihn die meisten Klassen auf Boss-Level meistens, den
+ * Abgrund der Leere (Level 60) nur gut ausgerüstet.
+ */
+export const DUNGEON_BOSS_FACTORS = { hp: 1.6, damage: 0.9 };
+
 const c = (id: string, name: string, sprite: string, level: number, boss = false): CreatureDef => ({
-  id, name, sprite, level, boss,
+  id, name, sprite, level, boss, ...(boss && { bossFactors: AREA_BOSS_FACTORS }),
 });
 
 /** Dungeon-Gegner: wie `c`, aber mit Stärke-Faktor. */
 const d = (id: string, name: string, sprite: string, level: number, power: number, boss = false): CreatureDef => ({
-  id, name, sprite, level, boss, power,
+  id, name, sprite, level, boss, power, ...(boss && { bossFactors: DUNGEON_BOSS_FACTORS }),
 });
 
 export const AREAS: readonly AreaDef[] = [
@@ -132,15 +151,13 @@ export const AREAS: readonly AreaDef[] = [
 ];
 
 /**
- * Stärke der Dungeon-Gegner gegenüber normalen Kreaturen gleichen Levels.
- * Die Bosse sind schon als Boss deutlich stärker, stehen 2 Level über dem
- * Mindest-Level und haben eine Fähigkeit – sie werden daher leicht abgeschwächt,
- * damit man sie auch nach drei Kämpfen ohne Heilung noch schaffen kann.
+ * Stärke der Dungeon-Gegner gegenüber normalen Kreaturen gleichen Levels. Per
+ * Simulation über alle Klassen abgestimmt: Ein gut gespielter Held auf dem Level
+ * des Bosses kommt mit Heiltränken sicher bis zum Boss, ohne sie kaum. Die Bosse
+ * haben eigene Faktoren (DUNGEON_BOSS_FACTORS).
  */
-const DUNGEON_POWER = 1.2;
-const ABYSS_POWER = 1.2;
-const DUNGEON_BOSS_POWER = 0.9;
-const ABYSS_BOSS_POWER = 1;
+const DUNGEON_POWER = 1.1;
+const ABYSS_POWER = 1.1;
 
 /**
  * Dungeons: mehrere Gegner hintereinander, zwischen den Kämpfen keine Heilung,
@@ -159,7 +176,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("mine-rat", "Minenratte", "mine-rat", 10, DUNGEON_POWER),
       d("kobold-blaster", "Kobold-Sprengmeister", "kobold", 11, DUNGEON_POWER),
       d("pit-spider", "Grubenspinne", "pit-spider", 11, DUNGEON_POWER),
-      d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, DUNGEON_BOSS_POWER, true),
+      d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true),
     ],
   },
   {
@@ -174,7 +191,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("temple-guardian", "Tempelwächter", "temple-guardian", 25, DUNGEON_POWER),
       d("cobra-priest", "Kobra-Priester", "cobra-priest", 26, DUNGEON_POWER),
       d("mummy", "Mumie", "mummy", 26, DUNGEON_POWER),
-      d("high-priestess", "Hohepriesterin Neferet", "high-priestess", 27, DUNGEON_BOSS_POWER, true),
+      d("high-priestess", "Hohepriesterin Neferet", "high-priestess", 27, 1, true),
     ],
   },
   {
@@ -189,7 +206,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("thunder-elemental", "Gewitterelementar", "thunder-elemental", 40, DUNGEON_POWER),
       d("stone-gargoyle", "Steingargoyle", "gargoyle", 41, DUNGEON_POWER),
       d("lightning-caller", "Blitzbeschwörer", "lightning-caller", 41, DUNGEON_POWER),
-      d("storm-lord", "Sturmfürst Kaelthar", "storm-lord", 42, DUNGEON_BOSS_POWER, true),
+      d("storm-lord", "Sturmfürst Kaelthar", "storm-lord", 42, 1, true),
     ],
   },
   {
@@ -204,7 +221,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("void-crawler", "Leerenkriecher", "void-crawler", 60, ABYSS_POWER),
       d("shadow-demon", "Schattendämon", "shadow-demon", 60, ABYSS_POWER),
       d("soul-eater", "Seelenfresser", "soul-eater", 60, ABYSS_POWER),
-      d("void-lord", "Leerenfürst Xal'Zar", "void-lord", 60, ABYSS_BOSS_POWER, true),
+      d("void-lord", "Leerenfürst Xal'Zar", "void-lord", 60, 1, true),
     ],
   },
 ];
@@ -222,12 +239,17 @@ export interface CreatureStats {
  * mit passender gewöhnlicher Ausrüstung etwa 5–7 Runden braucht und dabei
  * gut die Hälfte seiner Lebenspunkte verliert. Bosse halten deutlich mehr aus.
  */
+/** Dungeon- und Raid-Bosse: Lebenspunkte und Schaden gegenüber einer normalen Kreatur gleichen Levels. */
+export const BOSS_HP_FACTOR = 3;
+export const BOSS_DAMAGE_FACTOR = 1.25;
+
 export function getCreatureStats(creature: CreatureDef): CreatureStats {
   const L = creature.level;
   const power = creature.power ?? 1;
+  const factors = creature.boss ? (creature.bossFactors ?? { hp: BOSS_HP_FACTOR, damage: BOSS_DAMAGE_FACTOR }) : { hp: 1, damage: 1 };
   return {
-    maxHp: Math.round((60 + 14 * L) * (creature.boss ? 3 : 1) * power),
-    damage: (8 + 2.2 * L) * (creature.boss ? 1.25 : 1) * power,
+    maxHp: Math.round((60 + 14 * L) * factors.hp * power),
+    damage: (8 + 2.2 * L) * factors.damage * power,
     armor: Math.round(L * 3 * (creature.boss ? 1.3 : 1)),
     critChance: creature.boss ? 0.1 : 0.05,
   };

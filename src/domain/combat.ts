@@ -34,6 +34,7 @@ import {
   detectHeroClass,
   DUELIST_EXTRA_HIT,
   PLUNDERER_BLEED,
+  lifestealShare,
   rageFactor,
   type HeroClassId,
 } from "./heroClasses";
@@ -469,9 +470,10 @@ export function attackRound(
   for (let i = 0; i < (ability?.hits ?? 1) && enemy.hp > 0; i++) strike();
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
   if (!ability && state.heroClass === "duelist" && enemy.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike();
-  // Blutrausch: Lebensraub
-  if (ability?.lifesteal && dealtByHero > 0) {
-    const heal = Math.min(hero.maxHp - hero.hp, Math.round(dealtByHero * ability.lifesteal));
+  // Lebensraub: Blutrausch und Plünderer
+  const lifesteal = lifestealShare(state.heroClass, ability);
+  if (lifesteal > 0 && dealtByHero > 0) {
+    const heal = Math.min(hero.maxHp - hero.hp, Math.round(dealtByHero * lifesteal));
     hero = { ...hero, hp: hero.hp + heal };
     if (heal > 0) events.push({ type: "selfHeal", heal });
   }

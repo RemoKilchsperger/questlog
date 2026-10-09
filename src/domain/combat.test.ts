@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  abilityBlocker,
   attackRound,
   drinkPotion,
   flee,
   fleeCost,
   getHeroCombatProfile,
+  potionBlocker,
   BOSS_ITEM_DROP_CHANCE,
   rollBattleReward,
   rollBossLoot,
@@ -355,6 +357,72 @@ describe("Gebiete und Balance", () => {
         expect(avgRounds, `${creature.name}: Runden`).toBeGreaterThanOrEqual(3);
         expect(avgRounds, `${creature.name}: Runden`).toBeLessThanOrEqual(10);
       }
+    }
+  });
+
+  // Gut gespielter Champion: schwere Rüstung + Zweihandschwert, gewöhnliche Ausrüstung, nur die Level-up-Punkte
+  // (60 % Stärke, 40 % Ausdauer), Skill und Fähigkeiten des Zweihandschwerts – die er auch einsetzt.
+  const champion = (level: number) => {
+    const points = 2 * (level - 1);
+    const strength = Math.round(points * 0.6);
+    const character: Character = {
+      ...heroAt(level),
+      stats: { strength: 1 + strength, intellect: 1, endurance: 1 + points - strength, charisma: 1 },
+      spentPoints: points,
+      skills: { greatsword: 5 },
+      abilities: level >= 25 ? ["greatsword", "greatsword-2"] : ["greatsword"],
+    };
+    const equipment = { ...gearAt(level), weapon1: createItem(`greatsword-${indexForLevel(level)}`, "common", "gs", () => 0.5), weapon2: null };
+    return getHeroCombatProfile(character, equipment);
+  };
+
+  /** Kampf mit Fähigkeiten und – falls erlaubt – Heiltränken unter 40 % LP. */
+  const fightWell = (start: BattleState, rng: () => number, potions: boolean): BattleState => {
+    let state = start;
+    expect(state.heroClass).toBe("champion");
+    while (state.status === "active") {
+      if (potions && state.hero.hp < state.hero.maxHp * 0.4) {
+        const potion = ["medium", "small"].map(getPotion).find((p) => potionBlocker(state, p) === null);
+        if (potion) state = drinkPotion(state, potion).state;
+      }
+      const ability = (["greatsword-2", "greatsword"] as const).find((id) => abilityBlocker(state, id) === null);
+      state = attackRound(state, rng, ability).state;
+    }
+    return state;
+  };
+
+  it("Gebietsbosse: ein gut gespielter Champion auf Boss-Level verliert ohne Heiltränke meistens, gewinnt mit ihnen meistens", () => {
+    const fight = (boss: CreatureDef, rng: () => number, potions: boolean) =>
+      fightWell(startBattle("b", "Held", champion(boss.level), boss), rng, potions).status === "won";
+    for (const area of AREAS) {
+      const boss = area.creatures.at(-1)!;
+      const rng = seeded(boss.level);
+      const withoutPotions = Array.from({ length: 100 }, () => fight(boss, rng, false)).filter(Boolean).length;
+      const withPotions = Array.from({ length: 100 }, () => fight(boss, rng, true)).filter(Boolean).length;
+      expect(withoutPotions, `${boss.name}: Siege ohne Tränke`).toBeLessThan(25);
+      expect(withPotions, `${boss.name}: Siege mit Heiltränken`).toBeGreaterThan(60);
+    }
+  });
+
+  it("Dungeons bis Level 42: ein gut gespielter Champion schafft sie mit Heiltränken meistens, ohne kommt er kaum zum Boss", () => {
+    /** Erreichte Stufe – LP werden mitgenommen, keine Heilung zwischen den Kämpfen. */
+    const run = (dungeon: (typeof DUNGEONS)[number], rng: () => number, potions: boolean) => {
+      const hero = champion(dungeon.creatures.at(-1)!.level);
+      let hp = hero.maxHp;
+      for (let i = 0; i < dungeon.creatures.length; i++) {
+        const end = fightWell(startBattle("b", "Held", hero, dungeon.creatures[i], hp), rng, potions);
+        if (end.status !== "won") return i;
+        hp = end.hero.hp;
+      }
+      return dungeon.creatures.length;
+    };
+    for (const dungeon of DUNGEONS.filter((d) => d.minLevel < 60)) {
+      const rng = seeded(dungeon.minLevel);
+      const last = dungeon.creatures.length - 1;
+      const withoutPotions = Array.from({ length: 100 }, () => run(dungeon, rng, false));
+      const withPotions = Array.from({ length: 100 }, () => run(dungeon, rng, true));
+      expect(withoutPotions.filter((s) => s >= last).length, `${dungeon.name}: ohne Tränke beim Boss`).toBeLessThan(25);
+      expect(withPotions.filter((s) => s > last).length, `${dungeon.name}: mit Heiltränken geschafft`).toBeGreaterThan(60);
     }
   });
 
