@@ -14,7 +14,7 @@
 //      höchsten Bedrohung (mit etwas Zufall). Betäubung lässt sie ausfallen.
 //   4. Mana-Regeneration, Verstärkungen laufen ab.
 
-import { MANA_REGEN, type AbilityId, type Guard } from "./abilities";
+import { freshStunImmunity, MANA_REGEN, tickStunImmunity, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   CLERIC_POTION_FACTOR,
@@ -59,8 +59,6 @@ export const COOP_REWARD_FACTOR = 1.5;
 export const THREAT_DECAY = 0.3;
 /** Mit Bollwerk zieht der Schildträger diesen Anteil der Boss-Angriffe auf sich – egal wie gross die Gruppe ist. */
 export const BULWARK_SHARE = 0.75;
-/** Ab der zweiten Betäubung im Kampf wirkt sie nur noch mit dieser Chance. */
-export const REPEAT_STUN_CHANCE = 0.5;
 
 /** Id des Bosses in Ereignissen – Helden haben die Id ihres Spielers. */
 export const BOSS = "boss";
@@ -353,9 +351,9 @@ export interface CoopBattleState {
     weaken?: ActiveBuff;
     /** Verwundbar: erleidet `percent` mehr Schaden */
     vulnerable?: ActiveBuff;
+    /** So viele Runden (inkl. der aktuellen) noch immun gegen Betäubung – gilt für jeden Koop-Gegner */
+    stunImmunity?: number;
   };
-  /** Bisher versuchte Betäubungen – ab der zweiten nur noch mit Chance */
-  stunsUsed: number;
   status: CoopStatus;
   log: (CoopEvent & { round: number })[];
   /** Nur in Koop-Dungeons: welcher Dungeon, welcher Kampf. `bossId` ist dann der aktuelle Gegner. */
@@ -431,7 +429,6 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
     })),
     boss: coopEnemyStats(enemy, players.length),
     bossEffects: {},
-    stunsUsed: 0,
     status: "active",
     log: [],
   };
@@ -499,7 +496,6 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
     })),
     boss: coopEnemyStats(enemy, state.heroes.length),
     bossEffects: {},
-    stunsUsed: 0,
     status: "active",
     log: [],
   };
@@ -593,7 +589,6 @@ export function resolveRound(
   let heroes = state.heroes.map((h) => ({ ...h, combatant: { ...h.combatant }, effects: { ...h.effects } }));
   let boss = { ...state.boss };
   let bossEffects = { ...state.bossEffects };
-  let stunsUsed = state.stunsUsed;
   let stunAttempt = false;
   /** Helden mit Bollwerk – ihre Bedrohung wird nach der Heldenphase hochgesetzt */
   const taunts: CoopHero[] = [];
@@ -763,8 +758,9 @@ export function resolveRound(
   } else {
     let stunned = false;
     if (stunAttempt) {
-      stunned = stunsUsed === 0 || rng() < REPEAT_STUN_CHANCE;
-      stunsUsed++;
+      // Nach einer Betäubung ist der Gegner einige Runden immun
+      stunned = !bossEffects.stunImmunity;
+      if (stunned) bossEffects = { ...bossEffects, stunImmunity: freshStunImmunity() };
       events.push({ type: stunned ? "stunned" : "stunResisted" });
     }
     if (!stunned) {
@@ -868,7 +864,12 @@ export function resolveRound(
 
   // 4. Mana, Verstärkungen und abklingende Bedrohung
   const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
-  bossEffects = { ...bossEffects, weaken: tick(bossEffects.weaken), vulnerable: tick(bossEffects.vulnerable) };
+  bossEffects = {
+    ...bossEffects,
+    weaken: tick(bossEffects.weaken),
+    vulnerable: tick(bossEffects.vulnerable),
+    stunImmunity: tickStunImmunity(bossEffects.stunImmunity),
+  };
   heroes = heroes.map((h) => ({
     ...h,
     effects: { ...h.effects, empower: tick(h.effects.empower) },
@@ -888,7 +889,6 @@ export function resolveRound(
       heroes,
       boss,
       bossEffects,
-      stunsUsed,
       status,
       round: status === "active" ? state.round + 1 : state.round,
       deadline: now + COOP_TURN_SECONDS * 1000,

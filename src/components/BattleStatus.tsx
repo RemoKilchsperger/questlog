@@ -74,6 +74,7 @@ interface EnemyEffects {
   armorBreak?: number;
   weaken?: ActiveBuff;
   vulnerable?: ActiveBuff;
+  stunImmunity?: number;
 }
 
 /** Was gerade auf dem Gegner wirkt. */
@@ -96,6 +97,9 @@ export function enemyStatusChips(effects: EnemyEffects): StatusChip[] {
   }
   if (effects.vulnerable) {
     chips.push({ key: "vulnerable", icon: "🎯", text: `erleidet +${pct(effects.vulnerable.percent)}`, rounds: effects.vulnerable.roundsLeft, tone: "foe", title: "Verwundbar: erleidet mehr Schaden" });
+  }
+  if (effects.stunImmunity) {
+    chips.push({ key: "stunImmunity", icon: "🧱", text: "Immun gegen Betäubung", rounds: effects.stunImmunity, tone: "foe", title: "Nach einer Betäubung kann der Boss einige Runden nicht erneut betäubt werden" });
   }
   return chips;
 }

@@ -399,12 +399,17 @@ export interface RarityInfo {
   priceMultiplier: number;
 }
 
-/** Seltenheitsstufen, aufsteigend. Je seltener, desto mehr und höhere Attributboni. */
+/**
+ * Seltenheitsstufen, aufsteigend. Je seltener, desto mehr und höhere Attributboni.
+ * Die Boni sind bewusst knapp: Ein legendäres Item bringt ab Level 20 höchstens zwei
+ * Drittel der Punkte aus den Level-ups – sonst schlagen Helden mit einer einzigen
+ * legendären Waffe Bosse weit über ihrem Level (per Simulation abgestimmt).
+ */
 export const RARITIES: readonly RarityInfo[] = [
   { key: "common", label: "Gewöhnlich", statMultiplier: 1, bonusCount: 0, bonusFactor: 0, priceMultiplier: 1 },
   { key: "rare", label: "Selten", statMultiplier: 1.2, bonusCount: 1, bonusFactor: 1, priceMultiplier: 2 },
-  { key: "epic", label: "Episch", statMultiplier: 1.45, bonusCount: 2, bonusFactor: 1.5, priceMultiplier: 4 },
-  { key: "legendary", label: "Legendär", statMultiplier: 1.75, bonusCount: 3, bonusFactor: 2.5, priceMultiplier: 8 },
+  { key: "epic", label: "Episch", statMultiplier: 1.45, bonusCount: 2, bonusFactor: 1, priceMultiplier: 4 },
+  { key: "legendary", label: "Legendär", statMultiplier: 1.75, bonusCount: 3, bonusFactor: 1.25, priceMultiplier: 8 },
 ];
 
 const STAT_KEYS: readonly StatKey[] = ["strength", "intellect", "endurance", "charisma"];
@@ -417,12 +422,22 @@ export function getRarity(rarity: Rarity): RarityInfo {
 
 /**
  * Höhe eines einzelnen Attributbonus: wächst mit Seltenheit und Item-Level.
- * Beispiel: seltenes Item Lv. 1 → +1, legendäres Item Lv. 60 → +40.
+ * Beispiel: seltenes Item Lv. 1 → +1, legendäres Item Lv. 60 → +20.
  */
 export function bonusValue(rarity: Rarity, requiredLevel: number): number {
   const { bonusFactor } = getRarity(rarity);
   if (bonusFactor === 0) return 0;
   return Math.max(1, Math.round(bonusFactor * (1 + requiredLevel / 4)));
+}
+
+/**
+ * Setzt die Attributboni eines vorhandenen Exemplars auf die heutige Höhe –
+ * dieselben Attribute, nur mit dem aktuellen `bonusValue` (für Spielstand-Migrationen).
+ */
+export function rescaleBonuses(owned: OwnedItem): OwnedItem {
+  const value = bonusValue(owned.rarity, getItem(owned.itemId).requiredLevel);
+  const bonuses = Object.fromEntries(Object.keys(owned.bonuses).map((stat) => [stat, value])) as Partial<Stats>;
+  return { ...owned, bonuses };
 }
 
 /**

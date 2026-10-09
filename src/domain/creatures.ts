@@ -34,19 +34,26 @@ export interface AreaDef {
 /**
  * Gebietsbosse sind schwächer als Dungeon- und Raid-Bosse: Man trifft sie allein,
  * ohne Gruppe. Per Simulation über alle Klassen abgestimmt: Ein gut gespielter Held
- * auf dem Level des Bosses (aktive Klasse, gewöhnliche Ausrüstung, Fähigkeiten)
- * verliert ohne Heiltränke meistens und gewinnt mit Heiltränken meistens.
+ * auf dem Level des Bosses (aktive Klasse, Fähigkeiten) braucht seltene Ausrüstung
+ * und Heiltränke – damit gewinnt er meistens, mit gewöhnlicher Ausrüstung selten.
+ * Bis Level 30 schafft ihn 9 Level darunter auch mit einer legendären Waffe kaum jemand.
  */
-export const AREA_BOSS_FACTORS = { hp: 2, damage: 1 };
+export const AREA_BOSS_FACTORS = { hp: 2.5, damage: 1 };
+
+/**
+ * Die Bosse ab Level 41 sind stärker: Dort fällt der grosse Heiltrank, und Helden
+ * wachsen mit ihren Fähigkeiten und Waffen schneller als die Kreaturen.
+ */
+export const LATE_AREA_BOSS_FACTORS = { hp: 3, damage: 1.1 };
 
 /**
  * Dungeon-Bosse kommen nach drei Kämpfen ohne Heilung dazwischen und haben zwei
  * Fähigkeiten im Wechsel – Lebenspunkte und Schaden gegenüber einer normalen Kreatur
  * gleichen Levels. Abgestimmt wie die Gebietsbosse, aber für den ganzen Dungeon:
- * Mit Heiltränken schaffen ihn die meisten Klassen auf Boss-Level meistens, den
- * Abgrund der Leere (Level 60) nur gut ausgerüstet.
+ * Mit seltener Ausrüstung und Heiltränken schaffen ihn die meisten Klassen auf
+ * Boss-Level meistens, mit gewöhnlicher je nach Klasse und Dungeon nur manchmal.
  */
-export const DUNGEON_BOSS_FACTORS = { hp: 1.6, damage: 0.9 };
+export const DUNGEON_BOSS_FACTORS = { hp: 1.7, damage: 0.9 };
 
 const c = (id: string, name: string, sprite: string, level: number, boss = false): CreatureDef => ({
   id, name, sprite, level, boss, ...(boss && { bossFactors: AREA_BOSS_FACTORS }),
@@ -130,7 +137,7 @@ export const AREAS: readonly AreaDef[] = [
       c("wailing-ghost", "Klagegeist", "ghost", 43),
       c("bloodsucker", "Blutsauger", "vampire", 45),
       c("dark-sorcerer", "Dunkler Hexer", "sorcerer", 47),
-      c("lich-king", "Der Lichkönig", "lich", 50, true),
+      { ...c("lich-king", "Der Lichkönig", "lich", 50, true), bossFactors: LATE_AREA_BOSS_FACTORS },
     ],
   },
   {
@@ -145,7 +152,7 @@ export const AREAS: readonly AreaDef[] = [
       c("flame-elemental", "Flammenelementar", "flame-elemental", 53),
       c("young-dragon", "Jungdrache", "dragon", 56),
       c("demon-guard", "Dämonenwächter", "demon", 58),
-      c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true),
+      { ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS },
     ],
   },
 ];

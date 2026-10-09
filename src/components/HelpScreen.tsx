@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { MANA_REGEN } from "../domain/abilities";
+import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
@@ -316,8 +316,9 @@ export function HelpScreen() {
           <H>Boss-Fähigkeiten</H>
           <p>
             Bosse setzen alle paar Runden eine besondere Attacke ein. Sie wird eine Runde vorher angekündigt: Ein Bollwerk
-            (Schild) blockt sie komplett, ein Betäubender Schlag (Streitkolben) verhindert sie. Dungeon-Bosse haben zwei
-            Fähigkeiten, die sich abwechseln.
+            (Schild) blockt sie komplett, ein Betäubender Schlag (Streitkolben) verhindert sie. Nach einer Betäubung ist ein
+            Boss {STUN_IMMUNITY_ROUNDS} Runden lang immun dagegen – im Koop gilt das für jeden Gegner. Dungeon-Bosse haben
+            zwei Fähigkeiten, die sich abwechseln.
           </p>
         </Topic>
 

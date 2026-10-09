@@ -23,9 +23,9 @@ export interface PotionDef {
 }
 
 export const POTIONS: readonly PotionDef[] = [
-  { id: "small", name: "Kleiner Heiltrank", icon: "🧪", effect: { kind: "heal", percent: 0.3 }, price: 15 },
-  { id: "medium", name: "Heiltrank", icon: "⚗️", effect: { kind: "heal", percent: 0.6 }, price: 45 },
-  { id: "large", name: "Grosser Heiltrank", icon: "🏺", effect: { kind: "heal", percent: 1 }, price: null },
+  { id: "small", name: "Kleiner Heiltrank", icon: "🧪", effect: { kind: "heal", percent: 0.2 }, price: 15 },
+  { id: "medium", name: "Heiltrank", icon: "⚗️", effect: { kind: "heal", percent: 0.4 }, price: 45 },
+  { id: "large", name: "Grosser Heiltrank", icon: "🏺", effect: { kind: "heal", percent: 0.6 }, price: null },
   { id: "attack", name: "Angriffstrank", icon: "🔥", effect: { kind: "attack", percent: 0.3, rounds: 3 }, price: null },
   { id: "armor", name: "Rüstungstrank", icon: "🪨", effect: { kind: "armor", percent: 1, rounds: 3 }, price: null },
 ];
@@ -55,7 +55,7 @@ export function potionHeal(potion: PotionDef, maxHp: number): number {
   return potion.effect.kind === "heal" ? Math.max(1, Math.round(maxHp * potion.effect.percent)) : 0;
 }
 
-/** "heilt 30 % der LP" bzw. "+30 % Schaden für 3 Runden". */
+/** "heilt 20 % der LP" bzw. "+30 % Schaden für 3 Runden". */
 export function potionEffectText(potion: PotionDef): string {
   const { effect } = potion;
   const percent = Math.round(effect.percent * 100);

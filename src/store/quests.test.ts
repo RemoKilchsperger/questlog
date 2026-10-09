@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addToChest, EMPTY_CHEST, startBattle, type BattleState, type HeroCombatProfile } from "../domain/combat";
 import { AREA_BOSS_RESPAWN_MS, formatRespawn, getCreature, getDungeon, hasRespawn, respawnLeft, startRespawn } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
-import { createItem } from "../domain/items";
+import { createItem, getItem } from "../domain/items";
 import { getQuest, rollDailyQuests, rollWeeklyQuests, type TradeAction } from "../domain/quests";
 import { convertLinearCurveXp } from "../domain/leveling";
 import { migrateSave, useGameStore } from "./gameStore";
@@ -167,6 +167,28 @@ describe("Migration auf v14", () => {
     expect(state.character.totalXp).toBe(convertLinearCurveXp(500));
     expect(state.records).toMatchObject({ battlesWon: 4, questsCompleted: 2, dailyQuestsCompleted: 1 });
     expect(state.questLog).toEqual({ active: {}, completed: [] });
+  });
+});
+
+describe("Migration auf v16", () => {
+  it("rechnet die Attributboni vorhandener Items auf die neue Höhe um – gleiche Attribute, Schmied-Stufe bleibt", () => {
+    const legendary = { uid: "l", itemId: "greathammer-57", rarity: "legendary", bonuses: { strength: 14, charisma: 14, endurance: 14 }, upgrade: 3 };
+    const epic = { uid: "e", itemId: "chest-57", rarity: "epic", bonuses: { strength: 9, intellect: 9 } };
+    const rare = { uid: "r", itemId: "head-57", rarity: "rare", bonuses: { endurance: 6 } };
+    const offer = { uid: "o", itemId: "sword-57", rarity: "legendary", bonuses: { strength: 14, intellect: 14, charisma: 14 } };
+    const old = {
+      character: useGameStore.getState().character,
+      inventory: [epic],
+      equipment: { head: rare, chest: null, arms: null, legs: null, feet: null, weapon1: legendary, weapon2: null },
+      shop: { slot: "x", offers: [offer] },
+    };
+    const state = migrateSave(old, 15);
+    expect(getItem("greathammer-57").requiredLevel).toBe(18);
+    // Lv. 18: legendär 1,25 · (1 + 18/4) ≈ 7, episch 1 · 5,5 ≈ 6, selten unverändert
+    expect(state.equipment.weapon1).toEqual({ ...legendary, bonuses: { strength: 7, charisma: 7, endurance: 7 } });
+    expect(state.inventory[0].bonuses).toEqual({ strength: 6, intellect: 6 });
+    expect(state.equipment.head).toEqual(rare);
+    expect(state.shop.offers[0].bonuses).toEqual({ strength: 7, intellect: 7, charisma: 7 });
   });
 });
 

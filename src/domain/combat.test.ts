@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { STUN_IMMUNITY_ROUNDS } from "./abilities";
 import {
   abilityBlocker,
   attackRound,
@@ -127,6 +128,30 @@ describe("Kampfrunde", () => {
     expect(state.hero.hp).toBe(0);
     expect(events.at(-1)).toEqual({ type: "defeated", side: "hero" });
   });
+
+  it("Bosse sind nach einer Betäubung 3 Runden immun, normale Kreaturen nicht", () => {
+    /** Unverwüstlicher Held und Gegner, Streitkolben-Fähigkeit jederzeit bereit */
+    const setup = (creatureId: string): BattleState => {
+      const b = startBattle("b", "Held", { ...hero, maxMana: 999, abilities: ["mace"] }, getCreature(creatureId).creature);
+      return { ...b, mana: 999, hero: { ...b.hero, hp: 1e6, maxHp: 1e6 }, enemy: { ...b.enemy, hp: 1e6, maxHp: 1e6 } };
+    };
+    const stun = (s: BattleState) => attackRound({ ...s, mana: 999, cooldowns: {} }, fixedRng(0.5), "mace");
+    let { state, events } = stun(setup("cave-eye"));
+    expect(events).toContainEqual({ type: "stunned" });
+    for (let i = 0; i < STUN_IMMUNITY_ROUNDS; i++) {
+      expect(state.enemyEffects.stunImmunity).toBe(STUN_IMMUNITY_ROUNDS - i);
+      ({ state, events } = stun(state));
+      expect(events).toContainEqual({ type: "stunResisted" });
+      expect(events.some((e) => e.type === "hit" && e.attacker === "enemy")).toBe(true);
+    }
+    expect(state.enemyEffects.stunImmunity).toBeUndefined();
+    expect(stun(state).events).toContainEqual({ type: "stunned" });
+
+    // Normale Kreaturen lassen sich jede Runde betäuben (die Abklingzeit begrenzt es ohnehin)
+    const wolf = stun(setup("grey-wolf"));
+    expect(wolf.state.enemyEffects.stunImmunity).toBeUndefined();
+    expect(stun(wolf.state).events).toContainEqual({ type: "stunned" });
+  });
 });
 
 describe("Tränke", () => {
@@ -139,7 +164,7 @@ describe("Tränke", () => {
 
   it("heilt, aber nie über das Maximum", () => {
     const { state } = drinkPotion(hurt(10), getPotion("small"));
-    expect(state.hero.hp).toBe(10 + Math.round(hero.maxHp * 0.3));
+    expect(state.hero.hp).toBe(10 + Math.round(hero.maxHp * 0.2));
     expect(drinkPotion(hurt(hero.maxHp - 2), getPotion("large")).state.hero.hp).toBe(hero.maxHp);
   });
 
@@ -360,9 +385,9 @@ describe("Gebiete und Balance", () => {
     }
   });
 
-  // Gut gespielter Champion: schwere Rüstung + Zweihandschwert, gewöhnliche Ausrüstung, nur die Level-up-Punkte
+  // Gut gespielter Champion: schwere Rüstung + Zweihandschwert (Standard: gewöhnlich), nur die Level-up-Punkte
   // (60 % Stärke, 40 % Ausdauer), Skill und Fähigkeiten des Zweihandschwerts – die er auch einsetzt.
-  const champion = (level: number) => {
+  const champion = (level: number, rarity: Rarity = "common") => {
     const points = 2 * (level - 1);
     const strength = Math.round(points * 0.6);
     const character: Character = {
@@ -372,17 +397,18 @@ describe("Gebiete und Balance", () => {
       skills: { greatsword: 5 },
       abilities: level >= 25 ? ["greatsword", "greatsword-2"] : ["greatsword"],
     };
-    const equipment = { ...gearAt(level), weapon1: createItem(`greatsword-${indexForLevel(level)}`, "common", "gs", () => 0.5), weapon2: null };
+    const equipment = { ...gearAt(level, rarity), weapon1: createItem(`greatsword-${indexForLevel(level)}`, rarity, "gs", () => 0.5), weapon2: null };
     return getHeroCombatProfile(character, equipment);
   };
 
-  /** Kampf mit Fähigkeiten und – falls erlaubt – Heiltränken unter 40 % LP. */
+  /** Kampf mit Fähigkeiten und – falls erlaubt – Heiltränken unter 40 % LP: die beiden aus dem Laden, ab Level 41 auch der grosse (Beute). */
   const fightWell = (start: BattleState, rng: () => number, potions: boolean): BattleState => {
     let state = start;
     expect(state.heroClass).toBe("champion");
     while (state.status === "active") {
       if (potions && state.hero.hp < state.hero.maxHp * 0.4) {
-        const potion = ["medium", "small"].map(getPotion).find((p) => potionBlocker(state, p) === null);
+        const heal = start.enemy.level > 40 ? ["large", "medium", "small"] : ["medium", "small"];
+        const potion = heal.map(getPotion).find((p) => potionBlocker(state, p) === null);
         if (potion) state = drinkPotion(state, potion).state;
       }
       const ability = (["greatsword-2", "greatsword"] as const).find((id) => abilityBlocker(state, id) === null);
@@ -391,23 +417,27 @@ describe("Gebiete und Balance", () => {
     return state;
   };
 
-  it("Gebietsbosse: ein gut gespielter Champion auf Boss-Level verliert ohne Heiltränke meistens, gewinnt mit ihnen meistens", () => {
-    const fight = (boss: CreatureDef, rng: () => number, potions: boolean) =>
-      fightWell(startBattle("b", "Held", champion(boss.level), boss), rng, potions).status === "won";
+  it("Gebietsbosse: ein gut gespielter Champion auf Boss-Level braucht seltene Ausrüstung und Heiltränke", () => {
+    const fight = (boss: CreatureDef, rng: () => number, rarity: Rarity, potions: boolean) =>
+      fightWell(startBattle("b", "Held", champion(boss.level, rarity), boss), rng, potions).status === "won";
     for (const area of AREAS) {
       const boss = area.creatures.at(-1)!;
       const rng = seeded(boss.level);
-      const withoutPotions = Array.from({ length: 100 }, () => fight(boss, rng, false)).filter(Boolean).length;
-      const withPotions = Array.from({ length: 100 }, () => fight(boss, rng, true)).filter(Boolean).length;
-      expect(withoutPotions, `${boss.name}: Siege ohne Tränke`).toBeLessThan(25);
-      expect(withPotions, `${boss.name}: Siege mit Heiltränken`).toBeGreaterThan(60);
+      const wins = (rarity: Rarity, potions: boolean) =>
+        Array.from({ length: 100 }, () => fight(boss, rng, rarity, potions)).filter(Boolean).length;
+      const commonWithoutPotions = wins("common", false);
+      const commonWithPotions = wins("common", true);
+      const rareWithPotions = wins("rare", true);
+      expect(commonWithoutPotions, `${boss.name}: Siege ohne Tränke (gewöhnlich)`).toBeLessThan(25);
+      expect(commonWithPotions, `${boss.name}: Siege mit Heiltränken (gewöhnlich)`).toBeLessThan(50);
+      expect(rareWithPotions, `${boss.name}: Siege mit Heiltränken (selten)`).toBeGreaterThan(60);
     }
   });
 
-  it("Dungeons bis Level 42: ein gut gespielter Champion schafft sie mit Heiltränken meistens, ohne kommt er kaum zum Boss", () => {
+  it("Dungeons bis Level 42: ein gut gespielter Champion schafft sie mit seltener Ausrüstung und Heiltränken meistens, gewöhnlich ausgerüstet ohne Tränke kommt er kaum zum Boss", () => {
     /** Erreichte Stufe – LP werden mitgenommen, keine Heilung zwischen den Kämpfen. */
-    const run = (dungeon: (typeof DUNGEONS)[number], rng: () => number, potions: boolean) => {
-      const hero = champion(dungeon.creatures.at(-1)!.level);
+    const run = (dungeon: (typeof DUNGEONS)[number], rng: () => number, rarity: Rarity, potions: boolean) => {
+      const hero = champion(dungeon.creatures.at(-1)!.level, rarity);
       let hp = hero.maxHp;
       for (let i = 0; i < dungeon.creatures.length; i++) {
         const end = fightWell(startBattle("b", "Held", hero, dungeon.creatures[i], hp), rng, potions);
@@ -419,8 +449,8 @@ describe("Gebiete und Balance", () => {
     for (const dungeon of DUNGEONS.filter((d) => d.minLevel < 60)) {
       const rng = seeded(dungeon.minLevel);
       const last = dungeon.creatures.length - 1;
-      const withoutPotions = Array.from({ length: 100 }, () => run(dungeon, rng, false));
-      const withPotions = Array.from({ length: 100 }, () => run(dungeon, rng, true));
+      const withoutPotions = Array.from({ length: 100 }, () => run(dungeon, rng, "common", false));
+      const withPotions = Array.from({ length: 100 }, () => run(dungeon, rng, "rare", true));
       expect(withoutPotions.filter((s) => s >= last).length, `${dungeon.name}: ohne Tränke beim Boss`).toBeLessThan(25);
       expect(withPotions.filter((s) => s > last).length, `${dungeon.name}: mit Heiltränken geschafft`).toBeGreaterThan(60);
     }

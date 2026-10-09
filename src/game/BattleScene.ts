@@ -409,6 +409,8 @@ export class BattleScene extends Phaser.Scene {
       sfx.stun();
       this.tweens.add({ targets: enemy.body, angle: 8, duration: 90, yoyo: true, repeat: 3 });
       fx.dizzyStars(this, { x: enemy.homeX, y: GROUND_Y - 150 });
+    } else if (event.type === "stunResisted") {
+      this.floatText(this.fighters.enemy.homeX, GROUND_Y - 120, "WIDERSTEHT!", "#a49cb8", 22);
     } else if (event.type === "hit") {
       if (event.attacker === "hero") this.heroHit(event, special as AbilityId | null);
       else this.enemyHit(event, special);

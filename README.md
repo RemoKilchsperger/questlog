@@ -182,7 +182,7 @@ mit 25 % LP auf, der Host entscheidet nach jedem Sieg über Weiter oder Aussteig
 Dungeon-Bosse haben zwei Fähigkeiten im Wechsel (`bossAbilities.ts`): eine gegen ein Ziel, eine gegen die Gruppe.
 Solo treffen beide den Helden, im Koop trifft die zweite alle – jeden mit Solo-Schaden × 0.75.
 
-**Tränke:** Kleiner Heiltrank 30 % LP und Heiltrank 60 % gibt es beim Händler. Grosser Heiltrank 100 %,
+**Tränke:** Kleiner Heiltrank 20 % LP und Heiltrank 40 % gibt es beim Händler. Grosser Heiltrank 60 %,
 Angriffstrank (+30 % Schaden, 3 Runden) und Rüstungstrank (+100 % Rüstung, 3 Runden) gibt es nur als Beute.
 
 **Technik:** Die Kampflogik ist reine Domain-Logik (getestet, inkl. Balance-Simulation). Die Phaser-Szene

@@ -14,6 +14,7 @@ import {
   getCreatureLoot,
   getCreaturePotionDrop,
   getCreatureStats,
+  getCreature,
   getCreatureXp,
   rollCreatureGold,
   type CreatureDef,
@@ -25,7 +26,7 @@ import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potio
 import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { getSetHpMultiplier } from "./bossSets";
-import { abilitiesOf, MANA_REGEN, maxManaFor, type AbilityId, type Guard } from "./abilities";
+import { abilitiesOf, freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   classStatBonus,
@@ -139,6 +140,8 @@ export type BattleEvent =
   | { type: "bleed"; target: Side; damage: number }
   /** Der betäubte Gegner setzt diese Runde aus */
   | { type: "stunned" }
+  /** Der Boss ist nach einer Betäubung noch immun und greift trotzdem an */
+  | { type: "stunResisted" }
   /** Der Boss setzt seine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "bossAbility"; bossId: string; abilityId: string }
   /** Bollwerk hat den Angriff des Gegners komplett geblockt */
@@ -198,6 +201,8 @@ export interface BattleState {
     weaken?: ActiveBuff;
     /** Verwundbar: erleidet `percent` mehr Schaden */
     vulnerable?: ActiveBuff;
+    /** Bosse: so viele Runden (inkl. der aktuellen) noch immun gegen Betäubung */
+    stunImmunity?: number;
   };
   /** Wirkungen auf den Helden */
   heroEffects: {
@@ -504,9 +509,12 @@ export function attackRound(
   } else if (hero.hp === 0) {
     status = "lost";
     events.push({ type: "defeated", side: "hero" });
-  } else if (ability?.stun) {
+  } else if (ability?.stun && !enemyEffects.stunImmunity) {
     events.push({ type: "stunned" });
+    // Bosse sind danach einige Runden immun
+    if (getCreature(state.creatureId).creature.boss) enemyEffects = { ...enemyEffects, stunImmunity: freshStunImmunity() };
   } else {
+    if (ability?.stun) events.push({ type: "stunResisted" });
     const special = bossAbilityDue(state.creatureId, state.round);
     if (special) events.push({ type: "bossAbility", bossId: special.bossId, abilityId: special.id });
     if (heroEffects.bulwark) {
@@ -582,7 +590,12 @@ export function attackRound(
       ...state,
       hero,
       enemy,
-      enemyEffects: { ...enemyEffects, weaken: tickBuff(enemyEffects.weaken), vulnerable: tickBuff(enemyEffects.vulnerable) },
+      enemyEffects: {
+        ...enemyEffects,
+        weaken: tickBuff(enemyEffects.weaken),
+        vulnerable: tickBuff(enemyEffects.vulnerable),
+        stunImmunity: tickStunImmunity(enemyEffects.stunImmunity),
+      },
       heroEffects: { ...heroEffects, empower: tickBuff(heroEffects.empower) },
       mana: Math.min(state.maxMana, mana + MANA_REGEN),
       cooldowns: tickCooldowns(state.cooldowns, ability),

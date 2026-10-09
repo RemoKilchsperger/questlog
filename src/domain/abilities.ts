@@ -76,6 +76,21 @@ export interface Guard {
 
 export const MANA_REGEN = 6;
 
+/**
+ * Nach einer Betäubung sind Bosse so viele Runden immun gegen weitere – solo
+ * (Gebiets- und Dungeon-Bosse) und im Koop (dort alle Gegner). So lässt sich ein
+ * Boss nicht dauerhaft festhalten, auch nicht mit mehreren Streitkolben.
+ */
+export const STUN_IMMUNITY_ROUNDS = 3;
+
+/** Immunität nach einer Betäubung in dieser Runde: die Runde selbst plus `STUN_IMMUNITY_ROUNDS` folgende. */
+export const freshStunImmunity = (): number => STUN_IMMUNITY_ROUNDS + 1;
+
+/** Am Rundenende läuft eine Runde der Immunität ab. */
+export function tickStunImmunity(rounds: number | undefined): number | undefined {
+  return rounds !== undefined && rounds > 1 ? rounds - 1 : undefined;
+}
+
 /** Mana-Maximum: 40 + 2 pro Level über 1 + 1 pro Intelligenz. */
 export function maxManaFor(level: number, intellect: number): number {
   return 40 + (level - 1) * 2 + intellect;

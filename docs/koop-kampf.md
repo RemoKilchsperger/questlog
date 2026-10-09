@@ -108,7 +108,8 @@ Namen und Werte stehen noch offen.
 - Mana, Fähigkeiten, Tränke (einer pro Runde, jede Sorte einmal pro Kampf),
   Gift, Feuer, Bluten, Rüstungsbruch, Betäubung.
 - **Betäubung:** Ein betäubter Boss setzt seine ganze Bossphase aus. Das ist stark, deshalb
-  wird pro Kampf nur die erste Betäubung voll wirksam, jede weitere hat 50 % Chance.
+  ist der Gegner danach 3 Runden lang immun gegen weitere Betäubungen (gilt solo für alle Bosse, im
+  Koop für jeden Gegner).
 
 ---
 

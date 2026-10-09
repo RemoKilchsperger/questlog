@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getAbility } from "./abilities";
+import { getAbility, type AbilityId } from "./abilities";
 import { attackRound, drinkPotion, getHeroCombatProfile, startBattle, type BattleState } from "./combat";
 import { resolveRound, startCoopBattle } from "./coopCombat";
 import { getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { classAbility, CLERIC_POTION_FACTOR, CLERIC_REGEN, detectHeroClass, HERO_CLASSES, PLUNDERER_LIFESTEAL } from "./heroClasses";
+import { classAbility, CLERIC_POTION_FACTOR, CLERIC_REGEN, detectHeroClass, HERO_CLASSES, PALADIN_SHIELD_BASH, PLUNDERER_LIFESTEAL } from "./heroClasses";
 import { createItem } from "./items";
 import { getPotion } from "./potions";
 import type { ArmorClass, Character, Equipment } from "./types";
@@ -122,6 +122,18 @@ describe("Klassen: Kampfmechanik", () => {
     return { ...b, enemy: { ...b.enemy, hp: 99_999, maxHp: 99_999 } };
   };
   const rng = (value: number) => () => value;
+
+  it("Paladin: Bollwerk und Vergeltung schlagen mit halbem Schaden zu, ohne Klasse nicht", () => {
+    const paladin = { ...battle(gear("heavy", "mace-90", "shield-90")), abilities: ["shield", "shield-2"] as AbilityId[] };
+    expect(paladin.heroClass).toBe("paladin");
+    const plain = { ...battle(gear("heavy", "mace-90", "shield-90", 2)), abilities: ["shield", "shield-2"] as AbilityId[] };
+    for (const id of ["shield", "shield-2"] as const) {
+      const bash = attackRound(paladin, rng(0.5), id).events.find((e) => e.type === "hit" && e.attacker === "hero");
+      const full = attackRound(paladin, rng(0.5)).events.find((e) => e.type === "hit" && e.attacker === "hero");
+      expect(bash && full && bash.type === "hit" && full.type === "hit" && bash.damage / full.damage).toBeCloseTo(PALADIN_SHIELD_BASH, 1);
+      expect(attackRound(plain, rng(0.5), id).events.some((e) => e.type === "hit" && e.attacker === "hero")).toBe(false);
+    }
+  });
 
   it("Duellant schlägt manchmal zweimal zu", () => {
     const state = battle(gear("medium", "sword-90", "sword-91"));

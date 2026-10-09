@@ -24,7 +24,7 @@ import {
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type BossRespawns } from "../domain/creatures";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
-import { createItem, getItem, MAX_UPGRADE, migrateLegacyItemId, STARTER_ITEM_IDS } from "../domain/items";
+import { createItem, getItem, MAX_UPGRADE, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
 import {
   ACHIEVEMENTS,
@@ -401,6 +401,17 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
   // v14 → v15: steilere Level-Kurve – die XP werden umgerechnet, das Level bleibt gleich.
   if (version < 15) {
     state = { ...state, character: { ...state.character, totalXp: convertLinearCurveXp(state.character.totalXp) } };
+  }
+  // v15 → v16: epische und legendäre Items geben weniger Attributpunkte – vorhandene Items umrechnen.
+  if (version < 16) {
+    state = {
+      ...state,
+      inventory: state.inventory.map(rescaleBonuses),
+      equipment: Object.fromEntries(
+        Object.entries(state.equipment).map(([slot, item]) => [slot, item && rescaleBonuses(item)]),
+      ) as Equipment,
+      ...(state.shop && { shop: { ...state.shop, offers: state.shop.offers.map(rescaleBonuses) } }),
+    };
   }
   return state;
 }
@@ -914,7 +925,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 15,
+      version: 16,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { STUN_IMMUNITY_ROUNDS } from "./abilities";
 import type { HeroCombatProfile } from "./combat";
 import {
   BOSS,
@@ -145,12 +146,20 @@ describe("Koop-Kampf: Runde", () => {
     expect(state.heroes.every((h) => h.effects.poison)).toBe(true);
   });
 
-  it("die erste Betäubung wirkt sicher, weitere nur mit Chance", () => {
-    const stunner = () => tough(start([player("a", { abilities: ["mace"] }), player("b")]));
-    const first = resolveRound(stunner(), { a: { ability: "mace" } }, rng(0.9), 0);
-    expect(first.events).toContainEqual({ type: "stunned" });
-    const again = resolveRound({ ...first.state, heroes: first.state.heroes.map((h) => ({ ...h, mana: 80, cooldowns: {} })) }, { a: { ability: "mace" } }, rng(0.9), 0);
-    expect(again.events).toContainEqual({ type: "stunResisted" });
+  it("nach einer Betäubung ist der Gegner 3 Runden immun, danach wirkt sie wieder", () => {
+    const stunner = () => tough(start([player("a", { abilities: ["mace"] }), player("b", { abilities: ["mace"] })]));
+    const ready = (s: CoopBattleState) => ({ ...s, heroes: s.heroes.map((h) => ({ ...h, mana: 80, cooldowns: {} })) });
+    let { state, events } = resolveRound(stunner(), { a: { ability: "mace" } }, rng(0.9), 0);
+    expect(events).toContainEqual({ type: "stunned" });
+    // Drei Runden lang widersteht er – auch einem zweiten Streitkolben
+    for (let i = 0; i < STUN_IMMUNITY_ROUNDS; i++) {
+      expect(state.bossEffects.stunImmunity).toBe(STUN_IMMUNITY_ROUNDS - i);
+      ({ state, events } = resolveRound(ready(state), { b: { ability: "mace" } }, rng(0.9), 0));
+      expect(events).toContainEqual({ type: "stunResisted" });
+    }
+    expect(state.bossEffects.stunImmunity).toBeUndefined();
+    ({ events } = resolveRound(ready(state), { a: { ability: "mace" } }, rng(0.9), 0));
+    expect(events).toContainEqual({ type: "stunned" });
   });
 });
 

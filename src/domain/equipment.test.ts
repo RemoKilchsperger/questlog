@@ -21,7 +21,7 @@ import {
   migrateLegacyItemId,
   RARITIES,
 } from "./items";
-import { MAX_LEVEL } from "./leveling";
+import { MAX_LEVEL, POINTS_PER_LEVEL } from "./leveling";
 import { lootPool, rollDrop, rollRarity } from "./loot";
 import {
   buyOffer,
@@ -262,13 +262,21 @@ describe("Händler", () => {
 });
 
 describe("Seltenheit und Attributboni", () => {
-  it("seltenere Stufen geben mehr Boni und höhere Werte", () => {
+  it("seltenere Stufen geben mehr Boni, mehr Attributpunkte und höhere Werte", () => {
+    const points = (r: (typeof RARITIES)[number], level: number) => r.bonusCount * bonusValue(r.key, level);
     for (let i = 1; i < RARITIES.length; i++) {
       const lower = RARITIES[i - 1];
       const higher = RARITIES[i];
       expect(higher.bonusCount).toBeGreaterThan(lower.bonusCount);
       expect(higher.statMultiplier).toBeGreaterThan(lower.statMultiplier);
-      expect(bonusValue(higher.key, 12)).toBeGreaterThan(bonusValue(lower.key, 12));
+      expect(bonusValue(higher.key, 12)).toBeGreaterThanOrEqual(bonusValue(lower.key, 12));
+      expect(points(higher, 12)).toBeGreaterThan(points(lower, 12));
+    }
+  });
+
+  it("ein legendäres Item bringt ab Level 20 höchstens zwei Drittel der Punkte aus den Level-ups", () => {
+    for (let level = 20; level <= 60; level++) {
+      expect(3 * bonusValue("legendary", level), `Lv. ${level}`).toBeLessThanOrEqual(((level - 1) * POINTS_PER_LEVEL * 2) / 3);
     }
   });
 

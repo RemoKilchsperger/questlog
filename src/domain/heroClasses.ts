@@ -54,7 +54,7 @@ export const HERO_CLASSES: readonly HeroClassDef[] = [
   { id: "duelist", name: "Duellant", icon: "⚔️", armorClass: "medium", weapons: "zwei Schwerter", bonus: "+10 % Schaden, 35 % Chance auf einen zweiten Schlag bei jedem normalen Angriff", matches: (w) => w.filter((t) => t === "sword").length === 2 },
   { id: "plunderer", name: "Plünderer", icon: "🪓", armorClass: "medium", weapons: "Axt", bonus: "+20 % Schaden, heilt sich um 10 % des verursachten Schadens, kritische Treffer lassen den Gegner 2 Runden bluten, +25 % Gold", matches: has("axe") },
   { id: "cleric", name: "Kleriker", icon: "✨", armorClass: "medium", weapons: "Streitkolben", bonus: "Heilt sich jede Runde um 2 % der Lebenspunkte, Heiltränke wirken 15 % stärker", matches: has("mace") },
-  { id: "paladin", name: "Paladin", icon: "🛡️", armorClass: "heavy", weapons: "Streitkolben und Schild", bonus: "+10 % Schaden, +20 % Rüstung, Bollwerk kostet die Hälfte, im Koop doppelte Bedrohung", matches: (w) => w.includes("mace") && w.includes("shield") },
+  { id: "paladin", name: "Paladin", icon: "🛡️", armorClass: "heavy", weapons: "Streitkolben und Schild", bonus: "+10 % Schaden, +20 % Rüstung, Bollwerk kostet die Hälfte, Bollwerk und Vergeltung schlagen mit halbem Schaden zu (Schildstoss), im Koop doppelte Bedrohung", matches: (w) => w.includes("mace") && w.includes("shield") },
   { id: "berserker", name: "Berserker", icon: "💢", armorClass: "heavy", weapons: "Grossaxt", bonus: "Unter 50 % Lebenspunkten +30 % Schaden", matches: has("greataxe") },
   { id: "champion", name: "Champion", icon: "👑", armorClass: "heavy", weapons: "Zweihandschwert", bonus: "+15 % Schaden und +10 % Lebenspunkte", matches: has("greatsword") },
   { id: "warden", name: "Wächter", icon: "🏔️", armorClass: "heavy", weapons: "Grosshammer", bonus: "+15 % Lebenspunkte und +10 % Rüstung, Erdbeben schwächt den Gegner 3 statt 2 Runden", matches: has("greathammer") },
@@ -102,7 +102,7 @@ export function classStatBonus(id: HeroClassId | null): ClassStatBonus {
 /**
  * Fähigkeit so, wie die Klasse sie verändert: Magier (alle Fähigkeiten
  * günstiger und stärker), Hexer (stärkere, längere Zustände), Waldläufer
- * (Pfeilhagel mit 5 Pfeilen), Paladin (halbes Bollwerk), Wächter (längeres Erdbeben).
+ * (Pfeilhagel mit 5 Pfeilen), Paladin (halbes Bollwerk, Schildstoss), Wächter (längeres Erdbeben).
  */
 export function classAbility(id: AbilityId, heroClass: HeroClassId | null | undefined): AbilityDef {
   const base = getAbility(id);
@@ -117,7 +117,8 @@ export function classAbility(id: AbilityId, heroClass: HeroClassId | null | unde
     case "ranger":
       return id === "bow" ? { ...base, hits: 5 } : base;
     case "paladin":
-      return id === "shield" ? { ...base, manaCost: Math.round(base.manaCost / 2) } : base;
+      if (id === "shield") return { ...base, manaCost: Math.round(base.manaCost / 2), ...SHIELD_BASH };
+      return id === "shield-2" ? { ...base, ...SHIELD_BASH } : base;
     case "warden":
       return base.weaken && id === "greathammer-2" ? { ...base, weaken: { ...base.weaken, rounds: base.weaken.rounds + 1 } } : base;
     default:
@@ -139,6 +140,9 @@ export const CLERIC_POTION_FACTOR = 1.15;
 /** Berserker: Schadensbonus unter dieser LP-Schwelle. */
 export const BERSERKER_THRESHOLD = 0.5;
 export const BERSERKER_RAGE = 0.3;
+/** Paladin: Bollwerk und Vergeltung schlagen zusätzlich einmal mit halbem Schaden zu (Schildstoss). */
+export const PALADIN_SHIELD_BASH = 0.5;
+const SHIELD_BASH = { multiplier: PALADIN_SHIELD_BASH, hits: 1 };
 /** Paladin: Faktor auf die Bedrohung im Koop. */
 export const PALADIN_THREAT = 2;
 
