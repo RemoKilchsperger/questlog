@@ -2,11 +2,18 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect } from "react";
 import { getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
+import type { QuestSource } from "../domain/quests";
 import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
+
+const SOURCE_TEXT: Record<QuestSource, string> = {
+  story: "📜 Quest abgegeben",
+  daily: "⭐ Tagesauftrag abgegeben",
+  weekly: "📅 Wochenauftrag abgegeben",
+};
 
 /** Belohnungs-Popup nach dem Abgeben einer Quest, mit grossem Level-up-Banner. */
 export function RewardToast() {
@@ -53,8 +60,8 @@ export function RewardToast() {
                 Skillpunkt{event.levelAfter - event.levelBefore > 1 ? "e" : ""}
               </p>
             )}
-            <p className={`text-sm ${event.daily ? "text-gold" : "text-muted"}`}>
-              {event.daily ? "⭐ Tagesauftrag abgegeben" : "📜 Quest abgegeben"}
+            <p className={`text-sm ${event.source === "story" ? "text-muted" : "text-gold"}`}>
+              {SOURCE_TEXT[event.source]}
             </p>
             <p className="truncate font-semibold">{event.questTitle}</p>
             <div className="num mt-2 flex justify-center gap-4 text-base">

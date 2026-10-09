@@ -22,12 +22,14 @@ import {
   getCreaturePotionDrop,
   getCreatureStats,
   getCreatureXp,
+  formatRespawn,
   isAreaUnlocked,
+  respawnLeft,
   xpLevelFactor,
   type AreaDef,
   type CreatureDef,
 } from "../domain/creatures";
-import { dateKey } from "../domain/calendar";
+import { dateKey, weekKey } from "../domain/calendar";
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { questsForCreature, trackedQuests } from "../domain/quests";
@@ -54,6 +56,7 @@ import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSi
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestProgressChips } from "./QuestScreen";
+import { useNow } from "./useNow";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
 const PhaserBattle = lazy(() => import("../game/PhaserBattle"));
@@ -256,6 +259,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
 function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel: number }) {
   const startBattle = useGameStore((s) => s.startBattle);
   const quests = useCreatureQuests(creature.id);
+  const respawn = useRespawn(creature.id);
   const bossAbilities = getBossAbilities(creature.id);
   const stats = getCreatureStats(creature);
   const potionDrop = getCreaturePotionDrop(creature);
@@ -313,20 +317,30 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
       </div>
       <motion.button
         whileTap={{ scale: 0.9 }}
+        disabled={respawn > 0}
         onClick={() => startBattle(creature.id)}
-        className="font-pixel shrink-0 rounded-md border-2 border-danger bg-danger/15 px-3 py-1 text-danger hover:bg-danger/25"
+        title={respawn > 0 ? `Der Boss erscheint in ${formatRespawn(respawn)} wieder` : undefined}
+        className="font-pixel shrink-0 rounded-md border-2 border-danger bg-danger/15 px-3 py-1 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Kämpfen
+        {respawn > 0 ? <>⏳ <span className="num">{formatRespawn(respawn)}</span></> : "Kämpfen"}
       </motion.button>
     </li>
   );
+}
+
+/** Millisekunden bis zum Respawn eines Gebietsbosses (0 = bereit) – sekündlich aktualisiert, solange er läuft. */
+function useRespawn(creatureId: string): number {
+  const respawnAt = useGameStore((s) => s.bossRespawns[creatureId] ?? 0);
+  const now = useNow(respawnAt > Date.now() ? 1000 : 60_000);
+  return respawnLeft({ [creatureId]: respawnAt }, creatureId, now.getTime());
 }
 
 /** Laufende Quests und Tagesaufträge, die ein Sieg gegen diese Kreatur voranbringt. */
 function useCreatureQuests(creatureId: string) {
   const questLog = useGameStore((s) => s.questLog);
   const dailyQuests = useGameStore((s) => s.dailyQuests);
-  return questsForCreature(trackedQuests(questLog, dailyQuests, dateKey()), creatureId);
+  const weeklyQuests = useGameStore((s) => s.weeklyQuests);
+  return questsForCreature(trackedQuests(questLog, dailyQuests, weeklyQuests, dateKey(), weekKey()), creatureId);
 }
 
 function HeroPanel() {
@@ -628,6 +642,7 @@ function BattleResult({ battle }: { battle: BattleState }) {
   const leave = useGameStore((s) => s.leaveBattle);
   const dungeon = useGameStore((s) => s.dungeon);
   const quests = useCreatureQuests(battle.creatureId);
+  const respawn = useRespawn(battle.creatureId);
   const won = battle.status === "won";
   // Im Dungeon geht die Beute in die Truhe – hier nur ein kurzer Hinweis, was dazukam.
   const toChest = dungeon !== null;
@@ -743,9 +758,11 @@ function BattleResult({ battle }: { battle: BattleState }) {
           </button>
           <button
             onClick={() => startBattle(battle.creatureId)}
-            className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-4 py-1.5 text-danger hover:bg-danger/25"
+            disabled={respawn > 0}
+            title={respawn > 0 ? "Gebietsbosse erscheinen 5 Minuten nach einem Sieg wieder" : undefined}
+            className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-4 py-1.5 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Nochmal kämpfen
+            {respawn > 0 ? <>Respawn in <span className="num">{formatRespawn(respawn)}</span></> : "Nochmal kämpfen"}
           </button>
         </div>
       )}

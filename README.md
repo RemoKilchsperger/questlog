@@ -30,7 +30,7 @@ Motion (Animationen) · Phaser 3 (Kampfszene) · Supabase (Cloud, Rangliste, Koo
 src/
   domain/            Reine Spiellogik ohne UI – getestet, kann 1:1 auf den Server
     types.ts         Quest, Character, Item, Stats …
-    quests.ts        Questbuch (Jagd-, Boss- und Dungeon-Quests) und Tagesaufträge, Belohnungen
+    quests.ts        Questbuch (Jagd-, Boss- und Dungeon-Quests), Tages- und Wochenaufträge, Belohnungen
     stats.ts         Namen der Attribute
     leveling.ts      Level-Kurve, Attributpunkte
     skills.ts        Skilltree pro Waffentyp, Freischalten von Fähigkeiten
@@ -77,8 +77,13 @@ Annehmen ab dem Mindest-Level des Gebiets, nur Siege nach dem Annehmen zählen, 
 Belohnung pro Einheit: `6 % · xpRewardBase(Level)` und `0.6 · (3 + Level)` Gold – Level der Kreatur
 bzw. des Dungeons. Das Item hat das Level des Helden.
 
-**Tagesaufträge:** 3 pro Tag, je 3–6 Siege gegen verschiedene Kreaturen passend zum Level (keine Bosse).
-Sie laufen ohne Annehmen, geben dieselbe Belohnung pro Sieg und 35 % auf ein Item. Um Mitternacht verfallen sie.
+**Tagesaufträge:** 3 Jagden pro Tag, je 3–6 Siege gegen verschiedene Kreaturen passend zum Level (keine Bosse),
+dazu ein Händler-Auftrag, der täglich wechselt: 3 Ausrüstungsteile verkaufen, 2 zerlegen oder 2-mal verbessern. Aufträge laufen
+ohne Annehmen, geben 35 % auf ein Item und verfallen um Mitternacht.
+
+**Wochenaufträge** (montags neu, Item garantiert): 75 beliebige Kreaturen, 5 Bosse (Gebiet, Dungeon, Koop),
+3 Dungeons (ab Level 10) und ein wöchentlich wechselnder Händler-Auftrag (15 verkaufen, 10 zerlegen oder 8 verbessern).
+Bei Händler-Aufträgen zählt jedes Ausrüstungsteil (Waffen und Rüstung).
 
 ### Level und Skills
 
@@ -90,7 +95,7 @@ Sie laufen ohne Annehmen, geben dieselbe Belohnung pro Sieg und 35 % auf ein Ite
 - **Skills:** pro Waffentyp (inkl. Schild) 5 Ränge à +2 % Waffenschaden (Schild: +2 % Schild-Rüstung).
   Ab Rang 3 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei –
   unabhängig voneinander.
-  Zurücksetzen kostet `25 · Level · (1 + Level / 10)` Gold.
+  Zurücksetzen kostet `12.5 · Level · (1 + Level / 10)` Gold.
 
 ### Items
 
@@ -151,13 +156,14 @@ Fähigkeit**, danach Gift/Feuer/Bluten und der Gegenangriff. Jeder Kampf beginnt
 **Waffen skalieren mit Attributen** (`weaponScaling.ts`, Plan in `docs/attribut-skalierung.md`):
 Stärke – Schwert, Zweihandschwert, Axt, Grossaxt, Grosshammer · Intelligenz – Stab, Zepter ·
 Ausdauer – Streitkolben, Schild (auch `+0.1 · Ausdauer` Rüstung pro Schild) · Charisma – Dolch, Bogen.
-Attributpunkte lassen sich zurücksetzen: das erste Mal kostenlos, danach `50 · Level · (1 + Level / 10)` Gold.
+Attributpunkte lassen sich zurücksetzen: das erste Mal kostenlos, danach `25 · Level · (1 + Level / 10)` Gold.
 
 Klassen, Boss-Sets und leichte Rüstung kommen jeweils noch dazu.
 
 - **Sieg:** XP (8 % des Grundwerts auf dem Level der Kreatur, Bosse ×1.25, Abzug für zu leichte Gegner), 40 % Chance auf Gold, 35 % auf ein Item,
   25 % auf einen Heiltrank, 6 % auf einen Verstärkungstrank. Bosse geben immer Gold (×4), ein Item und
-  zwei Tränke. Bosse setzen alle paar Runden eine angekündigte Fähigkeit ein.
+  zwei Tränke. Bosse setzen alle paar Runden eine angekündigte Fähigkeit ein. Gebietsbosse erscheinen nach einem
+  Sieg erst nach 5 Minuten wieder (`AREA_BOSS_RESPAWN_MS`), damit man nicht nur sie wegen der garantierten Beute farmt.
 - **Flucht:** jederzeit möglich, kostet die durchschnittliche Gold-Beute der Kreatur.
 
 **Gebiete** (`creatures.ts`): Düsterwald (1–10), Nebelsümpfe (11–20), Kristallhöhlen (21–30),

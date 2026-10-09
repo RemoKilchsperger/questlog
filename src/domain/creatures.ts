@@ -329,6 +329,38 @@ export function getCreature(id: string): { creature: CreatureDef; area: AreaDef 
   throw new Error(`Unbekannte Kreatur: ${id}`);
 }
 
+/**
+ * Gebietsbosse erscheinen nach einem Sieg erst nach 5 Minuten wieder – damit man
+ * nicht nur Bosse wegen ihrer garantierten Beute bekämpft. Dungeon-Bosse kosten
+ * ohnehin einen ganzen Dungeon.
+ */
+export const AREA_BOSS_RESPAWN_MS = 5 * 60_000;
+
+/** Pro Boss-Id: Zeitpunkt (ms seit 1970), ab dem er wieder kämpft. */
+export type BossRespawns = Partial<Record<string, number>>;
+
+/** Hat dieser Gegner nach einem Sieg eine Respawn-Zeit? Nur Gebietsbosse. */
+export function hasRespawn(creatureId: string): boolean {
+  const { creature, area } = getCreature(creatureId);
+  return creature.boss && !area.dungeon;
+}
+
+/** Millisekunden, bis der Boss wieder erscheint – 0, wenn er bereitsteht. */
+export function respawnLeft(respawns: BossRespawns, creatureId: string, now: number = Date.now()): number {
+  return Math.max(0, (respawns[creatureId] ?? 0) - now);
+}
+
+/** Merkt sich nach einem Sieg, wann der Boss wieder erscheint. */
+export function startRespawn(respawns: BossRespawns, creatureId: string, now: number = Date.now()): BossRespawns {
+  return hasRespawn(creatureId) ? { ...respawns, [creatureId]: now + AREA_BOSS_RESPAWN_MS } : respawns;
+}
+
+/** "4:05" – Minuten und Sekunden. */
+export function formatRespawn(ms: number): string {
+  const seconds = Math.ceil(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 export function isAreaUnlocked(area: AreaDef, heroLevel: number): boolean {
   return heroLevel >= area.minLevel;
 }

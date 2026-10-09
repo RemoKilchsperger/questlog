@@ -312,7 +312,7 @@ function AttributeReset() {
         <p>
           Alle Attribute fallen auf 1 zurück, und du kannst <b>{points} Punkte</b> neu verteilen.{" "}
           {cost === 0 ? (
-            <>Das erste Mal ist kostenlos, danach kostet es viel Gold.</>
+            <>Das erste Mal ist kostenlos, danach kostet es Gold – je höher dein Level, desto mehr.</>
           ) : (
             <>
               Kosten: <Gold amount={cost} className="font-bold text-gold" />.

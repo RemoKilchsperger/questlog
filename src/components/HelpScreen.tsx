@@ -13,14 +13,25 @@ import {
   DUNGEON_REVIVE_HP,
   THREAT_DECAY,
 } from "../domain/coopCombat";
-import { AREAS, DUNGEONS, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
+import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
 import { FRAMES } from "../domain/achievements";
 import { UPGRADE_REFUND } from "../domain/forge";
 import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
 import { MAX_UPGRADE, RARITIES, UPGRADE_STEP } from "../domain/items";
 import { MAX_LEVEL, POINTS_PER_LEVEL, xpForNextLevel } from "../domain/leveling";
 import { POTIONS, potionEffectText } from "../domain/potions";
-import { DAILY_DROP_CHANCE, DAILY_QUEST_COUNT, KILL_QUEST_DROP_CHANCE, QUESTS } from "../domain/quests";
+import {
+  DAILY_DROP_CHANCE,
+  DAILY_HUNT_COUNT,
+  DAILY_TRADE_COUNTS,
+  KILL_QUEST_DROP_CHANCE,
+  QUESTS,
+  WEEKLY_BOSSES,
+  WEEKLY_DUNGEON_LEVEL,
+  WEEKLY_DUNGEONS,
+  WEEKLY_KILLS,
+  WEEKLY_TRADE_COUNTS,
+} from "../domain/quests";
 import { STAT_LABELS } from "../domain/stats";
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
 import {
@@ -108,10 +119,26 @@ export function HelpScreen() {
           <p>XP und Gold hängen vom Level der Kreatur bzw. des Dungeons ab – je schwieriger, desto mehr.</p>
           <H>⭐ Tagesaufträge</H>
           <p>
-            Jeden Tag gibt es {DAILY_QUEST_COUNT} neue Jagdaufträge passend zu deinem Level. Sie laufen sofort, ohne
+            Jeden Tag gibt es {DAILY_HUNT_COUNT} neue Jagdaufträge passend zu deinem Level und einen Auftrag für Händler
+            oder Schmied, der täglich wechselt: {DAILY_TRADE_COUNTS.sell} Ausrüstungsteile verkaufen,{" "}
+            {DAILY_TRADE_COUNTS.salvage} zerlegen oder {DAILY_TRADE_COUNTS.upgrade}-mal eines verbessern. Aufträge laufen sofort, ohne
             Annehmen, und geben XP, Gold und mit {pct(DAILY_DROP_CHANCE)} ein Item. Um Mitternacht kommen neue – was bis
             dahin nicht abgegeben ist, verfällt.
           </p>
+          <H>📅 Wochenaufträge</H>
+          <p>Jeden Montag gibt es grössere Ziele für die ganze Woche – mit mehr XP und Gold und immer einem Item:</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>{WEEKLY_KILLS} beliebige Kreaturen besiegen</li>
+            <li>{WEEKLY_BOSSES} Bosse besiegen – Gebiets-, Dungeon- und Koop-Bosse zählen</li>
+            <li>
+              {WEEKLY_DUNGEONS} Dungeons abschliessen, solo oder im Koop (ab Level {WEEKLY_DUNGEON_LEVEL})
+            </li>
+            <li>
+              Ein Auftrag für Händler oder Schmied, der wöchentlich wechselt: {WEEKLY_TRADE_COUNTS.sell} Ausrüstungsteile verkaufen,{" "}
+              {WEEKLY_TRADE_COUNTS.salvage} zerlegen oder {WEEKLY_TRADE_COUNTS.upgrade}-mal verbessern
+            </li>
+          </ul>
+          <p>Bei Händler und Schmied zählt jedes Ausrüstungsteil – Waffen, Schilde und Rüstung.</p>
         </Topic>
 
         <Topic id="character" title="🧙 Level & Attribute">
@@ -145,7 +172,7 @@ export function HelpScreen() {
           />
           <p>
             Attributboni auf Items und aus Boss-Sets zählen genauso wie verteilte Punkte. Im Charakter-Tab kannst du alle
-            Attributpunkte zurücksetzen und neu verteilen – das erste Mal kostenlos, danach gegen viel Gold.
+            Attributpunkte zurücksetzen und neu verteilen – das erste Mal kostenlos, danach gegen Gold (je nach Level).
           </p>
         </Topic>
 
@@ -276,6 +303,10 @@ export function HelpScreen() {
           <ul className="list-disc space-y-1 pl-5">
             <li>Jeder Sieg gibt XP, oft Gold und manchmal ein Item oder einen Heiltrank.</li>
             <li>Bosse geben immer Gold, ein Item und zwei Heiltränke – dazu die Chance auf ein Boss-Item.</li>
+            <li>
+              Nach einem Sieg erscheint ein Gebietsboss erst nach {AREA_BOSS_RESPAWN_MS / 60_000} Minuten wieder. Der Kampf-Tab
+              zeigt die Restzeit.
+            </li>
             <li>Selten ({pct(BUFF_POTION_DROP_CHANCE)}) fällt ein Angriffs- oder Rüstungstrank.</li>
             <li>Je höher das Gebiet, desto stärker die Heiltränke.</li>
           </ul>

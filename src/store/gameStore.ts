@@ -21,7 +21,7 @@ import {
   type BattleState,
   type DungeonChest,
 } from "../domain/combat";
-import { getCreature, getDungeon } from "../domain/creatures";
+import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type BossRespawns } from "../domain/creatures";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, getItem, MAX_UPGRADE, migrateLegacyItemId, STARTER_ITEM_IDS } from "../domain/items";
@@ -40,23 +40,26 @@ import { gearScore } from "../domain/gearScore";
 import {
   abandonQuest,
   acceptQuest,
-  applyDailyEvent,
+  applyBoardEvent,
   applyQuestEvent,
   EMPTY_QUEST_LOG,
   getQuest,
-  NO_DAILY_QUESTS,
+  EMPTY_BOARD,
   rollDailyQuests,
+  rollWeeklyQuests,
   rollQuestLoot,
-  turnInDaily,
+  turnInBoardQuest,
   turnInQuest,
-  type DailyQuests,
+  type QuestBoard,
+  type QuestSource,
+  type TradeAction,
   type QuestDef,
   type QuestEvent,
   type QuestLog,
 } from "../domain/quests";
 import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon } from "../domain/skills";
 import type { AbilityId } from "../domain/abilities";
-import { dateKey } from "../domain/calendar";
+import { dateKey, weekKey } from "../domain/calendar";
 import { allocatePoint, convertLinearCurveXp, getLevel, resetAttributes } from "../domain/leveling";
 import { buyOffer, EMPTY_SHOP, rerollShop, rollShopStock, shopSlot, type ShopStock } from "../domain/shop";
 import type { Character, EquipSlot, Equipment, Loot, OwnedItem, StatKey } from "../domain/types";
@@ -75,8 +78,8 @@ export type AchievementNotice = { id: string; tier: number } | { retroactive: nu
 export interface RewardEvent {
   id: string;
   questTitle: string;
-  /** Tagesauftrag (sonst Quest aus dem Questbuch) */
-  daily: boolean;
+  /** Questbuch, Tages- oder Wochenauftrag */
+  source: QuestSource;
   xp: number;
   gold: number;
   loot: Loot;
@@ -101,9 +104,11 @@ interface GameState {
   /** Gibt eine erfüllte Quest ab (Questbuch oder Tagesauftrag) und schreibt die Belohnung gut. */
   turnInQuest: (id: string) => void;
   /** Tagesaufträge – gehört `date` nicht zu heute, sind sie veraltet. */
-  dailyQuests: DailyQuests;
-  /** Würfelt neue Tagesaufträge aus, sobald ein neuer Tag begonnen hat. */
-  refreshDailyQuests: () => void;
+  dailyQuests: QuestBoard;
+  /** Wochenaufträge – `date` ist der Montag der Woche. */
+  weeklyQuests: QuestBoard;
+  /** Würfelt neue Tages- bzw. Wochenaufträge aus, sobald ein neuer Tag bzw. eine neue Woche begonnen hat. */
+  refreshQuestBoards: () => void;
 
   renameCharacter: (name: string) => void;
   /** Verteilt einen Level-up-Punkt auf ein Attribut. */
@@ -143,6 +148,8 @@ interface GameState {
 
   /** IDs aller Boss-Items, die der Held je erbeutet hat – auch wenn sie inzwischen verkauft sind. */
   bossCollection: string[];
+  /** Wann besiegte Gebietsbosse wieder erscheinen (siehe AREA_BOSS_RESPAWN_MS) */
+  bossRespawns: BossRespawns;
 
   /** Zähler für Erfolge (achievements.ts) */
   records: Records;
@@ -216,6 +223,7 @@ type SaveState = Pick<
   | "character"
   | "questLog"
   | "dailyQuests"
+  | "weeklyQuests"
   | "inventory"
   | "equipment"
   | "potions"
@@ -223,6 +231,7 @@ type SaveState = Pick<
   | "lastShopReroll"
   | "shopRerolls"
   | "bossCollection"
+  | "bossRespawns"
   | "coopStats"
   | "records"
   | "achievements"
@@ -277,7 +286,8 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     ...saved,
     ...(character && { character }),
     questLog: { ...EMPTY_QUEST_LOG, ...saved.questLog },
-    dailyQuests: saved.dailyQuests ?? NO_DAILY_QUESTS,
+    dailyQuests: saved.dailyQuests ?? EMPTY_BOARD,
+    weeklyQuests: saved.weeklyQuests ?? EMPTY_BOARD,
     inventory: saved.inventory ?? [],
     equipment: { ...EMPTY_EQUIPMENT, ...saved.equipment },
     potions: saved.potions ?? STARTER_POTIONS,
@@ -286,6 +296,7 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     // Ältere Stände kannten nur einen Wurf pro Tag
     shopRerolls: saved.shopRerolls ?? (saved.lastShopReroll ? 1 : 0),
     bossCollection: saved.bossCollection ?? [],
+    bossRespawns: saved.bossRespawns ?? {},
     coopStats: saved.coopStats ?? EMPTY_COOP_STATS,
     records: { ...EMPTY_RECORDS, ...saved.records },
     achievements,
@@ -377,7 +388,8 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
       ...rest,
       character,
       questLog: EMPTY_QUEST_LOG,
-      dailyQuests: NO_DAILY_QUESTS,
+      dailyQuests: EMPTY_BOARD,
+      weeklyQuests: EMPTY_BOARD,
       records: {
         ...EMPTY_RECORDS,
         ...rest.records,
@@ -413,15 +425,29 @@ export const useGameStore = create<GameState>()(
     (set, get) => {
       /** Ein Sieg oder ein abgeschlossener Dungeon bringt Questbuch und Tagesaufträge voran. */
       const questEvent = (event: QuestEvent) => {
-        get().refreshDailyQuests(); // Aufträge von gestern zählen nicht mehr
-        const { questLog, dailyQuests } = get();
+        get().refreshQuestBoards(); // Aufträge von gestern bzw. letzter Woche zählen nicht mehr
+        const { questLog, dailyQuests, weeklyQuests } = get();
         const nextLog = applyQuestEvent(questLog, event);
-        const nextDaily = applyDailyEvent(dailyQuests, event);
-        if (nextLog !== questLog || nextDaily !== dailyQuests) set({ questLog: nextLog, dailyQuests: nextDaily });
+        const nextDaily = applyBoardEvent(dailyQuests, event);
+        const nextWeekly = applyBoardEvent(weeklyQuests, event);
+        if (nextLog !== questLog || nextDaily !== dailyQuests || nextWeekly !== weeklyQuests) {
+          set({ questLog: nextLog, dailyQuests: nextDaily, weeklyQuests: nextWeekly });
+        }
+      };
+
+      /** Händler und Schmied: jedes Ausrüstungsteil zählt für die Händler-Aufträge. */
+      const tradeEvent = (action: TradeAction, item: OwnedItem | undefined) => {
+        if (item) questEvent({ kind: "trade", action });
+      };
+
+      /** Ein Item im Rucksack oder angelegt – vor dem Verkaufen, Zerlegen oder Verbessern nachgeschlagen. */
+      const findItem = (uid: string): OwnedItem | undefined => {
+        const { inventory, equipment } = get();
+        return [...inventory, ...Object.values(equipment)].find((o): o is OwnedItem => o !== null && o.uid === uid);
       };
 
       /** Schreibt die Belohnung einer abgegebenen Quest gut und zeigt sie an. */
-      const grantQuestReward = (def: QuestDef, daily: boolean, extra: Partial<GameState>) => {
+      const grantQuestReward = (def: QuestDef, source: QuestSource, extra: Partial<GameState>) => {
         const { character, inventory, bossCollection } = get();
         const levelBefore = getLevel(character.totalXp);
         const totalXp = character.totalXp + def.reward.xp;
@@ -435,7 +461,7 @@ export const useGameStore = create<GameState>()(
           lastReward: {
             id: newId(),
             questTitle: def.title,
-            daily,
+            source,
             xp: def.reward.xp,
             gold: def.reward.gold,
             loot,
@@ -489,7 +515,8 @@ export const useGameStore = create<GameState>()(
       return {
       character: createCharacter(),
       questLog: EMPTY_QUEST_LOG,
-      dailyQuests: NO_DAILY_QUESTS,
+      dailyQuests: EMPTY_BOARD,
+      weeklyQuests: EMPTY_BOARD,
       inventory: starterInventory(),
       equipment: EMPTY_EQUIPMENT,
       potions: STARTER_POTIONS,
@@ -497,6 +524,7 @@ export const useGameStore = create<GameState>()(
       lastShopReroll: "",
       shopRerolls: 0,
       bossCollection: [],
+      bossRespawns: {},
       coopStats: EMPTY_COOP_STATS,
       records: EMPTY_RECORDS,
       achievements: {},
@@ -559,19 +587,28 @@ export const useGameStore = create<GameState>()(
 
       turnInQuest: (id) =>
         attempt(() => {
-          const { questLog, dailyQuests, records } = get();
+          const { questLog, dailyQuests, weeklyQuests, records } = get();
+          const weekly = weeklyQuests.quests.find((q) => q.def.id === id);
+          if (weekly) {
+            if (weeklyQuests.date !== weekKey()) throw new Error("Dieser Wochenauftrag ist abgelaufen.");
+            grantQuestReward(weekly.def, "weekly", {
+              weeklyQuests: turnInBoardQuest(weeklyQuests, id),
+              records: { ...records, questsCompleted: records.questsCompleted + 1 },
+            });
+            return;
+          }
           const daily = dailyQuests.quests.find((q) => q.def.id === id);
           if (!daily) {
-            grantQuestReward(getQuest(id), false, {
+            grantQuestReward(getQuest(id), "story", {
               questLog: turnInQuest(questLog, id),
               records: { ...records, questsCompleted: records.questsCompleted + 1 },
             });
             return;
           }
           if (dailyQuests.date !== dateKey()) throw new Error("Dieser Tagesauftrag ist abgelaufen.");
-          const next = turnInDaily(dailyQuests, id);
+          const next = turnInBoardQuest(dailyQuests, id);
           const perfect = next.quests.every((q) => q.turnedIn);
-          grantQuestReward(daily.def, true, {
+          grantQuestReward(daily.def, "daily", {
             dailyQuests: next,
             records: {
               ...records,
@@ -582,10 +619,13 @@ export const useGameStore = create<GameState>()(
           });
         }),
 
-      refreshDailyQuests: () => {
+      refreshQuestBoards: () => {
         const today = dateKey();
-        const { dailyQuests, character } = get();
-        if (dailyQuests.date !== today) set({ dailyQuests: rollDailyQuests(today, getLevel(character.totalXp)) });
+        const week = weekKey();
+        const { dailyQuests, weeklyQuests, character } = get();
+        const level = getLevel(character.totalXp);
+        if (dailyQuests.date !== today) set({ dailyQuests: rollDailyQuests(today, level) });
+        if (weeklyQuests.date !== week) set({ weeklyQuests: rollWeeklyQuests(week, level) });
       },
 
       renameCharacter: (name) =>
@@ -607,7 +647,8 @@ export const useGameStore = create<GameState>()(
         set({
           character: createCharacter(),
           questLog: EMPTY_QUEST_LOG,
-          dailyQuests: NO_DAILY_QUESTS,
+          dailyQuests: EMPTY_BOARD,
+          weeklyQuests: EMPTY_BOARD,
           inventory: starterInventory(),
           equipment: EMPTY_EQUIPMENT,
           potions: STARTER_POTIONS,
@@ -615,6 +656,7 @@ export const useGameStore = create<GameState>()(
           lastShopReroll: "",
           shopRerolls: 0,
           bossCollection: [],
+          bossRespawns: {},
           coopStats: EMPTY_COOP_STATS,
           records: EMPTY_RECORDS,
           achievements: {},
@@ -674,15 +716,19 @@ export const useGameStore = create<GameState>()(
       sell: (uid) =>
         attempt(() => {
           const { inventory, equipment, character } = get();
+          const item = findItem(uid);
           const result = sellItem({ inventory, equipment }, character.gold, uid);
           set({ inventory: result.gear.inventory, character: { ...character, gold: result.gold } });
+          tradeEvent("sell", item);
         }),
 
       salvage: (uid) =>
         attempt(() => {
           const { inventory, equipment, character } = get();
+          const item = findItem(uid);
           const result = salvageItem({ inventory, equipment }, character.essence, uid);
           set({ inventory: result.gear.inventory, character: { ...character, essence: result.essence } });
+          tradeEvent("salvage", item);
         }),
 
       upgrade: (uid) =>
@@ -694,6 +740,7 @@ export const useGameStore = create<GameState>()(
             equipment: result.gear.equipment,
             character: { ...character, essence: result.essence },
           });
+          tradeEvent("upgrade", findItem(uid));
         }),
 
       buyPotion: (potionId) =>
@@ -710,6 +757,8 @@ export const useGameStore = create<GameState>()(
           const hero = getHeroCombatProfile(character, equipment);
           if (hero.level < area.minLevel) throw new Error(`${area.name} ist erst ab Level ${area.minLevel} zugänglich.`);
           if (area.dungeon) throw new Error("Dungeon-Gegner kämpfen nur im Dungeon.");
+          const wait = respawnLeft(get().bossRespawns, creatureId);
+          if (wait > 0) throw new Error(`${creature.name} erscheint erst in ${formatRespawn(wait)} wieder.`);
           const battle = startBattle(newId(), character.name, hero, creature);
           set({ battle, battleReward: null, dungeon: null });
           EventBus.emit("battle:started", { battle });
@@ -784,8 +833,9 @@ export const useGameStore = create<GameState>()(
                   : records.bossesDefeated,
               closeCall: records.closeCall || result.state.hero.hp < result.state.hero.maxHp * 0.05,
             },
+            bossRespawns: startRespawn(get().bossRespawns, creature.id),
           });
-          questEvent({ kind: "kill", creatureId: creature.id });
+          questEvent({ kind: "kill", creatureId: creature.id, boss: creature.boss });
           const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId());
           if (dungeon) {
             // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende.
@@ -829,6 +879,7 @@ export const useGameStore = create<GameState>()(
         const chest = addToChest(EMPTY_CHEST, reward);
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
         set((s) => ({ coopStats: recordCoopWin(s.coopStats, bossId) }));
+        questEvent({ kind: "kill", creatureId: bossId, boss: true });
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
@@ -850,6 +901,8 @@ export const useGameStore = create<GameState>()(
               bossesDefeated: s.records.bossesDefeated.includes(bossId) ? s.records.bossesDefeated : [...s.records.bossesDefeated, bossId],
             },
           }));
+          // Im Koop zählt der Endboss als besiegter Boss, dazu der abgeschlossene Dungeon
+          questEvent({ kind: "kill", creatureId: bossId, boss: true });
           questEvent({ kind: "dungeon", dungeonId });
         }
         if (levels.levelAfter > levels.levelBefore) {
@@ -866,6 +919,7 @@ export const useGameStore = create<GameState>()(
         character: s.character,
         questLog: s.questLog,
         dailyQuests: s.dailyQuests,
+        weeklyQuests: s.weeklyQuests,
         inventory: s.inventory,
         equipment: s.equipment,
         potions: s.potions,
@@ -873,6 +927,7 @@ export const useGameStore = create<GameState>()(
         lastShopReroll: s.lastShopReroll,
         shopRerolls: s.shopRerolls,
         bossCollection: s.bossCollection,
+        bossRespawns: s.bossRespawns,
         coopStats: s.coopStats,
         records: s.records,
         achievements: s.achievements,

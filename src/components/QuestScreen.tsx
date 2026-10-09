@@ -1,16 +1,18 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { dateKey, formatCountdown, nextBoundary } from "../domain/calendar";
+import { dateKey, formatCountdown, nextBoundary, nextWeekStart, weekKey } from "../domain/calendar";
 import { AREAS, DUNGEONS, getCreature, getDungeon, isAreaUnlocked } from "../domain/creatures";
 import { getLevel } from "../domain/leveling";
 import {
+  EMPTY_BOARD,
   isQuestComplete,
-  NO_DAILY_QUESTS,
   QUESTS,
   questGoalText,
   questTarget,
   trackedQuests,
+  type QuestBoard,
   type QuestDef,
+  type TradeAction,
   type TrackedQuest,
 } from "../domain/quests";
 import { useGameStore } from "../store/gameStore";
@@ -19,17 +21,17 @@ import { Gold } from "./Gold";
 import { Hint } from "./HoverCard";
 import { useNow } from "./useNow";
 
-/** Quest-Tab: Tagesaufträge und laufende Quests links, das Questbuch rechts. */
+/** Quest-Tab: Tages- und Wochenaufträge sowie laufende Quests links, das Questbuch rechts. */
 export function QuestScreen() {
   const now = useNow();
   const today = dateKey(now);
-  const refreshDailyQuests = useGameStore((s) => s.refreshDailyQuests);
-  useEffect(() => refreshDailyQuests(), [today, refreshDailyQuests]);
+  const refreshQuestBoards = useGameStore((s) => s.refreshQuestBoards);
+  useEffect(() => refreshQuestBoards(), [today, refreshQuestBoards]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="flex min-w-0 flex-col gap-4">
-        <DailyQuestPanel now={now} />
+        <BoardPanel now={now} />
         <ActiveQuestPanel />
       </div>
       <QuestBook />
@@ -40,31 +42,88 @@ export function QuestScreen() {
 /** Wie viele Quests erfüllt sind und auf die Abgabe warten – für das Abzeichen am Tab. */
 export function useReadyQuestCount(): number {
   return useGameStore((s) =>
-    trackedQuests(s.questLog, s.dailyQuests, dateKey()).filter((q) => isQuestComplete(q.def, q.progress)).length,
+    trackedQuests(s.questLog, s.dailyQuests, s.weeklyQuests, dateKey(), weekKey()).filter((q) => isQuestComplete(q.def, q.progress))
+      .length,
   );
 }
 
-function DailyQuestPanel({ now }: { now: Date }) {
+type BoardView = "daily" | "weekly";
+
+/** Gewählte Ansicht der Aufträge – nur eine Bequemlichkeit pro Browser. */
+const BOARD_VIEW_KEY = "questlog-board-view";
+
+const BOARD_VIEWS: Record<BoardView, { label: string; intro: string }> = {
+  daily: {
+    label: "⭐ Täglich",
+    intro: "Jeden Tag drei Jagdaufträge passend zu deinem Level und ein Auftrag für Händler oder Schmied – sie zählen sofort, ohne Annehmen.",
+  },
+  weekly: {
+    label: "📅 Wöchentlich",
+    intro: "Grössere Ziele für die ganze Woche, jeden Montag neu – mit garantiertem Item.",
+  },
+};
+
+/** Tages- und Wochenaufträge in einem Feld, mit Umschalter und Countdown bis zum Wechsel. */
+function BoardPanel({ now }: { now: Date }) {
+  const [view, setView] = useState<BoardView>(() => {
+    try {
+      return localStorage.getItem(BOARD_VIEW_KEY) === "weekly" ? "weekly" : "daily";
+    } catch {
+      return "daily";
+    }
+  });
+  const choose = (next: BoardView) => {
+    setView(next);
+    try {
+      localStorage.setItem(BOARD_VIEW_KEY, next);
+    } catch {
+      // ohne Speicher gilt die Wahl nur bis zum Neuladen
+    }
+  };
   const daily = useGameStore((s) => s.dailyQuests);
-  const quests = daily.date === dateKey(now) ? daily.quests : [];
-  const done = quests.filter((q) => q.turnedIn).length;
+  const weekly = useGameStore((s) => s.weeklyQuests);
+  const boards: Record<BoardView, QuestBoard> = {
+    daily: daily.date === dateKey(now) ? daily : EMPTY_BOARD,
+    weekly: weekly.date === weekKey(now) ? weekly : EMPTY_BOARD,
+  };
+  const board = boards[view];
+  const done = board.quests.filter((q) => q.turnedIn).length;
+  const resetIn = formatCountdown(now, view === "daily" ? nextBoundary(now, 24) : nextWeekStart(now));
+  /** Erfüllte, noch nicht abgegebene Aufträge – als Hinweis am Umschalter */
+  const ready = (b: QuestBoard) => b.quests.filter((q) => !q.turnedIn && isQuestComplete(q.def, q.progress)).length;
 
   return (
     <section className="panel border-gold/50 p-4">
-      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-pixel text-2xl text-gold">⭐ Tagesaufträge</h2>
-        <span className="text-xs text-muted">Neue in {formatCountdown(now, nextBoundary(now, 24))}</span>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-pixel text-2xl text-gold">Aufträge</h2>
+        <div className="flex rounded-md border-2 border-night-700 bg-night-900 p-0.5" role="group" aria-label="Aufträge">
+          {(["daily", "weekly"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => choose(v)}
+              aria-pressed={view === v}
+              className={`font-pixel rounded px-3 py-0.5 transition ${
+                view === v ? "bg-night-700 text-gold" : "text-muted hover:text-parchment"
+              }`}
+            >
+              {BOARD_VIEWS[v].label}
+              {ready(boards[v]) > 0 && (
+                <span className="num ml-1.5 rounded-full bg-xp px-1.5 text-xs text-night-950">{ready(boards[v])}</span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
       <p className="mb-3 text-xs text-muted">
-        Jeden Tag neue Jagdaufträge passend zu deinem Level – sie zählen sofort, ohne Annehmen.{" "}
+        {BOARD_VIEWS[view].intro}{" "}
         <span className="num text-parchment">
-          {done}/{quests.length}
+          {done}/{board.quests.length}
         </span>{" "}
-        abgegeben.
+        abgegeben · neue in {resetIn}.
       </p>
       <ul className="flex flex-col gap-2">
-        {quests.map((q) => (
-          <QuestRow key={q.def.id} def={q.def} progress={q.progress} state={q.turnedIn ? "done" : "active"} daily />
+        {board.quests.map((q) => (
+          <QuestRow key={q.def.id} def={q.def} progress={q.progress} state={q.turnedIn ? "done" : "active"} board />
         ))}
       </ul>
     </section>
@@ -73,7 +132,7 @@ function DailyQuestPanel({ now }: { now: Date }) {
 
 function ActiveQuestPanel() {
   const questLog = useGameStore((s) => s.questLog);
-  const active = trackedQuests(questLog, NO_DAILY_QUESTS, dateKey());
+  const active = trackedQuests(questLog, EMPTY_BOARD, EMPTY_BOARD, "", "");
 
   return (
     <section className="panel p-4">
@@ -165,13 +224,14 @@ function QuestRow({
   def,
   progress,
   state,
-  daily = false,
+  board = false,
   compact = false,
 }: {
   def: QuestDef;
   progress: number;
   state: RowState;
-  daily?: boolean;
+  /** Tages- oder Wochenauftrag – kann nicht abgebrochen werden */
+  board?: boolean;
   /** Im Questbuch: laufende Quests nur als Hinweis, ohne Abgabe */
   compact?: boolean;
 }) {
@@ -234,7 +294,7 @@ function QuestRow({
             >
               Abgeben
             </motion.button>
-            {!daily && (
+            {!board && (
               <button
                 onClick={() => abandon(def.id)}
                 className="text-xs text-muted opacity-70 hover:text-danger hover:opacity-100"
@@ -251,10 +311,19 @@ function QuestRow({
   );
 }
 
+const TRADE_ICONS: Record<TradeAction, string> = { sell: "🏪", salvage: "⚒️", upgrade: "✨" };
+
+/** Bild der Quest: die Kreatur bzw. der Dungeon-Boss, bei allgemeinen Aufträgen ein Symbol. */
 function QuestIcon({ def }: { def: QuestDef }) {
-  const creature =
-    def.goal.kind === "kill" ? getCreature(def.goal.creatureId).creature : getDungeon(def.goal.dungeonId).creatures.at(-1)!;
-  return <CreatureSprite sprite={creature.sprite} size={40} className="shrink-0" />;
+  const { goal } = def;
+  if (goal.kind === "kill") return <CreatureSprite sprite={getCreature(goal.creatureId).creature.sprite} size={40} className="shrink-0" />;
+  if (goal.kind === "dungeon") return <CreatureSprite sprite={getDungeon(goal.dungeonId).creatures.at(-1)!.sprite} size={40} className="shrink-0" />;
+  const symbol = goal.kind === "trade" ? TRADE_ICONS[goal.action] : goal.kind === "dungeons" ? "🏰" : goal.boss ? "👑" : "⚔️";
+  return (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center text-2xl" aria-hidden>
+      {symbol}
+    </span>
+  );
 }
 
 function ProgressBar({ value, max }: { value: number; max: number }) {
@@ -292,7 +361,7 @@ export function QuestProgressChips({ quests }: { quests: readonly TrackedQuest[]
             <span
               className={`num rounded px-1.5 py-0.5 text-xs ${complete ? "bg-xp/20 text-xp" : "bg-gold/15 text-gold"}`}
             >
-              {q.daily ? "⭐" : "📜"} {q.progress}/{questTarget(q.def)}
+              {q.source === "story" ? "📜" : q.source === "weekly" ? "📅" : "⭐"} {q.progress}/{questTarget(q.def)}
               {complete && " ✓"}
             </span>
           </Hint>

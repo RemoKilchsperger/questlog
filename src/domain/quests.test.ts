@@ -3,10 +3,13 @@ import { AREAS, DUNGEONS } from "./creatures";
 import {
   abandonQuest,
   acceptQuest,
-  applyDailyEvent,
+  advanceQuest,
+  applyBoardEvent,
   applyQuestEvent,
-  DAILY_QUEST_COUNT,
+  DAILY_HUNT_COUNT,
+  DAILY_TRADE_COUNTS,
   dailyCandidates,
+  EMPTY_BOARD,
   EMPTY_QUEST_LOG,
   getQuest,
   isQuestComplete,
@@ -15,9 +18,16 @@ import {
   questsForCreature,
   rollDailyQuests,
   rollQuestLoot,
+  rollWeeklyQuests,
+  tradeActionFor,
   trackedQuests,
-  turnInDaily,
+  turnInBoardQuest,
   turnInQuest,
+  WEEKLY_DUNGEON_LEVEL,
+  WEEKLY_KILLS,
+  WEEKLY_TRADE_COUNTS,
+  type QuestBoard,
+  type QuestDef,
 } from "./quests";
 
 const sequence = (value: number) => () => value;
@@ -62,15 +72,15 @@ describe("Questbuch", () => {
   it("Siege zählen nur für passende Quests, höchstens bis zum Ziel", () => {
     let log = acceptQuest(acceptQuest(EMPTY_QUEST_LOG, "hunt-giant-rat", 1), "hunt-grey-wolf", 1);
     // Fremde Kreatur: nichts ändert sich, dasselbe Objekt
-    expect(applyQuestEvent(log, { kind: "kill", creatureId: "forest-spider" })).toBe(log);
-    for (let i = 0; i < 7; i++) log = applyQuestEvent(log, { kind: "kill", creatureId: "giant-rat" });
+    expect(applyQuestEvent(log, { kind: "kill", creatureId: "forest-spider", boss: false })).toBe(log);
+    for (let i = 0; i < 7; i++) log = applyQuestEvent(log, { kind: "kill", creatureId: "giant-rat", boss: false });
     expect(log.active).toEqual({ "hunt-giant-rat": 5, "hunt-grey-wolf": 0 });
     expect(isQuestComplete(getQuest("hunt-giant-rat"), 5)).toBe(true);
   });
 
   it("Dungeon-Quests zählen nur den Abschluss", () => {
     let log = acceptQuest(EMPTY_QUEST_LOG, "dungeon-abandoned-mine", 10);
-    log = applyQuestEvent(log, { kind: "kill", creatureId: "ore-king" });
+    log = applyQuestEvent(log, { kind: "kill", creatureId: "ore-king", boss: false });
     expect(log.active["dungeon-abandoned-mine"]).toBe(0);
     log = applyQuestEvent(log, { kind: "dungeon", dungeonId: "abandoned-mine" });
     expect(log.active["dungeon-abandoned-mine"]).toBe(1);
@@ -80,14 +90,14 @@ describe("Questbuch", () => {
     let log = acceptQuest(EMPTY_QUEST_LOG, "boss-goblin-chief", 10);
     expect(() => turnInQuest(log, "boss-goblin-chief")).toThrow(/nicht erfüllt/);
     expect(() => turnInQuest(log, "hunt-giant-rat")).toThrow(/nicht angenommen/);
-    log = applyQuestEvent(log, { kind: "kill", creatureId: "goblin-chief" });
+    log = applyQuestEvent(log, { kind: "kill", creatureId: "goblin-chief", boss: false });
     log = turnInQuest(log, "boss-goblin-chief");
     expect(log).toEqual({ active: {}, completed: ["boss-goblin-chief"] });
   });
 
   it("abbrechen verwirft den Fortschritt", () => {
     let log = acceptQuest(EMPTY_QUEST_LOG, "hunt-giant-rat", 1);
-    log = applyQuestEvent(log, { kind: "kill", creatureId: "giant-rat" });
+    log = applyQuestEvent(log, { kind: "kill", creatureId: "giant-rat", boss: false });
     log = abandonQuest(log, "hunt-giant-rat");
     expect(log.active).toEqual({});
     expect(acceptQuest(log, "hunt-giant-rat", 1).active["hunt-giant-rat"]).toBe(0);
@@ -102,14 +112,15 @@ describe("Questbuch", () => {
 });
 
 describe("Tagesaufträge", () => {
-  it("drei verschiedene Kreaturen mit 3–6 Siegen, passend zum Level", () => {
+  const hunts = (board: QuestBoard) => board.quests.filter((q) => q.def.goal.kind === "kill");
+
+  it("drei Jagden auf verschiedene Kreaturen mit 3–6 Siegen, passend zum Level", () => {
     for (const level of [1, 5, 15, 33, 60]) {
       const daily = rollDailyQuests("2026-10-08", level, Math.random);
-      expect(daily.quests).toHaveLength(DAILY_QUEST_COUNT);
-      const ids = daily.quests.map((q) => (q.def.goal.kind === "kill" ? q.def.goal.creatureId : ""));
+      expect(hunts(daily)).toHaveLength(DAILY_HUNT_COUNT);
+      const ids = hunts(daily).map((q) => (q.def.goal.kind === "kill" ? q.def.goal.creatureId : ""));
       expect(new Set(ids).size).toBe(ids.length);
-      for (const q of daily.quests) {
-        expect(q.def.goal.kind).toBe("kill");
+      for (const q of hunts(daily)) {
         if (q.def.goal.kind !== "kill") continue;
         expect(q.def.goal.count).toBeGreaterThanOrEqual(3);
         expect(q.def.goal.count).toBeLessThanOrEqual(6);
@@ -121,26 +132,86 @@ describe("Tagesaufträge", () => {
   it("nie Bosse, nie Dungeon-Gegner und nichts aus verschlossenen Gebieten", () => {
     const candidates = dailyCandidates(12);
     expect(candidates.every((c) => !c.boss && c.level <= 14)).toBe(true);
-    expect(candidates.length).toBeGreaterThanOrEqual(DAILY_QUEST_COUNT);
+    expect(candidates.length).toBeGreaterThanOrEqual(DAILY_HUNT_COUNT);
     // Ganz am Anfang die schwächsten drei
     expect(dailyCandidates(1).map((c) => c.id)).toEqual(["giant-rat", "grey-wolf", "forest-spider"]);
+  });
+
+  it("dazu jeden Tag ein Händler-Auftrag – verkaufen, zerlegen, verbessern im Wechsel", () => {
+    const tradeOf = (date: string) => {
+      const trade = rollDailyQuests(date, 10, Math.random).quests.find((q) => q.def.goal.kind === "trade");
+      return trade?.def.goal.kind === "trade" ? trade.def.goal : null;
+    };
+    const days = ["2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"].map(tradeOf);
+    // Drei Tage hintereinander: jede Handlung einmal, am vierten Tag geht es von vorne los
+    expect(new Set(days.slice(0, 3).map((g) => g?.action)).size).toBe(3);
+    expect(days[3]?.action).toBe(days[0]?.action);
+    expect([0, 1, 2, 3].map(tradeActionFor)).toEqual(["sell", "salvage", "upgrade", "sell"]);
+    for (const goal of days) expect(goal!.count).toBe(DAILY_TRADE_COUNTS[goal!.action]);
   });
 
   it("Fortschritt, Abgabe und laufende Übersicht", () => {
     let daily = rollDailyQuests("2026-10-08", 1, sequence(0));
     const [first] = daily.quests;
     const creatureId = first.def.goal.kind === "kill" ? first.def.goal.creatureId : "";
-    expect(() => turnInDaily(daily, first.def.id)).toThrow(/nicht erfüllt/);
-    for (let i = 0; i < 10; i++) daily = applyDailyEvent(daily, { kind: "kill", creatureId });
+    expect(() => turnInBoardQuest(daily, first.def.id)).toThrow(/nicht erfüllt/);
+    for (let i = 0; i < 10; i++) daily = applyBoardEvent(daily, { kind: "kill", creatureId, boss: false });
     expect(daily.quests[0].progress).toBe(3);
-    daily = turnInDaily(daily, first.def.id);
+    daily = turnInBoardQuest(daily, first.def.id);
     expect(daily.quests[0].turnedIn).toBe(true);
-    expect(() => turnInDaily(daily, first.def.id)).toThrow();
+    expect(() => turnInBoardQuest(daily, first.def.id)).toThrow();
 
     // Abgegebene und gestrige Aufträge laufen nicht mehr
-    const tracked = trackedQuests(EMPTY_QUEST_LOG, daily, "2026-10-08");
-    expect(tracked).toHaveLength(DAILY_QUEST_COUNT - 1);
-    expect(trackedQuests(EMPTY_QUEST_LOG, daily, "2026-10-09")).toHaveLength(0);
+    const tracked = trackedQuests(EMPTY_QUEST_LOG, daily, EMPTY_BOARD, "2026-10-08", "");
+    expect(tracked).toHaveLength(daily.quests.length - 1);
+    expect(trackedQuests(EMPTY_QUEST_LOG, daily, EMPTY_BOARD, "2026-10-09", "")).toHaveLength(0);
     expect(questsForCreature(tracked, creatureId)).toHaveLength(0);
+  });
+});
+
+describe("Händler-Aufträge", () => {
+  const sellQuest = (count: number): QuestDef => ({
+    id: "t",
+    title: "t",
+    description: "",
+    goal: { kind: "trade", action: "sell", count },
+    reward: getQuest("hunt-giant-rat").reward,
+  });
+
+  it("zählen nur die passende Handlung, höchstens bis zum Ziel", () => {
+    const def = sellQuest(3);
+    expect(advanceQuest(def, 0, { kind: "trade", action: "sell" })).toBe(1);
+    expect(advanceQuest(def, 0, { kind: "trade", action: "salvage" })).toBe(0);
+    expect(advanceQuest(def, 3, { kind: "trade", action: "sell" })).toBe(3);
+    expect(questGoalText(def)).toBe("Verkaufe 3 Ausrüstungsteile beim Händler");
+  });
+});
+
+describe("Wochenaufträge", () => {
+  it("Kreaturen, Bosse, Dungeons und ein Händler-Auftrag – Dungeons erst ab dem ersten offenen Dungeon", () => {
+    const kinds = (level: number) => rollWeeklyQuests("2026-10-05", level).quests.map((q) => q.def.goal.kind);
+    expect(kinds(WEEKLY_DUNGEON_LEVEL)).toEqual(["killAny", "killAny", "dungeons", "trade"]);
+    expect(kinds(WEEKLY_DUNGEON_LEVEL - 1)).toEqual(["killAny", "killAny", "trade"]);
+    for (const q of rollWeeklyQuests("2026-10-05", 30).quests) expect(q.def.reward.dropChance).toBe(1);
+  });
+
+  it("allgemeine Ziele: jede Kreatur, nur Bosse, jeder Dungeon", () => {
+    let board = rollWeeklyQuests("2026-10-05", 20);
+    board = applyBoardEvent(board, { kind: "kill", creatureId: "giant-rat", boss: false });
+    board = applyBoardEvent(board, { kind: "kill", creatureId: "swamp-hydra", boss: true });
+    board = applyBoardEvent(board, { kind: "dungeon", dungeonId: "abandoned-mine" });
+    expect(board.quests.map((q) => q.progress)).toEqual([2, 1, 1, 0]);
+    expect(board.quests.map((q) => questGoalText(q.def))).toContain(`Besiege ${WEEKLY_KILLS} Kreaturen`);
+  });
+
+  it("der Händler-Auftrag wechselt jede Woche und ist grösser als der tägliche", () => {
+    const tradeOf = (week: string) => {
+      const goal = rollWeeklyQuests(week, 20).quests.at(-1)!.def.goal;
+      return goal.kind === "trade" ? goal : null;
+    };
+    const weeks = ["2026-10-05", "2026-10-12", "2026-10-19"].map(tradeOf);
+    expect(new Set(weeks.map((g) => g?.action)).size).toBe(3);
+    for (const goal of weeks) expect(goal!.count).toBeGreaterThan(DAILY_TRADE_COUNTS[goal!.action]);
+    expect(weeks.map((g) => g!.count).sort()).toEqual(Object.values(WEEKLY_TRADE_COUNTS).sort());
   });
 });

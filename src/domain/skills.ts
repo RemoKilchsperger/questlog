@@ -116,9 +116,12 @@ export function learnSkill(character: Character, weapon: SkillWeapon): Character
   return { ...character, skills: { ...character.skills, [weapon]: skillRank(character, weapon) + 1 } };
 }
 
-/** Gold für das Zurücksetzen aller Skillpunkte: 25 × Level × (1 + Level/10). Lv. 20 → 1500. */
+/**
+ * Gold für das Zurücksetzen aller Skillpunkte: 12.5 × Level × (1 + Level/10). Lv. 20 → 750.
+ * Bewusst günstig, damit sich das Ausprobieren anderer Klassen und Builds lohnt.
+ */
 export function skillResetCost(level: number): number {
-  return Math.round(25 * level * (1 + level / 10));
+  return Math.round(12.5 * level * (1 + level / 10));
 }
 
 /** Warum die Skillpunkte gerade nicht zurückgesetzt werden können – oder null. */

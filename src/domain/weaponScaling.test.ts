@@ -73,7 +73,7 @@ describe("Waffen skalieren mit Attributen", () => {
 describe("Attributpunkte zurücksetzen", () => {
   it("das erste Mal kostenlos, danach teuer", () => {
     expect(attributeResetCost(hero())).toBe(0);
-    expect(attributeResetCost(hero({ attributeResets: 1 }))).toBe(Math.round(50 * 20 * 3));
+    expect(attributeResetCost(hero({ attributeResets: 1 }))).toBe(Math.round(25 * 20 * 3));
   });
 
   it("alle Attribute fallen auf 1, alle Punkte darüber sind wieder frei – auch die aus Quests", () => {

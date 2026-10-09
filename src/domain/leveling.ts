@@ -88,12 +88,12 @@ export const BASE_STAT = 1;
 
 /**
  * Gold für das Zurücksetzen der Attributpunkte: das erste Mal kostenlos, danach
- * 50 × Level × (1 + Level/10) – doppelt so viel wie bei den Skillpunkten. Lv. 20 → 3000.
+ * 25 × Level × (1 + Level/10) – doppelt so viel wie bei den Skillpunkten. Lv. 20 → 1500.
  */
 export function attributeResetCost(character: Character): number {
   if ((character.attributeResets ?? 0) === 0) return 0;
   const level = getLevel(character.totalXp);
-  return Math.round(50 * level * (1 + level / 10));
+  return Math.round(25 * level * (1 + level / 10));
 }
 
 /** Punkte, die das Zurücksetzen frei machen würde: alles über dem Startwert. */

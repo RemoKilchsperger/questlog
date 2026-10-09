@@ -78,7 +78,7 @@ export function SkillTree() {
   );
 }
 
-/** Alle Skillpunkte gegen viel Gold zurücksetzen – mit Rückfrage. */
+/** Alle Skillpunkte gegen Gold zurücksetzen – mit Rückfrage. */
 function SkillReset() {
   const character = useGameStore((s) => s.character);
   const reset = useGameStore((s) => s.resetSkills);

@@ -108,7 +108,7 @@ describe("Skills zurücksetzen", () => {
   const rich = (character: Character, gold: number): Character => ({ ...character, gold });
 
   it("kostet viel Gold, mehr auf höherem Level", () => {
-    expect(skillResetCost(20)).toBe(1500);
+    expect(skillResetCost(20)).toBe(750);
     expect(skillResetCost(40)).toBeGreaterThan(skillResetCost(20));
   });
 
