@@ -1026,7 +1026,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "burn":
       return e.target === "enemy" ? `Feuer fügt ${enemy} ${e.damage} Schaden zu.` : `Feuer fügt dir ${e.damage} Schaden zu.`;
     case "stunned":
-      return `${enemy} ist betäubt und kann nicht zurückschlagen.`;
+      return `${enemy} ist ${e.freeze ? "eingefroren" : "betäubt"} und kann nicht zurückschlagen.`;
     case "stunResisted":
       return `${enemy} ist noch immun gegen Betäubung und schlägt zurück.`;
     case "bossAbility":

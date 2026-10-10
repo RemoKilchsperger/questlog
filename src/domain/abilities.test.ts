@@ -4,7 +4,7 @@ import { abilityBlocker, attackRound, getHeroCombatProfile, startBattle, type Ba
 import { getBossAbility, roundsUntilBossAbility } from "./bossAbilities";
 import { AREAS, getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { createItem, getItemStats } from "./items";
+import { createItem, getItemStats, ITEM_TYPES } from "./items";
 import { xpForNextLevel } from "./leveling";
 import { clampSkills, MAX_SKILL_RANK, SKILL_BONUS_PER_RANK, unspentSkillPoints } from "./skills";
 import type { Character, Equipment } from "./types";
@@ -40,6 +40,11 @@ describe("Fähigkeiten", () => {
     expect(ABILITIES.filter((a) => a.tier === 1).map((a) => a.id).sort()).toEqual([...weapons].sort());
     expect(ABILITIES.filter((a) => a.tier === 2).map((a) => a.id).sort()).toEqual(weapons.map((w) => `${w}-2`).sort());
     for (const a of ABILITIES) expect(a.id.startsWith(a.weapon), a.id).toBe(true);
+  });
+
+  it("Zweihandwaffen haben eine dritte Fähigkeit (Id = Waffe-3)", () => {
+    const twoHanded = ITEM_TYPES.filter((t) => t.kind === "weapon" && t.twoHanded).map((t) => `${t.type}-3`);
+    expect(ABILITIES.filter((a) => a.tier === 3).map((a) => a.id).sort()).toEqual(twoHanded.sort());
   });
 
   it("verfügbar sind die Fähigkeiten der angelegten Waffen", () => {

@@ -236,7 +236,7 @@ function AbilityCardContent({ ability, learned, blocker }: { ability: AbilityDef
       </div>
       <p className="font-pixel text-lg leading-tight text-intellect">{ability.name}</p>
       <p className="text-xs text-muted">
-        {ability.tier === 1 ? "Erste" : "Zweite"} Fähigkeit · {weapon}
+        {["Erste", "Zweite", "Dritte"][ability.tier - 1]} Fähigkeit · {weapon}
       </p>
       <p className="num text-sm">
         <span className="text-intellect">💧 {ability.manaCost} Mana</span>

@@ -6,10 +6,13 @@ import { xpForNextLevel } from "./leveling";
 import {
   ABILITY_COST,
   ABILITY_UNLOCK_RANK,
+  abilityCost,
   abilityUnlockBlocker,
   learnSkill,
   MAX_SKILL_RANK,
   resetSkills,
+  SECOND_ABILITY_COST,
+  SECOND_ABILITY_LEVEL,
   skillResetBlocker,
   skillResetCost,
   SKILL_BONUS_PER_RANK,
@@ -95,6 +98,19 @@ describe("Skilltree", () => {
     expect(abilityUnlockBlocker(unlocked, "sword")).toMatch(/Bereits/);
     // Ohne passende Waffe bleibt die Fähigkeit im Kampf weg.
     expect(getHeroCombatProfile(unlocked, EMPTY_EQUIPMENT).abilities).toEqual([]);
+  });
+
+  it("die dritte Fähigkeit der Zweihandwaffen gibt es wie die zweite ab Level 25 für 2 Skillpunkte", () => {
+    const young = learnTimes(heroAt(SECOND_ABILITY_LEVEL - 1), "staff", ABILITY_UNLOCK_RANK);
+    expect(abilityUnlockBlocker(young, "staff-3")).toMatch(/Level 25/);
+
+    const grown = learnTimes(heroAt(SECOND_ABILITY_LEVEL), "staff", ABILITY_UNLOCK_RANK);
+    expect(abilityCost("staff-3")).toBe(SECOND_ABILITY_COST);
+    expect(abilityUnlockBlocker(grown, "staff-3")).toBeNull();
+    const unlocked = unlockAbility(grown, "staff-3");
+    expect(unspentSkillPoints(unlocked)).toBe(unspentSkillPoints(grown) - SECOND_ABILITY_COST);
+    const staff = { ...EMPTY_EQUIPMENT, weapon1: createItem("staff-30", "common", "s") };
+    expect(getHeroCombatProfile(unlocked, staff).abilities).toEqual(["staff-3"]);
   });
 
   it("ohne freie Skillpunkte lässt sich keine Fähigkeit freischalten", () => {

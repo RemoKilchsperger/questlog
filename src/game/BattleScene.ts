@@ -80,6 +80,8 @@ export class BattleScene extends Phaser.Scene {
   private fighters!: Record<Side, Fighter>;
   /** Kuppel von Bollwerk – bleibt sichtbar, bis sie einen Angriff blockt */
   private bulwark: Phaser.GameObjects.Graphics | null = null;
+  /** Eissplitter schweben ab der Ankündigung über dem Helden, bis sie losfliegen */
+  private iceShards: fx.IceShards | null = null;
 
   constructor() {
     super("battle");
@@ -403,6 +405,12 @@ export class BattleScene extends Phaser.Scene {
       fx.siphon(this, this.center("hero"), this.center("enemy"), 0x7aa7f0, 10);
       sfx.manaBurn();
       this.floatText(hero.homeX, GROUND_Y - 105, `-${event.amount} Mana`, "#7aa7f0", 24);
+    } else if (event.type === "stunned" && event.freeze) {
+      const enemy = this.fighters.enemy;
+      this.floatText(enemy.homeX, GROUND_Y - 120, "EINGEFROREN", "#a9e4ff", 26);
+      sfx.stun();
+      this.tint(enemy, 0x9fd8ff, 1100);
+      fx.burst(this, this.center("enemy"), 0xdff4ff, 14, 70, 5);
     } else if (event.type === "stunned") {
       const enemy = this.fighters.enemy;
       this.floatText(enemy.homeX, GROUND_Y - 120, "BETÄUBT", "#d39bf0", 26);
@@ -615,6 +623,32 @@ export class BattleScene extends Phaser.Scene {
         fx.rise(this, at, 0xf4c95d, 8, 50);
         this.tint(hero, 0xffe28f, 600);
         sfx.block();
+        break;
+
+      /* ── dritte Fähigkeiten (Zweihandwaffen) ── */
+      case "greatsword-3": // Klingensturm: Klinge kreisen lassen
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: 360, duration: 360, onComplete: () => hero.weapon?.setAngle(0) });
+        fx.whirl(this, at, 0xffc27a);
+        sfx.whoosh(0.35);
+        break;
+      case "greataxe-3": // Enthaupten: Axt hoch über den Kopf, dunkle Aura
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -110, duration: 260 });
+        fx.rise(this, at, 0x5a2a3a, 10, 60);
+        sfx.whoosh(0.25);
+        break;
+      case "greathammer-3": // Schockwelle: Funken knistern am Hammer
+        fx.rise(this, at, 0xffe66b, 10, 60);
+        fx.ring(this, at, 0xffe66b, 50, 300);
+        sfx.magic();
+        break;
+      case "staff-3": // Eissplitter: Splitter bilden sich und schweben über dem Helden
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -30, duration: 220, yoyo: true, hold: 300 });
+        this.iceShards = fx.iceShards(this, at);
+        sfx.magic();
+        break;
+      case "bow-3": // Ausweichschuss: Sehne spannen
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, scaleX: 0.8, duration: 220, yoyo: true });
+        sfx.whoosh(0.2);
         break;
       case "bow": // Pfeile zum Himmel richten
         if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -35, duration: 220, yoyo: true, hold: 120 });
@@ -897,6 +931,49 @@ export class BattleScene extends Phaser.Scene {
         });
         break;
       }
+
+      /* ── dritte Fähigkeiten (Zweihandwaffen) ── */
+      case "greatsword-3":
+        // Klingensturm: schnelle, wuchtige Hiebe
+        this.lunge("hero", () => {
+          hit(0.006);
+          fx.slashes(this, target, 0xffc27a, 1, event.crit);
+          sfx.slash();
+        }, 90, 100);
+        break;
+      case "greataxe-3":
+        // Enthaupten: Sprung, ein gewaltiger Hieb von oben
+        this.leapStrike("hero", () => {
+          hit(0.015);
+          fx.slashes(this, target, 0xff3a3a, 1);
+          fx.burst(this, target, 0xc23a3a, 16, 70, 5);
+          sfx.slash();
+        });
+        break;
+      case "greathammer-3":
+        // Schockwelle: Aufprall mit Blitzen
+        this.leapStrike("hero", () => {
+          hit(0.02);
+          fx.lightning(this, target);
+          fx.ring(this, { x: target.x, y: GROUND_Y }, 0xffe66b, 140, 450, true);
+          sfx.quake(0.4);
+        });
+        break;
+      case "staff-3":
+        // Eissplitter: die schwebenden Splitter schiessen nacheinander auf den Gegner
+        sfx.whoosh(0.3);
+        (this.iceShards ?? fx.iceShards(this, this.center("hero"))).launch(target, () => {
+          hit(0.006);
+          fx.ring(this, target, 0x9fd8ff, 60, 400);
+        });
+        this.iceShards = null;
+        break;
+      case "bow-3":
+        // Ausweichschuss: schiessen und dabei zurückspringen
+        this.shootArrow(target, () => hit());
+        this.tweens.add({ targets: hero.body, x: hero.homeX - 50, duration: 180, yoyo: true, hold: 260, ease: "Quad.easeOut" });
+        this.time.delayedCall(200, () => this.tint(hero, 0xa9c6ff, 500));
+        break;
       default:
         // Mit dem Bogen wird auch normal geschossen statt zugeschlagen.
         if (this.setup.heroWeapon?.type === "bow") this.shootArrow(target, () => hit());

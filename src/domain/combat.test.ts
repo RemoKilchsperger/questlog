@@ -152,6 +152,31 @@ describe("Kampfrunde", () => {
     expect(wolf.state.enemyEffects.stunImmunity).toBeUndefined();
     expect(stun(wolf.state).events).toContainEqual({ type: "stunned" });
   });
+
+  it("Eissplitter und Schockwelle betäuben nur mit einer Chance – Eissplitter frieren ein", () => {
+    const setup = (): BattleState => {
+      const b = startBattle("b", "Held", { ...hero, maxMana: 999, abilities: ["staff-3", "greathammer-3"] }, getCreature("cave-eye").creature);
+      return { ...b, mana: 999, hero: { ...b.hero, hp: 1e6, maxHp: 1e6 }, enemy: { ...b.enemy, hp: 1e6, maxHp: 1e6 } };
+    };
+    const enemyStrikes = (events: { type: string; attacker?: string }[]) => events.some((e) => e.type === "hit" && e.attacker === "enemy");
+
+    // Chance 40 %: Wurf 0.3 trifft, 0.5 nicht
+    const frozen = attackRound(setup(), fixedRng(0.3), "staff-3");
+    expect(frozen.events).toContainEqual({ type: "stunned", freeze: true });
+    expect(enemyStrikes(frozen.events)).toBe(false);
+    // Einfrieren zählt für die Immunität wie eine Betäubung
+    expect(frozen.state.enemyEffects.stunImmunity).toBe(STUN_IMMUNITY_ROUNDS);
+    const resisted = attackRound({ ...frozen.state, cooldowns: {} }, fixedRng(0.1), "greathammer-3");
+    expect(resisted.events).toContainEqual({ type: "stunResisted" });
+
+    const missed = attackRound(setup(), fixedRng(0.5), "staff-3");
+    expect(missed.events.some((e) => e.type === "stunned" || e.type === "stunResisted")).toBe(false);
+    expect(enemyStrikes(missed.events)).toBe(true);
+
+    // Schockwelle: 30 %
+    expect(attackRound(setup(), fixedRng(0.2), "greathammer-3").events).toContainEqual({ type: "stunned" });
+    expect(attackRound(setup(), fixedRng(0.35), "greathammer-3").events).not.toContainEqual({ type: "stunned" });
+  });
 });
 
 describe("Tränke", () => {

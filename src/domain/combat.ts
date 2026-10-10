@@ -26,7 +26,7 @@ import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potio
 import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { getSetHpMultiplier } from "./bossSets";
-import { abilitiesOf, freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityId, type Guard } from "./abilities";
+import { abilitiesOf, freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   classStatBonus,
@@ -138,10 +138,10 @@ export type BattleEvent =
   | { type: "burn"; target: Side; damage: number }
   /** Blutungsschaden – `target` ist, wer blutet */
   | { type: "bleed"; target: Side; damage: number }
-  /** Der betäubte Gegner setzt diese Runde aus */
-  | { type: "stunned" }
+  /** Der betäubte (bei `freeze` eingefrorene) Gegner setzt diese Runde aus */
+  | { type: "stunned"; freeze?: boolean }
   /** Der Boss ist nach einer Betäubung noch immun und greift trotzdem an */
-  | { type: "stunResisted" }
+  | { type: "stunResisted"; freeze?: boolean }
   /** Der Boss setzt seine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "bossAbility"; bossId: string; abilityId: string }
   /** Bollwerk hat den Angriff des Gegners komplett geblockt */
@@ -390,6 +390,15 @@ export function abilityBlocker(state: BattleState, id: AbilityId): string | null
   return null;
 }
 
+/** Betäubt die Fähigkeit den Gegner? Manche nur mit einer Chance (Eissplitter, Schockwelle). */
+export function stunLands(ability: AbilityDef | null, rng: () => number): boolean {
+  if (!ability?.stun) return false;
+  return ability.stunChance === undefined || rng() < ability.stunChance;
+}
+
+/** Kennzeichnet Betäubungs-Ereignisse der Eissplitter als Einfrieren. */
+export const freezeFlag = (ability: AbilityDef | null): { freeze?: true } => (ability?.freeze ? { freeze: true } : {});
+
 /**
  * Eine Runde: Angriff des Helden – normal oder mit einer Fähigkeit –,
  * danach Gift, Feuer, Bluten und Gegenangriff der Kreatur (ausser sie ist betäubt).
@@ -503,18 +512,19 @@ export function attackRound(
   }
 
   // 3. Gegenangriff (entfällt bei Betäubung) – Bosse setzen regelmässig ihre Fähigkeit ein
+  const stuns = enemy.hp > 0 && hero.hp > 0 && stunLands(ability, rng);
   if (enemy.hp === 0) {
     status = "won";
     events.push({ type: "defeated", side: "enemy" });
   } else if (hero.hp === 0) {
     status = "lost";
     events.push({ type: "defeated", side: "hero" });
-  } else if (ability?.stun && !enemyEffects.stunImmunity) {
-    events.push({ type: "stunned" });
+  } else if (stuns && !enemyEffects.stunImmunity) {
+    events.push({ type: "stunned", ...freezeFlag(ability) });
     // Bosse sind danach einige Runden immun
     if (getCreature(state.creatureId).creature.boss) enemyEffects = { ...enemyEffects, stunImmunity: freshStunImmunity() };
   } else {
-    if (ability?.stun) events.push({ type: "stunResisted" });
+    if (stuns) events.push({ type: "stunResisted", ...freezeFlag(ability) });
     const special = bossAbilityDue(state.creatureId, state.round);
     if (special) events.push({ type: "bossAbility", bossId: special.bossId, abilityId: special.id });
     if (heroEffects.bulwark) {

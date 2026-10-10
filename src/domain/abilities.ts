@@ -1,27 +1,33 @@
 // Kampf-Fähigkeiten: Jeder Waffentyp (auch der Schild) bringt zwei Fähigkeiten
-// mit, die Mana kosten und den normalen Angriff einer Runde ersetzen. Sie müssen
-// im Skilltree freigeschaltet werden: beide ab Rang 3 in der Waffe, die zweite
-// zusätzlich ab Level 25 – unabhängig voneinander (siehe skills.ts). Verfügbar sind die
-// freigeschalteten Fähigkeiten aller angelegten Waffen.
+// mit, Zweihandwaffen drei – sie können nicht wie Einhandwaffen die Fähigkeiten
+// zweier Waffen kombinieren. Fähigkeiten kosten Mana und ersetzen den normalen
+// Angriff einer Runde. Sie müssen im Skilltree freigeschaltet werden: alle ab
+// Rang 3 in der Waffe, die zweite und dritte zusätzlich ab Level 25 – unabhängig
+// voneinander (siehe skills.ts). Verfügbar sind die freigeschalteten Fähigkeiten
+// aller angelegten Waffen.
 //
 // Abklingzeit: Nach dem Einsatz ist eine Fähigkeit 1–4 Runden gesperrt – je
 // stärker, desto länger. So lohnt es sich, den richtigen Moment abzupassen.
 //
 // Ids: Die erste Fähigkeit heisst wie der Waffentyp ("sword"), die zweite
-// bekommt "-2" angehängt ("sword-2") – so bleiben alte Spielstände gültig.
+// bekommt "-2" angehängt ("sword-2"), die dritte "-3" ("staff-3") – so bleiben
+// alte Spielstände gültig.
 //
 // Mana: zu Kampfbeginn voll, +MANA_REGEN pro Runde. Das Maximum wächst mit
 // Level und Intelligenz (siehe `maxManaFor`).
 
 import type { SkillWeapon } from "./skills";
 
-export type AbilityId = SkillWeapon | `${SkillWeapon}-2`;
+/** Waffentypen mit dritter Fähigkeit: die Zweihandwaffen. */
+export type TwoHandedWeapon = "greatsword" | "greataxe" | "greathammer" | "staff" | "bow";
+
+export type AbilityId = SkillWeapon | `${SkillWeapon}-2` | `${TwoHandedWeapon}-3`;
 
 export interface AbilityDef {
   id: AbilityId;
   weapon: SkillWeapon;
-  /** 1 = erste Fähigkeit der Waffe, 2 = zweite */
-  tier: 1 | 2;
+  /** 1 = erste Fähigkeit der Waffe, 2 = zweite, 3 = dritte (nur Zweihandwaffen) */
+  tier: 1 | 2 | 3;
   name: string;
   icon: string;
   manaCost: number;
@@ -38,6 +44,10 @@ export interface AbilityDef {
   ignoreArmor?: boolean;
   /** Gegner setzt in dieser Runde aus */
   stun?: boolean;
+  /** Chance auf die Betäubung (Standard: sicher) */
+  stunChance?: number;
+  /** Die Betäubung ist ein Einfrieren – wirkt gleich und zählt auch für die Immunität */
+  freeze?: boolean;
   /** Gift: Anteil des Heldenschadens pro Runde, ignoriert Rüstung */
   poison?: { percent: number; rounds: number };
   /** Feuer: Anteil des Heldenschadens pro Runde, ignoriert Rüstung */
@@ -373,6 +383,73 @@ export const ABILITIES: readonly AbilityDef[] = [
     guard: { reduce: 0.5, reflect: 1 },
     description:
       "Statt anzugreifen: Der nächste gegnerische Angriff macht nur halben Schaden – und der volle Schaden trifft den Angreifer.",
+  },
+  // ───────────── Dritte Fähigkeiten der Zweihandwaffen (ab Level 25) ─────────────
+  {
+    id: "greatsword-3",
+    weapon: "greatsword",
+    tier: 3,
+    name: "Klingensturm",
+    icon: "🌪️",
+    manaCost: 40,
+    cooldown: 3,
+    multiplier: 0.8,
+    hits: 3,
+    vulnerable: { percent: 0.15, rounds: 2 },
+    description: "Drei wuchtige Hiebe – jeder kann kritisch treffen. Danach erleidet der Gegner 2 Runden lang 15 % mehr Schaden.",
+  },
+  {
+    id: "greataxe-3",
+    weapon: "greataxe",
+    tier: 3,
+    name: "Enthaupten",
+    icon: "💀",
+    manaCost: 35,
+    cooldown: 3,
+    multiplier: 1.3,
+    execute: { threshold: 0.3, factor: 2.5 },
+    description: "Ein Hieb mit 1,3-fachem Schaden – 2,5-fach so stark, wenn der Gegner unter 30 % seiner Lebenspunkte ist.",
+  },
+  {
+    id: "greathammer-3",
+    weapon: "greathammer",
+    tier: 3,
+    name: "Schockwelle",
+    icon: "⚡",
+    manaCost: 40,
+    cooldown: 3,
+    multiplier: 1.5,
+    stun: true,
+    stunChance: 0.3,
+    description: "Ein Schlag mit 1,5-fachem Schaden – mit 30 % Chance ist der Gegner betäubt und kann nicht zurückschlagen.",
+  },
+  {
+    id: "staff-3",
+    weapon: "staff",
+    tier: 3,
+    name: "Eissplitter",
+    icon: "❄️",
+    manaCost: 40,
+    cooldown: 3,
+    multiplier: 1.3,
+    ignoreArmor: true,
+    stun: true,
+    stunChance: 0.4,
+    freeze: true,
+    description:
+      "Schwebende Eissplitter mit 1,3-fachem Schaden, die Rüstung ignorieren – mit 40 % Chance friert der Gegner ein und setzt eine Runde aus.",
+  },
+  {
+    id: "bow-3",
+    weapon: "bow",
+    tier: 3,
+    name: "Ausweichschuss",
+    icon: "💨",
+    manaCost: 30,
+    cooldown: 3,
+    multiplier: 1.2,
+    guard: { reduce: 0.4 },
+    description: "Ein Schuss mit 1,2-fachem Schaden, dann Rückzug: Der nächste gegnerische Angriff macht 60 % weniger Schaden.",
   },
 ];
 

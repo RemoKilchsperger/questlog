@@ -74,6 +74,8 @@ interface Unit {
 export class CoopBattleScene extends Phaser.Scene {
   private setup!: CoopSceneData;
   private heroes = new Map<string, Unit>();
+  /** Eissplitter schweben ab der Ankündigung über ihrem Helden, bis sie losfliegen */
+  private iceShards = new Map<Unit, fx.IceShards>();
   private boss!: Unit;
 
   constructor() {
@@ -348,9 +350,15 @@ export class CoopBattleScene extends Phaser.Scene {
         this.announceBossAbility(event.abilityId, event.name);
         break;
       case "stunned":
-        this.float(this.boss, "BETÄUBT", "#d39bf0", 22, 60);
         sfx.stun();
-        fx.dizzyStars(this, { x: BOSS_X, y: GROUND_Y - 160 });
+        if (event.freeze) {
+          this.float(this.boss, "EINGEFROREN", "#a9e4ff", 22, 60);
+          this.tint(this.boss, 0x9fd8ff, 1100);
+          fx.burst(this, this.center(this.boss), 0xdff4ff, 14, 70, 5);
+        } else {
+          this.float(this.boss, "BETÄUBT", "#d39bf0", 22, 60);
+          fx.dizzyStars(this, { x: BOSS_X, y: GROUND_Y - 160 });
+        }
         break;
       case "stunResisted":
         this.float(this.boss, "WIDERSTEHT!", "#a49cb8", 20, 60);
@@ -508,6 +516,24 @@ export class CoopBattleScene extends Phaser.Scene {
         fx.ring(this, at, 0xf4c95d, 45);
         this.tint(hero, 0xffe28f, 500);
         sfx.block();
+        break;
+      case "greatsword-3":
+        fx.whirl(this, at, 0xffc27a);
+        sfx.whoosh(0.35);
+        break;
+      case "greataxe-3":
+        fx.rise(this, at, 0x5a2a3a, 8, 45);
+        break;
+      case "greathammer-3":
+        fx.ring(this, at, 0xffe66b, 40, 300);
+        sfx.magic();
+        break;
+      case "staff-3": // Eissplitter: schweben über dem Helden, bis sie losfliegen
+        this.iceShards.set(hero, fx.iceShards(this, at, 4));
+        sfx.magic();
+        break;
+      case "bow-3":
+        sfx.whoosh(0.2);
         break;
     }
   }
@@ -722,6 +748,42 @@ export class CoopBattleScene extends Phaser.Scene {
             fx.burst(this, target, 0xc23a3a, 10, 50);
           },
         });
+        return true;
+      }
+      case "greatsword-3":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xffc27a, 1, crit);
+          sfx.slash();
+        });
+        return true;
+      case "greataxe-3":
+        leap(() => {
+          hit();
+          fx.slashes(this, target, 0xff3a3a, 1);
+          fx.burst(this, target, 0xc23a3a, 14, 60, 5);
+          sfx.slash();
+        });
+        return true;
+      case "greathammer-3":
+        leap(() => {
+          hit();
+          fx.lightning(this, target);
+          fx.ring(this, { x: target.x, y: GROUND_Y }, 0xffe66b, 120, 450, true);
+          sfx.quake(0.4);
+        });
+        return true;
+      case "staff-3":
+        sfx.whoosh(0.3);
+        (this.iceShards.get(hero) ?? fx.iceShards(this, this.center(hero), 4)).launch(target, hit);
+        this.iceShards.delete(hero);
+        return true;
+      case "bow-3": {
+        this.texture("arrow", ARROW);
+        sfx.bowShot();
+        const arrow = this.add.image(0, 0, "arrow").setScale(4);
+        fx.projectile(this, from, target, arrow, { duration: 260, arc: 10, face: true, onArrive: hit });
+        this.tweens.add({ targets: hero.body, x: hero.homeX - 40, duration: 180, yoyo: true, hold: 220, ease: "Quad.easeOut" });
         return true;
       }
       default:

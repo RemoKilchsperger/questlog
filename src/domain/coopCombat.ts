@@ -14,7 +14,7 @@
 //      höchsten Bedrohung (mit etwas Zufall). Betäubung lässt sie ausfallen.
 //   4. Mana-Regeneration, Verstärkungen laufen ab.
 
-import { freshStunImmunity, MANA_REGEN, tickStunImmunity, type AbilityId, type Guard } from "./abilities";
+import { freshStunImmunity, MANA_REGEN, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   CLERIC_POTION_FACTOR,
@@ -30,8 +30,10 @@ import {
   addToChest,
   cooldownText,
   EMPTY_CHEST,
+  freezeFlag,
   rollBattleReward,
   rollHit,
+  stunLands,
   tickCooldowns,
   type ActiveBuff,
   type BattleReward,
@@ -320,8 +322,8 @@ export type CoopEvent =
   | { type: "hit"; attacker: string; target: string; damage: number; crit: boolean; weapon?: SkillWeapon; ability?: AbilityId }
   | { type: OverTimeKind; target: string; damage: number }
   | { type: "bossAbility"; bossId: string; abilityId: string; name: string }
-  | { type: "stunned" }
-  | { type: "stunResisted" }
+  | { type: "stunned"; freeze?: boolean }
+  | { type: "stunResisted"; freeze?: boolean }
   | { type: "blocked"; heroId: string }
   | { type: "down"; heroId: string }
   | { type: "victory" }
@@ -589,7 +591,8 @@ export function resolveRound(
   let heroes = state.heroes.map((h) => ({ ...h, combatant: { ...h.combatant }, effects: { ...h.effects } }));
   let boss = { ...state.boss };
   let bossEffects = { ...state.bossEffects };
-  let stunAttempt = false;
+  /** Fähigkeit, die den Gegner in dieser Runde betäuben würde */
+  let stunAttempt: AbilityDef | null = null;
   /** Helden mit Bollwerk – ihre Bedrohung wird nach der Heldenphase hochgesetzt */
   const taunts: CoopHero[] = [];
   const byId = (id: string) => heroes.find((h) => h.id === id)!;
@@ -666,7 +669,7 @@ export function resolveRound(
         if (heal > 0) events.push({ type: "selfHeal", heroId: hero.id, heal });
       }
       if (ability.armorBreak) bossEffects = { ...bossEffects, armorBreak: ability.armorBreak };
-      if (ability.stun) stunAttempt = true;
+      if (stunLands(ability, rng)) stunAttempt = ability;
       for (const kind of OVER_TIME) {
         const effect = ability[kind];
         if (!effect) continue;
@@ -761,7 +764,7 @@ export function resolveRound(
       // Nach einer Betäubung ist der Gegner einige Runden immun
       stunned = !bossEffects.stunImmunity;
       if (stunned) bossEffects = { ...bossEffects, stunImmunity: freshStunImmunity() };
-      events.push({ type: stunned ? "stunned" : "stunResisted" });
+      events.push({ type: stunned ? "stunned" : "stunResisted", ...freezeFlag(stunAttempt) });
     }
     if (!stunned) {
       const enemy = getCoopEnemy(state.bossId);

@@ -835,9 +835,9 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "bossAbility":
       return `${bossName} setzt ${e.name} ein!`;
     case "stunned":
-      return `${bossName} ist betäubt und setzt aus.`;
+      return `${bossName} ist ${e.freeze ? "eingefroren" : "betäubt"} und setzt aus.`;
     case "stunResisted":
-      return `${bossName} widersteht der Betäubung.`;
+      return `${bossName} widersteht ${e.freeze ? "dem Einfrieren" : "der Betäubung"}.`;
     case "blocked":
       return `${name(e.heroId)} blockt den Angriff mit Bollwerk.`;
     case "down":

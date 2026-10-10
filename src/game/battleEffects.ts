@@ -415,3 +415,50 @@ export function dome(scene: Phaser.Scene, at: Point): Phaser.GameObjects.Graphic
   scene.tweens.add({ targets: g, alpha: 0.6, duration: 700, yoyo: true, repeat: -1, delay: 300 });
   return g;
 }
+
+/** Schwebende Eissplitter (Eissplitter): erscheinen über dem Helden und warten auf `launch`. */
+export interface IceShards {
+  /** Die Splitter schiessen nacheinander auf das Ziel – `onHit` beim ersten Einschlag. */
+  launch: (to: Point, onHit: () => void) => void;
+}
+
+export function iceShards(scene: Phaser.Scene, at: Point, count = 5): IceShards {
+  const shards = Array.from({ length: count }, (_, i) => {
+    // Im Bogen über und hinter dem Helden verteilt, Spitze zum Gegner
+    const angle = Math.PI * (0.15 + (0.7 * i) / (count - 1));
+    const x = at.x - 10 - Math.cos(angle) * 55;
+    const y = at.y - 40 - Math.sin(angle) * 45;
+    const shard = scene.add.rectangle(x, y, 26, 8, 0xbfe9ff).setStrokeStyle(2, 0xffffff).setDepth(20).setAlpha(0).setScale(0.3);
+    shard.angle = rnd(-12, 12);
+    scene.tweens.add({ targets: shard, alpha: 1, scale: 1, duration: 200, delay: i * 50, ease: "Back.easeOut" });
+    // Leichtes Auf und Ab, jeder Splitter im eigenen Takt
+    const hover = scene.tweens.add({ targets: shard, y: y - 8, duration: rnd(260, 340), yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    return { shard, hover };
+  });
+  let launched = false;
+  return {
+    launch: (to, onHit) => {
+      if (launched) return;
+      launched = true;
+      let first = true;
+      shards.forEach(({ shard, hover }, i) => {
+        scene.time.delayedCall(i * 70, () => {
+          hover.stop();
+          const target = { x: to.x + rnd(-14, 14), y: to.y + rnd(-22, 22) };
+          projectile(scene, { x: shard.x, y: shard.y }, target, shard, {
+            duration: 220,
+            face: true,
+            trail: 0xdff4ff,
+            onArrive: () => {
+              burst(scene, target, 0xdff4ff, 6, 30, 4);
+              if (first) {
+                first = false;
+                onHit();
+              }
+            },
+          });
+        });
+      });
+    },
+  };
+}

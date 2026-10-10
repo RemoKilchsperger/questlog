@@ -185,7 +185,8 @@ export function HelpScreen() {
           <H>Fähigkeiten</H>
           <p>
             Ab Rang {ABILITY_UNLOCK_RANK} in einem Waffentyp schaltest du für einen weiteren Skillpunkt seine erste
-            Kampf-Fähigkeit frei. Ab Level {SECOND_ABILITY_LEVEL} gibt es für {SECOND_ABILITY_COST} Skillpunkte die zweite – auch ohne die erste. Im
+            Kampf-Fähigkeit frei. Ab Level {SECOND_ABILITY_LEVEL} gibt es für {SECOND_ABILITY_COST} Skillpunkte die zweite – auch ohne die erste.
+            Zweihandwaffen haben noch eine dritte Fähigkeit, die gleich viel kostet und ab demselben Level verfügbar ist. Im
             Skilltree zeigt ein Symbol pro Fähigkeit, was sie kann, wenn du darüberfährst. Im Kampf stehen die Fähigkeiten der
             gerade angelegten Waffen bereit.
           </p>

@@ -34,7 +34,7 @@ src/
     stats.ts         Namen der Attribute
     leveling.ts      Level-Kurve, Attributpunkte
     skills.ts        Skilltree pro Waffentyp, Freischalten von Fähigkeiten
-    abilities.ts     Kampf-Fähigkeiten (zwei pro Waffentyp), Mana
+    abilities.ts     Kampf-Fähigkeiten (zwei pro Waffentyp, drei bei Zweihandwaffen), Mana
     items.ts         Item-Katalog, Seltenheit, Boss-Items, Verbesserungsstufen
     armorClasses.ts  Leichte, mittlere und schwere Rüstung
     heroClasses.ts   Klassen aus Rüstungsklasse + Waffe
@@ -93,7 +93,8 @@ Bei Händler-Aufträgen zählt jedes Ausrüstungsteil (Waffen und Rüstung).
 - Gegner mehr als 3 Level unter dem Helden geben 15 % weniger XP pro Level, mindestens 10 %.
 - Pro Level-up: 2 Attributpunkte und 1 Skillpunkt.
 - **Skills:** pro Waffentyp (inkl. Schild) 5 Ränge à +2 % Waffenschaden (Schild: +2 % Schild-Rüstung).
-  Ab Rang 3 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei –
+  Ab Rang 3 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei
+  (Zweihandwaffen: auch die dritte, ebenfalls 2 Punkte) –
   unabhängig voneinander.
   Zurücksetzen kostet `12.5 · Level · (1 + Level / 10)` Gold.
 

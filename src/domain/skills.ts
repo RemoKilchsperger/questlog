@@ -4,7 +4,8 @@
 // unabhängig voneinander lernbar – auch Zweihandwaffen.
 // Ab Rang 3 in einem Waffentyp kann man für einen weiteren Skillpunkt dessen
 // erste Kampf-Fähigkeit freischalten – ab Level 25 für zwei Skillpunkte die
-// zweite, unabhängig von der ersten.
+// zweite, unabhängig von der ersten. Zweihandwaffen haben eine dritte Fähigkeit,
+// die genauso viel kostet und ab demselben Level verfügbar ist wie die zweite.
 // Gegen viel Gold lassen sich alle Skillpunkte zurücksetzen.
 
 import { getAbility, type AbilityId } from "./abilities";
@@ -22,14 +23,14 @@ export const MAX_SKILL_RANK = 5;
 /** Ab diesem Rang lassen sich die Fähigkeiten eines Waffentyps freischalten. */
 export const ABILITY_UNLOCK_RANK = 3;
 export const SKILL_BONUS_PER_RANK = 0.02;
-/** Skillpunkte für das Freischalten der ersten bzw. zweiten Fähigkeit einer Waffe. */
+/** Skillpunkte für das Freischalten der ersten bzw. zweiten (und dritten) Fähigkeit einer Waffe. */
 export const ABILITY_COST = 1;
 export const SECOND_ABILITY_COST = 2;
-/** Ab diesem Level lässt sich die zweite Fähigkeit freischalten. */
+/** Ab diesem Level lassen sich die zweite und dritte Fähigkeit freischalten. */
 export const SECOND_ABILITY_LEVEL = 25;
 
 export function abilityCost(id: AbilityId): number {
-  return getAbility(id).tier === 2 ? SECOND_ABILITY_COST : ABILITY_COST;
+  return getAbility(id).tier === 1 ? ABILITY_COST : SECOND_ABILITY_COST;
 }
 
 export interface SkillNode {
@@ -83,7 +84,7 @@ export function abilityUnlockBlocker(character: Character, id: AbilityId): strin
   if (skillRank(character, ability.weapon) < ABILITY_UNLOCK_RANK) {
     return `Erst ${getItemType(ability.weapon).label} auf Rang ${ABILITY_UNLOCK_RANK} bringen.`;
   }
-  if (ability.tier === 2) {
+  if (ability.tier > 1) {
     if (getLevel(character.totalXp) < SECOND_ABILITY_LEVEL) return `Ab Level ${SECOND_ABILITY_LEVEL}.`;
   }
   const cost = abilityCost(id);

@@ -161,6 +161,15 @@ describe("Koop-Kampf: Runde", () => {
     ({ events } = resolveRound(ready(state), { a: { ability: "mace" } }, rng(0.9), 0));
     expect(events).toContainEqual({ type: "stunned" });
   });
+
+  it("Eissplitter frieren den Gegner mit 40 % Chance ein", () => {
+    const freezer = () => tough(start([player("a", { abilities: ["staff-3"] }), player("b")]));
+    const frozen = resolveRound(freezer(), { a: { ability: "staff-3" } }, rng(0.3), 0);
+    expect(frozen.events).toContainEqual({ type: "stunned", freeze: true });
+    expect(frozen.state.bossEffects.stunImmunity).toBe(STUN_IMMUNITY_ROUNDS);
+    const missed = resolveRound(freezer(), { a: { ability: "staff-3" } }, rng(0.5), 0);
+    expect(missed.events.some((e) => e.type === "stunned" || e.type === "stunResisted")).toBe(false);
+  });
 });
 
 describe("Koop-Kampf: Fallen und Wiederbeleben", () => {
