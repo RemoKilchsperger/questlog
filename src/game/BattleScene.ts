@@ -6,6 +6,7 @@ import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
 import { getBossAbilityById } from "../domain/bossAbilities";
 import type { BattleEvent, BattleState, Side } from "../domain/combat";
+import { getCreature } from "../domain/creatures";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
 import { creatureImage, lastOpaqueRow } from "./creatureImages";
@@ -35,6 +36,8 @@ export interface BattleSceneData {
   colors: { sky: number; ground: number };
   /** Gebiet bzw. Dungeon – bestimmt den gemalten Hintergrund (backgrounds.ts) */
   areaId: string;
+  /** Klick auf einen Gegner: Begleiter (uid) oder Boss (undefined) als Ziel wählen */
+  selectTarget: (target: string | undefined) => void;
 }
 
 const FONT = '"Pixelify Sans", monospace';
@@ -51,6 +54,16 @@ const BAR_Y = 34;
 const HERO_SCALE = 4;
 const ENEMY_IMAGE_SCALE = 1.3;
 const BOSS_IMAGE_SCALE = 1.55;
+/** Begleiter des Bosses: kleiner, abwechselnd vor und hinter ihm */
+const ADD_X = [410, 655];
+const ADD_IMAGE_SCALE = 0.95;
+const ADD_SPRITE_SCALE = 6;
+const ADD_BAR_WIDTH = 90;
+/** Kleinere Lebensbalken tiefer, unter dem des Bosses */
+const ADD_BAR_Y = 112;
+
+/** Grafik eines Begleiters (creatureSprites.ts / creatureImages.ts). */
+const addSprite = (creatureId: string) => getCreature(creatureId).creature.sprite;
 
 /** Pfeil für Bogenschüsse: Federn links, Spitze rechts. */
 const ARROW_SPRITE: SpriteDef = {
@@ -69,6 +82,8 @@ interface Fighter {
   hp: number;
   maxHp: number;
   homeX: number;
+  barWidth: number;
+  barY: number;
   /** Stand-Position am Boden */
   groundY?: number;
   /** Atem-Animation – wird bei Sprüngen pausiert */
@@ -77,7 +92,10 @@ interface Fighter {
 
 export class BattleScene extends Phaser.Scene {
   private setup!: BattleSceneData;
-  private fighters!: Record<Side, Fighter>;
+  /** "hero", "enemy" (der Boss) und die Begleiter unter ihrer uid */
+  private fighters!: Record<string, Fighter>;
+  /** Pfeil über dem gewählten Ziel – nur, wenn Begleiter mitkämpfen */
+  private targetMarker: Phaser.GameObjects.Text | null = null;
   /** Kuppel von Bollwerk – bleibt sichtbar, bis sie einen Angriff blockt */
   private bulwark: Phaser.GameObjects.Graphics | null = null;
   /** Eissplitter schweben ab der Ankündigung über dem Helden, bis sie losfliegen */
@@ -93,9 +111,12 @@ export class BattleScene extends Phaser.Scene {
 
   /** Gegner mit eigenem Bild (creatureImages.ts) vorab laden. */
   preload() {
-    const url = creatureImage(this.setup.enemySprite);
-    const key = `creature-img-${this.setup.enemySprite}`;
-    if (url && !this.textures.exists(key)) this.load.image(key, url);
+    const sprites = [this.setup.enemySprite, ...(this.setup.battle.adds ?? []).map((a) => addSprite(a.creatureId))];
+    for (const sprite of new Set(sprites)) {
+      const url = creatureImage(sprite);
+      const key = `creature-img-${sprite}`;
+      if (url && !this.textures.exists(key)) this.load.image(key, url);
+    }
   }
 
   create() {
@@ -115,10 +136,24 @@ export class BattleScene extends Phaser.Scene {
       hero: this.createFighter(hero, battle.hero.name, battle.hero.level, battle.hero.hp, battle.hero.maxHp),
       enemy: this.createFighter(enemy, battle.enemy.name, battle.enemy.level, battle.enemy.hp, battle.enemy.maxHp),
     };
+    // Begleiter: kleiner, der erste vor dem Boss, der zweite dahinter
+    (battle.adds ?? []).forEach((add, i) => {
+      const sprite = addSprite(add.creatureId);
+      const x = ADD_X[i % ADD_X.length];
+      const image = `creature-img-${sprite}`;
+      const parts = this.textures.exists(image)
+        ? this.addImageBody(x, image, ADD_IMAGE_SCALE)
+        : this.addBody(x, `creature-${sprite}`, getCreatureSprite(sprite), ADD_SPRITE_SCALE);
+      parts.body.setDepth(i % 2 === 0 ? 2 : -0.5);
+      const { name, level, hp, maxHp } = add.combatant;
+      this.fighters[add.uid] = this.createFighter(parts, name, level, hp, maxHp, true);
+    });
+    if (battle.adds?.length) this.enableTargeting(battle);
 
     // Leichtes Atmen, damit die Szene lebt.
     for (const f of Object.values(this.fighters)) {
       f.groundY = f.body.y;
+      if (f.hp === 0) continue;
       f.breath = this.tweens.add({
         targets: f.body,
         y: f.body.y - 4,
@@ -129,15 +164,21 @@ export class BattleScene extends Phaser.Scene {
       });
     }
 
+    for (const add of battle.adds ?? []) if (add.combatant.hp === 0) this.showAddDefeat(add.uid, true);
     if (battle.status === "won") this.showDefeat("enemy", true);
     if (battle.status === "lost") this.showDefeat("hero", true);
     if (battle.status === "fled") this.showFlight(true);
 
     const off = EventBus.on("battle:events", ({ battle: next, events }) => {
-      if (next.id === this.setup.battle.id) this.play(events, next.id);
+      if (next.id === this.setup.battle.id) this.play(events, next);
     });
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, off);
-    this.events.once(Phaser.Scenes.Events.DESTROY, off);
+    const offTarget = EventBus.on("battle:target", ({ battleId, target }) => {
+      if (battleId === this.setup.battle.id) this.markTarget(target);
+    });
+    for (const event of [Phaser.Scenes.Events.SHUTDOWN, Phaser.Scenes.Events.DESTROY]) {
+      this.events.once(event, off);
+      this.events.once(event, offTarget);
+    }
 
     if (battle.status === "active") {
       music.start(this.setup.boss, this);
@@ -166,6 +207,35 @@ export class BattleScene extends Phaser.Scene {
     g.fillStyle(0x000000, 0.3);
     g.fillEllipse(HERO_X, GROUND_Y + 2, 90, 16);
     g.fillEllipse(ENEMY_X, GROUND_Y + 2, this.setup.boss ? 140 : 110, 18);
+    (this.setup.battle.adds ?? []).forEach((_, i) => g.fillEllipse(ADD_X[i % ADD_X.length], GROUND_Y + 2, 80, 14));
+  }
+
+  /**
+   * Gegner anklicken wählt das Ziel – ein Pfeil zeigt, wen der Held angreift.
+   * Nur, wenn Begleiter mitkämpfen; sonst gibt es nichts zu wählen.
+   */
+  private enableTargeting(battle: BattleState) {
+    for (const key of ["enemy", ...(battle.adds ?? []).map((a) => a.uid)]) {
+      const f = this.fighters[key];
+      const figure = f.images[0];
+      figure.setInteractive({ useHandCursor: true }).on("pointerdown", () => {
+        if (f.hp > 0) this.setup.selectTarget(key === "enemy" ? undefined : key);
+      });
+    }
+    this.targetMarker = this.add
+      .text(0, 0, "▼", { fontFamily: NUMBER_FONT, fontSize: "22px", color: "#f4c95d" })
+      .setOrigin(0.5, 1)
+      .setStroke("#0e0b16", 4)
+      .setDepth(5);
+    this.tweens.add({ targets: this.targetMarker, alpha: 0.45, duration: 600, yoyo: true, repeat: -1 });
+    this.markTarget(battle.target);
+  }
+
+  /** Pfeil über das gewählte Ziel setzen (undefined = Boss). */
+  private markTarget(target: string | undefined) {
+    if (!this.targetMarker) return;
+    const f = this.fighters[target ?? "enemy"];
+    this.targetMarker.setPosition(f.homeX, Math.max(f.barY + 48, f.images[0].getBounds().top - 4));
   }
 
   /** Erzeugt die Textur (mit Umriss), falls es sie noch nicht gibt. */
@@ -256,18 +326,21 @@ export class BattleScene extends Phaser.Scene {
     this.tweens.add({ targets: shimmer, alpha: 0.4, duration: 1100, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
   }
 
+  /** Figur mit Name und Lebensbalken – `small` für Begleiter (schmaler, tiefer). */
   private createFighter(
     parts: Pick<Fighter, "body" | "images" | "weapon">,
     name: string,
     level: number,
     hp: number,
     maxHp: number,
+    small = false,
   ): Fighter {
     const x = parts.body.x;
+    const barY = small ? ADD_BAR_Y : BAR_Y;
     this.add
-      .text(x, 6, `${name} · Lv. ${level}`, {
+      .text(x, barY - 28, small ? name : `${name} · Lv. ${level}`, {
         fontFamily: NUMBER_FONT,
-        fontSize: "17px",
+        fontSize: small ? "13px" : "17px",
         fontStyle: "bold",
         color: "#efe6d2",
       })
@@ -275,10 +348,11 @@ export class BattleScene extends Phaser.Scene {
       .setStroke("#0e0b16", 4);
     const bar = this.add.graphics();
     const hpText = this.add
-      .text(x, 48, "", { fontFamily: NUMBER_FONT, fontSize: "14px", fontStyle: "bold", color: "#efe6d2" })
+      .text(x, barY + 14, "", { fontFamily: NUMBER_FONT, fontSize: small ? "11px" : "14px", fontStyle: "bold", color: "#efe6d2" })
       .setOrigin(0.5, 0)
       .setStroke("#0e0b16", 3);
-    const fighter: Fighter = { ...parts, bar, hpText, hp, maxHp, homeX: x };
+    const barWidth = small ? ADD_BAR_WIDTH : BAR_WIDTH;
+    const fighter: Fighter = { ...parts, bar, hpText, hp, maxHp, homeX: x, barWidth, barY };
     this.drawBar(fighter, hp);
     return fighter;
   }
@@ -286,16 +360,16 @@ export class BattleScene extends Phaser.Scene {
   private drawBar(f: Fighter, hp: number) {
     const ratio = Phaser.Math.Clamp(hp / f.maxHp, 0, 1);
     const color = ratio > 0.5 ? 0x7dd3a8 : ratio > 0.25 ? 0xf4c95d : 0xf0776a;
-    const x = f.homeX - BAR_WIDTH / 2;
+    const x = f.homeX - f.barWidth / 2;
     f.bar.clear();
-    f.bar.fillStyle(0x0e0b16).fillRect(x - 3, BAR_Y - 3, BAR_WIDTH + 6, 16);
-    f.bar.fillStyle(0x2e2640).fillRect(x, BAR_Y, BAR_WIDTH, 10);
-    f.bar.fillStyle(color).fillRect(x, BAR_Y, Math.round(BAR_WIDTH * ratio), 10);
+    f.bar.fillStyle(0x0e0b16).fillRect(x - 3, f.barY - 3, f.barWidth + 6, 16);
+    f.bar.fillStyle(0x2e2640).fillRect(x, f.barY, f.barWidth, 10);
+    f.bar.fillStyle(color).fillRect(x, f.barY, Math.round(f.barWidth * ratio), 10);
     f.hpText.setText(`${Math.round(hp)} / ${f.maxHp} LP`);
   }
 
   /** Lebensbalken weich auf den neuen Wert bringen. */
-  private setHp(side: Side, hp: number) {
+  private setHp(side: string, hp: number) {
     const f = this.fighters[side];
     const from = { value: f.hp };
     f.hp = hp;
@@ -313,26 +387,53 @@ export class BattleScene extends Phaser.Scene {
    * Nach "ability"/"bossAbility" werden die folgenden Treffer dieser Seite im
    * Stil der Fähigkeit gezeigt (Geschoss, Strahl, Sprung …).
    */
-  private play(events: BattleEvent[], battleId: string) {
+  private play(events: BattleEvent[], next: BattleState) {
     let delay = 0;
     let heroAbility: AbilityId | null = null;
     let bossAbility: string | null = null;
+    /** Erstes Ziel einer Flächen-Fähigkeit – Treffer auf die übrigen laufen nur kurz mit */
+    let mainTarget: string | null = null;
     for (const event of events) {
-      if (event.type === "ability") heroAbility = event.ability;
+      if (event.type === "ability") {
+        heroAbility = event.ability;
+        mainTarget = null;
+      }
       if (event.type === "bossAbility") bossAbility = event.abilityId;
+      // Begleiter setzen keine Boss-Fähigkeiten ein
       const special =
-        event.type === "hit" ? (event.attacker === "hero" ? heroAbility : bossAbility) : null;
-      this.time.delayedCall(delay, () => this.animate(event, special));
+        event.type === "hit" ? (event.attacker === "hero" ? heroAbility : event.add ? null : bossAbility) : null;
+      const aoe = heroAbility ? getAbility(heroAbility).aoe : undefined;
+      const sideHit =
+        event.type === "hit" &&
+        event.attacker === "hero" &&
+        (aoe === "all" || typeof aoe === "object") &&
+        (mainTarget ??= event.add ?? "enemy") !== (event.add ?? "enemy");
+      this.time.delayedCall(delay, () => (sideHit ? this.sideImpact(event) : this.animate(event, special)));
       delay +=
         event.type === "defeated" || event.type === "fled"
-          ? 900
+          ? event.type === "defeated" && event.add
+            ? 450
+            : 900
           : event.type === "ability" || event.type === "bossAbility"
             ? 600
             : event.type === "manaBurn" || event.type === "drain"
               ? 500
-              : 750;
+              : sideHit || event.type === "blocked" || (event.type === "stunned" && event.add)
+                ? 300
+                : 750;
     }
-    this.time.delayedCall(delay, () => EventBus.emit("battle:animation-done", { battleId }));
+    this.time.delayedCall(delay, () => {
+      this.markTarget(next.target);
+      EventBus.emit("battle:animation-done", { battleId: next.id });
+    });
+  }
+
+  /** Nebentreffer einer Flächen-Fähigkeit: nur Einschlag und Schadenszahl, ohne eigenen Angriff. */
+  private sideImpact(event: BattleEvent) {
+    if (event.type !== "hit") return;
+    const key = event.add ?? "enemy";
+    this.impact(key, event.damage, event.crit);
+    fx.burst(this, this.center(key), 0xf4c95d, 8, 40);
   }
 
   private animate(event: BattleEvent, special: string | null = null) {
@@ -357,29 +458,38 @@ export class BattleScene extends Phaser.Scene {
     } else if (event.type === "ability") {
       this.announceHeroAbility(event.ability);
     } else if (event.type === "poison") {
-      const target = this.fighters[event.target];
-      this.setHp(event.target, Math.max(0, target.hp - event.damage));
+      const key = event.add ?? event.target;
+      const target = this.fighters[key];
+      this.setHp(key, Math.max(0, target.hp - event.damage));
       this.floatText(target.homeX, GROUND_Y - 100, `☠ -${event.damage}`, "#7dd3a8", 24);
       sfx.poison();
       this.tint(target, 0x7dd3a8, 350);
-      fx.rise(this, this.center(event.target), 0x7dd3a8, 8);
+      fx.rise(this, this.center(key), 0x7dd3a8, 8);
     } else if (event.type === "bleed") {
-      const target = this.fighters[event.target];
-      this.setHp(event.target, Math.max(0, target.hp - event.damage));
+      const key = event.add ?? event.target;
+      const target = this.fighters[key];
+      this.setHp(key, Math.max(0, target.hp - event.damage));
       this.floatText(target.homeX, GROUND_Y - 100, `🩸 -${event.damage}`, "#c23a3a", 24);
       sfx.bleed();
       this.tint(target, 0xc23a3a, 350);
       this.drips(target.homeX, GROUND_Y - 80);
     } else if (event.type === "burn") {
-      const target = this.fighters[event.target];
-      this.setHp(event.target, Math.max(0, target.hp - event.damage));
+      const key = event.add ?? event.target;
+      const target = this.fighters[key];
+      this.setHp(key, Math.max(0, target.hp - event.damage));
       this.floatText(target.homeX, GROUND_Y - 100, `🔥 -${event.damage}`, "#f08a2c", 24);
       sfx.burn();
       this.tint(target, 0xf08a2c, 350);
-      fx.rise(this, this.center(event.target), 0xf08a2c, 10);
-      fx.rise(this, this.center(event.target), 0xffe28f, 5, 30);
+      fx.rise(this, this.center(key), 0xf08a2c, 10);
+      fx.rise(this, this.center(key), 0xffe28f, 5, 30);
     } else if (event.type === "bossAbility") {
       this.announceBossAbility(event.abilityId);
+    } else if (event.type === "blocked" && event.add) {
+      // Die Kuppel hält auch die Begleiter ab – nur ein kleines Aufblitzen
+      const hero = this.fighters.hero;
+      this.floatText(hero.homeX, GROUND_Y - 95, "GEBLOCKT", "#7aa7f0", 20);
+      fx.ring(this, { x: hero.homeX, y: GROUND_Y - 70 }, 0xa9c6ff, 80);
+      sfx.block();
     } else if (event.type === "blocked") {
       const hero = this.fighters.hero;
       this.floatText(hero.homeX, GROUND_Y - 115, "GEBLOCKT!", "#7aa7f0", 28);
@@ -406,13 +516,13 @@ export class BattleScene extends Phaser.Scene {
       sfx.manaBurn();
       this.floatText(hero.homeX, GROUND_Y - 105, `-${event.amount} Mana`, "#7aa7f0", 24);
     } else if (event.type === "stunned" && event.freeze) {
-      const enemy = this.fighters.enemy;
+      const enemy = this.fighters[event.add ?? "enemy"];
       this.floatText(enemy.homeX, GROUND_Y - 120, "EINGEFROREN", "#a9e4ff", 26);
       sfx.stun();
       this.tint(enemy, 0x9fd8ff, 1100);
-      fx.burst(this, this.center("enemy"), 0xdff4ff, 14, 70, 5);
+      fx.burst(this, this.center(event.add ?? "enemy"), 0xdff4ff, 14, 70, 5);
     } else if (event.type === "stunned") {
-      const enemy = this.fighters.enemy;
+      const enemy = this.fighters[event.add ?? "enemy"];
       this.floatText(enemy.homeX, GROUND_Y - 120, "BETÄUBT", "#d39bf0", 26);
       sfx.stun();
       this.tweens.add({ targets: enemy.body, angle: 8, duration: 90, yoyo: true, repeat: 3 });
@@ -445,6 +555,8 @@ export class BattleScene extends Phaser.Scene {
       this.setHp("hero", hero.hp + event.heal);
       this.floatText(hero.homeX, GROUND_Y - 105, `+${event.heal}`, "#9dffc8", 22);
       this.sparkles(hero.homeX, GROUND_Y - 60, 0x9dffc8);
+    } else if (event.add) {
+      this.showAddDefeat(event.add, false);
     } else {
       music.stop(this, 0.3);
       this.showDefeat(event.side, false);
@@ -454,12 +566,12 @@ export class BattleScene extends Phaser.Scene {
   /* ───────────── Bausteine für Treffer ───────────── */
 
   /** Mitte der Figur – Ziel für Geschosse, Strahlen und Effekte. */
-  private center(side: Side): fx.Point {
+  private center(side: string): fx.Point {
     return { x: this.fighters[side].homeX, y: GROUND_Y - 65 };
   }
 
   /** Vorderseite der Figur (zum Gegner hin) – Startpunkt für Geschosse. */
-  private front(side: Side): fx.Point {
+  private front(side: string): fx.Point {
     return { x: this.fighters[side].homeX + (side === "hero" ? 55 : -55), y: GROUND_Y - 75 };
   }
 
@@ -469,9 +581,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** Der Treffer selbst: LP abziehen, Ziel blinkt und wackelt, Schadenszahl. */
-  private impact(defenderSide: Side, damage: number, crit: boolean, shake = 0) {
+  private impact(defenderSide: string, damage: number, crit: boolean, shake = 0) {
     const defender = this.fighters[defenderSide];
-    const dir = defenderSide === "enemy" ? 1 : -1;
+    const dir = defenderSide === "hero" ? -1 : 1;
     this.setHp(defenderSide, Math.max(0, defender.hp - damage));
     sfx.hit(crit, shake >= 0.012);
     this.tweens.add({ targets: defender.body, alpha: 0.25, duration: 70, yoyo: true, repeat: 2 });
@@ -482,7 +594,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** Ausfallschritt zum Gegner und zurück; `onHit` beim Auftreffen. */
-  private lunge(side: Side, onHit: () => void, distance = 90, duration = 140) {
+  private lunge(side: string, onHit: () => void, distance = 90, duration = 140) {
     const f = this.fighters[side];
     const dir = side === "hero" ? 1 : -1;
     if (f.weapon) this.swing(f.weapon);
@@ -498,7 +610,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** Sprung nach oben, dann Ausfallschritt mit Wucht nach unten. */
-  private leapStrike(side: Side, onHit: () => void) {
+  private leapStrike(side: string, onHit: () => void) {
     const f = this.fighters[side];
     const baseY = f.groundY ?? f.body.y;
     const dir = side === "hero" ? 1 : -1;
@@ -688,9 +800,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private heroHit(event: Extract<BattleEvent, { type: "hit" }>, id: AbilityId | null) {
-    const hit = (shake = 0) => this.impact("enemy", event.damage, event.crit, shake);
+    const defender = event.add ?? "enemy";
+    const hit = (shake = 0) => this.impact(defender, event.damage, event.crit, shake);
     const hero = this.fighters.hero;
-    const target = this.center("enemy");
+    const target = this.center(defender);
     switch (id) {
       case "dagger": {
         // Hinter dem Gegner auftauchen, zustechen, zurück in den Schatten
@@ -898,7 +1011,7 @@ export class BattleScene extends Phaser.Scene {
           fx.ring(this, target, 0x8a4ad0, 60, 500);
           fx.rise(this, target, 0x5a2a8a, 10);
           this.floatText(target.x, GROUND_Y - 140, "VERFLUCHT", "#b07cff", 22);
-          this.tint(this.fighters.enemy, 0x8a4ad0, 900);
+          this.tint(this.fighters[defender], 0x8a4ad0, 900);
         });
         break;
       case "staff-2": {
@@ -1112,7 +1225,7 @@ export class BattleScene extends Phaser.Scene {
         sfx.curse();
         break;
       default:
-        this.lunge("enemy", () => hit());
+        this.lunge(event.add ?? "enemy", () => hit());
     }
   }
 
@@ -1155,6 +1268,16 @@ export class BattleScene extends Phaser.Scene {
       .setStroke("#0e0b16", 8)
       .setScale(instant ? 1 : 0.2);
     if (!instant) this.tweens.add({ targets: banner, scale: 1, duration: 450, ease: "Back.easeOut", delay: 250 });
+  }
+
+  /** Ein Begleiter fällt – er sinkt zusammen und verblasst, der Kampf geht weiter. */
+  private showAddDefeat(uid: string, instant: boolean) {
+    const f = this.fighters[uid];
+    this.tweens.killTweensOf(f.body);
+    f.body.disableInteractive();
+    f.images.forEach((image) => image.disableInteractive());
+    this.tweens.add({ targets: f.body, alpha: 0.2, angle: 12, y: (f.groundY ?? f.body.y) + 8, duration: instant ? 0 : 500 });
+    if (!instant) sfx.hit(false);
   }
 
   /** Der Held dreht um und rennt aus dem Bild. */

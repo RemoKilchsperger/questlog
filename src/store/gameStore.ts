@@ -10,12 +10,14 @@ import {
 import {
   addToChest,
   attackRound,
+  defeatedAdds,
   drinkPotion,
   EMPTY_CHEST,
   flee,
   fleeCost,
   getHeroCombatProfile,
   rollBattleReward,
+  setTarget,
   startBattle,
   type BattleReward,
   type BattleState,
@@ -173,6 +175,8 @@ interface GameState {
   battleDrinkPotion: (potionId: string) => void;
   /** Angriff der Runde – ohne Argument normal, sonst mit der Fähigkeit dieses Waffentyps. */
   battleAttack: (ability?: AbilityId) => void;
+  /** Wählt das Ziel: einen Begleiter (uid) oder den Boss (undefined). */
+  battleTarget: (target: string | undefined) => void;
   /** Flucht: kostet Gold (siehe `fleeCost`), beendet den Kampf ohne Gegenangriff. */
   battleFlee: () => void;
   leaveBattle: () => void;
@@ -847,7 +851,10 @@ export const useGameStore = create<GameState>()(
             bossRespawns: startRespawn(get().bossRespawns, creature.id),
           });
           questEvent({ kind: "kill", creatureId: creature.id, boss: creature.boss });
-          const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId());
+          // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
+          const adds = defeatedAdds(result.state);
+          for (const add of adds) questEvent({ kind: "kill", creatureId: add.id, boss: false });
+          const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds);
           if (dungeon) {
             // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende.
             const level = getLevel(character.totalXp);
@@ -867,6 +874,14 @@ export const useGameStore = create<GameState>()(
           if (levels.levelAfter > levels.levelBefore) {
             EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
           }
+        }),
+
+      battleTarget: (target) =>
+        attempt(() => {
+          const { battle } = get();
+          if (!battle || battle.status !== "active") return;
+          set({ battle: setTarget(battle, target) });
+          EventBus.emit("battle:target", { battleId: battle.id, target });
         }),
 
       battleFlee: () =>

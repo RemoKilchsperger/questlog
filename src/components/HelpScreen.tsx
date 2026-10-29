@@ -321,6 +321,17 @@ export function HelpScreen() {
             Boss {STUN_IMMUNITY_ROUNDS} Runden lang immun dagegen – im Koop gilt das für jeden Gegner. Dungeon-Bosse haben
             zwei Fähigkeiten, die sich abwechseln.
           </p>
+          <H>Bosse mit Begleitern</H>
+          <p>
+            Manche Bosse bringen Begleiter mit. Sie halten wenig aus, schlagen aber jede Runde mit zu. Wähle dein Ziel über
+            die Ziel-Leiste oder per Klick in der Kampfszene. Fällt der Boss, ist der Kampf gewonnen – die Begleiter
+            fliehen. Besiegte Begleiter geben etwas Erfahrung und Gold.
+          </p>
+          <p>
+            Flächen-Fähigkeiten treffen mehrere Gegner: Klingensturm, Erdbeben und Schockwelle alle, Schwertwirbel und
+            Pfeilhagel verteilen ihre Treffer zufällig, Spalter und Meteor treffen Umstehende mit halbem Schaden. Ein
+            Bollwerk blockt den ganzen gegnerischen Zug, Parade und Vergeltung wirken nur gegen den Boss.
+          </p>
         </Topic>
 
         <Topic id="dungeons" title="🗝️ Dungeons">

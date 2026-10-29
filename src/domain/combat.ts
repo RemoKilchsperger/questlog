@@ -6,11 +6,17 @@
 //   2. Angriff des Helden – normal oder mit einer Waffen-Fähigkeit (kostet Mana) –
 //      oder Flucht (kostet Gold, beendet den Kampf)
 //   3. Gift, Feuer und Bluten wirken, dann Gegenangriff der Kreatur (falls sie noch steht und nicht betäubt ist)
+//      und ihrer Begleiter
 //   4. Der Held regeneriert etwas Mana
+//
+// Begleiter (Adds): Manche Bosse kämpfen nicht allein. Der Held wählt sein Ziel
+// (Standard: der Boss), Flächen-Fähigkeiten treffen mehrere. Fällt der Boss, ist
+// der Kampf gewonnen – die Begleiter fliehen. Besiegte Begleiter bleiben liegen.
 
 import { getArmorClassSummary, getCombatStats, getEffectiveStats } from "./equipment";
 import {
   getCreatureGold,
+  getCreatureGoldDrop,
   getCreatureLoot,
   getCreaturePotionDrop,
   getCreatureStats,
@@ -123,7 +129,8 @@ export interface Combatant {
 export type BattleEvent =
   /** `heal` = geheilte LP (0 bei Verstärkungstränken), `buff` = welche Verstärkung beginnt */
   | { type: "potion"; potionId: string; heal: number; buff?: BuffKind }
-  | { type: "hit"; attacker: Side; damage: number; crit: boolean }
+  /** `add`: der beteiligte Begleiter – Ziel des Helden bzw. Angreifer (fehlt: der Boss) */
+  | { type: "hit"; attacker: Side; damage: number; crit: boolean; add?: string }
   /** Der Held setzt eine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "ability"; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
   /** Der Held heilt sich durch eine Fähigkeit (Heiliges Licht, Blutrausch) */
@@ -133,24 +140,25 @@ export type BattleEvent =
   /** … und der Gegner erleidet Konter- bzw. Rückwurfschaden */
   | { type: "counter"; damage: number }
   /** Giftschaden – `target` ist, wer vergiftet ist */
-  | { type: "poison"; target: Side; damage: number }
+  | { type: "poison"; target: Side; damage: number; add?: string }
   /** Feuerschaden – `target` ist, wer brennt */
-  | { type: "burn"; target: Side; damage: number }
+  | { type: "burn"; target: Side; damage: number; add?: string }
   /** Blutungsschaden – `target` ist, wer blutet */
-  | { type: "bleed"; target: Side; damage: number }
+  | { type: "bleed"; target: Side; damage: number; add?: string }
   /** Der betäubte (bei `freeze` eingefrorene) Gegner setzt diese Runde aus */
-  | { type: "stunned"; freeze?: boolean }
+  | { type: "stunned"; freeze?: boolean; add?: string }
   /** Der Boss ist nach einer Betäubung noch immun und greift trotzdem an */
   | { type: "stunResisted"; freeze?: boolean }
   /** Der Boss setzt seine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "bossAbility"; bossId: string; abilityId: string }
   /** Bollwerk hat den Angriff des Gegners komplett geblockt */
-  | { type: "blocked" }
+  | { type: "blocked"; add?: string }
   /** Der Gegner heilt sich (Lebensentzug) */
   | { type: "drain"; heal: number }
   /** Der Gegner raubt dem Helden Mana */
   | { type: "manaBurn"; amount: number }
-  | { type: "defeated"; side: Side }
+  /** Mit `add`: nur ein Begleiter fällt, der Kampf geht weiter */
+  | { type: "defeated"; side: Side; add?: string }
   | { type: "fled"; goldLost: number }
   /** Klassen-Regeneration (Kleriker) am Ende der Runde */
   | { type: "regen"; heal: number };
@@ -169,6 +177,30 @@ export interface ActiveBuff {
   percent: number;
   /** Verbleibende Runden inklusive der aktuellen */
   roundsLeft: number;
+}
+
+/** Wirkungen der Fähigkeiten auf einen Gegner */
+export interface EnemyEffects {
+  poison?: DamageOverTime;
+  burn?: DamageOverTime;
+  bleed?: DamageOverTime;
+  /** Rüstungsminderung für den Rest des Kampfes (0.3 = −30 %) */
+  armorBreak?: number;
+  /** Geschwächt: macht `percent` weniger Schaden */
+  weaken?: ActiveBuff;
+  /** Verwundbar: erleidet `percent` mehr Schaden */
+  vulnerable?: ActiveBuff;
+  /** Bosse: so viele Runden (inkl. der aktuellen) noch immun gegen Betäubung */
+  stunImmunity?: number;
+}
+
+/** Ein Begleiter des Bosses – eine normale Kreatur, die mitkämpft. */
+export interface BattleAdd {
+  /** "add-1", "add-2", … */
+  uid: string;
+  creatureId: string;
+  combatant: Combatant;
+  effects: EnemyEffects;
 }
 
 export interface BattleState {
@@ -190,20 +222,12 @@ export interface BattleState {
   cooldowns?: Partial<Record<AbilityId, number>>;
   /** Aktive Klasse des Helden (fehlt bei älteren Kämpfen) */
   heroClass?: HeroClassId | null;
-  /** Wirkungen der Fähigkeiten auf den Gegner */
-  enemyEffects: {
-    poison?: DamageOverTime;
-    burn?: DamageOverTime;
-    bleed?: DamageOverTime;
-    /** Rüstungsminderung für den Rest des Kampfes (0.3 = −30 %) */
-    armorBreak?: number;
-    /** Geschwächt: macht `percent` weniger Schaden */
-    weaken?: ActiveBuff;
-    /** Verwundbar: erleidet `percent` mehr Schaden */
-    vulnerable?: ActiveBuff;
-    /** Bosse: so viele Runden (inkl. der aktuellen) noch immun gegen Betäubung */
-    stunImmunity?: number;
-  };
+  /** Wirkungen der Fähigkeiten auf den Gegner (den Boss) */
+  enemyEffects: EnemyEffects;
+  /** Begleiter des Bosses – auch besiegte (LP 0). Fehlt bei älteren Kämpfen. */
+  adds?: BattleAdd[];
+  /** Ziel des Helden: uid eines Begleiters – fehlt, greift er den Boss an */
+  target?: string;
   /** Wirkungen auf den Helden */
   heroEffects: {
     /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
@@ -259,9 +283,38 @@ export function startBattle(
     heroClass: hero.heroClass,
     enemyEffects: {},
     heroEffects: {},
+    adds: (creature.adds ?? [])
+      .flatMap((add) => Array.from({ length: add.count }, () => add))
+      .map((add, i) => {
+        const { creature: def } = getCreature(add.creatureId);
+        const stats = getCreatureStats(def);
+        const maxHp = Math.round(stats.maxHp * add.hp);
+        return {
+          uid: `add-${i + 1}`,
+          creatureId: def.id,
+          combatant: { name: def.name, level: def.level, ...stats, maxHp, hp: maxHp, damage: stats.damage * add.damage },
+          effects: {},
+        };
+      }),
     status: "active",
     log: [],
   };
+}
+
+/** Lebende Begleiter. */
+export function livingAdds(state: BattleState): BattleAdd[] {
+  return (state.adds ?? []).filter((a) => a.combatant.hp > 0);
+}
+
+/** Wählt das Ziel des Helden: einen lebenden Begleiter (uid) oder den Boss (undefined). */
+export function setTarget(state: BattleState, target: string | undefined): BattleState {
+  if (target !== undefined && !livingAdds(state).some((a) => a.uid === target)) throw new Error("Dieses Ziel gibt es nicht.");
+  return { ...state, target };
+}
+
+/** Kreaturen der in diesem Kampf besiegten Begleiter – für Belohnung und Aufträge. */
+export function defeatedAdds(state: BattleState): CreatureDef[] {
+  return (state.adds ?? []).filter((a) => a.combatant.hp === 0).map((a) => getCreature(a.creatureId).creature);
 }
 
 /** Der Held mit den Werten aktiver Verstärkungen (Schaden, Rüstung). */
@@ -399,9 +452,27 @@ export function stunLands(ability: AbilityDef | null, rng: () => number): boolea
 /** Kennzeichnet Betäubungs-Ereignisse der Eissplitter als Einfrieren. */
 export const freezeFlag = (ability: AbilityDef | null): { freeze?: true } => (ability?.freeze ? { freeze: true } : {});
 
+/** Ein Gegner in der laufenden Runde: der Boss (ohne `add`) oder ein Begleiter. */
+interface Foe {
+  add?: string;
+  c: Combatant;
+  fx: EnemyEffects;
+}
+
+const foeTag = (foe: Foe): { add?: string } => (foe.add ? { add: foe.add } : {});
+
+/** Am Rundenende laufen Schwächung, Verwundbarkeit und Betäubungs-Immunität eine Runde ab. */
+const tickEnemyEffects = (fx: EnemyEffects): EnemyEffects => ({
+  ...fx,
+  weaken: tickBuff(fx.weaken),
+  vulnerable: tickBuff(fx.vulnerable),
+  stunImmunity: tickStunImmunity(fx.stunImmunity),
+});
+
 /**
- * Eine Runde: Angriff des Helden – normal oder mit einer Fähigkeit –,
- * danach Gift, Feuer, Bluten und Gegenangriff der Kreatur (ausser sie ist betäubt).
+ * Eine Runde: Angriff des Helden – normal oder mit einer Fähigkeit – auf sein Ziel
+ * (Flächen-Fähigkeiten auf mehrere Gegner), danach Gift, Feuer, Bluten und
+ * Gegenangriff des Bosses (ausser er ist betäubt) und seiner Begleiter.
  * Am Ende regeneriert der Held etwas Mana.
  */
 export function attackRound(
@@ -417,11 +488,16 @@ export function attackRound(
   }
   const events: BattleEvent[] = [];
   let hero = state.hero;
-  let enemy = state.enemy;
-  let enemyEffects = state.enemyEffects;
   let heroEffects = state.heroEffects;
   let mana = state.mana;
   let status: BattleStatus = "active";
+  // Der Boss zuerst, dann die Begleiter – Kopien, die sich in dieser Runde ändern
+  const boss: Foe = { c: state.enemy, fx: state.enemyEffects };
+  const adds: Foe[] = (state.adds ?? []).map((a) => ({ add: a.uid, c: a.combatant, fx: a.effects }));
+  const foes = [boss, ...adds];
+  const living = () => foes.filter((f) => f.c.hp > 0);
+  const target = adds.find((f) => f.add === state.target && f.c.hp > 0) ?? boss;
+  const aoe = ability?.aoe;
   // Verstärkungen wirken auf Schaden und Rüstung, die Lebenspunkte bleiben die echten.
   const strongBase = buffedHero(state);
   // Berserker: bei wenig Lebenspunkten mehr Schaden; Kriegsschrei: Verstärkung
@@ -439,51 +515,72 @@ export function attackRound(
     if (ability.guard) heroEffects = { ...heroEffects, guard: ability.guard };
     // +1, weil die Verstärkung erst ab der nächsten Runde zählt (am Rundenende läuft eine ab)
     if (ability.empower) heroEffects = { ...heroEffects, empower: { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 } };
-    if (ability.weaken) enemyEffects = { ...enemyEffects, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
-    if (ability.vulnerable) {
-      enemyEffects = { ...enemyEffects, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
-    }
     if (ability.heal) {
       const heal = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * ability.heal));
       hero = { ...hero, hp: hero.hp + heal };
       if (heal > 0) events.push({ type: "selfHeal", heal });
     }
-    if (ability.armorBreak) enemyEffects = { ...enemyEffects, armorBreak: ability.armorBreak };
-    for (const kind of OVER_TIME) {
-      const effect = ability[kind];
-      if (!effect) continue;
-      const damage = Math.max(1, Math.round(strong.damage * effect.percent));
-      enemyEffects = { ...enemyEffects, [kind]: { damage, roundsLeft: effect.rounds } };
+    // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner
+    for (const foe of aoe === "all" ? living() : [target]) {
+      if (ability.weaken) foe.fx = { ...foe.fx, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
+      if (ability.vulnerable) {
+        foe.fx = { ...foe.fx, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
+      }
+      if (ability.armorBreak) foe.fx = { ...foe.fx, armorBreak: ability.armorBreak };
+      for (const kind of OVER_TIME) {
+        const effect = ability[kind];
+        if (!effect) continue;
+        const damage = Math.max(1, Math.round(strong.damage * effect.percent));
+        foe.fx = { ...foe.fx, [kind]: { damage, roundsLeft: effect.rounds } };
+      }
     }
   }
-  // Finisher (Meucheln): mehr Schaden gegen angeschlagene Gegner
-  const execute = ability?.execute && enemy.hp < enemy.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
-  const vulnerable = 1 + (enemyEffects.vulnerable?.percent ?? 0);
-  const attacker: Combatant = ability
-    ? {
-        ...strong,
-        damage: strong.damage * ability.multiplier * execute * vulnerable,
-        critChance: ability.guaranteedCrit ? 1 : strong.critChance,
-      }
-    : { ...strong, damage: strong.damage * vulnerable };
-  const targetArmor = ability?.ignoreArmor ? 0 : Math.round(enemy.armor * (1 - (enemyEffects.armorBreak ?? 0)));
+  const vulnerableOf = (foe: Foe) => 1 + (foe.fx.vulnerable?.percent ?? 0);
+  const armorOf = (foe: Foe) => (ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0))));
+  /** Ein gefallener Begleiter – der Kampf geht weiter. */
+  const addDown = (foe: Foe) => {
+    if (foe.add && foe.c.hp === 0) events.push({ type: "defeated", side: "enemy", add: foe.add });
+  };
   let dealtByHero = 0;
-  const strike = () => {
-    const heroHit = rollHit(attacker, { ...enemy, armor: targetArmor }, rng);
-    dealtByHero += Math.min(enemy.hp, heroHit.damage);
-    enemy = { ...enemy, hp: Math.max(0, enemy.hp - heroHit.damage) };
-    events.push({ type: "hit", attacker: "hero", ...heroHit });
+  /** Ein Treffer des Helden – `share` < 1 bei Splash-Schaden auf Umstehende. */
+  const strike = (foe: Foe, share = 1) => {
+    // Finisher (Meucheln): mehr Schaden gegen angeschlagene Gegner
+    const execute = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
+    const attacker: Combatant = ability
+      ? {
+          ...strong,
+          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share,
+          critChance: ability.guaranteedCrit ? 1 : strong.critChance,
+        }
+      : { ...strong, damage: strong.damage * vulnerableOf(foe) };
+    const heroHit = rollHit(attacker, { ...foe.c, armor: armorOf(foe) }, rng);
+    dealtByHero += Math.min(foe.c.hp, heroHit.damage);
+    foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - heroHit.damage) };
+    events.push({ type: "hit", attacker: "hero", ...heroHit, ...foeTag(foe) });
     // Plünderer: kritische Treffer lassen bluten
-    if (heroHit.crit && state.heroClass === "plunderer" && enemy.hp > 0) {
+    if (heroHit.crit && state.heroClass === "plunderer" && foe.c.hp > 0) {
       const damage = Math.max(1, Math.round(strong.damage * PLUNDERER_BLEED.percent));
-      if ((enemyEffects.bleed?.damage ?? 0) <= damage) {
-        enemyEffects = { ...enemyEffects, bleed: { damage, roundsLeft: PLUNDERER_BLEED.rounds } };
+      if ((foe.fx.bleed?.damage ?? 0) <= damage) {
+        foe.fx = { ...foe.fx, bleed: { damage, roundsLeft: PLUNDERER_BLEED.rounds } };
       }
     }
+    addDown(foe);
   };
-  for (let i = 0; i < (ability?.hits ?? 1) && enemy.hp > 0; i++) strike();
+  for (let i = 0; i < (ability?.hits ?? 1) && boss.c.hp > 0; i++) {
+    if (aoe === "all") {
+      for (const foe of living()) strike(foe);
+    } else if (aoe === "spread") {
+      // Jeder Treffer geht an einen zufälligen Gegner
+      const options = living();
+      strike(options.length > 1 ? options[Math.floor(rng() * options.length)] : options[0]);
+    } else {
+      if (target.c.hp === 0) break;
+      strike(target);
+      if (typeof aoe === "object") for (const foe of living()) if (foe !== target) strike(foe, aoe.splash);
+    }
+  }
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
-  if (!ability && state.heroClass === "duelist" && enemy.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike();
+  if (!ability && state.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
   // Lebensraub: Blutrausch und Plünderer
   const lifesteal = lifestealShare(state.heroClass, ability);
   if (lifesteal > 0 && dealtByHero > 0) {
@@ -492,92 +589,120 @@ export function attackRound(
     if (heal > 0) events.push({ type: "selfHeal", heal });
   }
 
-  // 2. Gift, Feuer und Bluten wirken nach der Aktion des Helden – erst beim Gegner, dann beim Helden
-  for (const kind of OVER_TIME) {
-    const effect = enemyEffects[kind];
-    if (effect && enemy.hp > 0) {
-      const damage = Math.round(effect.damage * vulnerable);
-      enemy = { ...enemy, hp: Math.max(0, enemy.hp - damage) };
-      events.push({ type: kind, target: "enemy", damage });
-      enemyEffects = { ...enemyEffects, [kind]: tickOverTime(effect) };
+  // 2. Gift, Feuer und Bluten wirken nach der Aktion des Helden – erst bei den Gegnern, dann beim Helden
+  for (const foe of foes) {
+    for (const kind of OVER_TIME) {
+      const effect = foe.fx[kind];
+      if (effect && foe.c.hp > 0 && boss.c.hp > 0) {
+        const damage = Math.round(effect.damage * vulnerableOf(foe));
+        foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - damage) };
+        events.push({ type: kind, target: "enemy", damage, ...foeTag(foe) });
+        foe.fx = { ...foe.fx, [kind]: tickOverTime(effect) };
+        addDown(foe);
+      }
     }
   }
   for (const kind of OVER_TIME) {
     const effect = heroEffects[kind];
-    if (effect && enemy.hp > 0 && hero.hp > 0) {
+    if (effect && boss.c.hp > 0 && hero.hp > 0) {
       hero = { ...hero, hp: Math.max(0, hero.hp - effect.damage) };
       events.push({ type: kind, target: "hero", damage: effect.damage });
       heroEffects = { ...heroEffects, [kind]: tickOverTime(effect) };
     }
   }
 
-  // 3. Gegenangriff (entfällt bei Betäubung) – Bosse setzen regelmässig ihre Fähigkeit ein
-  const stuns = enemy.hp > 0 && hero.hp > 0 && stunLands(ability, rng);
-  if (enemy.hp === 0) {
+  // 3. Gegenangriff (entfällt bei Betäubung) – Bosse setzen regelmässig ihre Fähigkeit ein,
+  //    danach greifen die Begleiter an. Bei Flächenwirkung "all" würfelt jeder Gegner seine Betäubung.
+  const stunned = new Set<Foe>();
+  if (boss.c.hp > 0 && hero.hp > 0) {
+    for (const foe of aoe === "all" ? living() : [target]) if (foe.c.hp > 0 && stunLands(ability, rng)) stunned.add(foe);
+  }
+  if (boss.c.hp === 0) {
     status = "won";
     events.push({ type: "defeated", side: "enemy" });
   } else if (hero.hp === 0) {
     status = "lost";
     events.push({ type: "defeated", side: "hero" });
-  } else if (stuns && !enemyEffects.stunImmunity) {
-    events.push({ type: "stunned", ...freezeFlag(ability) });
-    // Bosse sind danach einige Runden immun
-    if (getCreature(state.creatureId).creature.boss) enemyEffects = { ...enemyEffects, stunImmunity: freshStunImmunity() };
   } else {
-    if (stuns) events.push({ type: "stunResisted", ...freezeFlag(ability) });
-    const special = bossAbilityDue(state.creatureId, state.round);
-    if (special) events.push({ type: "bossAbility", bossId: special.bossId, abilityId: special.id });
-    if (heroEffects.bulwark) {
-      // Bollwerk blockt den ganzen Angriff samt Zusatzeffekten.
-      events.push({ type: "blocked" });
-      heroEffects = { ...heroEffects, bulwark: undefined };
+    // Bollwerk blockt den ganzen gegnerischen Zug – Boss und Begleiter samt Zusatzeffekten.
+    const bulwark = heroEffects.bulwark;
+    let blocked = false;
+    if (stunned.has(boss) && !boss.fx.stunImmunity) {
+      events.push({ type: "stunned", ...freezeFlag(ability) });
+      // Bosse sind danach einige Runden immun
+      if (getCreature(state.creatureId).creature.boss) boss.fx = { ...boss.fx, stunImmunity: freshStunImmunity() };
     } else {
-      // Geschwächte Gegner machen weniger Schaden
-      const weakened = 1 - (enemyEffects.weaken?.percent ?? 0);
-      const attacker = { ...enemy, damage: enemy.damage * (special?.multiplier ?? 1) * weakened };
-      const defender = special?.ignoreArmor ? { ...strong, armor: 0 } : strong;
-      const guard = heroEffects.guard;
-      let dealt = 0;
-      let raw = 0;
-      for (let i = 0; i < (special?.hits ?? 1) && hero.hp > 0; i++) {
-        const enemyHit = rollHit(attacker, defender, rng);
-        // Parade/Vergeltung: nur ein Teil des Schadens kommt durch
-        const damage = guard ? Math.max(1, Math.round(enemyHit.damage * guard.reduce)) : enemyHit.damage;
-        raw += enemyHit.damage;
-        hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
-        dealt += damage;
-        events.push({ type: "hit", attacker: "enemy", ...enemyHit, damage });
-      }
-      if (guard) {
-        heroEffects = { ...heroEffects, guard: undefined };
-        events.push({ type: "guarded", prevented: raw - dealt });
-        let counter = guard.reflect ? Math.round(raw * guard.reflect) : 0;
-        if (guard.counter && hero.hp > 0) {
-          counter += rollHit({ ...strong, damage: strong.damage * guard.counter }, { ...enemy, armor: targetArmor }, rng).damage;
+      if (stunned.has(boss)) events.push({ type: "stunResisted", ...freezeFlag(ability) });
+      const special = bossAbilityDue(state.creatureId, state.round);
+      if (special) events.push({ type: "bossAbility", bossId: special.bossId, abilityId: special.id });
+      if (bulwark) {
+        events.push({ type: "blocked" });
+        blocked = true;
+      } else {
+        // Geschwächte Gegner machen weniger Schaden
+        const weakened = 1 - (boss.fx.weaken?.percent ?? 0);
+        const attacker = { ...boss.c, damage: boss.c.damage * (special?.multiplier ?? 1) * weakened };
+        const defender = special?.ignoreArmor ? { ...strong, armor: 0 } : strong;
+        // Parade/Vergeltung wirkt nur gegen den Boss – den grossen Treffer
+        const guard = heroEffects.guard;
+        let dealt = 0;
+        let raw = 0;
+        for (let i = 0; i < (special?.hits ?? 1) && hero.hp > 0; i++) {
+          const enemyHit = rollHit(attacker, defender, rng);
+          // Parade/Vergeltung: nur ein Teil des Schadens kommt durch
+          const damage = guard ? Math.max(1, Math.round(enemyHit.damage * guard.reduce)) : enemyHit.damage;
+          raw += enemyHit.damage;
+          hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
+          dealt += damage;
+          events.push({ type: "hit", attacker: "enemy", ...enemyHit, damage });
         }
-        if (counter > 0) {
-          enemy = { ...enemy, hp: Math.max(0, enemy.hp - counter) };
-          events.push({ type: "counter", damage: counter });
+        if (guard) {
+          heroEffects = { ...heroEffects, guard: undefined };
+          events.push({ type: "guarded", prevented: raw - dealt });
+          let counter = guard.reflect ? Math.round(raw * guard.reflect) : 0;
+          if (guard.counter && hero.hp > 0) {
+            counter += rollHit({ ...strong, damage: strong.damage * guard.counter }, { ...boss.c, armor: armorOf(boss) }, rng).damage;
+          }
+          if (counter > 0) {
+            boss.c = { ...boss.c, hp: Math.max(0, boss.c.hp - counter) };
+            events.push({ type: "counter", damage: counter });
+          }
         }
-      }
-      if (special?.drain) {
-        const heal = Math.min(enemy.maxHp - enemy.hp, Math.round(dealt * special.drain));
-        enemy = { ...enemy, hp: enemy.hp + heal };
-        if (heal > 0) events.push({ type: "drain", heal });
-      }
-      if (special?.manaBurn) {
-        const amount = Math.min(mana, special.manaBurn);
-        mana -= amount;
-        if (amount > 0) events.push({ type: "manaBurn", amount });
-      }
-      for (const kind of OVER_TIME) {
-        const effect = special?.[kind];
-        if (!effect) continue;
-        const damage = Math.max(1, Math.round(enemy.damage * effect.percent));
-        heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: effect.rounds } };
+        if (special?.drain) {
+          const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(dealt * special.drain));
+          boss.c = { ...boss.c, hp: boss.c.hp + heal };
+          if (heal > 0) events.push({ type: "drain", heal });
+        }
+        if (special?.manaBurn) {
+          const amount = Math.min(mana, special.manaBurn);
+          mana -= amount;
+          if (amount > 0) events.push({ type: "manaBurn", amount });
+        }
+        for (const kind of OVER_TIME) {
+          const effect = special?.[kind];
+          if (!effect) continue;
+          const damage = Math.max(1, Math.round(boss.c.damage * effect.percent));
+          heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: effect.rounds } };
+        }
       }
     }
-    if (enemy.hp === 0) {
+    // Begleiter: je ein normaler Angriff, solange Boss und Held stehen
+    for (const foe of adds) {
+      if (foe.c.hp === 0 || boss.c.hp === 0 || hero.hp === 0) continue;
+      if (stunned.has(foe)) {
+        events.push({ type: "stunned", ...freezeFlag(ability), ...foeTag(foe) });
+      } else if (bulwark) {
+        events.push({ type: "blocked", ...foeTag(foe) });
+        blocked = true;
+      } else {
+        const weakened = 1 - (foe.fx.weaken?.percent ?? 0);
+        const enemyHit = rollHit({ ...foe.c, damage: foe.c.damage * weakened }, strong, rng);
+        hero = { ...hero, hp: Math.max(0, hero.hp - enemyHit.damage) };
+        events.push({ type: "hit", attacker: "enemy", ...enemyHit, ...foeTag(foe) });
+      }
+    }
+    if (blocked) heroEffects = { ...heroEffects, bulwark: undefined };
+    if (boss.c.hp === 0) {
       status = "won";
       events.push({ type: "defeated", side: "enemy" });
     } else if (hero.hp === 0) {
@@ -599,13 +724,13 @@ export function attackRound(
     state: {
       ...state,
       hero,
-      enemy,
-      enemyEffects: {
-        ...enemyEffects,
-        weaken: tickBuff(enemyEffects.weaken),
-        vulnerable: tickBuff(enemyEffects.vulnerable),
-        stunImmunity: tickStunImmunity(enemyEffects.stunImmunity),
-      },
+      enemy: boss.c,
+      enemyEffects: tickEnemyEffects(boss.fx),
+      ...(state.adds && {
+        adds: state.adds.map((a, i) => ({ ...a, combatant: adds[i].c, effects: tickEnemyEffects(adds[i].fx) })),
+      }),
+      // Ist das gewählte Ziel gefallen, geht es wieder gegen den Boss
+      target: target.add !== undefined && target.c.hp > 0 ? target.add : undefined,
       heroEffects: { ...heroEffects, empower: tickBuff(heroEffects.empower) },
       mana: Math.min(state.maxMana, mana + MANA_REGEN),
       cooldowns: tickCooldowns(state.cooldowns, ability),
@@ -701,21 +826,33 @@ export function rollBossLoot(creature: CreatureDef, uid: string, rng: () => numb
   return createItem(items[Math.floor(rng() * items.length)].id, "legendary", uid, rng);
 }
 
-/** Belohnung für einen Sieg: XP, Gold (mit Charisma-Bonus), ggf. ein Item, Tränke und bei Bossen ein Boss-Item. */
+/** Besiegte Begleiter geben diesen Anteil ihrer Erfahrung und ihres durchschnittlichen Golds – Beute gibt es nur vom Boss. */
+export const ADD_REWARD_SHARE = 0.5;
+
+/**
+ * Belohnung für einen Sieg: XP, Gold (mit Charisma-Bonus), ggf. ein Item, Tränke und
+ * bei Bossen ein Boss-Item – dazu etwas XP und Gold für besiegte Begleiter.
+ */
 export function rollBattleReward(
   creature: CreatureDef,
   hero: HeroCombatProfile,
   uid: string,
   rng: () => number = Math.random,
+  addsDefeated: readonly CreatureDef[] = [],
 ): BattleReward {
   const { dropChance, weights } = getCreatureLoot(creature);
   const potionDrop = getCreaturePotionDrop(creature);
+  const addXp = addsDefeated.reduce((sum, add) => sum + Math.round(getCreatureXp(add, hero.level) * ADD_REWARD_SHARE), 0);
+  const addGold = addsDefeated.reduce(
+    (sum, add) => sum + getCreatureGold(add) * getCreatureGoldDrop(add).chance * ADD_REWARD_SHARE,
+    0,
+  );
   return {
-    xp: getCreatureXp(creature, hero.level),
+    xp: getCreatureXp(creature, hero.level) + addXp,
     loot: rollDrop(dropChance, weights, creature.level, uid, rng),
     potions: rng() < potionDrop.chance ? { potionId: potionDrop.potionId, count: potionDrop.count } : null,
     bossLoot: rollBossLoot(creature, `${uid}-boss`, rng),
     buffPotion: rollBuffPotion(rng),
-    gold: Math.round(rollCreatureGold(creature, rng) * (1 + hero.goldBonus)),
+    gold: Math.round((rollCreatureGold(creature, rng) + addGold) * (1 + hero.goldBonus)),
   };
 }

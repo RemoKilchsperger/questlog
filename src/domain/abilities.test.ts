@@ -205,7 +205,8 @@ describe("Boss-Fähigkeiten", () => {
     expect(due.round).toBe(3);
     const { events } = attackRound(due, rng(0.5));
     expect(events.some((e) => e.type === "bossAbility")).toBe(true);
-    expect(events.filter((e) => e.type === "hit" && e.attacker === "enemy")).toHaveLength(3); // Rasender Hieb
+    // Rasender Hieb – die Begleiter greifen danach je einmal normal an
+    expect(events.filter((e) => e.type === "hit" && e.attacker === "enemy" && !e.add)).toHaveLength(3);
   });
 
   it("Bollwerk blockt die Boss-Fähigkeit samt Gift, Betäubung verhindert sie", () => {

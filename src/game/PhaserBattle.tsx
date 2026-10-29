@@ -27,6 +27,7 @@ export default function PhaserBattle({ battleId }: { battleId: string }) {
       boss: creature.boss,
       colors: area.colors,
       areaId: area.id,
+      selectTarget: (target) => useGameStore.getState().battleTarget(target),
     };
 
     const game = new Phaser.Game({

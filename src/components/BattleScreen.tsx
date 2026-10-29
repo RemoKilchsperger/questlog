@@ -307,6 +307,12 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           </Hint>
           {dangerText && <span className={danger > 0 ? "text-danger" : "text-xp"}>{dangerText}</span>}
         </div>
+        {creature.adds?.map((add) => (
+          <p key={add.creatureId} className="mt-1 text-xs text-danger">
+            Begleiter: {add.count}× {getCreature(add.creatureId).creature.name} – schwächer als sonst, greifen aber jede
+            Runde mit an.
+          </p>
+        ))}
         {bossAbilities.map((a) => (
           <p key={a.id} className="mt-1 text-xs text-danger">
             Fähigkeit: {a.icon} {a.name} – {bossAbilities.length > 1 ? "im Wechsel " : ""}alle {a.every} Runden.{" "}
@@ -493,6 +499,7 @@ function Battle({ battle }: { battle: BattleState }) {
             </StatusSide>
             <StatusSide title={battle.enemy.name} chips={enemyStatusChips(battle.enemyEffects)} />
           </div>
+          {(battle.adds?.length ?? 0) > 0 && <TargetPicker battle={battle} disabled={!active} />}
           <BossWarning battle={battle} />
 
           <ActionGroup label="Angriff" hint="Danach schlägt der Gegner zurück.">
@@ -585,6 +592,62 @@ function Battle({ battle }: { battle: BattleState }) {
 
       <BattleLog battle={battle} />
     </div>
+  );
+}
+
+/**
+ * Boss und Begleiter: Ziel wählen (auch per Klick in der Szene), Lebenspunkte
+ * und Effekte jedes Gegners im Blick.
+ */
+function TargetPicker({ battle, disabled }: { battle: BattleState; disabled: boolean }) {
+  const choose = useGameStore((s) => s.battleTarget);
+  const foes = [
+    { uid: undefined, combatant: battle.enemy, effects: battle.enemyEffects, boss: true },
+    ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false })),
+  ];
+  return (
+    <ActionGroup label="Ziel" hint="Fällt der Boss, ist der Kampf gewonnen · Flächen-Fähigkeiten treffen mehrere">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {foes.map(({ uid, combatant, effects, boss }) => {
+          const down = combatant.hp === 0;
+          const selected = battle.target === uid;
+          return (
+            <button
+              key={uid ?? "boss"}
+              type="button"
+              disabled={disabled || down}
+              onClick={() => choose(uid)}
+              aria-pressed={selected}
+              className={`flex min-w-0 flex-col gap-1 rounded-md border-2 px-2 py-1.5 text-left disabled:cursor-not-allowed ${
+                selected ? "border-gold bg-gold/10" : "border-night-600 hover:border-muted"
+              } ${down ? "opacity-40" : ""}`}
+            >
+              <span className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="truncate font-bold">
+                  {selected && "▼ "}
+                  {boss && "👑 "}
+                  {combatant.name}
+                </span>
+                <span className="num shrink-0 text-xs text-muted">
+                  {down ? "besiegt" : `${combatant.hp}/${combatant.maxHp}`}
+                </span>
+              </span>
+              <span className="h-1.5 overflow-hidden rounded-sm bg-night-700">
+                <span className="block h-full bg-danger" style={{ width: `${(combatant.hp / combatant.maxHp) * 100}%` }} />
+              </span>
+              <span className="flex min-h-4 flex-wrap gap-1 text-xs">
+                {enemyStatusChips(effects).map((chip) => (
+                  <span key={chip.key} title={chip.title}>
+                    {chip.icon}
+                    {chip.rounds !== undefined && <span className="num text-muted">{chip.rounds}</span>}
+                  </span>
+                ))}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </ActionGroup>
   );
 }
 
@@ -997,7 +1060,10 @@ function BattleLog({ battle }: { battle: BattleState }) {
 }
 
 function describe(e: BattleState["log"][number], battle: BattleState): string {
-  const enemy = battle.enemy.name;
+  // Ereignisse eines Begleiters tragen seine uid – sonst geht es um den Boss
+  const named = (add: string | undefined) =>
+    (add && battle.adds?.find((a) => a.uid === add)?.combatant.name) || battle.enemy.name;
+  const enemy = named("add" in e ? e.add : undefined);
   switch (e.type) {
     case "potion":
       return e.buff
@@ -1008,7 +1074,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
         ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden.`
         : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden.`;
     case "defeated":
-      return e.side === "enemy" ? `${enemy} ist besiegt!` : "Du wurdest besiegt.";
+      return e.side === "hero" ? "Du wurdest besiegt." : e.add ? `${enemy} geht zu Boden.` : `${enemy} ist besiegt!`;
     case "fled":
       return e.goldLost > 0 ? `Du fliehst und verlierst ${e.goldLost} Gold.` : "Du fliehst.";
     case "ability":

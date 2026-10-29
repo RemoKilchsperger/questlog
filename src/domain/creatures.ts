@@ -16,6 +16,19 @@ export interface CreatureDef {
   power?: number;
   /** Nur Bosse: eigene Faktoren auf Lebenspunkte und Schaden statt BOSS_HP_FACTOR / BOSS_DAMAGE_FACTOR */
   bossFactors?: { hp: number; damage: number };
+  /**
+   * Nur Bosse: Begleiter, die von Anfang an mitkämpfen – normale Kreaturen mit
+   * eigenen Faktoren auf Lebenspunkte und Schaden. Fällt der Boss, fliehen sie.
+   */
+  adds?: readonly BossAdd[];
+}
+
+/** Begleiter eines Bosses: zerbrechlich, aber mit spürbarem Schaden – es lohnt sich, sie auszuschalten. */
+export interface BossAdd {
+  creatureId: string;
+  count: number;
+  hp: number;
+  damage: number;
 }
 
 export interface AreaDef {
@@ -77,7 +90,12 @@ export const AREAS: readonly AreaDef[] = [
       c("grey-wolf", "Grauwolf", "wolf", 3),
       c("forest-spider", "Waldspinne", "spider", 5),
       c("goblin-raider", "Goblin-Plünderer", "goblin", 7),
-      c("goblin-chief", "Goblinhäuptling Krummzahn", "goblin-chief", 10, true),
+      {
+        ...c("goblin-chief", "Goblinhäuptling Krummzahn", "goblin-chief", 10, true),
+        // Mit zwei Plünderern an der Seite hält der Häuptling selbst weniger aus
+        bossFactors: { hp: 1.9, damage: 1 },
+        adds: [{ creatureId: "goblin-raider", count: 2, hp: 0.35, damage: 0.65 }],
+      },
     ],
   },
   {

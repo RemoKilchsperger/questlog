@@ -17,6 +17,8 @@ export interface GameEvents {
   "battle:started": { battle: BattleState };
   /** React → Phaser: Ereignisse einer Aktion (Trank, Angriff), `battle` ist der Stand danach. */
   "battle:events": { battle: BattleState; events: BattleEvent[] };
+  /** React → Phaser: neues Ziel des Helden – ein Begleiter (uid) oder der Boss (undefined). */
+  "battle:target": { battleId: string; target: string | undefined };
   /** Phaser → React: Animationen sind fertig, die nächste Aktion ist möglich. */
   "battle:animation-done": { battleId: string };
   /** Koop → Phaser: neue Ereignisse einer Runde, `state` ist der Stand danach. */

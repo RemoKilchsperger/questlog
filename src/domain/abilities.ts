@@ -38,6 +38,13 @@ export interface AbilityDef {
   multiplier: number;
   /** Anzahl Treffer (Standard 1) */
   hits?: number;
+  /**
+   * Flächenwirkung gegen Boss und Begleiter (Standard: nur das Ziel):
+   * - "all": jeder Treffer trifft alle Gegner, Zusatzeffekte wirken auf alle
+   * - "spread": jeder Treffer geht an einen zufälligen Gegner
+   * - { splash }: das Ziel voll, alle anderen mit diesem Anteil (Zusatzeffekte nur aufs Ziel)
+   */
+  aoe?: AbilityAoe;
   /** Trifft immer kritisch */
   guaranteedCrit?: boolean;
   /** Rüstung des Gegners wird ignoriert */
@@ -77,6 +84,8 @@ export interface AbilityDef {
   /** Verwundbar: der Gegner erleidet `percent` mehr Schaden für `rounds` Runden */
   vulnerable?: { percent: number; rounds: number };
 }
+
+export type AbilityAoe = "all" | "spread" | { splash: number };
 
 export interface Guard {
   reduce: number;
@@ -129,7 +138,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     cooldown: 1,
     multiplier: 0.6,
     hits: 3,
-    description: "Drei schnelle Hiebe – jeder kann kritisch treffen.",
+    aoe: "spread",
+    description: "Drei schnelle Hiebe – jeder kann kritisch treffen. Bei mehreren Gegnern trifft jeder Hieb einen zufälligen.",
   },
   {
     id: "greatsword",
@@ -165,8 +175,9 @@ export const ABILITIES: readonly AbilityDef[] = [
     multiplier: 1.5,
     armorBreak: 0.2,
     bleed: { percent: 0.25, rounds: 3 },
+    aoe: { splash: 0.5 },
     description:
-      "Spaltet die Panzerung: −20 % Rüstung des Gegners für den Rest des Kampfes, dazu blutet er 3 Runden lang.",
+      "Spaltet die Panzerung: −20 % Rüstung des Gegners für den Rest des Kampfes, dazu blutet er 3 Runden lang. Umstehende Gegner erleiden halben Schaden.",
   },
   {
     id: "mace",
@@ -227,7 +238,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     cooldown: 2,
     multiplier: 0.45,
     hits: 4,
-    description: "Vier Pfeile regnen auf den Gegner herab – jeder kann kritisch treffen.",
+    aoe: "spread",
+    description: "Vier Pfeile regnen herab – jeder kann kritisch treffen. Bei mehreren Gegnern verteilen sie sich zufällig.",
   },
   {
     id: "shield",
@@ -328,7 +340,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     multiplier: 1.3,
     ignoreArmor: true,
     weaken: { percent: 0.4, rounds: 2 },
-    description: "Der Boden bebt: 1,3-facher Schaden, der Rüstung ignoriert – der Gegner macht 2 Runden lang 40 % weniger Schaden.",
+    aoe: "all",
+    description: "Der Boden bebt unter allen Gegnern: 1,3-facher Schaden, der Rüstung ignoriert – sie machen 2 Runden lang 40 % weniger Schaden.",
   },
   {
     id: "scepter-2",
@@ -355,7 +368,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     multiplier: 2.6,
     ignoreArmor: true,
     burn: { percent: 0.3, rounds: 3 },
-    description: "Ein Meteor mit 2,6-fachem Schaden, der Rüstung ignoriert und den Gegner 3 Runden lang in Brand setzt.",
+    aoe: { splash: 0.5 },
+    description: "Ein Meteor mit 2,6-fachem Schaden, der Rüstung ignoriert und das Ziel 3 Runden lang in Brand setzt. Umstehende Gegner erleiden halben Schaden.",
   },
   {
     id: "bow-2",
@@ -396,7 +410,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     multiplier: 0.8,
     hits: 3,
     vulnerable: { percent: 0.15, rounds: 2 },
-    description: "Drei wuchtige Hiebe – jeder kann kritisch treffen. Danach erleidet der Gegner 2 Runden lang 15 % mehr Schaden.",
+    aoe: "all",
+    description: "Drei wuchtige Hiebe gegen alle Gegner – jeder kann kritisch treffen. Danach erleiden sie 2 Runden lang 15 % mehr Schaden.",
   },
   {
     id: "greataxe-3",
@@ -421,7 +436,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     multiplier: 1.5,
     stun: true,
     stunChance: 0.3,
-    description: "Ein Schlag mit 1,5-fachem Schaden – mit 30 % Chance ist der Gegner betäubt und kann nicht zurückschlagen.",
+    aoe: "all",
+    description: "Ein Schlag mit 1,5-fachem Schaden gegen alle Gegner – jeder ist mit 30 % Chance betäubt und kann nicht zurückschlagen.",
   },
   {
     id: "staff-3",
