@@ -68,9 +68,10 @@ describe("Begleiter", () => {
   it("der Goblinhäuptling kämpft mit zwei zerbrechlichen Plünderern, normale Kreaturen allein", () => {
     const battle = startBattle("b", "Held", profileWith("sword-0"), chief);
     expect(battle.adds!.map((a) => a.uid)).toEqual(["add-1", "add-2"]);
-    const stats = getCreatureStats(raider);
+    const stats = getCreatureStats({ ...raider, level: chief.level });
     for (const a of battle.adds!) {
       expect(a.creatureId).toBe("goblin-raider");
+      expect(a.combatant.level).toBe(chief.level);
       expect(a.combatant.hp).toBe(a.combatant.maxHp);
       expect(a.combatant.maxHp).toBeLessThan(stats.maxHp / 2);
       expect(a.combatant.damage).toBeLessThan(stats.damage);
@@ -97,7 +98,8 @@ describe("Begleiter", () => {
     expect(state.status).toBe("active");
     expect(state.target).toBeUndefined();
     expect(livingAdds(state).map((a) => a.uid)).toEqual(["add-2"]);
-    expect(defeatedAdds(state)).toEqual([raider]);
+    // Begleiter kämpfen auf dem Level ihres Bosses – danach richtet sich auch ihre Erfahrung
+    expect(defeatedAdds(state)).toEqual([{ ...raider, level: chief.level }]);
     expect(() => setTarget(state, "add-1")).toThrow();
     // Gefallene Begleiter bleiben liegen
     const next = attackRound(state, rng(0.5));

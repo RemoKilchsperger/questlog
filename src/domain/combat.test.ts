@@ -156,7 +156,8 @@ describe("Kampfrunde", () => {
   it("Eissplitter und Schockwelle betäuben nur mit einer Chance – Eissplitter frieren ein", () => {
     const setup = (): BattleState => {
       const b = startBattle("b", "Held", { ...hero, maxMana: 999, abilities: ["staff-3", "greathammer-3"] }, getCreature("cave-eye").creature);
-      return { ...b, mana: 999, hero: { ...b.hero, hp: 1e6, maxHp: 1e6 }, enemy: { ...b.enemy, hp: 1e6, maxHp: 1e6 } };
+      // Ohne Begleiter – hier geht es nur um die Betäubung des Bosses
+      return { ...b, adds: [], mana: 999, hero: { ...b.hero, hp: 1e6, maxHp: 1e6 }, enemy: { ...b.enemy, hp: 1e6, maxHp: 1e6 } };
     };
     const enemyStrikes = (events: { type: string; attacker?: string }[]) => events.some((e) => e.type === "hit" && e.attacker === "enemy");
 

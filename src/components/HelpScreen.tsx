@@ -332,6 +332,10 @@ export function HelpScreen() {
             Pfeilhagel verteilen ihre Treffer zufällig, Spalter und Meteor treffen Umstehende mit halbem Schaden. Ein
             Bollwerk blockt den ganzen gegnerischen Zug, Parade und Vergeltung wirken nur gegen den Boss.
           </p>
+          <p>
+            Im Koop-Dungeon bringen die Endbosse ihre Begleiter ebenfalls mit. Jeder wählt sein eigenes Ziel, die
+            Begleiter greifen wie der Boss nach Bedrohung an.
+          </p>
         </Topic>
 
         <Topic id="dungeons" title="🗝️ Dungeons">

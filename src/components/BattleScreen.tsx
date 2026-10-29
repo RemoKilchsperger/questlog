@@ -52,7 +52,7 @@ import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from
 import { PixelAvatar } from "./PixelAvatar";
 import { AvatarFrame } from "./Achievements";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
-import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
+import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide, TargetPicker } from "./BattleStatus";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestProgressChips } from "./QuestScreen";
@@ -499,7 +499,7 @@ function Battle({ battle }: { battle: BattleState }) {
             </StatusSide>
             <StatusSide title={battle.enemy.name} chips={enemyStatusChips(battle.enemyEffects)} />
           </div>
-          {(battle.adds?.length ?? 0) > 0 && <TargetPicker battle={battle} disabled={!active} />}
+          {(battle.adds?.length ?? 0) > 0 && <BattleTargets battle={battle} disabled={!active} />}
           <BossWarning battle={battle} />
 
           <ActionGroup label="Angriff" hint="Danach schlägt der Gegner zurück.">
@@ -595,59 +595,19 @@ function Battle({ battle }: { battle: BattleState }) {
   );
 }
 
-/**
- * Boss und Begleiter: Ziel wählen (auch per Klick in der Szene), Lebenspunkte
- * und Effekte jedes Gegners im Blick.
- */
-function TargetPicker({ battle, disabled }: { battle: BattleState; disabled: boolean }) {
+/** Boss und Begleiter: Ziel wählen (auch per Klick in der Szene). */
+function BattleTargets({ battle, disabled }: { battle: BattleState; disabled: boolean }) {
   const choose = useGameStore((s) => s.battleTarget);
-  const foes = [
-    { uid: undefined, combatant: battle.enemy, effects: battle.enemyEffects, boss: true },
-    ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false })),
-  ];
   return (
-    <ActionGroup label="Ziel" hint="Fällt der Boss, ist der Kampf gewonnen · Flächen-Fähigkeiten treffen mehrere">
-      <div className="grid gap-2 sm:grid-cols-3">
-        {foes.map(({ uid, combatant, effects, boss }) => {
-          const down = combatant.hp === 0;
-          const selected = battle.target === uid;
-          return (
-            <button
-              key={uid ?? "boss"}
-              type="button"
-              disabled={disabled || down}
-              onClick={() => choose(uid)}
-              aria-pressed={selected}
-              className={`flex min-w-0 flex-col gap-1 rounded-md border-2 px-2 py-1.5 text-left disabled:cursor-not-allowed ${
-                selected ? "border-gold bg-gold/10" : "border-night-600 hover:border-muted"
-              } ${down ? "opacity-40" : ""}`}
-            >
-              <span className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="truncate font-bold">
-                  {selected && "▼ "}
-                  {boss && "👑 "}
-                  {combatant.name}
-                </span>
-                <span className="num shrink-0 text-xs text-muted">
-                  {down ? "besiegt" : `${combatant.hp}/${combatant.maxHp}`}
-                </span>
-              </span>
-              <span className="h-1.5 overflow-hidden rounded-sm bg-night-700">
-                <span className="block h-full bg-danger" style={{ width: `${(combatant.hp / combatant.maxHp) * 100}%` }} />
-              </span>
-              <span className="flex min-h-4 flex-wrap gap-1 text-xs">
-                {enemyStatusChips(effects).map((chip) => (
-                  <span key={chip.key} title={chip.title}>
-                    {chip.icon}
-                    {chip.rounds !== undefined && <span className="num text-muted">{chip.rounds}</span>}
-                  </span>
-                ))}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </ActionGroup>
+    <TargetPicker
+      foes={[
+        { combatant: battle.enemy, effects: battle.enemyEffects, boss: true },
+        ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false })),
+      ]}
+      selected={battle.target}
+      disabled={disabled}
+      onChoose={choose}
+    />
   );
 }
 

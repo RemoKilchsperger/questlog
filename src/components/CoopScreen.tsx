@@ -42,7 +42,7 @@ import { DungeonChest } from "./DungeonChest";
 import { PixelAvatar } from "./PixelAvatar";
 import { CreatureSprite } from "./CreatureSprite";
 import { POTION_BUTTONS } from "./potionUi";
-import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide } from "./BattleStatus";
+import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide, TargetPicker } from "./BattleStatus";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 
@@ -546,6 +546,11 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   const [potion, setPotion] = useState<CoopAction["potion"]>(undefined);
   // Neue Runde: Trank-Auswahl zurücksetzen
   useEffect(() => setPotion(undefined), [battle.round]);
+  // Eigenes Ziel: ein lebender Begleiter – sonst der Boss. Bleibt über die Runden, bis er fällt.
+  const [chosenTarget, setTarget] = useState<string | undefined>(undefined);
+  const target = battle.adds?.some((a) => a.uid === chosenTarget && a.combatant.hp > 0) ? chosenTarget : undefined;
+  useEffect(() => EventBus.on("coop:select-target", ({ target: next }) => setTarget(next)), []);
+  useEffect(() => EventBus.emit("coop:target", { target }), [target]);
   const me = battle.heroes.find((h) => h.id === myId);
   if (!me) return <p className="text-sm text-muted">Du schaust zu.</p>;
   if (me.down) {
@@ -564,14 +569,17 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   }
   if (myAction) {
     const what = myAction.ability ? getAbility(myAction.ability).name : "Angriff";
+    const on = battle.adds?.find((a) => a.uid === myAction.target)?.combatant.name;
     return (
       <p className="rounded-md bg-night-800 p-3 text-sm">
         ✓ Gewählt: <b>{what}</b>
+        {on && <> gegen <b>{on}</b></>}
         {myAction.potion && ` + ${getPotion(myAction.potion.potionId).name}`} – warte auf die anderen …
       </p>
     );
   }
-  const send = (ability?: CoopAction["ability"]) => choose({ ...(potion && { potion }), ...(ability && { ability }) });
+  const send = (ability?: CoopAction["ability"]) =>
+    choose({ ...(potion && { potion }), ...(ability && { ability }), ...(target && { target }) });
   const fallen = battle.heroes.filter((h) => h.down && !h.revived);
 
   return (
@@ -590,8 +598,19 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         </StatusSide>
         <StatusSide title={battle.boss.name} chips={enemyStatusChips(battle.bossEffects)} />
       </div>
+      {(battle.adds?.length ?? 0) > 0 && (
+        <TargetPicker
+          foes={[
+            { combatant: battle.boss, effects: battle.bossEffects, boss: true },
+            ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false })),
+          ]}
+          selected={target}
+          disabled={locked}
+          onChoose={setTarget}
+        />
+      )}
 
-      <ActionGroup label="Angriff" hint="Alle Helden handeln, danach der Boss.">
+      <ActionGroup label="Angriff" hint={battle.adds?.length ? "Alle Helden handeln, danach Boss und Begleiter." : "Alle Helden handeln, danach der Boss."}>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <motion.button
             whileTap={{ scale: 0.95 }}
@@ -810,6 +829,7 @@ function CoopResultPanel({ battle, onLeave }: { battle: CoopBattleState; onLeave
 }
 
 function describe(e: CoopEvent, names: Record<string, string>, bossName: string): string | null {
+  // Spieler-Ids, BOSS und die uids der Begleiter (stehen mit in `names`)
   const name = (id: string) => (id === "boss" ? bossName : (names[id] ?? id));
   switch (e.type) {
     case "potion":
@@ -835,11 +855,15 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "bossAbility":
       return `${bossName} setzt ${e.name} ein!`;
     case "stunned":
-      return `${bossName} ist ${e.freeze ? "eingefroren" : "betäubt"} und setzt aus.`;
+      return `${e.add ? name(e.add) : bossName} ist ${e.freeze ? "eingefroren" : "betäubt"} und setzt aus.`;
     case "stunResisted":
-      return `${bossName} widersteht ${e.freeze ? "dem Einfrieren" : "der Betäubung"}.`;
+      return `${e.add ? name(e.add) : bossName} widersteht ${e.freeze ? "dem Einfrieren" : "der Betäubung"}.`;
     case "blocked":
-      return `${name(e.heroId)} blockt den Angriff mit Bollwerk.`;
+      return e.add
+        ? `${name(e.heroId)} blockt den Angriff von ${name(e.add)} mit Bollwerk.`
+        : `${name(e.heroId)} blockt den Angriff mit Bollwerk.`;
+    case "addDown":
+      return `${name(e.add)} geht zu Boden.`;
     case "down":
       return `${name(e.heroId)} ist gefallen!`;
     case "victory":
@@ -861,6 +885,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
 
 function CoopLog({ battle, names }: { battle: CoopBattleState; names: Record<string, string> }) {
   const bossName = getCoopEnemy(battle.bossId).name;
+  const allNames = { ...names, ...Object.fromEntries((battle.adds ?? []).map((a) => [a.uid, a.combatant.name])) };
   const lines = [...battle.log].reverse().slice(0, 30);
   if (lines.length === 0) return null;
   return (
@@ -870,7 +895,7 @@ function CoopLog({ battle, names }: { battle: CoopBattleState; names: Record<str
         {lines.map((e, i) => (
           <li key={i}>
             <span className="num mr-2 text-xs text-muted">R{e.round}</span>
-            {describe(e, names, bossName)}
+            {describe(e, allNames, bossName)}
           </li>
         ))}
       </ol>

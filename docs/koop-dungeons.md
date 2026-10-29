@@ -86,7 +86,37 @@ Fehler aus. Dann traf sie alle; ohne den Faktor 0,75 und mit Gruppenzuschlag wur
 fast chancenlos. Jetzt zwei Fähigkeiten im Wechsel; die neuen sind so stark gewählt, dass die
 Solo-Dungeons etwa gleich schwer bleiben wie vorher (Simulation).
 
-### 3.3 Zufällige Beute, die beim Neuladen gleich bleibt
+### 3.3 Begleiter der Endbosse
+
+Wie solo kämpft jeder Dungeon-Endboss mit zwei Begleitern aus seinem Dungeon (`creatures.ts`,
+`withAdds`): auf dem Level des Bosses, mit 25 % der Lebenspunkte und 50 % des Schadens einer
+normalen Kreatur. Fällt der Boss, ist der Kampf gewonnen.
+
+- **Ziel:** Jeder Held wählt sein eigenes Ziel (`CoopAction.target`, uid des Begleiters – fehlt
+  sie oder ist sie ungültig, geht es gegen den Boss). Flächen-Fähigkeiten treffen mehrere Gegner
+  wie solo.
+- **Angriff der Begleiter:** nach dem Boss, jeder auf ein Ziel nach Bedrohung (`pickBossTarget`).
+- **Bollwerk** blockt in dieser Runde alle Angriffe auf den Schildträger – vom Boss und von den
+  Begleitern. **Parade/Vergeltung** wirken nur gegen den Boss.
+- **Betäubung:** Die Immunität danach gilt wie bisher für jeden Koop-Gegner, also auch für Begleiter.
+- **Gruppengrösse:** Begleiter wachsen milder als ihr Boss – Lebenspunkte × n, Schaden +20 % pro
+  Spieler über einem. Mit der vollen Dungeon-Skalierung wurde der Tempel zu viert deutlich
+  schwerer (Siegquote 93 % → 61 % mit seltener Ausrüstung).
+- **Beute:** Besiegte Begleiter geben im Koop nichts extra (solo: 50 % ihrer XP und ihres Golds).
+
+Simulation (Champions auf Boss-Level, je zwei Heiltränke pro Kampf, Siegquote für den ganzen
+Dungeon mit seltener Ausrüstung, ohne → mit Begleitern):
+
+| Dungeon | Duo | Trio | Vier |
+|---|---|---|---|
+| Verlassene Mine | 100 → 99 % | 100 → 99 % | 99 → 98 % |
+| Versunkener Tempel | 100 → 95 % | 97 → 85 % | 93 → 84 % |
+| Gewitterturm | 99 → 93 % | 99 → 100 % | 100 → 100 % |
+| Abgrund der Leere | 100 → 100 % | 100 → 99 % | 100 → 100 % |
+
+Die Raid-Bosse kämpfen (noch) ohne Begleiter.
+
+### 3.4 Zufällige Beute, die beim Neuladen gleich bleibt
 
 Jeder würfelt seine Beute selbst, mit einem Startwert aus Kampf, Gegner und Spieler. So zeigt der
 Zwischenbildschirm schon den echten Inhalt der Truhe, und nach einem Neuladen ist er derselbe.

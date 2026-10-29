@@ -68,6 +68,24 @@ export const LATE_AREA_BOSS_FACTORS = { hp: 3, damage: 1.1 };
  */
 export const DUNGEON_BOSS_FACTORS = { hp: 1.7, damage: 0.9 };
 
+/**
+ * Begleiter der Bosse: zwei Kreaturen aus ihrem Gebiet, die auf dem Level des
+ * Bosses kämpfen – mit einem Viertel der Lebenspunkte und dem halben Schaden einer
+ * normalen Kreatur. Zerbrechlich, aber zusammen so gefährlich wie der Boss selbst.
+ */
+export const ADD_FACTORS = { hp: 0.25, damage: 0.5 };
+
+/**
+ * Boss mit zwei Begleitern. Weil sie mitschlagen, hält der Boss selbst weniger aus:
+ * `hp` ersetzt seinen LP-Faktor – per Simulation so gewählt, dass ein gut gespielter
+ * Champion mit seltener Ausrüstung und Heiltränken etwa so oft gewinnt wie ohne Begleiter.
+ */
+const withAdds = (boss: CreatureDef, creatureId: string, hp: number): CreatureDef => ({
+  ...boss,
+  bossFactors: { ...boss.bossFactors!, hp },
+  adds: [{ creatureId, count: 2, ...ADD_FACTORS }],
+});
+
 const c = (id: string, name: string, sprite: string, level: number, boss = false): CreatureDef => ({
   id, name, sprite, level, boss, ...(boss && { bossFactors: AREA_BOSS_FACTORS }),
 });
@@ -90,12 +108,7 @@ export const AREAS: readonly AreaDef[] = [
       c("grey-wolf", "Grauwolf", "wolf", 3),
       c("forest-spider", "Waldspinne", "spider", 5),
       c("goblin-raider", "Goblin-Plünderer", "goblin", 7),
-      {
-        ...c("goblin-chief", "Goblinhäuptling Krummzahn", "goblin-chief", 10, true),
-        // Mit zwei Plünderern an der Seite hält der Häuptling selbst weniger aus
-        bossFactors: { hp: 1.9, damage: 1 },
-        adds: [{ creatureId: "goblin-raider", count: 2, hp: 0.35, damage: 0.65 }],
-      },
+      withAdds(c("goblin-chief", "Goblinhäuptling Krummzahn", "goblin-chief", 10, true), "goblin-raider", 1.9),
     ],
   },
   {
@@ -110,7 +123,7 @@ export const AREAS: readonly AreaDef[] = [
       c("bog-serpent", "Moorschlange", "snake", 13),
       c("bog-corpse", "Moorleiche", "zombie", 15),
       c("blood-swarm", "Blutmückenschwarm", "mosquitoes", 17),
-      c("ancient-lizard", "Uralte Sumpfechse", "swamp-lizard", 20, true),
+      withAdds(c("ancient-lizard", "Uralte Sumpfechse", "swamp-lizard", 20, true), "bog-serpent", 1.9),
     ],
   },
   {
@@ -125,7 +138,7 @@ export const AREAS: readonly AreaDef[] = [
       c("stone-golem", "Steingolem", "golem", 23),
       c("crystal-scorpion", "Kristallskorpion", "scorpion", 25),
       c("rock-worm", "Felswurm", "worm", 27),
-      c("cave-eye", "Das Höhlenauge", "eye", 30, true),
+      withAdds(c("cave-eye", "Das Höhlenauge", "eye", 30, true), "cave-bat", 1.75),
     ],
   },
   {
@@ -140,7 +153,7 @@ export const AREAS: readonly AreaDef[] = [
       c("frost-elemental", "Frostelementar", "frost-elemental", 33),
       c("snow-wolf", "Schneewolf", "snow-wolf", 35),
       c("frost-troll", "Frosttroll", "troll", 37),
-      c("primal-mammoth", "Urmammut Graufrost", "mammoth", 40, true),
+      withAdds(c("primal-mammoth", "Urmammut Graufrost", "mammoth", 40, true), "snow-wolf", 1.55),
     ],
   },
   {
@@ -155,7 +168,7 @@ export const AREAS: readonly AreaDef[] = [
       c("wailing-ghost", "Klagegeist", "ghost", 43),
       c("bloodsucker", "Blutsauger", "vampire", 45),
       c("dark-sorcerer", "Dunkler Hexer", "sorcerer", 47),
-      { ...c("lich-king", "Der Lichkönig", "lich", 50, true), bossFactors: LATE_AREA_BOSS_FACTORS },
+      withAdds({ ...c("lich-king", "Der Lichkönig", "lich", 50, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "skeleton-warrior", 2.25),
     ],
   },
   {
@@ -170,7 +183,7 @@ export const AREAS: readonly AreaDef[] = [
       c("flame-elemental", "Flammenelementar", "flame-elemental", 53),
       c("young-dragon", "Jungdrache", "dragon", 56),
       c("demon-guard", "Dämonenwächter", "demon", 58),
-      { ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS },
+      withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 2),
     ],
   },
 ];
@@ -201,7 +214,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("mine-rat", "Minenratte", "mine-rat", 10, DUNGEON_POWER),
       d("kobold-blaster", "Kobold-Sprengmeister", "kobold", 11, DUNGEON_POWER),
       d("pit-spider", "Grubenspinne", "pit-spider", 11, DUNGEON_POWER),
-      d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true),
+      withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 1.2),
     ],
   },
   {
@@ -216,7 +229,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("temple-guardian", "Tempelwächter", "temple-guardian", 25, DUNGEON_POWER),
       d("cobra-priest", "Kobra-Priester", "cobra-priest", 26, DUNGEON_POWER),
       d("mummy", "Mumie", "mummy", 26, DUNGEON_POWER),
-      d("high-priestess", "Hohepriesterin Neferet", "high-priestess", 27, 1, true),
+      withAdds(d("high-priestess", "Hohepriesterin Neferet", "high-priestess", 27, 1, true), "cobra-priest", 1.3),
     ],
   },
   {
@@ -231,7 +244,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("thunder-elemental", "Gewitterelementar", "thunder-elemental", 40, DUNGEON_POWER),
       d("stone-gargoyle", "Steingargoyle", "gargoyle", 41, DUNGEON_POWER),
       d("lightning-caller", "Blitzbeschwörer", "lightning-caller", 41, DUNGEON_POWER),
-      d("storm-lord", "Sturmfürst Kaelthar", "storm-lord", 42, 1, true),
+      withAdds(d("storm-lord", "Sturmfürst Kaelthar", "storm-lord", 42, 1, true), "lightning-caller", 1.45),
     ],
   },
   {
@@ -246,7 +259,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("void-crawler", "Leerenkriecher", "void-crawler", 60, ABYSS_POWER),
       d("shadow-demon", "Schattendämon", "shadow-demon", 60, ABYSS_POWER),
       d("soul-eater", "Seelenfresser", "soul-eater", 60, ABYSS_POWER),
-      d("void-lord", "Leerenfürst Xal'Zar", "void-lord", 60, 1, true),
+      withAdds(d("void-lord", "Leerenfürst Xal'Zar", "void-lord", 60, 1, true), "void-crawler", 1.45),
     ],
   },
 ];

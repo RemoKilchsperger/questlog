@@ -5,6 +5,7 @@
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
 import { BOSS, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
+import { getCreature } from "../domain/creatures";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
 import type { CoopMember } from "../coop/protocol";
@@ -40,6 +41,15 @@ const BOSS_IMAGE_SCALE = 1.6;
 const ENEMY_SCALE = 8;
 const ENEMY_IMAGE_SCALE = 1.3;
 const HERO_BAR = 64;
+/** Begleiter des Bosses: kleiner, einer vor und einer hinter ihm */
+const ADD_X = [440, 665];
+const ADD_IMAGE_SCALE = 0.95;
+const ADD_SPRITE_SCALE = 6;
+const ADD_BAR = 80;
+const ADD_BAR_Y = 106;
+
+/** Grafik eines Begleiters (creatureSprites.ts / creatureImages.ts). */
+const addSprite = (creatureId: string) => getCreature(creatureId).creature.sprite;
 /** Boss-Fähigkeiten, deren Treffer erst nach einer längeren Animation landet (siehe `bossHits`) */
 const SLOW_IMPACT = new Set(["ore-king", "high-priestess", "void-lord"]);
 
@@ -77,6 +87,10 @@ export class CoopBattleScene extends Phaser.Scene {
   /** Eissplitter schweben ab der Ankündigung über ihrem Helden, bis sie losfliegen */
   private iceShards = new Map<Unit, fx.IceShards>();
   private boss!: Unit;
+  /** Begleiter des Bosses unter ihrer uid */
+  private adds = new Map<string, Unit>();
+  /** Pfeil über dem eigenen Ziel – nur, wenn Begleiter mitkämpfen */
+  private targetMarker: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super("coop-battle");
@@ -85,13 +99,18 @@ export class CoopBattleScene extends Phaser.Scene {
   init(data: CoopSceneData) {
     this.setup = data;
     this.heroes = new Map();
+    this.adds = new Map();
+    this.targetMarker = null;
   }
 
   /** Boss mit eigenem Bild (creatureImages.ts) vorab laden. */
   preload() {
-    const sprite = getCoopEnemy(this.setup.state.bossId).sprite;
-    const url = creatureImage(sprite);
-    if (url && !this.textures.exists(`creature-img-${sprite}`)) this.load.image(`creature-img-${sprite}`, url);
+    const { state } = this.setup;
+    const sprites = [getCoopEnemy(state.bossId).sprite, ...(state.adds ?? []).map((a) => addSprite(a.creatureId))];
+    for (const sprite of new Set(sprites)) {
+      const url = creatureImage(sprite);
+      if (url && !this.textures.exists(`creature-img-${sprite}`)) this.load.image(`creature-img-${sprite}`, url);
+    }
   }
 
   create() {
@@ -107,6 +126,13 @@ export class CoopBattleScene extends Phaser.Scene {
       this.heroes.set(hero.id, this.addHero(hero.id, xs[index], member, hero.name, hero.combatant.hp, hero.combatant.maxHp, hero.id === myId));
     });
     this.boss = this.addBoss(def.sprite, def.name, def.level, state.boss.hp, state.boss.maxHp, def.boss);
+    (state.adds ?? []).forEach((add, i) => {
+      const unit = this.addAdd(add.creatureId, ADD_X[i % ADD_X.length], add.combatant.name, add.combatant.hp, add.combatant.maxHp);
+      unit.body.setDepth(i % 2 === 0 ? 2 : -0.5);
+      this.adds.set(add.uid, unit);
+      if (add.combatant.hp === 0) this.addFalls(add.uid, true);
+    });
+    if (this.adds.size > 0) this.enableTargeting();
 
     // Wer beim (Wieder-)Einstieg schon gefallen ist, liegt am Boden
     for (const hero of state.heroes) if (hero.down) this.fall(hero.id, true);
@@ -117,9 +143,10 @@ export class CoopBattleScene extends Phaser.Scene {
     const off = EventBus.on("coop:events", ({ state: next, events }) => {
       if (next.id === this.setup.state.id) this.play(events, next);
     });
+    const offTarget = EventBus.on("coop:target", ({ target }) => this.markTarget(target));
     const stopMusic = () => music.stop(this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => (off(), stopMusic()));
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => (off(), stopMusic()));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => (off(), offTarget(), stopMusic()));
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => (off(), offTarget(), stopMusic()));
   }
 
   /* ───────────── Aufbau ───────────── */
@@ -138,6 +165,85 @@ export class CoopBattleScene extends Phaser.Scene {
     g.fillStyle(0x000000, 0.3);
     for (const x of HERO_X[this.setup.state.heroes.length] ?? HERO_X[4]) g.fillEllipse(x, GROUND_Y + 2, 60, 12);
     g.fillEllipse(BOSS_X, GROUND_Y + 2, 150, 18);
+    (this.setup.state.adds ?? []).forEach((_, i) => g.fillEllipse(ADD_X[i % ADD_X.length], GROUND_Y + 2, 80, 14));
+  }
+
+  /** Begleiter: kleiner als der Boss, mit schmalem Lebensbalken unter dessen. */
+  private addAdd(creatureId: string, x: number, name: string, hp: number, maxHp: number): Unit {
+    const sprite = addSprite(creatureId);
+    const imageKey = `creature-img-${sprite}`;
+    let object: Phaser.GameObjects.Image;
+    let scale = ADD_SPRITE_SCALE;
+    if (this.textures.exists(imageKey)) {
+      const source = this.textures.get(imageKey).getSourceImage() as HTMLImageElement;
+      object = this.add.image(0, 0, imageKey).setOrigin(0.5, (lastOpaqueRow(source) + 1) / source.height);
+      scale = ADD_IMAGE_SCALE;
+    } else {
+      object = this.figure(`creature-${sprite}`, getCreatureSprite(sprite)).object;
+    }
+    const body = this.add.container(x, GROUND_Y + 4, [object]).setScale(scale);
+    const idle = this.tweens.add({ targets: body, y: body.y - 3, duration: 1000 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    this.add
+      .text(x, ADD_BAR_Y - 22, name, { fontFamily: NUMBER_FONT, fontSize: "12px", fontStyle: "bold", color: "#efe6d2" })
+      .setOrigin(0.5, 0)
+      .setStroke("#0e0b16", 4);
+    const unit: Unit = {
+      body,
+      images: [object],
+      weapon: null,
+      weaponType: null,
+      bar: this.add.graphics(),
+      hpText: this.add
+        .text(x, ADD_BAR_Y + 10, "", { fontFamily: NUMBER_FONT, fontSize: "11px", fontStyle: "bold", color: "#efe6d2" })
+        .setOrigin(0.5, 0)
+        .setStroke("#0e0b16", 3),
+      hp,
+      maxHp,
+      homeX: x,
+      barWidth: ADD_BAR,
+      barY: ADD_BAR_Y,
+      idle,
+    };
+    this.drawBar(unit, hp);
+    return unit;
+  }
+
+  /** Gegner anklicken wählt das eigene Ziel (die Aktionsleiste übernimmt es), ein Pfeil zeigt es an. */
+  private enableTargeting() {
+    const foes: [string | undefined, Unit][] = [[undefined, this.boss], ...[...this.adds].map(([uid, unit]): [string, Unit] => [uid, unit])];
+    for (const [uid, unit] of foes) {
+      unit.images[0].setInteractive({ useHandCursor: true }).on("pointerdown", () => {
+        if (unit.hp > 0) EventBus.emit("coop:select-target", { target: uid });
+      });
+    }
+    this.targetMarker = this.add
+      .text(0, 0, "▼", { fontFamily: NUMBER_FONT, fontSize: "22px", color: "#f4c95d" })
+      .setOrigin(0.5, 1)
+      .setStroke("#0e0b16", 4)
+      .setDepth(5);
+    this.tweens.add({ targets: this.targetMarker, alpha: 0.45, duration: 600, yoyo: true, repeat: -1 });
+    this.markTarget(undefined);
+  }
+
+  /** Pfeil über das eigene Ziel setzen (undefined = Boss). */
+  private markTarget(target: string | undefined) {
+    if (!this.targetMarker) return;
+    const unit = (target && this.adds.get(target)) || this.boss;
+    this.targetMarker.setPosition(unit.homeX, Math.max(unit.barY + 44, unit.images[0].getBounds().top - 4));
+  }
+
+  /** Ein Begleiter fällt – er sinkt zusammen und verblasst, der Kampf geht weiter. */
+  private addFalls(uid: string, instant: boolean) {
+    const unit = this.adds.get(uid);
+    if (!unit) return;
+    this.tweens.killTweensOf(unit.body);
+    unit.images[0].disableInteractive();
+    this.tweens.add({ targets: unit.body, alpha: 0.2, angle: 12, y: GROUND_Y + 12, duration: instant ? 0 : 500 });
+  }
+
+  /** Ist das ein Gegner (Boss oder Begleiter)? */
+  private isFoe(unit: Unit): boolean {
+    return unit === this.boss || [...this.adds.values()].includes(unit);
   }
 
   private texture(key: string, sprite: SpriteDef) {
@@ -258,11 +364,11 @@ export class CoopBattleScene extends Phaser.Scene {
   }
 
   private unit(id: string): Unit {
-    return id === BOSS ? this.boss : this.heroes.get(id)!;
+    return id === BOSS ? this.boss : (this.adds.get(id) ?? this.heroes.get(id)!);
   }
 
   private center(unit: Unit): fx.Point {
-    return { x: unit.homeX, y: GROUND_Y - (unit === this.boss ? 70 : 45) };
+    return { x: unit.homeX, y: GROUND_Y - (unit === this.boss ? 70 : this.adds.size && this.isFoe(unit) ? 55 : 45) };
   }
 
   /* ───────────── Ablauf ───────────── */
@@ -273,17 +379,29 @@ export class CoopBattleScene extends Phaser.Scene {
     let aoe = false;
     /** Nach "bossAbility" gehören die Treffer des Bosses zu dieser Fähigkeit – eigener Effekt pro Fähigkeit */
     let special: string | null = null;
+    /** Erstes Ziel der laufenden Helden-Fähigkeit – Treffer auf die übrigen Gegner laufen bei Flächenwirkung nur kurz mit */
+    let mainTarget: string | null = null;
     for (const event of events) {
+      if (event.type === "ability") mainTarget = null;
+      const heroAoe = event.type === "hit" && event.ability ? getAbility(event.ability).aoe : undefined;
+      const sideHit =
+        event.type === "hit" &&
+        event.attacker !== BOSS &&
+        !this.adds.has(event.attacker) &&
+        (heroAoe === "all" || typeof heroAoe === "object") &&
+        (mainTarget ??= event.target) !== event.target;
       if (event.type === "bossAbility") {
         const enemy = getCoopEnemy(next.bossId);
         aoe = enemy.abilities.find((a) => (a.id ?? enemy.id) === event.abilityId)?.aoe === true;
         special = event.abilityId;
       }
       const ability = special;
-      this.time.delayedCall(delay, () => this.animate(event, ability));
+      this.time.delayedCall(delay, () => (sideHit && event.type === "hit" ? this.sideImpact(event) : this.animate(event, ability)));
       const quick =
+        sideHit ||
         (aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked" || event.type === "manaBurn")) ||
-        event.type === "drain";
+        event.type === "drain" ||
+        event.type === "addDown";
       // Steinschlag, Fluchkreis und Strudel treffen erst nach ihrer Animation – dafür Zeit lassen
       const slowImpact = event.type === "hit" && event.attacker === BOSS && special !== null && SLOW_IMPACT.has(special);
       delay +=
@@ -300,6 +418,13 @@ export class CoopBattleScene extends Phaser.Scene {
                   : 700;
     }
     this.time.delayedCall(delay + 200, () => EventBus.emit("coop:animation-done", { logLength: next.log.length }));
+  }
+
+  /** Nebentreffer einer Flächen-Fähigkeit: nur Einschlag und Schadenszahl, ohne eigenen Angriff. */
+  private sideImpact(event: Extract<CoopEvent, { type: "hit" }>) {
+    const foe = this.unit(event.target);
+    this.impact(foe, event.damage, event.crit);
+    fx.burst(this, this.center(foe), 0xf4c95d, 8, 40);
   }
 
   /** `bossAbility`: Id des Bosses, dessen Fähigkeit gerade wirkt (für den passenden Treffer-Effekt) */
@@ -331,7 +456,13 @@ export class CoopBattleScene extends Phaser.Scene {
       }
       case "hit":
         if (event.attacker === BOSS) this.bossHits(event, bossAbility);
+        else if (this.adds.has(event.attacker)) this.addHits(event);
         else this.heroHits(event);
+        break;
+      case "addDown":
+        this.addFalls(event.add, false);
+        this.float(this.unit(event.add), "BESIEGT", "#a49cb8", 14, 20);
+        sfx.hit(false);
         break;
       case "poison":
       case "burn":
@@ -349,19 +480,21 @@ export class CoopBattleScene extends Phaser.Scene {
       case "bossAbility":
         this.announceBossAbility(event.abilityId, event.name);
         break;
-      case "stunned":
+      case "stunned": {
+        const foe = this.unit(event.add ?? BOSS);
         sfx.stun();
         if (event.freeze) {
-          this.float(this.boss, "EINGEFROREN", "#a9e4ff", 22, 60);
-          this.tint(this.boss, 0x9fd8ff, 1100);
-          fx.burst(this, this.center(this.boss), 0xdff4ff, 14, 70, 5);
+          this.float(foe, "EINGEFROREN", "#a9e4ff", 22, 60);
+          this.tint(foe, 0x9fd8ff, 1100);
+          fx.burst(this, this.center(foe), 0xdff4ff, 14, 70, 5);
         } else {
-          this.float(this.boss, "BETÄUBT", "#d39bf0", 22, 60);
-          fx.dizzyStars(this, { x: BOSS_X, y: GROUND_Y - 160 });
+          this.float(foe, "BETÄUBT", "#d39bf0", 22, 60);
+          fx.dizzyStars(this, { x: foe.homeX, y: GROUND_Y - (foe === this.boss ? 160 : 120) });
         }
         break;
+      }
       case "stunResisted":
-        this.float(this.boss, "WIDERSTEHT!", "#a49cb8", 20, 60);
+        this.float(this.unit(event.add ?? BOSS), "WIDERSTEHT!", "#a49cb8", 20, 60);
         break;
       case "blocked": {
         const hero = this.unit(event.heroId);
@@ -539,7 +672,7 @@ export class CoopBattleScene extends Phaser.Scene {
   }
 
   /** Eigene Treffer-Animation einer Fähigkeit – false, wenn sie die Animation ihres Waffentyps nutzt (Bogen, Stab, Zepter). */
-  private abilityHit(hero: Unit, id: AbilityId, from: fx.Point, target: fx.Point, hit: () => void, crit: boolean): boolean {
+  private abilityHit(hero: Unit, id: AbilityId, from: fx.Point, target: fx.Point, hit: () => void, crit: boolean, foe: Unit): boolean {
     const dash = (onHit: () => void) => {
       sfx.swing();
       if (hero.weapon) this.swing(hero.weapon);
@@ -639,7 +772,7 @@ export class CoopBattleScene extends Phaser.Scene {
         leap(() => {
           hit();
           fx.cracks(this, target);
-          this.float(this.boss, "RÜSTUNG ↓", "#f0776a", 16, 40);
+          this.float(foe, "RÜSTUNG ↓", "#f0776a", 16, 40);
           this.cameras.main.shake(180, 0.008);
         });
         return true;
@@ -704,7 +837,7 @@ export class CoopBattleScene extends Phaser.Scene {
         fx.groundWave(this, { x: hero.homeX + 30, y: GROUND_Y }, { x: target.x, y: GROUND_Y }, 0x8a7a60, 380, () => {
           hit();
           fx.cracks(this, target);
-          this.float(this.boss, "GESCHWÄCHT", "#c8b090", 18, 30);
+          this.float(foe, "GESCHWÄCHT", "#c8b090", 18, 30);
         });
         return true;
       case "scepter-2":
@@ -713,8 +846,8 @@ export class CoopBattleScene extends Phaser.Scene {
         this.time.delayedCall(160, () => {
           hit();
           fx.ring(this, target, 0x8a4ad0, 55, 480);
-          this.float(this.boss, "VERFLUCHT", "#b07cff", 18, 30);
-          this.tint(this.boss, 0x8a4ad0, 900);
+          this.float(foe, "VERFLUCHT", "#b07cff", 18, 30);
+          this.tint(foe, 0x8a4ad0, 900);
         });
         return true;
       case "staff-2": {
@@ -793,10 +926,11 @@ export class CoopBattleScene extends Phaser.Scene {
 
   private heroHits(event: Extract<CoopEvent, { type: "hit" }>) {
     const hero = this.unit(event.attacker);
-    const target = this.center(this.boss);
-    const hit = () => this.impact(this.boss, event.damage, event.crit);
+    const foe = this.unit(event.target);
+    const target = this.center(foe);
+    const hit = () => this.impact(foe, event.damage, event.crit);
     const from = { x: hero.homeX + 30, y: GROUND_Y - 50 };
-    if (event.ability && this.abilityHit(hero, event.ability, from, target, hit, event.crit)) return;
+    if (event.ability && this.abilityHit(hero, event.ability, from, target, hit, event.crit, foe)) return;
     const kind = event.weapon ?? hero.weaponType;
     if (kind === "bow") {
       this.texture("arrow", ARROW);
@@ -816,6 +950,16 @@ export class CoopBattleScene extends Phaser.Scene {
       if (hero.weapon) this.swing(hero.weapon);
       this.tweens.add({ targets: hero.body, x: hero.homeX + 60, duration: 130, ease: "Quad.easeIn", yoyo: true, onYoyo: hit });
     }
+  }
+
+  /** Ein Begleiter springt sein Ziel an. */
+  private addHits(event: Extract<CoopEvent, { type: "hit" }>) {
+    const add = this.unit(event.attacker);
+    const target = this.unit(event.target);
+    const hit = () => this.impact(target, event.damage, event.crit);
+    sfx.swing();
+    const reach = Math.max(30, add.homeX - target.homeX - 90);
+    this.tweens.add({ targets: add.body, x: add.homeX - reach, duration: 150, ease: "Quad.easeIn", yoyo: true, onYoyo: hit });
   }
 
   /** Der Boss stürzt sich auf sein Ziel (bei Flächenangriffen schlägt er nur zu). */
@@ -925,7 +1069,7 @@ export class CoopBattleScene extends Phaser.Scene {
   private impact(unit: Unit, damage: number, crit: boolean) {
     this.setHp(unit, Math.max(0, unit.hp - damage));
     sfx.hit(crit, false);
-    const dir = unit === this.boss ? 1 : -1;
+    const dir = this.isFoe(unit) ? 1 : -1;
     this.tweens.add({ targets: unit.body, alpha: 0.3, duration: 70, yoyo: true, repeat: 1 });
     this.tweens.add({ targets: unit.body, x: unit.homeX + 8 * dir, duration: 60, yoyo: true });
     if (crit) this.cameras.main.shake(160, 0.008);

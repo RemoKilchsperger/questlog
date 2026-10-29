@@ -134,6 +134,72 @@ export function StatusSide({ title, chips, children }: { title: string; chips: S
   );
 }
 
+/** Ein Gegner zur Zielwahl: der Boss (ohne `uid`) oder ein Begleiter. */
+export interface TargetOption {
+  uid?: string;
+  combatant: { name: string; hp: number; maxHp: number };
+  effects: EnemyEffects;
+  boss: boolean;
+}
+
+/** Boss und Begleiter als Knöpfe: Lebenspunkte und Effekte im Blick, das gewählte Ziel hervorgehoben. */
+export function TargetPicker({
+  foes,
+  selected,
+  disabled,
+  onChoose,
+}: {
+  foes: TargetOption[];
+  selected: string | undefined;
+  disabled: boolean;
+  onChoose: (uid: string | undefined) => void;
+}) {
+  return (
+    <ActionGroup label="Ziel" hint="Fällt der Boss, ist der Kampf gewonnen · Flächen-Fähigkeiten treffen mehrere">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {foes.map(({ uid, combatant, effects, boss }) => {
+          const down = combatant.hp === 0;
+          const isSelected = selected === uid;
+          return (
+            <button
+              key={uid ?? "boss"}
+              type="button"
+              disabled={disabled || down}
+              onClick={() => onChoose(uid)}
+              aria-pressed={isSelected}
+              className={`flex min-w-0 flex-col gap-1 rounded-md border-2 px-2 py-1.5 text-left disabled:cursor-not-allowed ${
+                isSelected ? "border-gold bg-gold/10" : "border-night-600 hover:border-muted"
+              } ${down ? "opacity-40" : ""}`}
+            >
+              <span className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="truncate font-bold">
+                  {isSelected && "▼ "}
+                  {boss && "👑 "}
+                  {combatant.name}
+                </span>
+                <span className="num shrink-0 text-xs text-muted">
+                  {down ? "besiegt" : `${combatant.hp}/${combatant.maxHp}`}
+                </span>
+              </span>
+              <span className="h-1.5 overflow-hidden rounded-sm bg-night-700">
+                <span className="block h-full bg-danger" style={{ width: `${(combatant.hp / combatant.maxHp) * 100}%` }} />
+              </span>
+              <span className="flex min-h-4 flex-wrap gap-1 text-xs">
+                {enemyStatusChips(effects).map((chip) => (
+                  <span key={chip.key} title={chip.title}>
+                    {chip.icon}
+                    {chip.rounds !== undefined && <span className="num text-muted">{chip.rounds}</span>}
+                  </span>
+                ))}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </ActionGroup>
+  );
+}
+
 /** Abschnitt der Aktionsleiste mit kleiner Überschrift und optionalem Hinweis rechts. */
 export function ActionGroup({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (

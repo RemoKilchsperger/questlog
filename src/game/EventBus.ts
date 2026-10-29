@@ -23,6 +23,10 @@ export interface GameEvents {
   "battle:animation-done": { battleId: string };
   /** Koop → Phaser: neue Ereignisse einer Runde, `state` ist der Stand danach. */
   "coop:events": { state: CoopBattleState; events: CoopEvent[] };
+  /** React → Phaser: eigenes Ziel im Koop-Kampf – ein Begleiter (uid) oder der Boss (undefined). */
+  "coop:target": { target: string | undefined };
+  /** Phaser → React: Gegner in der Koop-Szene angeklickt – als eigenes Ziel wählen. */
+  "coop:select-target": { target: string | undefined };
   /** Phaser → React: Animationen sind fertig – `logLength` = Länge des Protokolls danach. */
   "coop:animation-done": { logLength: number };
 }

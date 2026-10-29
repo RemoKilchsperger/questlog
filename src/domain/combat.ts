@@ -286,13 +286,14 @@ export function startBattle(
     adds: (creature.adds ?? [])
       .flatMap((add) => Array.from({ length: add.count }, () => add))
       .map((add, i) => {
+        // Begleiter kämpfen auf dem Level ihres Bosses – so wirken ihre Faktoren bei jedem Boss gleich
         const { creature: def } = getCreature(add.creatureId);
-        const stats = getCreatureStats(def);
+        const stats = getCreatureStats({ ...def, level: creature.level });
         const maxHp = Math.round(stats.maxHp * add.hp);
         return {
           uid: `add-${i + 1}`,
           creatureId: def.id,
-          combatant: { name: def.name, level: def.level, ...stats, maxHp, hp: maxHp, damage: stats.damage * add.damage },
+          combatant: { name: def.name, level: creature.level, ...stats, maxHp, hp: maxHp, damage: stats.damage * add.damage },
           effects: {},
         };
       }),
@@ -314,7 +315,9 @@ export function setTarget(state: BattleState, target: string | undefined): Battl
 
 /** Kreaturen der in diesem Kampf besiegten Begleiter – für Belohnung und Aufträge. */
 export function defeatedAdds(state: BattleState): CreatureDef[] {
-  return (state.adds ?? []).filter((a) => a.combatant.hp === 0).map((a) => getCreature(a.creatureId).creature);
+  return (state.adds ?? [])
+    .filter((a) => a.combatant.hp === 0)
+    .map((a) => ({ ...getCreature(a.creatureId).creature, level: a.combatant.level }));
 }
 
 /** Der Held mit den Werten aktiver Verstärkungen (Schaden, Rüstung). */
