@@ -1,7 +1,8 @@
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useCloudStore } from "../cloud/cloudStore";
-import { fetchLeaderboard, fetchProfile, fetchRank, LEADERBOARD_SIZE } from "../cloud/profiles";
+import { fetchLeaderboard, fetchProfile, fetchRank, fetchTowerLeaderboard, LEADERBOARD_SIZE } from "../cloud/profiles";
+import { isoWeek } from "../domain/tower";
 import type { PublicProfile } from "../cloud/publicProfile";
 import { cloudEnabled } from "../cloud/supabase";
 import { getItemStats, SLOT_ICONS, SLOT_LABELS } from "../domain/items";
@@ -37,21 +38,44 @@ function Ranking() {
   const [profiles, setProfiles] = useState<PublicProfile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const myName = useCloudStore((s) => s.username);
+  /** Erfahrung oder Endlos-Turm (bestes Stockwerk dieser Woche) */
+  const [mode, setMode] = useState<"xp" | "tower">("xp");
+  const week = isoWeek();
 
   useEffect(() => {
-    fetchLeaderboard()
+    setProfiles(null);
+    setError(null);
+    (mode === "xp" ? fetchLeaderboard() : fetchTowerLeaderboard(week))
       .then(setProfiles)
       .catch((e: Error) => setError(e.message));
-  }, []);
+  }, [mode, week]);
 
   return (
     <section className="panel p-5">
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-pixel text-2xl">🏆 Rangliste</h2>
-        <MyRank />
+        {mode === "xp" && <MyRank />}
+      </div>
+      <div className="mb-2 flex w-fit rounded-md border-2 border-night-700 bg-night-900 p-0.5" role="group" aria-label="Rangliste">
+        {([
+          ["xp", "⭐ Erfahrung"],
+          ["tower", "🗼 Endlos-Turm"],
+        ] as const).map(([m, label]) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            aria-pressed={mode === m}
+            className={`font-pixel rounded px-3 py-0.5 transition ${mode === m ? "bg-night-700 text-gold" : "text-muted hover:text-parchment"}`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       <p className="mb-4 text-sm text-muted">
-        Die {LEADERBOARD_SIZE} erfahrensten Helden. Klicke auf einen Namen, um das Profil anzusehen.
+        {mode === "xp"
+          ? `Die ${LEADERBOARD_SIZE} erfahrensten Helden.`
+          : `Die höchsten Stockwerke dieser Woche (${week}) – jeden Montag geht es von vorn los.`}{" "}
+        Klicke auf einen Namen, um das Profil anzusehen.
       </p>
       {error && <p className="text-danger">Rangliste konnte nicht geladen werden: {error}</p>}
       {!profiles && !error && <p className="text-muted">Wird geladen …</p>}
@@ -83,7 +107,12 @@ function Ranking() {
                 <TitleBadge achievementId={p.snapshot.achievementTitle} className="block text-xs" />
               </span>
               <span className="text-right text-xs text-muted">
-                <span className="block text-base text-gold">
+                {mode === "tower" && (
+                  <span className="block text-base text-legendary">
+                    🗼 Stockwerk <span className="num">{p.snapshot.tower?.weekBest ?? 0}</span>
+                  </span>
+                )}
+                <span className={`block ${mode === "tower" ? "" : "text-base"} text-gold`}>
                   Lv. <span className="num">{p.level}</span>
                 </span>
                 <span className="block text-legendary">

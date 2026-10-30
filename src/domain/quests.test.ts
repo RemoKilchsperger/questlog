@@ -188,9 +188,9 @@ describe("Händler-Aufträge", () => {
 });
 
 describe("Wochenaufträge", () => {
-  it("Kreaturen, Bosse, Dungeons und ein Händler-Auftrag – Dungeons erst ab dem ersten offenen Dungeon", () => {
+  it("Kreaturen, Bosse, Dungeons, ein Händler- und ein Turm-Auftrag – Dungeons und Turm erst, wenn sie offen sind", () => {
     const kinds = (level: number) => rollWeeklyQuests("2026-10-05", level).quests.map((q) => q.def.goal.kind);
-    expect(kinds(WEEKLY_DUNGEON_LEVEL)).toEqual(["killAny", "killAny", "dungeons", "trade"]);
+    expect(kinds(WEEKLY_DUNGEON_LEVEL)).toEqual(["killAny", "killAny", "dungeons", "trade", "towerFloor"]);
     expect(kinds(WEEKLY_DUNGEON_LEVEL - 1)).toEqual(["killAny", "killAny", "trade"]);
     for (const q of rollWeeklyQuests("2026-10-05", 30).quests) expect(q.def.reward.dropChance).toBe(1);
   });
@@ -200,13 +200,16 @@ describe("Wochenaufträge", () => {
     board = applyBoardEvent(board, { kind: "kill", creatureId: "giant-rat", boss: false });
     board = applyBoardEvent(board, { kind: "kill", creatureId: "swamp-hydra", boss: true });
     board = applyBoardEvent(board, { kind: "dungeon", dungeonId: "abandoned-mine" });
-    expect(board.quests.map((q) => q.progress)).toEqual([2, 1, 1, 0]);
+    board = applyBoardEvent(board, { kind: "towerFloor", floor: 7 });
+    board = applyBoardEvent(board, { kind: "towerFloor", floor: 4 });
+    // Turm: das höchste geschaffte Stockwerk zählt, nicht die Anzahl
+    expect(board.quests.map((q) => q.progress)).toEqual([2, 1, 1, 0, 7]);
     expect(board.quests.map((q) => questGoalText(q.def))).toContain(`Besiege ${WEEKLY_KILLS} Kreaturen`);
   });
 
   it("der Händler-Auftrag wechselt jede Woche und ist grösser als der tägliche", () => {
     const tradeOf = (week: string) => {
-      const goal = rollWeeklyQuests(week, 20).quests.at(-1)!.def.goal;
+      const goal = rollWeeklyQuests(week, 20).quests.find((q) => q.def.goal.kind === "trade")!.def.goal;
       return goal.kind === "trade" ? goal : null;
     };
     const weeks = ["2026-10-05", "2026-10-12", "2026-10-19"].map(tradeOf);

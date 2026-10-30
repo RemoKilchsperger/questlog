@@ -36,3 +36,21 @@ export async function fetchRank(totalXp: number): Promise<number | null> {
   if (error) return null;
   return (count ?? 0) + 1;
 }
+
+/**
+ * Endlos-Turm: die Helden mit dem höchsten Stockwerk dieser Woche. Gelesen aus dem öffentlichen
+ * Profil (`snapshot.tower`) – Profile ohne Turm-Lauf in dieser Woche fehlen.
+ */
+export async function fetchTowerLeaderboard(week: string): Promise<PublicProfile[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("public_profiles")
+    .select(COLUMNS)
+    .eq("snapshot->tower->>week", week)
+    .gt("snapshot->tower->weekBest", 0)
+    .order("snapshot->tower->weekBest", { ascending: false })
+    .order("total_xp", { ascending: true })
+    .limit(LEADERBOARD_SIZE);
+  if (error) throw new Error(error.message);
+  return data as PublicProfile[];
+}

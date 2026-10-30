@@ -4,6 +4,7 @@ import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { ADD_ROLES, type AddRole } from "../domain/bossMechanics";
 import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL } from "../domain/elites";
 import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
+import { BLESSING_EVERY, BLESSINGS, BOSS_EVERY, TOWER_MIN_LEVEL } from "../domain/tower";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
@@ -317,6 +318,23 @@ export function HelpScreen() {
           <H>Gebiete</H>
           <p>Jedes Gebiet öffnet sich ab seinem Mindestlevel und hat vier Kreaturen und einen Boss.</p>
           <Table head={["Gebiet", "Level"]} rows={AREAS.map((a) => [a.name, `${a.minLevel}–${a.maxLevel}`])} />
+          <H>🗼 Endlos-Turm</H>
+          <p>
+            Ab Level {TOWER_MIN_LEVEL}: Stockwerk für Stockwerk stärkere Gegner auf deinem Level, jedes {BOSS_EVERY}.
+            Stockwerk ein Boss, oben werden Elite-Gegner häufiger. Zwischen den Kämpfen heilst du nicht. Nach jedem{" "}
+            {BLESSING_EVERY}. Stockwerk wählst du einen von drei Segen für den Rest des Laufs, derselbe Segen stapelt
+            sich. Die Beute sammelt sich in einer Truhe. Der Turm ist für den Ruhm da, nicht zum Farmen: wenig Erfahrung
+            und Gold, Items fast nur von Bossen. Nach jedem Sieg kannst du aussteigen, bei einer Niederlage ist die
+            Truhe verloren. Dein bestes Stockwerk der Woche zählt für die Turm-Rangliste, dazu gibt es Turm-Aufträge
+            und -Erfolge.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {BLESSINGS.map((b) => (
+              <li key={b.id}>
+                {b.icon} <b>{b.name}:</b> {b.description}
+              </li>
+            ))}
+          </ul>
           <H>Schwächen und Resistenzen</H>
           <p>
             Jeder Gegner nimmt von manchen Waffen mehr Schaden (+{Math.round((WEAK_FACTOR - 1) * 100)} %), von anderen

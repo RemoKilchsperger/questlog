@@ -4,6 +4,7 @@ import { getAbility, MANA_REGEN } from "../domain/abilities";
 import { getBossAbilities, getBossAbilityById, roundsUntilBossAbility, upcomingBossAbility } from "../domain/bossAbilities";
 import {
   abilityBlocker,
+  abilityCost,
   BOSS_ITEM_DROP_CHANCE,
   BUFF_POTION_DROP_CHANCE,
   chestCount,
@@ -44,6 +45,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { CoopDungeonList, CoopJoinForm, CoopPanel, CoopScreen } from "./CoopScreen";
 import { useCoopStore } from "../coop/coopStore";
 import { DungeonChest } from "./DungeonChest";
+import { TowerPanel, TowerProgress, TowerResultActions } from "./TowerScreen";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
@@ -85,6 +87,19 @@ export function BattleScreen() {
 
 /* ───────────────────────── Gebietsauswahl ───────────────────────── */
 
+type BattleView = "areas" | "dungeons" | "tower" | "coop";
+
+/** Gewählte Ansicht im Kampf-Tab – nur eine Bequemlichkeit pro Browser. */
+const BATTLE_VIEW_KEY = "questlog-battle-view";
+
+const BATTLE_VIEWS: Record<BattleView, { label: string; intro: string }> = {
+  areas: { label: "🌲 Gebiete", intro: "Kreaturen und Bosse der Gebiete – jedes öffnet sich ab seinem Mindestlevel." },
+  dungeons: { label: "🗝️ Dungeons", intro: "Mehrere Kämpfe hintereinander ohne Heilung, am Ende ein Boss mit eigenem Set – solo oder im Koop." },
+  tower: { label: "🗼 Endlos-Turm", intro: "So hoch wie möglich: Stockwerk für Stockwerk stärkere Gegner, Segen und eine Wochen-Rangliste." },
+  coop: { label: "🤝 Koop-Bosse", intro: "Raid-Bosse für 2–4 Helden – mit eigenen Sets." },
+};
+const BATTLE_VIEW_ORDER: readonly BattleView[] = ["areas", "dungeons", "tower", "coop"];
+
 function AreaSelect() {
   const character = useGameStore((s) => s.character);
   const equipment = useGameStore((s) => s.equipment);
@@ -92,39 +107,83 @@ function AreaSelect() {
   const unlocked = AREAS.filter((a) => isAreaUnlocked(a, hero.level));
   const [areaId, setAreaId] = useState(unlocked[unlocked.length - 1].id);
   const area = AREAS.find((a) => a.id === areaId)!;
+  const [view, setView] = useState<BattleView>(() => {
+    try {
+      const saved = localStorage.getItem(BATTLE_VIEW_KEY);
+      return BATTLE_VIEW_ORDER.includes(saved as BattleView) ? (saved as BattleView) : "areas";
+    } catch {
+      return "areas";
+    }
+  });
+  const choose = (next: BattleView) => {
+    setView(next);
+    try {
+      localStorage.setItem(BATTLE_VIEW_KEY, next);
+    } catch {
+      // ohne Speicher gilt die Wahl nur bis zum Neuladen
+    }
+  };
+  // Läuft noch ein Koop-Kampf (z. B. nach dem Neuladen)? Am Koop-Knopf zeigen, auch wenn eine andere Ansicht offen ist.
+  const rejoin = useCoopStore((s) => s.rejoin);
+  const checkRejoin = useCoopStore((s) => s.checkRejoin);
+  useEffect(() => void checkRejoin(), [checkRejoin]);
 
   return (
     <div className="grid gap-4 md:grid-cols-[280px_1fr]">
       <HeroPanel />
 
       <div className="flex flex-col gap-4">
-        <section className="panel p-5">
-          <h2 className="font-pixel mb-3 text-2xl">Gebiete</h2>
-          <div className="flex flex-wrap gap-2">
-            {AREAS.map((a) => {
-              const open = isAreaUnlocked(a, hero.level);
-              return (
-                <button
-                  key={a.id}
-                  disabled={!open}
-                  onClick={() => setAreaId(a.id)}
-                  aria-pressed={a.id === areaId}
-                  title={open ? a.description : `Ab Level ${a.minLevel}`}
-                  className={`rounded-md border-2 px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
-                    a.id === areaId ? "border-gold text-gold" : "border-night-700 text-muted hover:text-parchment"
-                  }`}
-                >
-                  {open ? "" : "🔒 "}
-                  {a.name} <span className="text-xs opacity-70">Lv. {a.minLevel}–{a.maxLevel}</span>
-                </button>
-              );
-            })}
+        <section className="panel p-4">
+          <div className="flex flex-wrap rounded-md border-2 border-night-700 bg-night-900 p-0.5" role="group" aria-label="Kampfart">
+            {BATTLE_VIEW_ORDER.map((v) => (
+              <button
+                key={v}
+                onClick={() => choose(v)}
+                aria-pressed={view === v}
+                className={`font-pixel flex-1 whitespace-nowrap rounded px-3 py-1 transition ${
+                  view === v ? "bg-night-700 text-gold" : "text-muted hover:text-parchment"
+                }`}
+              >
+                {BATTLE_VIEWS[v].label}
+                {v === "coop" && rejoin && <span className="ml-1.5 rounded-full bg-xp px-1.5 text-xs text-night-950">!</span>}
+              </button>
+            ))}
           </div>
+          <p className="mt-2 text-xs text-muted">{BATTLE_VIEWS[view].intro}</p>
         </section>
 
-        <AreaPanel area={area} heroLevel={hero.level} />
-        <DungeonPanel heroLevel={hero.level} />
-        <CoopPanel heroLevel={hero.level} />
+        {view === "areas" && (
+          <>
+            <section className="panel p-5">
+              <h2 className="font-pixel mb-3 text-2xl">Gebiete</h2>
+              <div className="flex flex-wrap gap-2">
+                {AREAS.map((a) => {
+                  const open = isAreaUnlocked(a, hero.level);
+                  return (
+                    <button
+                      key={a.id}
+                      disabled={!open}
+                      onClick={() => setAreaId(a.id)}
+                      aria-pressed={a.id === areaId}
+                      title={open ? a.description : `Ab Level ${a.minLevel}`}
+                      className={`rounded-md border-2 px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
+                        a.id === areaId ? "border-gold text-gold" : "border-night-700 text-muted hover:text-parchment"
+                      }`}
+                    >
+                      {open ? "" : "🔒 "}
+                      {a.name} <span className="text-xs opacity-70">Lv. {a.minLevel}–{a.maxLevel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <AreaPanel area={area} heroLevel={hero.level} />
+          </>
+        )}
+        {view === "dungeons" && <DungeonPanel heroLevel={hero.level} />}
+        {view === "tower" && <TowerPanel heroLevel={hero.level} />}
+        {view === "coop" && <CoopPanel heroLevel={hero.level} />}
       </div>
     </div>
   );
@@ -464,7 +523,14 @@ function Battle({ battle }: { battle: BattleState }) {
       <section className="panel p-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-pixel text-2xl">
-            {area.name} <span className="text-base text-muted">· {creature.name}</span>
+            {battle.towerFloor ? (
+              <>
+                🗼 Endlos-Turm <span className="num text-gold">· Stockwerk {battle.towerFloor}</span>
+              </>
+            ) : (
+              area.name
+            )}{" "}
+            <span className="text-base text-muted">· {creature.name}</span>
             {battle.elite && (
               <Hint text="Elite-Gegner: stärker als sonst, dafür doppelte Erfahrung, doppeltes Gold und sichere Beute.">
                 <span className="ml-2 text-base text-legendary">★ Elite</span>
@@ -478,7 +544,8 @@ function Battle({ battle }: { battle: BattleState }) {
             </span>
           </div>
         </div>
-        {area.dungeon && <DungeonProgress area={area} />}
+        {area.dungeon && !battle.towerFloor && <DungeonProgress area={area} />}
+        {battle.towerFloor && <TowerProgress floor={battle.towerFloor} />}
         <Suspense
           fallback={
             <div className="flex aspect-[9/4] w-full items-center justify-center rounded-md bg-night-950 text-muted">
@@ -538,7 +605,7 @@ function Battle({ battle }: { battle: BattleState }) {
               {battle.abilities.map((id) => (
                 <AbilityButton
                   key={id}
-                  ability={classAbility(id, battle.heroClass)}
+                  ability={{ ...classAbility(id, battle.heroClass), manaCost: abilityCost(battle, id) }}
                   blocker={abilityBlocker(battle, id)}
                   disabled={busy}
                   onClick={() => act(() => attack(id))}
@@ -702,11 +769,13 @@ function BattleResult({ battle }: { battle: BattleState }) {
   const startBattle = useGameStore((s) => s.startBattle);
   const leave = useGameStore((s) => s.leaveBattle);
   const dungeon = useGameStore((s) => s.dungeon);
+  const tower = useGameStore((s) => s.tower);
   const quests = useCreatureQuests(battle.creatureId);
   const respawn = useRespawn(battle.creatureId);
   const won = battle.status === "won";
   // Im Dungeon geht die Beute in die Truhe – hier nur ein kurzer Hinweis, was dazukam.
-  const toChest = dungeon !== null;
+  const run = dungeon ?? tower;
+  const toChest = run !== null;
   const levelUp = reward !== null && reward.levelAfter > reward.levelBefore;
   const fled = battle.status === "fled";
   const loot = reward?.loot ? getItemStats(reward.loot) : null;
@@ -728,7 +797,7 @@ function BattleResult({ battle }: { battle: BattleState }) {
         {won ? "Sieg!" : fled ? "Geflohen" : "Niederlage"}
       </h2>
       {won && reward && toChest ? (
-        dungeon.claimed ? null : <ChestDeposit reward={reward} />
+        run.claimed ? null : <ChestDeposit reward={reward} />
       ) : won && reward ? (
         <>
           {levelUp && (
@@ -812,6 +881,8 @@ function BattleResult({ battle }: { battle: BattleState }) {
       )}
       {dungeon ? (
         <DungeonResultActions battle={battle} won={won} />
+      ) : tower ? (
+        <TowerResultActions battle={battle} won={won} />
       ) : (
         <div className="flex gap-2">
           <button
@@ -1078,6 +1149,10 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `${enemy} heilt ${battle.enemy.name} um ${e.heal} LP.`;
     case "enemyRegen":
       return `${enemy} regeneriert ${e.heal} LP.`;
+    case "thorns":
+      return `Deine Dornen treffen ${enemy} für ${e.damage} Schaden.`;
+    case "secondWind":
+      return `🕊️ Zweiter Atem! Du stehst mit ${e.heal} LP wieder auf.`;
     case "immune":
       return `${enemy} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "explosion":

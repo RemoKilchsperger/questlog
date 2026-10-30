@@ -8,6 +8,7 @@
 import { xpRewardBase } from "./leveling";
 import { rollDrop } from "./loot";
 import { AREAS, DUNGEONS, getCreature, isAreaUnlocked, type AreaDef, type CreatureDef } from "./creatures";
+import { TOWER_MIN_LEVEL } from "./tower";
 import type { Loot, Rarity } from "./types";
 
 /** Händler und Schmied: Ausrüstung verkaufen, zerlegen oder verbessern. */
@@ -21,7 +22,9 @@ export type QuestGoal =
   /** Beliebige Dungeons abschliessen */
   | { kind: "dungeons"; count: number }
   /** Ausrüstung (Waffen und Rüstung) verkaufen, zerlegen oder verbessern */
-  | { kind: "trade"; action: TradeAction; count: number };
+  | { kind: "trade"; action: TradeAction; count: number }
+  /** Im Endlos-Turm in einem Lauf dieses Stockwerk schaffen */
+  | { kind: "towerFloor"; floor: number };
 
 export interface QuestReward {
   xp: number;
@@ -58,7 +61,9 @@ export type QuestEvent =
   | { kind: "kill"; creatureId: string; boss: boolean }
   | { kind: "dungeon"; dungeonId: string }
   /** Ein Ausrüstungsteil wurde verkauft, zerlegt oder verbessert */
-  | { kind: "trade"; action: TradeAction };
+  | { kind: "trade"; action: TradeAction }
+  /** Im Endlos-Turm wurde dieses Stockwerk geschafft */
+  | { kind: "towerFloor"; floor: number };
 
 /* ───────────── Belohnungen ───────────── */
 
@@ -199,7 +204,7 @@ export function questArea(def: QuestDef): AreaDef {
 
 /** Ziel als Zahl: Anzahl Siege, Dungeons oder Ausrüstungsteile – beim bestimmten Dungeon 1. */
 export function questTarget(def: QuestDef): number {
-  return def.goal.kind === "dungeon" ? 1 : def.goal.count;
+  return def.goal.kind === "dungeon" ? 1 : def.goal.kind === "towerFloor" ? def.goal.floor : def.goal.count;
 }
 
 const TRADE_GOAL_TEXT: Record<TradeAction, string> = {
@@ -224,6 +229,8 @@ export function questGoalText(def: QuestDef): string {
       return `Schliesse ${goal.count} Dungeons ab (solo oder Koop)`;
     case "trade":
       return TRADE_GOAL_TEXT[goal.action].replace("{n}", String(goal.count));
+    case "towerFloor":
+      return `Schaffe im Endlos-Turm Stockwerk ${goal.floor} in einem Lauf`;
   }
 }
 
@@ -249,12 +256,17 @@ function matchesGoal(goal: QuestGoal, event: QuestEvent): boolean {
       return event.kind === "dungeon";
     case "trade":
       return event.kind === "trade" && event.action === goal.action;
+    case "towerFloor":
+      return event.kind === "towerFloor";
   }
 }
 
 /** Bringt eine Quest durch ein Ereignis weiter – gibt den neuen Fortschritt zurück (höchstens das Ziel). */
 export function advanceQuest(def: QuestDef, progress: number, event: QuestEvent): number {
-  return matchesGoal(def.goal, event) ? Math.min(questTarget(def), progress + 1) : progress;
+  if (!matchesGoal(def.goal, event)) return progress;
+  // Turm: Fortschritt ist das höchste geschaffte Stockwerk, nicht die Anzahl
+  const next = event.kind === "towerFloor" ? Math.max(progress, event.floor) : progress + 1;
+  return Math.min(questTarget(def), next);
 }
 
 export function acceptQuest(log: QuestLog, id: string, heroLevel: number): QuestLog {
@@ -350,6 +362,20 @@ function dayNumber(key: string): number {
   return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
 }
 
+/** Turm-Aufträge: Stockwerk in einem Lauf – täglich und wöchentlich (ab Turm-Level). */
+export const DAILY_TOWER_FLOOR = 5;
+export const WEEKLY_TOWER_FLOOR = 12;
+
+function towerQuest(id: string, floor: number, reward: QuestReward): QuestDef {
+  return {
+    id,
+    title: floor >= WEEKLY_TOWER_FLOOR ? "Hoch hinaus" : "Turmaufstieg",
+    description: "Der Wächter des Endlos-Turms zahlt jedem, der weit genug hinaufkommt.",
+    goal: { kind: "towerFloor", floor },
+    reward,
+  };
+}
+
 function tradeQuest(id: string, action: TradeAction, count: number, reward: QuestReward): QuestDef {
   return { id, ...TRADE_TITLES[action], goal: { kind: "trade", action, count }, reward };
 }
@@ -388,6 +414,9 @@ export function rollDailyQuests(date: string, heroLevel: number, rng: () => numb
   const action = tradeActionFor(dayNumber(date));
   const reward = questReward(heroLevel, DAILY_TRADE_UNITS, DAILY_DROP_CHANCE, KILL_WEIGHTS);
   quests.push({ def: tradeQuest(`daily-${date}-trade`, action, DAILY_TRADE_COUNTS[action], reward), progress: 0, turnedIn: false });
+  if (heroLevel >= TOWER_MIN_LEVEL) {
+    quests.push({ def: towerQuest(`daily-${date}-tower`, DAILY_TOWER_FLOOR, reward), progress: 0, turnedIn: false });
+  }
   return { date, quests };
 }
 
@@ -430,6 +459,7 @@ export function rollWeeklyQuests(week: string, heroLevel: number): QuestBoard {
   }
   const action = tradeActionFor(Math.floor(dayNumber(week) / 7));
   defs.push(tradeQuest(`weekly-${week}-trade`, action, WEEKLY_TRADE_COUNTS[action], reward(WEEKLY_TRADE_UNITS)));
+  if (heroLevel >= TOWER_MIN_LEVEL) defs.push(towerQuest(`weekly-${week}-tower`, WEEKLY_TOWER_FLOOR, reward(30)));
   return { date: week, quests: defs.map((def) => ({ def, progress: 0, turnedIn: false })) };
 }
 

@@ -65,6 +65,7 @@ import {
 import type { Character, Equipment, Loot, OwnedItem } from "./types";
 import { attributeDamage, shieldArmorBonus } from "./weaponScaling";
 import { mainWeapon, matchupFactor, matchupOf, WEAPON_KIND, type DotKind } from "./matchups";
+import { BLESSING, stacks, type BlessingId } from "./tower";
 
 /** Kritische Trefferchance pro Charisma-Punkt (bis zur Obergrenze von 30 %). */
 export const CRIT_PER_CHARISMA = 0.002;
@@ -167,6 +168,10 @@ export type BattleEvent =
   | { type: "enemyRegen"; heal: number }
   /** Elite „Explosiv“: Der Gegner explodiert beim Tod – `blocked`: Bollwerk hat die Explosion abgefangen */
   | { type: "explosion"; damage: number; blocked?: boolean }
+  /** Turm-Segen „Dornen“: Der Angreifer erleidet einen Teil seines Schadens selbst */
+  | { type: "thorns"; damage: number; add?: string }
+  /** Turm-Segen „Zweiter Atem“: Der Held steht einmal wieder auf */
+  | { type: "secondWind"; heal: number }
   /** Der Held setzt eine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "ability"; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
   /** Der Held heilt sich durch eine Fähigkeit (Heiliges Licht, Blutrausch) */
@@ -272,6 +277,12 @@ export interface BattleState {
   elite?: EliteAffix[];
   /** Hauptwaffe des Helden – ihre Schadensart zählt bei normalen Angriffen (matchups.ts) */
   heroWeapon?: SkillWeapon | null;
+  /** Endlos-Turm: Segen des Laufs (tower.ts) – wirken im Kampf (Fokus, Blutdurst, Henker, Dornen, Alchemie, Zweiter Atem) */
+  blessings?: BlessingId[];
+  /** Zweiter Atem ist in diesem Lauf schon verbraucht */
+  secondWindUsed?: boolean;
+  /** Endlos-Turm: das Stockwerk dieses Kampfes (der Gegner kämpft auf dem Level des Helden) */
+  towerFloor?: number;
   /** Wirkungen auf den Helden */
   heroEffects: {
     /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
@@ -420,7 +431,10 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
   const blocker = potionBlocker(state, potion);
   if (blocker) throw new Error(blocker);
   const { effect } = potion;
-  const factor = state.heroClass === "cleric" && effect.kind === "heal" ? CLERIC_POTION_FACTOR : 1;
+  const factor =
+    effect.kind === "heal"
+      ? (state.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) * (1 + BLESSING.alchemy * stacks(state.blessings, "alchemy"))
+      : 1;
   const heal = Math.min(Math.round(potionHeal(potion, state.hero.maxHp) * factor), state.hero.maxHp - state.hero.hp);
   const buff = effect.kind === "heal" ? undefined : effect.kind;
   const event: BattleEvent = { type: "potion", potionId: potion.id, heal, ...(buff && { buff }) };
@@ -489,9 +503,15 @@ export function abilityBlocker(state: BattleState, id: AbilityId): string | null
   if (!state.abilities.includes(id)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
   const wait = state.cooldowns?.[id] ?? 0;
   if (wait > 0) return cooldownText(wait);
-  const { manaCost } = classAbility(id, state.heroClass);
+  const manaCost = abilityCost(state, id);
   if (state.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
+}
+
+/** Manakosten einer Fähigkeit – mit Klasse und dem Turm-Segen „Fokus“. */
+export function abilityCost(state: Pick<BattleState, "heroClass" | "blessings">, id: AbilityId): number {
+  const { manaCost } = classAbility(id, state.heroClass);
+  return Math.round(manaCost * Math.max(0, 1 - BLESSING.focus * stacks(state.blessings, "focus")));
 }
 
 /** Betäubt die Fähigkeit den Gegner? Manche nur mit einer Chance (Eissplitter, Schockwelle). */
@@ -583,8 +603,9 @@ export function attackRound(
 
   // 1. Aktion des Helden
   if (ability) {
-    mana -= ability.manaCost;
-    events.push({ type: "ability", ability: ability.id, weapon: ability.weapon, manaCost: ability.manaCost });
+    const manaCost = abilityCost(state, ability.id);
+    mana -= manaCost;
+    events.push({ type: "ability", ability: ability.id, weapon: ability.weapon, manaCost });
     if (ability.bulwark) heroEffects = { ...heroEffects, bulwark: true };
     if (ability.guard) heroEffects = { ...heroEffects, guard: ability.guard };
     // +1, weil die Verstärkung erst ab der nächsten Runde zählt (am Rundenende läuft eine ab)
@@ -617,7 +638,10 @@ export function attackRound(
   /** Ein Treffer des Helden – `share` < 1 bei Splash-Schaden auf Umstehende. */
   const strike = (foe: Foe, share = 1) => {
     // Finisher (Meucheln): mehr Schaden gegen angeschlagene Gegner
-    const execute = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
+    const finisher = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
+    // Turm-Segen „Henker“: mehr Schaden gegen angeschlagene Gegner
+    const headsman = foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(state.blessings, "executioner") : 1;
+    const execute = finisher * headsman;
     const taken = takenBy(foe);
     // Schwäche oder Resistenz gegen die Schadensart der Waffe
     const matchup = heroKind ? matchupOf(foe.creatureId, heroKind) : null;
@@ -663,7 +687,7 @@ export function attackRound(
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
   if (!ability && state.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
   // Lebensraub: Blutrausch und Plünderer
-  const lifesteal = lifestealShare(state.heroClass, ability);
+  const lifesteal = lifestealShare(state.heroClass, ability) + BLESSING.bloodthirst * stacks(state.blessings, "bloodthirst");
   if (lifesteal > 0 && dealtByHero > 0) {
     const heal = Math.min(hero.maxHp - hero.hp, Math.round(dealtByHero * lifesteal));
     hero = { ...hero, hp: hero.hp + heal };
@@ -699,6 +723,15 @@ export function attackRound(
     for (const foe of aoe === "all" ? living() : [target]) if (foe.c.hp > 0 && stunLands(ability, rng)) stunned.add(foe);
   }
   const elite = state.elite ?? [];
+  /** Turm-Segen „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst. */
+  const thorns = (foe: Foe, damage: number) => {
+    const share = BLESSING.thorns * stacks(state.blessings, "thorns");
+    if (share <= 0 || damage <= 0 || foe.c.hp <= 0) return;
+    const back = Math.max(1, Math.round(damage * share));
+    foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - back) };
+    events.push({ type: "thorns", damage: back, ...foeTag(foe) });
+    addDown(foe);
+  };
   /** Der Gegner fällt – ein explosiver Elite reisst den Helden womöglich mit (Bollwerk blockt). */
   const enemyDown = () => {
     if (elite.includes("explosive") && hero.hp > 0) {
@@ -773,6 +806,7 @@ export function attackRound(
           dealt += damage;
           events.push({ type: "hit", attacker: "enemy", ...enemyHit, damage });
         }
+        thorns(boss, dealt);
         if (guard) {
           heroEffects = { ...heroEffects, guard: undefined };
           events.push({ type: "guarded", prevented: raw - dealt });
@@ -827,6 +861,7 @@ export function attackRound(
         const enemyHit = rollHit({ ...foe.c, damage: foe.c.damage * weakened }, strong, rng);
         hero = { ...hero, hp: Math.max(0, hero.hp - enemyHit.damage) };
         events.push({ type: "hit", attacker: "enemy", ...enemyHit, ...foeTag(foe) });
+        thorns(foe, enemyHit.damage);
       }
     }
     if (blocked) heroEffects = { ...heroEffects, bulwark: undefined };
@@ -857,9 +892,22 @@ export function attackRound(
     }
   }
 
+  // Turm-Segen „Zweiter Atem“: Wer fällt, steht einmal pro Lauf wieder auf (der Gegner lebt noch)
+  let secondWindUsed = state.secondWindUsed;
+  if (status === "lost" && hero.hp === 0 && boss.c.hp > 0 && !secondWindUsed && stacks(state.blessings, "secondWind") > 0) {
+    const last = events.at(-1);
+    if (last?.type === "defeated" && last.side === "hero") events.pop();
+    const heal = Math.round(hero.maxHp * BLESSING.secondWind);
+    hero = { ...hero, hp: heal };
+    status = "active";
+    secondWindUsed = true;
+    events.push({ type: "secondWind", heal });
+  }
+
   return {
     state: {
       ...state,
+      ...(secondWindUsed && { secondWindUsed }),
       hero,
       enemy: boss.c,
       enemyEffects: tickEnemyEffects(boss.fx),
