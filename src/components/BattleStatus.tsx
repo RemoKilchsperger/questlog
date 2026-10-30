@@ -5,6 +5,7 @@
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import type { AbilityDef, Guard } from "../domain/abilities";
+import { ADD_ROLES, DRUMMER_BONUS, getBossPhase, SHIELD_DAMAGE_TAKEN, type AddRole } from "../domain/bossMechanics";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
 import { BUFF_LABELS, type BuffKind } from "../domain/potions";
 import { Hint } from "./HoverCard";
@@ -104,6 +105,56 @@ export function enemyStatusChips(effects: EnemyEffects): StatusChip[] {
   return chips;
 }
 
+/**
+ * Was die Boss-Mechaniken gerade bewirken (bossMechanics.ts): Raserei nach der
+ * zweiten Phase, Schutz durch den Schildträger, Anfeuern durch den Trommler.
+ * Rot getönt – es hilft dem Boss.
+ */
+export function bossMechanicChips(
+  bossId: string,
+  phase: boolean | undefined,
+  adds: readonly { role?: AddRole; combatant: { hp: number } }[],
+): StatusChip[] {
+  const chips: StatusChip[] = [];
+  const phaseDef = getBossPhase(bossId);
+  if (phase && phaseDef?.enrage) {
+    chips.push({ key: "enrage", icon: phaseDef.icon, text: `Raserei +${pct(phaseDef.enrage)}`, tone: "bad", title: `${phaseDef.name}: ${phaseDef.description}` });
+  }
+  const alive = (role: AddRole) => adds.some((a) => a.role === role && a.combatant.hp > 0);
+  if (alive("shield")) {
+    chips.push({ key: "shield", icon: ADD_ROLES.shield.icon, text: `Geschützt −${pct(1 - SHIELD_DAMAGE_TAKEN)}`, tone: "bad", title: ADD_ROLES.shield.description });
+  }
+  if (alive("drummer")) {
+    chips.push({ key: "drummer", icon: ADD_ROLES.drummer.icon, text: `Angefeuert +${pct(DRUMMER_BONUS)}`, tone: "bad", title: ADD_ROLES.drummer.description });
+  }
+  if (alive("healer")) {
+    chips.push({ key: "healer", icon: ADD_ROLES.healer.icon, text: "Wird geheilt", tone: "bad", title: ADD_ROLES.healer.description });
+  }
+  return chips;
+}
+
+/** So knapp über der Schwelle kündigt sich die zweite Phase an (Anteil der maximalen LP). */
+const PHASE_WARNING = 0.15;
+
+/** Kündigt die zweite Phase des Bosses an, sobald er sich ihrer Schwelle nähert. */
+export function PhaseWarning({ bossId, phase, boss }: { bossId: string; phase: boolean | undefined; boss: { hp: number; maxHp: number } }) {
+  const def = getBossPhase(bossId);
+  if (!def || phase || boss.hp <= 0 || boss.hp >= boss.maxHp * (def.at + PHASE_WARNING)) return null;
+  return (
+    <motion.p
+      initial={{ scale: 0.95, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className="rounded-md border-2 border-gold/70 bg-gold/10 px-3 py-1.5 text-sm text-gold"
+    >
+      ⚠️ Unter {pct(def.at)} Lebenspunkten wechselt der Boss in seine zweite Phase:{" "}
+      <strong>
+        {def.icon} {def.name}
+      </strong>{" "}
+      – {def.description}
+    </motion.p>
+  );
+}
+
 const TONES: Record<StatusChip["tone"], string> = {
   good: "border-xp/40 bg-xp/10 text-xp",
   bad: "border-danger/40 bg-danger/10 text-danger",
@@ -140,6 +191,8 @@ export interface TargetOption {
   combatant: { name: string; hp: number; maxHp: number };
   effects: EnemyEffects;
   boss: boolean;
+  /** Aufgabe des Begleiters (Heiler, Schildträger, Trommler) */
+  role?: AddRole;
 }
 
 /** Boss und Begleiter als Knöpfe: Lebenspunkte und Effekte im Blick, das gewählte Ziel hervorgehoben. */
@@ -157,9 +210,10 @@ export function TargetPicker({
   return (
     <ActionGroup label="Ziel" hint="Fällt der Boss, ist der Kampf gewonnen · Flächen-Fähigkeiten treffen mehrere">
       <div className="grid gap-2 sm:grid-cols-3">
-        {foes.map(({ uid, combatant, effects, boss }) => {
+        {foes.map(({ uid, combatant, effects, boss, role }) => {
           const down = combatant.hp === 0;
           const isSelected = selected === uid;
+          const roleDef = role && ADD_ROLES[role];
           return (
             <button
               key={uid ?? "boss"}
@@ -167,6 +221,7 @@ export function TargetPicker({
               disabled={disabled || down}
               onClick={() => onChoose(uid)}
               aria-pressed={isSelected}
+              title={roleDef ? `${roleDef.name}: ${roleDef.description}` : undefined}
               className={`flex min-w-0 flex-col gap-1 rounded-md border-2 px-2 py-1.5 text-left disabled:cursor-not-allowed ${
                 isSelected ? "border-gold bg-gold/10" : "border-night-600 hover:border-muted"
               } ${down ? "opacity-40" : ""}`}
@@ -175,12 +230,14 @@ export function TargetPicker({
                 <span className="truncate font-bold">
                   {isSelected && "▼ "}
                   {boss && "👑 "}
+                  {roleDef && `${roleDef.icon} `}
                   {combatant.name}
                 </span>
                 <span className="num shrink-0 text-xs text-muted">
                   {down ? "besiegt" : `${combatant.hp}/${combatant.maxHp}`}
                 </span>
               </span>
+              {roleDef && <span className="truncate text-xs text-danger">{roleDef.name}</span>}
               <span className="h-1.5 overflow-hidden rounded-sm bg-night-700">
                 <span className="block h-full bg-danger" style={{ width: `${(combatant.hp / combatant.maxHp) * 100}%` }} />
               </span>

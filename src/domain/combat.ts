@@ -12,6 +12,10 @@
 // Begleiter (Adds): Manche Bosse kämpfen nicht allein. Der Held wählt sein Ziel
 // (Standard: der Boss), Flächen-Fähigkeiten treffen mehrere. Fällt der Boss, ist
 // der Kampf gewonnen – die Begleiter fliehen. Besiegte Begleiter bleiben liegen.
+//
+// Boss-Mechaniken (bossMechanics.ts): Begleiter mit Aufgabe (Heiler, Schildträger,
+// Trommler) helfen dem Boss, solange sie stehen. Unter der Hälfte seiner LP
+// wechselt der Boss einmal in seine zweite Phase (Raserei und/oder Sammelruf).
 
 import { getArmorClassSummary, getCombatStats, getEffectiveStats } from "./equipment";
 import {
@@ -31,6 +35,7 @@ import { rollDrop } from "./loot";
 import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potions";
 import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
+import { bossDamageDealtFactor, bossDamageTakenFactor, HEALER_HEAL, phaseDue, type AddRole } from "./bossMechanics";
 import { getSetHpMultiplier } from "./bossSets";
 import { abilitiesOf, freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
@@ -129,8 +134,15 @@ export interface Combatant {
 export type BattleEvent =
   /** `heal` = geheilte LP (0 bei Verstärkungstränken), `buff` = welche Verstärkung beginnt */
   | { type: "potion"; potionId: string; heal: number; buff?: BuffKind }
-  /** `add`: der beteiligte Begleiter – Ziel des Helden bzw. Angreifer (fehlt: der Boss) */
-  | { type: "hit"; attacker: Side; damage: number; crit: boolean; add?: string }
+  /**
+   * `add`: der beteiligte Begleiter – Ziel des Helden bzw. Angreifer (fehlt: der Boss).
+   * `shielded`: Ein Schildträger hat den Treffer auf den Boss gemindert.
+   */
+  | { type: "hit"; attacker: Side; damage: number; crit: boolean; add?: string; shielded?: boolean }
+  /** Ein Heiler unter den Begleitern heilt den Boss */
+  | { type: "addHeal"; add: string; heal: number }
+  /** Der Boss fällt in seine zweite Phase (bossMechanics.ts) – `rally`: diese Begleiter stehen mit vollen LP (wieder) da */
+  | { type: "bossPhase"; bossId: string; rally?: string[] }
   /** Der Held setzt eine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "ability"; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
   /** Der Held heilt sich durch eine Fähigkeit (Heiliges Licht, Blutrausch) */
@@ -199,6 +211,8 @@ export interface BattleAdd {
   /** "add-1", "add-2", … */
   uid: string;
   creatureId: string;
+  /** Aufgabe im Kampf: Heiler, Schildträger, Trommler (bossMechanics.ts) */
+  role?: AddRole;
   combatant: Combatant;
   effects: EnemyEffects;
 }
@@ -228,6 +242,8 @@ export interface BattleState {
   adds?: BattleAdd[];
   /** Ziel des Helden: uid eines Begleiters – fehlt, greift er den Boss an */
   target?: string;
+  /** Der Boss ist in seiner zweiten Phase (bossMechanics.ts) – sie kommt nur einmal */
+  phase?: boolean;
   /** Wirkungen auf den Helden */
   heroEffects: {
     /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
@@ -293,7 +309,8 @@ export function startBattle(
         return {
           uid: `add-${i + 1}`,
           creatureId: def.id,
-          combatant: { name: def.name, level: creature.level, ...stats, maxHp, hp: maxHp, damage: stats.damage * add.damage },
+          ...(add.role && { role: add.role }),
+          combatant: { name: add.name ?? def.name, level: creature.level, ...stats, maxHp, hp: maxHp, damage: stats.damage * add.damage },
           effects: {},
         };
       }),
@@ -458,9 +475,13 @@ export const freezeFlag = (ability: AbilityDef | null): { freeze?: true } => (ab
 /** Ein Gegner in der laufenden Runde: der Boss (ohne `add`) oder ein Begleiter. */
 interface Foe {
   add?: string;
+  role?: AddRole;
   c: Combatant;
   fx: EnemyEffects;
 }
+
+/** Rollen der Begleiter (bossMechanics.ts) zählen nur, solange sie stehen. */
+const roleHolders = (adds: readonly Foe[]) => adds.map((f) => ({ role: f.role, hp: f.c.hp }));
 
 const foeTag = (foe: Foe): { add?: string } => (foe.add ? { add: foe.add } : {});
 
@@ -496,7 +517,10 @@ export function attackRound(
   let status: BattleStatus = "active";
   // Der Boss zuerst, dann die Begleiter – Kopien, die sich in dieser Runde ändern
   const boss: Foe = { c: state.enemy, fx: state.enemyEffects };
-  const adds: Foe[] = (state.adds ?? []).map((a) => ({ add: a.uid, c: a.combatant, fx: a.effects }));
+  const adds: Foe[] = (state.adds ?? []).map((a) => ({ add: a.uid, role: a.role, c: a.combatant, fx: a.effects }));
+  let phase = state.phase;
+  /** Schildträger: Der Boss erleidet weniger Schaden, solange einer steht */
+  const takenBy = (foe: Foe) => (foe === boss ? bossDamageTakenFactor(roleHolders(adds)) : 1);
   const foes = [boss, ...adds];
   const living = () => foes.filter((f) => f.c.hp > 0);
   const target = adds.find((f) => f.add === state.target && f.c.hp > 0) ?? boss;
@@ -549,17 +573,18 @@ export function attackRound(
   const strike = (foe: Foe, share = 1) => {
     // Finisher (Meucheln): mehr Schaden gegen angeschlagene Gegner
     const execute = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
+    const taken = takenBy(foe);
     const attacker: Combatant = ability
       ? {
           ...strong,
-          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share,
+          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share * taken,
           critChance: ability.guaranteedCrit ? 1 : strong.critChance,
         }
-      : { ...strong, damage: strong.damage * vulnerableOf(foe) };
+      : { ...strong, damage: strong.damage * vulnerableOf(foe) * taken };
     const heroHit = rollHit(attacker, { ...foe.c, armor: armorOf(foe) }, rng);
     dealtByHero += Math.min(foe.c.hp, heroHit.damage);
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - heroHit.damage) };
-    events.push({ type: "hit", attacker: "hero", ...heroHit, ...foeTag(foe) });
+    events.push({ type: "hit", attacker: "hero", ...heroHit, ...foeTag(foe), ...(taken < 1 && { shielded: true }) });
     // Plünderer: kritische Treffer lassen bluten
     if (heroHit.crit && state.heroClass === "plunderer" && foe.c.hp > 0) {
       const damage = Math.max(1, Math.round(strong.damage * PLUNDERER_BLEED.percent));
@@ -597,7 +622,7 @@ export function attackRound(
     for (const kind of OVER_TIME) {
       const effect = foe.fx[kind];
       if (effect && foe.c.hp > 0 && boss.c.hp > 0) {
-        const damage = Math.round(effect.damage * vulnerableOf(foe));
+        const damage = Math.max(1, Math.round(effect.damage * vulnerableOf(foe) * takenBy(foe)));
         foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - damage) };
         events.push({ type: kind, target: "enemy", damage, ...foeTag(foe) });
         foe.fx = { ...foe.fx, [kind]: tickOverTime(effect) };
@@ -627,6 +652,21 @@ export function attackRound(
     status = "lost";
     events.push({ type: "defeated", side: "hero" });
   } else {
+    // Zweite Phase: Raserei und/oder Sammelruf – wirkt schon auf den folgenden Gegenangriff
+    const nextPhase = phaseDue(state.creatureId, phase, boss.c);
+    if (nextPhase) {
+      phase = true;
+      if (nextPhase.enrage) boss.c = { ...boss.c, damage: boss.c.damage * (1 + nextPhase.enrage) };
+      // Sammelruf: nur gewöhnliche Begleiter – wer Heiler, Schildträger oder Trommler besiegt hat, ist ihn los
+      const rallied = nextPhase.rally ? adds.filter((f) => !f.role) : [];
+      for (const foe of rallied) {
+        foe.c = { ...foe.c, hp: foe.c.maxHp };
+        foe.fx = {};
+      }
+      events.push({ type: "bossPhase", bossId: state.creatureId, ...(nextPhase.rally && { rally: rallied.map((f) => f.add!) }) });
+    }
+    // Trommler: Der Boss macht mehr Schaden, solange einer steht
+    const drums = bossDamageDealtFactor(roleHolders(adds));
     // Bollwerk blockt den ganzen gegnerischen Zug – Boss und Begleiter samt Zusatzeffekten.
     const bulwark = heroEffects.bulwark;
     let blocked = false;
@@ -644,7 +684,7 @@ export function attackRound(
       } else {
         // Geschwächte Gegner machen weniger Schaden
         const weakened = 1 - (boss.fx.weaken?.percent ?? 0);
-        const attacker = { ...boss.c, damage: boss.c.damage * (special?.multiplier ?? 1) * weakened };
+        const attacker = { ...boss.c, damage: boss.c.damage * (special?.multiplier ?? 1) * weakened * drums };
         const defender = special?.ignoreArmor ? { ...strong, armor: 0 } : strong;
         // Parade/Vergeltung wirkt nur gegen den Boss – den grossen Treffer
         const guard = heroEffects.guard;
@@ -664,7 +704,8 @@ export function attackRound(
           events.push({ type: "guarded", prevented: raw - dealt });
           let counter = guard.reflect ? Math.round(raw * guard.reflect) : 0;
           if (guard.counter && hero.hp > 0) {
-            counter += rollHit({ ...strong, damage: strong.damage * guard.counter }, { ...boss.c, armor: armorOf(boss) }, rng).damage;
+            const damage = strong.damage * guard.counter * takenBy(boss);
+            counter += rollHit({ ...strong, damage }, { ...boss.c, armor: armorOf(boss) }, rng).damage;
           }
           if (counter > 0) {
             boss.c = { ...boss.c, hp: Math.max(0, boss.c.hp - counter) };
@@ -684,16 +725,20 @@ export function attackRound(
         for (const kind of OVER_TIME) {
           const effect = special?.[kind];
           if (!effect) continue;
-          const damage = Math.max(1, Math.round(boss.c.damage * effect.percent));
+          const damage = Math.max(1, Math.round(boss.c.damage * drums * effect.percent));
           heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: effect.rounds } };
         }
       }
     }
-    // Begleiter: je ein normaler Angriff, solange Boss und Held stehen
+    // Begleiter: je ein normaler Angriff, solange Boss und Held stehen – Heiler heilen stattdessen den Boss
     for (const foe of adds) {
       if (foe.c.hp === 0 || boss.c.hp === 0 || hero.hp === 0) continue;
       if (stunned.has(foe)) {
         events.push({ type: "stunned", ...freezeFlag(ability), ...foeTag(foe) });
+      } else if (foe.role === "healer") {
+        const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * HEALER_HEAL));
+        boss.c = { ...boss.c, hp: boss.c.hp + heal };
+        if (heal > 0) events.push({ type: "addHeal", add: foe.add!, heal });
       } else if (bulwark) {
         events.push({ type: "blocked", ...foeTag(foe) });
         blocked = true;
@@ -734,6 +779,7 @@ export function attackRound(
       }),
       // Ist das gewählte Ziel gefallen, geht es wieder gegen den Boss
       target: target.add !== undefined && target.c.hp > 0 ? target.add : undefined,
+      ...(phase && { phase }),
       heroEffects: { ...heroEffects, empower: tickBuff(heroEffects.empower) },
       mana: Math.min(state.maxMana, mana + MANA_REGEN),
       cooldowns: tickCooldowns(state.cooldowns, ability),

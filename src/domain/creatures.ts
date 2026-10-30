@@ -2,6 +2,7 @@
 // Kreaturen plus einen Boss. Die Kampfwerte werden aus Level und Boss-Status
 // berechnet, damit die Balance an einer Stelle angepasst werden kann.
 
+import type { AddRole } from "./bossMechanics";
 import { xpRewardBase } from "./leveling";
 import type { Rarity } from "./types";
 
@@ -15,7 +16,12 @@ export interface CreatureDef {
   /** Faktor auf Lebenspunkte und Schaden – Dungeon-Gegner sind stärker (Standard 1) */
   power?: number;
   /** Nur Bosse: eigene Faktoren auf Lebenspunkte und Schaden statt BOSS_HP_FACTOR / BOSS_DAMAGE_FACTOR */
-  bossFactors?: { hp: number; damage: number };
+  bossFactors?: {
+    hp: number;
+    damage: number;
+    /** Nur Dungeon-Bosse im Koop: LP-Faktor statt `hp` (siehe `withAdds`) */
+    coopHp?: number;
+  };
   /**
    * Nur Bosse: Begleiter, die von Anfang an mitkämpfen – normale Kreaturen mit
    * eigenen Faktoren auf Lebenspunkte und Schaden. Fällt der Boss, fliehen sie.
@@ -29,6 +35,10 @@ export interface BossAdd {
   count: number;
   hp: number;
   damage: number;
+  /** Aufgabe im Kampf (bossMechanics.ts) – fehlt bei gewöhnlichen Begleitern */
+  role?: AddRole;
+  /** Eigener Name statt dem der Kreatur (z. B. „Goblin-Trommler“) */
+  name?: string;
 }
 
 export interface AreaDef {
@@ -76,14 +86,28 @@ export const DUNGEON_BOSS_FACTORS = { hp: 1.7, damage: 0.9 };
 export const ADD_FACTORS = { hp: 0.25, damage: 0.5 };
 
 /**
- * Boss mit zwei Begleitern. Weil sie mitschlagen, hält der Boss selbst weniger aus:
- * `hp` ersetzt seinen LP-Faktor – per Simulation so gewählt, dass ein gut gespielter
- * Champion mit seltener Ausrüstung und Heiltränken etwa so oft gewinnt wie ohne Begleiter.
+ * Boss mit zwei Begleitern: einem gewöhnlichen und einem mit Rolle (Heiler,
+ * Schildträger oder Trommler, siehe bossMechanics.ts). Weil sie mitschlagen, hält
+ * der Boss selbst weniger aus: `hp` ersetzt seinen LP-Faktor – per Simulation so
+ * gewählt, dass ein gut gespielter Held mit seltener Ausrüstung und Heiltränken
+ * etwa so oft gewinnt wie ohne Begleiter.
+ *
+ * `coopHp`: Im Koop-Dungeon fällt der Begleiter mit Rolle in einer Runde, weil alle
+ * auf ihn gehen – dort braucht der Boss die Senkung nicht (eigener LP-Faktor).
  */
-const withAdds = (boss: CreatureDef, creatureId: string, hp: number): CreatureDef => ({
+const withAdds = (
+  boss: CreatureDef,
+  creatureId: string,
+  hp: number,
+  roleAdd: { creatureId: string; role: AddRole; name?: string },
+  coopHp?: number,
+): CreatureDef => ({
   ...boss,
-  bossFactors: { ...boss.bossFactors!, hp },
-  adds: [{ creatureId, count: 2, ...ADD_FACTORS }],
+  bossFactors: { ...boss.bossFactors!, hp, ...(coopHp && { coopHp }) },
+  adds: [
+    { creatureId, count: 1, ...ADD_FACTORS },
+    { ...roleAdd, count: 1, ...ADD_FACTORS },
+  ],
 });
 
 const c = (id: string, name: string, sprite: string, level: number, boss = false): CreatureDef => ({
@@ -108,7 +132,7 @@ export const AREAS: readonly AreaDef[] = [
       c("grey-wolf", "Grauwolf", "wolf", 3),
       c("forest-spider", "Waldspinne", "spider", 5),
       c("goblin-raider", "Goblin-Plünderer", "goblin", 7),
-      withAdds(c("goblin-chief", "Goblinhäuptling Krummzahn", "goblin-chief", 10, true), "goblin-raider", 1.9),
+      withAdds(c("goblin-chief", "Goblinhäuptling Krummzahn", "goblin-chief", 10, true), "goblin-raider", 1.6, { creatureId: "goblin-raider", role: "drummer", name: "Goblin-Trommler" }),
     ],
   },
   {
@@ -123,7 +147,7 @@ export const AREAS: readonly AreaDef[] = [
       c("bog-serpent", "Moorschlange", "snake", 13),
       c("bog-corpse", "Moorleiche", "zombie", 15),
       c("blood-swarm", "Blutmückenschwarm", "mosquitoes", 17),
-      withAdds(c("ancient-lizard", "Uralte Sumpfechse", "swamp-lizard", 20, true), "bog-serpent", 1.9),
+      withAdds(c("ancient-lizard", "Uralte Sumpfechse", "swamp-lizard", 20, true), "bog-serpent", 1.7, { creatureId: "marsh-toad", role: "healer" }),
     ],
   },
   {
@@ -138,7 +162,7 @@ export const AREAS: readonly AreaDef[] = [
       c("stone-golem", "Steingolem", "golem", 23),
       c("crystal-scorpion", "Kristallskorpion", "scorpion", 25),
       c("rock-worm", "Felswurm", "worm", 27),
-      withAdds(c("cave-eye", "Das Höhlenauge", "eye", 30, true), "cave-bat", 1.75),
+      withAdds(c("cave-eye", "Das Höhlenauge", "eye", 30, true), "cave-bat", 1.5, { creatureId: "stone-golem", role: "shield" }),
     ],
   },
   {
@@ -153,7 +177,7 @@ export const AREAS: readonly AreaDef[] = [
       c("frost-elemental", "Frostelementar", "frost-elemental", 33),
       c("snow-wolf", "Schneewolf", "snow-wolf", 35),
       c("frost-troll", "Frosttroll", "troll", 37),
-      withAdds(c("primal-mammoth", "Urmammut Graufrost", "mammoth", 40, true), "snow-wolf", 1.55),
+      withAdds(c("primal-mammoth", "Urmammut Graufrost", "mammoth", 40, true), "snow-wolf", 1.3, { creatureId: "frost-troll", role: "drummer" }),
     ],
   },
   {
@@ -168,7 +192,7 @@ export const AREAS: readonly AreaDef[] = [
       c("wailing-ghost", "Klagegeist", "ghost", 43),
       c("bloodsucker", "Blutsauger", "vampire", 45),
       c("dark-sorcerer", "Dunkler Hexer", "sorcerer", 47),
-      withAdds({ ...c("lich-king", "Der Lichkönig", "lich", 50, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "skeleton-warrior", 2.25),
+      withAdds({ ...c("lich-king", "Der Lichkönig", "lich", 50, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "skeleton-warrior", 1.85, { creatureId: "dark-sorcerer", role: "healer" }),
     ],
   },
   {
@@ -183,7 +207,7 @@ export const AREAS: readonly AreaDef[] = [
       c("flame-elemental", "Flammenelementar", "flame-elemental", 53),
       c("young-dragon", "Jungdrache", "dragon", 56),
       c("demon-guard", "Dämonenwächter", "demon", 58),
-      withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 2),
+      withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 1.55, { creatureId: "demon-guard", role: "shield" }),
     ],
   },
 ];
@@ -214,7 +238,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("mine-rat", "Minenratte", "mine-rat", 10, DUNGEON_POWER),
       d("kobold-blaster", "Kobold-Sprengmeister", "kobold", 11, DUNGEON_POWER),
       d("pit-spider", "Grubenspinne", "pit-spider", 11, DUNGEON_POWER),
-      withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 1.2),
+      withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 0.95, { creatureId: "kobold-blaster", role: "drummer", name: "Kobold-Trommler" }, 1.05),
     ],
   },
   {
@@ -229,7 +253,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("temple-guardian", "Tempelwächter", "temple-guardian", 25, DUNGEON_POWER),
       d("cobra-priest", "Kobra-Priester", "cobra-priest", 26, DUNGEON_POWER),
       d("mummy", "Mumie", "mummy", 26, DUNGEON_POWER),
-      withAdds(d("high-priestess", "Hohepriesterin Neferet", "high-priestess", 27, 1, true), "cobra-priest", 1.3),
+      withAdds(d("high-priestess", "Hohepriesterin Neferet", "high-priestess", 27, 1, true), "cobra-priest", 1.2, { creatureId: "cobra-priest", role: "healer" }, 1.45),
     ],
   },
   {
@@ -244,7 +268,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("thunder-elemental", "Gewitterelementar", "thunder-elemental", 40, DUNGEON_POWER),
       d("stone-gargoyle", "Steingargoyle", "gargoyle", 41, DUNGEON_POWER),
       d("lightning-caller", "Blitzbeschwörer", "lightning-caller", 41, DUNGEON_POWER),
-      withAdds(d("storm-lord", "Sturmfürst Kaelthar", "storm-lord", 42, 1, true), "lightning-caller", 1.45),
+      withAdds(d("storm-lord", "Sturmfürst Kaelthar", "storm-lord", 42, 1, true), "lightning-caller", 1.2, { creatureId: "stone-gargoyle", role: "shield" }, 1.45),
     ],
   },
   {
@@ -259,7 +283,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("void-crawler", "Leerenkriecher", "void-crawler", 60, ABYSS_POWER),
       d("shadow-demon", "Schattendämon", "shadow-demon", 60, ABYSS_POWER),
       d("soul-eater", "Seelenfresser", "soul-eater", 60, ABYSS_POWER),
-      withAdds(d("void-lord", "Leerenfürst Xal'Zar", "void-lord", 60, 1, true), "void-crawler", 1.45),
+      withAdds(d("void-lord", "Leerenfürst Xal'Zar", "void-lord", 60, 1, true), "void-crawler", 1.15, { creatureId: "soul-eater", role: "healer" }, 1.35),
     ],
   },
 ];

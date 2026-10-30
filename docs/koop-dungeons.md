@@ -116,6 +116,11 @@ Dungeon mit seltener Ausrüstung, ohne → mit Begleitern):
 
 Die Raid-Bosse kämpfen (noch) ohne Begleiter.
 
+Seit den Boss-Mechaniken (docs/boss-mechaniken.md) hat einer der beiden Begleiter eine Aufgabe (Heiler,
+Schildträger, Trommler), und der Boss wechselt unter 50 % LP in eine zweite Phase. Die Tabelle oben ist der
+Stand davor. Weil die Gruppe den Begleiter mit Aufgabe in einer Runde ausschaltet, haben die Endbosse im Koop
+einen eigenen LP-Faktor (`coopHp`, siehe dort).
+
 ### 3.4 Zufällige Beute, die beim Neuladen gleich bleibt
 
 Jeder würfelt seine Beute selbst, mit einem Startwert aus Kampf, Gegner und Spieler. So zeigt der

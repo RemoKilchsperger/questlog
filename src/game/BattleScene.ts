@@ -5,6 +5,7 @@
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
 import { getBossAbilityById } from "../domain/bossAbilities";
+import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
 import type { BattleEvent, BattleState, Side } from "../domain/combat";
 import { getCreature } from "../domain/creatures";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
@@ -146,7 +147,9 @@ export class BattleScene extends Phaser.Scene {
         : this.addBody(x, `creature-${sprite}`, getCreatureSprite(sprite), ADD_SPRITE_SCALE);
       parts.body.setDepth(i % 2 === 0 ? 2 : -0.5);
       const { name, level, hp, maxHp } = add.combatant;
-      this.fighters[add.uid] = this.createFighter(parts, name, level, hp, maxHp, true);
+      // Begleiter mit Rolle tragen ihr Zeichen vor dem Namen (💚 Heiler, 🛡️ Schildträger, 🥁 Trommler)
+      const label = add.role ? `${ADD_ROLES[add.role].icon} ${name}` : name;
+      this.fighters[add.uid] = this.createFighter(parts, label, level, hp, maxHp, true);
     });
     if (battle.adds?.length) this.enableTargeting(battle);
 
@@ -414,9 +417,11 @@ export class BattleScene extends Phaser.Scene {
           ? event.type === "defeated" && event.add
             ? 450
             : 900
-          : event.type === "ability" || event.type === "bossAbility"
+          : event.type === "bossPhase"
+            ? 1100
+            : event.type === "ability" || event.type === "bossAbility"
             ? 600
-            : event.type === "manaBurn" || event.type === "drain"
+            : event.type === "manaBurn" || event.type === "drain" || event.type === "addHeal"
               ? 500
               : sideHit || event.type === "blocked" || (event.type === "stunned" && event.add)
                 ? 300
@@ -532,6 +537,20 @@ export class BattleScene extends Phaser.Scene {
     } else if (event.type === "hit") {
       if (event.attacker === "hero") this.heroHit(event, special as AbilityId | null);
       else this.enemyHit(event, special);
+      // Der Schildträger fängt einen Teil ab – blauer Schimmer um den Boss
+      if (event.shielded) this.time.delayedCall(150, () => fx.ring(this, this.center("enemy"), 0x7aa7f0, 75, 350));
+    } else if (event.type === "addHeal") {
+      // Lebenskraft fliesst vom Heiler zum Boss
+      const enemy = this.fighters.enemy;
+      fx.siphon(this, this.center(event.add), this.center("enemy"), 0x7dd3a8, 10);
+      sfx.heal();
+      this.time.delayedCall(350, () => {
+        this.setHp("enemy", Math.min(enemy.maxHp, enemy.hp + event.heal));
+        this.floatText(enemy.homeX, GROUND_Y - 105, `+${event.heal}`, "#7dd3a8", 26);
+        this.tint(enemy, 0x9dffc8, 300);
+      });
+    } else if (event.type === "bossPhase") {
+      this.showBossPhase(event.bossId, event.rally ?? []);
     } else if (event.type === "selfHeal") {
       const hero = this.fighters.hero;
       this.setHp("hero", hero.hp + event.heal);
@@ -555,9 +574,9 @@ export class BattleScene extends Phaser.Scene {
       this.setHp("hero", hero.hp + event.heal);
       this.floatText(hero.homeX, GROUND_Y - 105, `+${event.heal}`, "#9dffc8", 22);
       this.sparkles(hero.homeX, GROUND_Y - 60, 0x9dffc8);
-    } else if (event.add) {
+    } else if (event.type === "defeated" && event.add) {
       this.showAddDefeat(event.add, false);
-    } else {
+    } else if (event.type === "defeated") {
       music.stop(this, 0.3);
       this.showDefeat(event.side, false);
     }
@@ -1268,6 +1287,62 @@ export class BattleScene extends Phaser.Scene {
       .setStroke("#0e0b16", 8)
       .setScale(instant ? 1 : 0.2);
     if (!instant) this.tweens.add({ targets: banner, scale: 1, duration: 450, ease: "Back.easeOut", delay: 250 });
+  }
+
+  /**
+   * Zweite Phase des Bosses: Name gross in der Mitte, der Boss brüllt – bei Raserei glüht er rot,
+   * beim Sammelruf stehen die Begleiter mit vollen Lebenspunkten wieder auf.
+   */
+  private showBossPhase(bossId: string, rally: string[]) {
+    const phase = getBossPhase(bossId);
+    const enemy = this.fighters.enemy;
+    sfx.roar();
+    this.cameras.main.shake(350, 0.01);
+    fx.flash(this, phase?.enrage ? 0xc23a3a : 0xf4c95d, 0.25, 250);
+    const banner = this.add
+      .text(SCENE_WIDTH / 2, 120, `${phase?.icon ?? ""} ${phase?.name ?? "Zweite Phase"}`.trim(), {
+        fontFamily: FONT,
+        fontSize: "40px",
+        color: phase?.enrage ? "#f0776a" : "#f4c95d",
+      })
+      .setOrigin(0.5)
+      .setStroke("#0e0b16", 7)
+      .setScale(0.3)
+      .setDepth(6);
+    this.tweens.chain({
+      targets: banner,
+      tweens: [
+        { scale: 1, duration: 300, ease: "Back.easeOut" },
+        { alpha: 0, duration: 400, delay: 500, onComplete: () => banner.destroy() },
+      ],
+    });
+    if (phase?.enrage) {
+      this.tint(enemy, 0xff6b5a, 900);
+      fx.rise(this, this.center("enemy"), 0xc23a3a, 14, 90);
+    }
+    for (const uid of rally) this.reviveAdd(uid);
+  }
+
+  /** Sammelruf: Der Begleiter steht (wieder) auf, mit vollen Lebenspunkten. */
+  private reviveAdd(uid: string) {
+    const f = this.fighters[uid];
+    if (!f) return;
+    this.tweens.killTweensOf(f.body);
+    const groundY = f.groundY ?? f.body.y;
+    this.tweens.add({
+      targets: f.body,
+      alpha: 1,
+      angle: 0,
+      y: groundY,
+      duration: 400,
+      ease: "Back.easeOut",
+      onComplete: () => {
+        f.breath = this.tweens.add({ targets: f.body, y: groundY - 4, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      },
+    });
+    f.images[0].setInteractive();
+    this.setHp(uid, f.maxHp);
+    fx.pillar(this, this.center(uid), 0xf4c95d, 50);
   }
 
   /** Ein Begleiter fällt – er sinkt zusammen und verblasst, der Kampf geht weiter. */

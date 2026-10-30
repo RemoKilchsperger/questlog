@@ -7,7 +7,9 @@ import {
   flee,
   fleeCost,
   getHeroCombatProfile,
+  livingAdds,
   potionBlocker,
+  setTarget,
   BOSS_ITEM_DROP_CHANCE,
   rollBattleReward,
   rollBossLoot,
@@ -427,7 +429,11 @@ describe("Gebiete und Balance", () => {
     return getHeroCombatProfile(character, equipment);
   };
 
-  /** Kampf mit Fähigkeiten und – falls erlaubt – Heiltränken unter 40 % LP: die beiden aus dem Laden, ab Level 41 auch der grosse (Beute). */
+  /**
+   * Kampf mit Fähigkeiten und – falls erlaubt – Heiltränken unter 40 % LP: die beiden aus dem Laden, ab Level 41
+   * auch der grosse (Beute). Den Begleiter mit Rolle (Heiler, Schildträger, Trommler) schaltet er zuerst aus –
+   * mit normalen Angriffen, die Fähigkeiten spart er für den Boss auf.
+   */
   const fightWell = (start: BattleState, rng: () => number, potions: boolean): BattleState => {
     let state = start;
     expect(state.heroClass).toBe("champion");
@@ -437,7 +443,10 @@ describe("Gebiete und Balance", () => {
         const potion = heal.map(getPotion).find((p) => potionBlocker(state, p) === null);
         if (potion) state = drinkPotion(state, potion).state;
       }
-      const ability = (["greatsword-2", "greatsword"] as const).find((id) => abilityBlocker(state, id) === null);
+      state = setTarget(state, livingAdds(state).find((a) => a.role)?.uid);
+      const ability = state.target
+        ? undefined
+        : (["greatsword-2", "greatsword"] as const).find((id) => abilityBlocker(state, id) === null);
       state = attackRound(state, rng, ability).state;
     }
     return state;

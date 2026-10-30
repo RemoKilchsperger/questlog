@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
+import { ADD_ROLES, type AddRole } from "../domain/bossMechanics";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
@@ -335,6 +336,24 @@ export function HelpScreen() {
           <p>
             Im Koop-Dungeon bringen die Endbosse ihre Begleiter ebenfalls mit. Jeder wählt sein eigenes Ziel, die
             Begleiter greifen wie der Boss nach Bedrohung an.
+          </p>
+          <H>Begleiter mit Aufgabe</H>
+          <p>
+            Einer der beiden Begleiter hilft dem Boss, solange er steht – meist lohnt es sich, ihn zuerst auszuschalten:
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {(Object.keys(ADD_ROLES) as AddRole[]).map((role) => (
+              <li key={role}>
+                {ADD_ROLES[role].icon} <b>{ADD_ROLES[role].name}:</b> {ADD_ROLES[role].description}
+              </li>
+            ))}
+          </ul>
+          <H>Zweite Phase</H>
+          <p>
+            Fällt ein Boss unter die Hälfte seiner Lebenspunkte, wechselt er einmal pro Kampf in seine zweite Phase – das
+            wird kurz vorher angekündigt. Manche geraten in Raserei und machen bis zum Ende mehr Schaden, andere rufen
+            Verstärkung: Ihr gewöhnlicher Begleiter steht mit vollen Lebenspunkten wieder auf. Heiler, Schildträger und
+            Trommler bleiben liegen.
           </p>
         </Topic>
 

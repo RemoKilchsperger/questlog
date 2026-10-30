@@ -4,6 +4,7 @@
 
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
+import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
 import { BOSS, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { getCreature } from "../domain/creatures";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
@@ -127,7 +128,9 @@ export class CoopBattleScene extends Phaser.Scene {
     });
     this.boss = this.addBoss(def.sprite, def.name, def.level, state.boss.hp, state.boss.maxHp, def.boss);
     (state.adds ?? []).forEach((add, i) => {
-      const unit = this.addAdd(add.creatureId, ADD_X[i % ADD_X.length], add.combatant.name, add.combatant.hp, add.combatant.maxHp);
+      // Begleiter mit Rolle tragen ihr Zeichen vor dem Namen (💚 Heiler, 🛡️ Schildträger, 🥁 Trommler)
+      const label = add.role ? `${ADD_ROLES[add.role].icon} ${add.combatant.name}` : add.combatant.name;
+      const unit = this.addAdd(add.creatureId, ADD_X[i % ADD_X.length], label, add.combatant.hp, add.combatant.maxHp);
       unit.body.setDepth(i % 2 === 0 ? 2 : -0.5);
       this.adds.set(add.uid, unit);
       if (add.combatant.hp === 0) this.addFalls(add.uid, true);
@@ -402,11 +405,14 @@ export class CoopBattleScene extends Phaser.Scene {
         (aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked" || event.type === "manaBurn")) ||
         event.type === "drain" ||
         event.type === "addDown";
+      const long = event.type === "bossPhase";
       // Steinschlag, Fluchkreis und Strudel treffen erst nach ihrer Animation – dafür Zeit lassen
       const slowImpact = event.type === "hit" && event.attacker === BOSS && special !== null && SLOW_IMPACT.has(special);
       delay +=
-        event.type === "victory" || event.type === "wipe"
-          ? 900
+        event.type === "victory" || event.type === "wipe" || long
+          ? long
+            ? 1100
+            : 900
           : slowImpact
             ? 520
             : quick
@@ -458,6 +464,22 @@ export class CoopBattleScene extends Phaser.Scene {
         if (event.attacker === BOSS) this.bossHits(event, bossAbility);
         else if (this.adds.has(event.attacker)) this.addHits(event);
         else this.heroHits(event);
+        // Der Schildträger fängt einen Teil ab – blauer Schimmer um den Boss
+        if (event.shielded) this.time.delayedCall(150, () => fx.ring(this, this.center(this.boss), 0x7aa7f0, 75, 350));
+        break;
+      case "addHeal": {
+        // Lebenskraft fliesst vom Heiler zum Boss
+        fx.siphon(this, this.center(this.unit(event.add)), this.center(this.boss), 0x7dd3a8, 10);
+        sfx.heal();
+        this.time.delayedCall(350, () => {
+          this.setHp(this.boss, Math.min(this.boss.maxHp, this.boss.hp + event.heal));
+          this.float(this.boss, `+${event.heal}`, "#7dd3a8", 20, 40);
+          this.tint(this.boss, 0x9dffc8, 300);
+        });
+        break;
+      }
+      case "bossPhase":
+        this.showBossPhase(event.bossId, event.rally ?? []);
         break;
       case "addDown":
         this.addFalls(event.add, false);
@@ -1116,6 +1138,61 @@ export class CoopBattleScene extends Phaser.Scene {
       .setStroke("#0e0b16", 5)
       .setDepth(30);
     this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 1000, ease: "Cubic.easeOut", onComplete: () => t.destroy() });
+  }
+
+  /**
+   * Zweite Phase des Bosses: Name gross in der Mitte, der Boss brüllt – bei Raserei glüht er rot,
+   * beim Sammelruf stehen die Begleiter mit vollen Lebenspunkten wieder auf.
+   */
+  private showBossPhase(bossId: string, rally: string[]) {
+    const phase = getBossPhase(bossId);
+    sfx.roar();
+    this.cameras.main.shake(350, 0.01);
+    fx.flash(this, phase?.enrage ? 0xc23a3a : 0xf4c95d, 0.25, 250);
+    const banner = this.add
+      .text(COOP_SCENE_WIDTH / 2, 120, `${phase?.icon ?? ""} ${phase?.name ?? "Zweite Phase"}`.trim(), {
+        fontFamily: FONT,
+        fontSize: "40px",
+        color: phase?.enrage ? "#f0776a" : "#f4c95d",
+      })
+      .setOrigin(0.5)
+      .setStroke("#0e0b16", 7)
+      .setScale(0.3)
+      .setDepth(40);
+    this.tweens.chain({
+      targets: banner,
+      tweens: [
+        { scale: 1, duration: 300, ease: "Back.easeOut" },
+        { alpha: 0, duration: 400, delay: 500, onComplete: () => banner.destroy() },
+      ],
+    });
+    if (phase?.enrage) {
+      this.tint(this.boss, 0xff6b5a, 900);
+      fx.rise(this, this.center(this.boss), 0xc23a3a, 14, 90);
+    }
+    for (const uid of rally) this.addRises(uid);
+  }
+
+  /** Sammelruf: Der Begleiter steht (wieder) auf, mit vollen Lebenspunkten. */
+  private addRises(uid: string) {
+    const unit = this.adds.get(uid);
+    if (!unit) return;
+    this.tweens.killTweensOf(unit.body);
+    const y = GROUND_Y + 4;
+    this.tweens.add({
+      targets: unit.body,
+      alpha: 1,
+      angle: 0,
+      y,
+      duration: 400,
+      ease: "Back.easeOut",
+      onComplete: () => {
+        unit.idle = this.tweens.add({ targets: unit.body, y: y - 3, duration: 1000 + unit.homeX, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      },
+    });
+    unit.images[0].setInteractive();
+    this.setHp(unit, unit.maxHp);
+    fx.pillar(this, this.center(unit), 0xf4c95d, 50);
   }
 
   private showBanner(text: string, color: string, instant: boolean) {

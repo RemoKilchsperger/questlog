@@ -52,7 +52,17 @@ import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from
 import { PixelAvatar } from "./PixelAvatar";
 import { AvatarFrame } from "./Achievements";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
-import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide, TargetPicker } from "./BattleStatus";
+import {
+  AbilityButton,
+  ActionGroup,
+  bossMechanicChips,
+  enemyStatusChips,
+  heroStatusChips,
+  PhaseWarning,
+  StatusSide,
+  TargetPicker,
+} from "./BattleStatus";
+import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestProgressChips } from "./QuestScreen";
@@ -261,6 +271,7 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
   const quests = useCreatureQuests(creature.id);
   const respawn = useRespawn(creature.id);
   const bossAbilities = getBossAbilities(creature.id);
+  const phase = getBossPhase(creature.id);
   const stats = getCreatureStats(creature);
   const potionDrop = getCreaturePotionDrop(creature);
   const goldDrop = getCreatureGoldDrop(creature);
@@ -308,11 +319,20 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           {dangerText && <span className={danger > 0 ? "text-danger" : "text-xp"}>{dangerText}</span>}
         </div>
         {creature.adds?.map((add) => (
-          <p key={add.creatureId} className="mt-1 text-xs text-danger">
-            Begleiter: {add.count}× {getCreature(add.creatureId).creature.name} – schwächer als sonst, greifen aber jede
-            Runde mit an.
+          <p key={add.name ?? add.creatureId + (add.role ?? "")} className="mt-1 text-xs text-danger">
+            Begleiter: {add.count > 1 && `${add.count}× `}
+            {add.role && `${ADD_ROLES[add.role].icon} `}
+            {add.name ?? getCreature(add.creatureId).creature.name}
+            {add.role
+              ? ` (${ADD_ROLES[add.role].name}) – ${ADD_ROLES[add.role].description}`
+              : " – schwächer als sonst, greift aber jede Runde mit an."}
           </p>
         ))}
+        {phase && (
+          <p className="mt-1 text-xs text-danger">
+            Zweite Phase unter {Math.round(phase.at * 100)} % LP: {phase.icon} {phase.name} – {phase.description}
+          </p>
+        )}
         {bossAbilities.map((a) => (
           <p key={a.id} className="mt-1 text-xs text-danger">
             Fähigkeit: {a.icon} {a.name} – {bossAbilities.length > 1 ? "im Wechsel " : ""}alle {a.every} Runden.{" "}
@@ -497,10 +517,14 @@ function Battle({ battle }: { battle: BattleState }) {
                 </div>
               </Hint>
             </StatusSide>
-            <StatusSide title={battle.enemy.name} chips={enemyStatusChips(battle.enemyEffects)} />
+            <StatusSide
+              title={battle.enemy.name}
+              chips={[...bossMechanicChips(battle.creatureId, battle.phase, battle.adds ?? []), ...enemyStatusChips(battle.enemyEffects)]}
+            />
           </div>
           {(battle.adds?.length ?? 0) > 0 && <BattleTargets battle={battle} disabled={!active} />}
           <BossWarning battle={battle} />
+          <PhaseWarning bossId={battle.creatureId} phase={battle.phase} boss={battle.enemy} />
 
           <ActionGroup label="Angriff" hint="Danach schlägt der Gegner zurück.">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -602,7 +626,7 @@ function BattleTargets({ battle, disabled }: { battle: BattleState; disabled: bo
     <TargetPicker
       foes={[
         { combatant: battle.enemy, effects: battle.enemyEffects, boss: true },
-        ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false })),
+        ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false, role: a.role })),
       ]}
       selected={battle.target}
       disabled={disabled}
@@ -1031,8 +1055,14 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
         : `Du trinkst ${getPotion(e.potionId).name} und heilst ${e.heal} LP.`;
     case "hit":
       return e.attacker === "hero"
-        ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden.`
+        ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.shielded ? " – der Schildträger schützt ihn" : ""}.`
         : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden.`;
+    case "addHeal":
+      return `${enemy} heilt ${battle.enemy.name} um ${e.heal} LP.`;
+    case "bossPhase": {
+      const phase = getBossPhase(e.bossId);
+      return phase ? `${battle.enemy.name}: ${phase.icon} ${phase.name}! ${phase.description}` : `${battle.enemy.name} wird wütend!`;
+    }
     case "defeated":
       return e.side === "hero" ? "Du wurdest besiegt." : e.add ? `${enemy} geht zu Boden.` : `${enemy} ist besiegt!`;
     case "fled":

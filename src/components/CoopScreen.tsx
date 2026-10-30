@@ -42,7 +42,17 @@ import { DungeonChest } from "./DungeonChest";
 import { PixelAvatar } from "./PixelAvatar";
 import { CreatureSprite } from "./CreatureSprite";
 import { POTION_BUTTONS } from "./potionUi";
-import { AbilityButton, ActionGroup, enemyStatusChips, heroStatusChips, StatusSide, TargetPicker } from "./BattleStatus";
+import {
+  AbilityButton,
+  ActionGroup,
+  bossMechanicChips,
+  enemyStatusChips,
+  heroStatusChips,
+  PhaseWarning,
+  StatusSide,
+  TargetPicker,
+} from "./BattleStatus";
+import { getBossPhase } from "../domain/bossMechanics";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 
@@ -465,6 +475,7 @@ function CoopBattle() {
               ⚠️ {due.icon} {boss.name} setzt diese Runde <b>{due.name}</b> ein{due.aoe && <b> – trifft alle</b>}: {due.description}
             </p>
           )}
+          {!finished && <PhaseWarning bossId={battle.bossId} phase={battle.phase} boss={battle.boss} />}
           <ActionBar battle={battle} locked={animating || finished} />
           <div className="flex justify-end">
             <button
@@ -596,13 +607,16 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
             </span>
           </div>
         </StatusSide>
-        <StatusSide title={battle.boss.name} chips={enemyStatusChips(battle.bossEffects)} />
+        <StatusSide
+          title={battle.boss.name}
+          chips={[...bossMechanicChips(battle.bossId, battle.phase, battle.adds ?? []), ...enemyStatusChips(battle.bossEffects)]}
+        />
       </div>
       {(battle.adds?.length ?? 0) > 0 && (
         <TargetPicker
           foes={[
             { combatant: battle.boss, effects: battle.bossEffects, boss: true },
-            ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false })),
+            ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false, role: a.role })),
           ]}
           selected={target}
           disabled={locked}
@@ -845,7 +859,13 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "counter":
       return `${name(e.heroId)} schlägt zurück: ${bossName} −${e.damage}.`;
     case "hit":
-      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden.`;
+      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.shielded ? " – der Schildträger schützt ihn" : ""}.`;
+    case "addHeal":
+      return `${name(e.add)} heilt ${bossName} um ${e.heal} LP.`;
+    case "bossPhase": {
+      const phase = getBossPhase(e.bossId);
+      return phase ? `${bossName}: ${phase.icon} ${phase.name}! ${phase.description}` : `${bossName} wird wütend!`;
+    }
     case "poison":
       return `Gift: ${name(e.target)} −${e.damage}.`;
     case "burn":
