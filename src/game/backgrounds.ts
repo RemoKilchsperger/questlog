@@ -479,7 +479,81 @@ const voidAbyss: Painter = (p) => {
   }
 };
 
+/* ───────────── Endlos-Turm ───────────── */
+
+/**
+ * Halle im Endlos-Turm: Quadermauern, hohe Bogenfenster mit Sternenhimmel
+ * (oben liegt nur noch der Himmel), Säulen mit Kohlebecken und ein
+ * glimmender Runenkreis auf dem Steinboden.
+ */
+const endlessTower: Painter = (p) => {
+  // Mauerwerk: versetzte Quader mit dunklen Fugen und hellen Kanten
+  p.gradient(0, BG_GROUND, ["#191326", "#201831", "#28203d", "#2f2647"]);
+  for (let row = 0; row * 6 < BG_GROUND; row++) {
+    const y = row * 6;
+    p.rect(0, y, BG_WIDTH, 1, "#120d1d");
+    for (let x = row % 2 ? -6 : 0; x < BG_WIDTH; x += 12) {
+      p.rect(x, y, 1, 6, "#120d1d");
+      if (p.rnd() < 0.35) p.rect(x + 2, y + 1, p.int(3, 7), 1, "#3b3057");
+    }
+  }
+  // Bogenfenster: Rahmen, Nachthimmel, Sterne – im mittleren der Mond
+  for (const cx of [32, 90, 148]) {
+    p.rect(cx - 9, 13, 19, 30, "#4a3d6a");
+    p.circle(cx, 13, 9, "#4a3d6a");
+    p.rect(cx - 7, 13, 15, 29, "#0a0918");
+    p.circle(cx, 13, 7, "#0a0918");
+    p.scatter(9, [cx - 6, 7, cx + 6, 38], ["#e8e4ff", "#9fb4ff", "#c9a8ff"]);
+    p.rect(cx - 9, 42, 19, 2, "#5a4c80"); // Sims
+    p.rect(cx, 6, 1, 36, "#4a3d6a"); // Fensterkreuz
+    p.rect(cx - 7, 24, 15, 1, "#4a3d6a");
+  }
+  p.circle(90, 18, 3, "#f1ecd2");
+  p.px(91, 17, "#ffffff");
+  // Säulen mit Kapitell und Kohlebecken
+  for (const x of [58, 116]) {
+    p.rect(x, 4, 8, BG_GROUND - 4, "#3a2f55");
+    p.rect(x + 1, 4, 1, BG_GROUND - 4, "#4d4170");
+    p.rect(x + 6, 4, 1, BG_GROUND - 4, "#2a2140");
+    p.rect(x - 1, 2, 10, 3, "#4d4170");
+    p.rect(x - 1, BG_GROUND - 3, 10, 3, "#4d4170");
+    p.glow(x + 4, 30, 9, "#f08a2c");
+    p.rect(x, 31, 8, 3, "#5a4030");
+    p.rect(x + 1, 28, 6, 3, "#f08a2c");
+    p.rect(x + 2, 26, 4, 2, "#ffd27a");
+    p.px(x + 4, 25, "#fff1c4");
+  }
+  // Wimpel mit Turm-Zeichen zwischen den Fenstern
+  for (const x of [10, 170]) {
+    p.rect(x - 3, 6, 7, 20, "#5a2a6e");
+    p.rect(x - 3, 6, 7, 1, "#d6b45a");
+    p.px(x - 3, 26, "#5a2a6e");
+    p.px(x + 3, 26, "#5a2a6e");
+    p.px(x, 27, "#5a2a6e");
+    // Kleiner Turm mit Zinnen als Zeichen
+    p.rect(x - 1, 12, 3, 9, "#d6b45a");
+    p.px(x - 2, 11, "#d6b45a");
+    p.px(x, 11, "#d6b45a");
+    p.px(x + 2, 11, "#d6b45a");
+    p.rect(x - 2, 12, 5, 1, "#d6b45a");
+    p.px(x, 19, "#5a2a6e");
+    p.px(x, 15, "#5a2a6e");
+  }
+  // Glimmende Runen im Mauerwerk
+  p.scatter(16, [0, 4, BG_WIDTH, BG_GROUND - 6], ["#5ad8e6", "#3a8fb0"]);
+  // Steinboden mit Plattenfugen und Runenkreis in der Mitte
+  p.ground("#5a4c80", ["#2e2645", "#241d38", "#1a1429"], ["#3e3460", "#140f20"], 50);
+  for (let x = 4; x < BG_WIDTH; x += 16) p.rect(x, BG_GROUND + 1, 1, BG_HEIGHT - BG_GROUND, "#1a1429");
+  p.rect(0, BG_GROUND + 9, BG_WIDTH, 1, "#1a1429");
+  for (let a = 0; a < 64; a++) {
+    const t = (a / 64) * Math.PI * 2;
+    p.px(90 + Math.cos(t) * 34, BG_GROUND + 9 + Math.sin(t) * 5, a % 3 ? "#5ad8e6" : "#a8f0ff");
+  }
+  p.glow(90, BG_GROUND + 9, 8, "#3a8fb0");
+};
+
 const PAINTERS: Record<string, Painter> = {
+  "endless-tower": endlessTower,
   darkwood,
   mistmarsh,
   "crystal-caves": crystalCaves,

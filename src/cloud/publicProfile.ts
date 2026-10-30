@@ -9,6 +9,7 @@ import { EMPTY_COOP_STATS, type CoopStats } from "../domain/coopCombat";
 import { getEffectiveStats } from "../domain/equipment";
 import { getLevel } from "../domain/leveling";
 import type { QuestLog } from "../domain/quests";
+import { EMPTY_TOWER_RECORD, type TowerRecord } from "../domain/tower";
 import type { Character, Equipment, Stats, WeaponType } from "../domain/types";
 
 /** Was ein öffentliches Profil zeigt. */
@@ -27,6 +28,8 @@ export interface ProfileSnapshot {
   frame?: string;
   /** Freigeschaltete Erfolgsstufen */
   achievementTiers?: number;
+  /** Endlos-Turm: bestes Stockwerk (für immer und diese Woche) – fehlt bei älteren Profilen */
+  tower?: TowerRecord;
 }
 
 /** Eine Zeile der Tabelle public_profiles (ohne user_id/username). */
@@ -54,9 +57,19 @@ interface GameData {
   coopStats?: CoopStats;
   achievements?: AchievementTiers;
   cosmetics?: { title: string | null; frame: string };
+  towerRecord?: TowerRecord;
 }
 
-export function buildPublicProfile({ character, equipment, records, bossCollection, coopStats, achievements, cosmetics }: GameData): PublicProfileRow {
+export function buildPublicProfile({
+  character,
+  equipment,
+  records,
+  bossCollection,
+  coopStats,
+  achievements,
+  cosmetics,
+  towerRecord,
+}: GameData): PublicProfileRow {
   const level = getLevel(character.totalXp);
   return {
     hero_name: character.name,
@@ -73,6 +86,7 @@ export function buildPublicProfile({ character, equipment, records, bossCollecti
       achievementTitle: cosmetics?.title ?? null,
       frame: cosmetics?.frame ?? "none",
       achievementTiers: totalTiers(achievements ?? {}),
+      tower: towerRecord ?? EMPTY_TOWER_RECORD,
     },
   };
 }

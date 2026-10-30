@@ -25,8 +25,9 @@ export default function PhaserBattle({ battleId }: { battleId: string }) {
       heroWeaponGlow: getMainWeaponGlow(equipment),
       enemySprite: creature.sprite,
       boss: creature.boss,
-      colors: area.colors,
-      areaId: area.id,
+      // Im Endlos-Turm eine eigene Halle statt des Gebiets der Kreatur
+      colors: battle.towerFloor ? { sky: 0x191326, ground: 0x2e2645 } : area.colors,
+      areaId: battle.towerFloor ? "endless-tower" : area.id,
       selectTarget: (target) => useGameStore.getState().battleTarget(target),
     };
 

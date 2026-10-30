@@ -568,6 +568,18 @@ export class BattleScene extends Phaser.Scene {
         this.floatText(enemy.homeX, GROUND_Y - 105, `+${event.heal}`, "#7dd3a8", 26);
         this.tint(enemy, 0x9dffc8, 300);
       });
+    } else if (event.type === "thorns") {
+      const key = event.add ?? "enemy";
+      const f = this.fighters[key];
+      this.setHp(key, Math.max(0, f.hp - event.damage));
+      this.floatText(f.homeX, GROUND_Y - 110, `🌵 -${event.damage}`, "#7dd3a8", 22);
+      this.tint(f, 0x9dffc8, 200);
+    } else if (event.type === "secondWind") {
+      const hero = this.fighters.hero;
+      this.setHp("hero", event.heal);
+      this.floatText(hero.homeX, GROUND_Y - 120, "ZWEITER ATEM!", "#f4c95d", 26);
+      fx.pillar(this, this.center("hero"), 0xf4c95d, 60);
+      sfx.heal();
     } else if (event.type === "enemyRegen") {
       const enemy = this.fighters.enemy;
       this.setHp("enemy", Math.min(enemy.maxHp, enemy.hp + event.heal));

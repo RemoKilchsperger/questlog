@@ -41,6 +41,10 @@ export interface Records {
   maxGold: number;
   /** Höchster Gear Score der angelegten Ausrüstung */
   maxGearScore: number;
+  /** Endlos-Turm: höchstes geschafftes Stockwerk, besiegte Turm-Bosse, meiste Segen in einem Lauf */
+  towerBest: number;
+  towerBosses: number;
+  towerBlessings: number;
 }
 
 export const EMPTY_RECORDS: Records = {
@@ -56,6 +60,9 @@ export const EMPTY_RECORDS: Records = {
   maxedSeen: [],
   maxGold: 0,
   maxGearScore: 0,
+  towerBest: 0,
+  towerBosses: 0,
+  towerBlessings: 0,
 };
 
 /** Alles, woraus sich der Fortschritt berechnet. */
@@ -67,12 +74,13 @@ export interface AchievementInput {
   records: Records;
 }
 
-export type AchievementCategory = "quests" | "character" | "combat" | "collection" | "sets" | "coop";
+export type AchievementCategory = "quests" | "character" | "combat" | "tower" | "collection" | "sets" | "coop";
 
 export const ACHIEVEMENT_CATEGORIES: readonly { key: AchievementCategory; label: string; icon: string }[] = [
   { key: "quests", label: "Quests", icon: "📜" },
   { key: "character", label: "Charakter", icon: "🧙" },
   { key: "combat", label: "Kampf", icon: "⚔️" },
+  { key: "tower", label: "Turm", icon: "🗼" },
   { key: "collection", label: "Sammeln", icon: "💎" },
   { key: "sets", label: "Boss-Sets", icon: "👑" },
   { key: "coop", label: "Koop", icon: "🤝" },
@@ -160,6 +168,10 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: "boss-slayer", name: "Bossbezwinger", icon: "💀", category: "combat", description: "{n} verschiedene Gebietsbosse besiegt", tiers: [1, 3, 6], title: "Bossbezwinger", progress: (i) => areaBossIds.filter((b) => bossesDefeated(i).has(b)).length },
   { id: "dungeon-runner", name: "Dungeonläufer", icon: "🗝️", category: "combat", description: "{n} verschiedene Dungeons abgeschlossen", tiers: [1, 2, 4], title: "Dungeonmeister", progress: (i) => dungeonsCleared(i).size },
   { id: "dragon-slayer", name: "Drachentöter", icon: "🐉", category: "combat", description: "Den Uralten Drachen Ignaroth besiegt", tiers: [1], title: "Drachentöter", progress: (i) => (bossesDefeated(i).has("ignaroth") ? 1 : 0) },
+  // Endlos-Turm
+  { id: "tower-climber", name: "Himmelsstürmer", icon: "🗼", category: "tower", description: "Im Endlos-Turm Stockwerk {n} geschafft", tiers: [10, 25, 50], title: "Himmelsstürmer", progress: (i) => i.records.towerBest },
+  { id: "tower-bosses", name: "Turmbezwinger", icon: "🏯", category: "tower", description: "{n} Bosse im Endlos-Turm besiegt", tiers: [3, 20, 60], title: "Turmbezwinger", progress: (i) => i.records.towerBosses },
+  { id: "tower-blessed", name: "Gesegnet", icon: "✨", category: "tower", description: "{n} Segen in einem Turm-Lauf gesammelt", tiers: [3, 6, 10], title: "Der Gesegnete", progress: (i) => i.records.towerBlessings },
   { id: "close-call", name: "Haaresbreite", icon: "😅", category: "combat", description: "Einen Kampf mit unter 5 % Lebenspunkten gewonnen", tiers: [1], title: "Überlebenskünstler", progress: (i) => (i.records.closeCall ? 1 : 0) },
   // Sammeln
   { id: "treasure-hunter", name: "Schatzjäger", icon: "💎", category: "collection", description: "{n} legendäre Items gefunden", tiers: [1, 10, 30], title: "Schatzjäger", progress: (i) => i.records.legendarySeen.length },

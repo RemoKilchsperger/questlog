@@ -25,6 +25,20 @@ import {
 } from "../domain/combat";
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type BossRespawns } from "../domain/creatures";
 import { rollElite } from "../domain/elites";
+import {
+  BLESSING,
+  blessedProfile,
+  blessingOffer,
+  EMPTY_TOWER_RECORD,
+  floorCreature,
+  floorElite,
+  towerReward,
+  isBlessingFloor,
+  recordFloor,
+  TOWER_MIN_LEVEL,
+  type BlessingId,
+  type TowerRecord,
+} from "../domain/tower";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, getItem, MAX_UPGRADE, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
@@ -191,6 +205,19 @@ interface GameState {
   /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
   leaveDungeonWithChest: () => void;
 
+  /** Endlos-Turm: laufender Lauf (wird wie der Kampf nicht gespeichert) */
+  tower: TowerRun | null;
+  /** Bestes Stockwerk aller Zeiten und dieser Woche (gespeichert, im öffentlichen Profil) */
+  towerRecord: TowerRecord;
+  /** Betritt den Turm: Stockwerk 1 */
+  startTower: () => void;
+  /** Nach einem Sieg (und gewähltem Segen): nächstes Stockwerk mit den übrigen Lebenspunkten */
+  nextTowerFloor: () => void;
+  /** Wählt einen der angebotenen Segen */
+  chooseBlessing: (id: BlessingId) => void;
+  /** Turm nach einem Sieg verlassen – die Truhe wird gutgeschrieben */
+  leaveTowerWithChest: () => void;
+
   // Koop-Kampf (der Kampf selbst läuft in src/coop/coopStore.ts)
   /** Ein im Koop-Kampf getrunkener (oder verabreichter) Trank verlässt den Vorrat. */
   consumePotion: (potionId: string) => void;
@@ -209,6 +236,21 @@ export interface DungeonRun {
   /** Gesammelte Beute – erst am Ende gutgeschrieben, bei einer Niederlage verloren. */
   chest: DungeonChest;
   /** Gutgeschriebene Truhe (Abschluss oder Verlassen) – die UI zeigt sie mit Animation. */
+  claimed: ClaimedChest | null;
+}
+
+export interface TowerRun {
+  /** Startwert des Laufs – bestimmt Gegner, Elite und Segen-Angebote */
+  seed: string;
+  floor: number;
+  /** Gesammelte Beute – bei einer Niederlage verloren */
+  chest: DungeonChest;
+  /** Gewählte Segen (gleiche können sich stapeln) */
+  blessings: BlessingId[];
+  secondWindUsed: boolean;
+  /** Segen zur Wahl nach diesem Stockwerk – erst wählen, dann weiter */
+  offer: BlessingId[] | null;
+  /** Gutgeschriebene Truhe (Aussteigen oder Flucht) – die UI zeigt sie mit Animation */
   claimed: ClaimedChest | null;
 }
 
@@ -241,6 +283,7 @@ type SaveState = Pick<
   | "records"
   | "achievements"
   | "cosmetics"
+  | "towerRecord"
 >;
 
 const createCharacter = (): Character => ({
@@ -306,6 +349,7 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     records: { ...EMPTY_RECORDS, ...saved.records },
     achievements,
     cosmetics,
+    towerRecord: saved.towerRecord ?? EMPTY_TOWER_RECORD,
   };
 }
 
@@ -528,6 +572,27 @@ export const useGameStore = create<GameState>()(
         }
       };
 
+      /** Turm: Truhe gutschreiben (Aussteigen oder Flucht) – bei einer Niederlage bleibt sie verloren. */
+      const claimTowerChest = () => {
+        const { tower } = get();
+        if (!tower || tower.claimed) return;
+        const { chest } = tower;
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        set({ tower: { ...tower, claimed: { ...chest, ...levels, completed: false } } });
+        if (levels.levelAfter > levels.levelBefore) {
+          EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
+        }
+      };
+
+      /** Kampf auf dem aktuellen Stockwerk des Turms – mit den Segen des Laufs und den mitgenommenen LP. */
+      const towerBattle = (run: TowerRun, heroHp: number | null) => {
+        const { character, equipment } = get();
+        const hero = blessedProfile(getHeroCombatProfile(character, equipment), run.blessings);
+        const creature = floorCreature(run.seed, run.floor, hero.level);
+        const battle = startBattle(newId(), character.name, hero, creature, heroHp ?? hero.maxHp, floorElite(run.seed, run.floor));
+        return { ...battle, towerFloor: run.floor, blessings: run.blessings, secondWindUsed: run.secondWindUsed };
+      };
+
       return {
       character: createCharacter(),
       questLog: EMPTY_QUEST_LOG,
@@ -549,6 +614,8 @@ export const useGameStore = create<GameState>()(
       battle: null,
       battleReward: null,
       dungeon: null,
+      tower: null,
+      towerRecord: EMPTY_TOWER_RECORD,
       lastReward: null,
 
       setTitle: (achievementId) =>
@@ -681,6 +748,8 @@ export const useGameStore = create<GameState>()(
           battle: null,
           battleReward: null,
           dungeon: null,
+          tower: null,
+          towerRecord: EMPTY_TOWER_RECORD,
           lastReward: null,
         }),
 
@@ -776,7 +845,7 @@ export const useGameStore = create<GameState>()(
           const wait = respawnLeft(get().bossRespawns, creatureId);
           if (wait > 0) throw new Error(`${creature.name} erscheint erst in ${formatRespawn(wait)} wieder.`);
           const battle = startBattle(newId(), character.name, hero, creature, hero.maxHp, rollElite(creature));
-          set({ battle, battleReward: null, dungeon: null });
+          set({ battle, battleReward: null, dungeon: null, tower: null });
           EventBus.emit("battle:started", { battle });
         }),
 
@@ -793,8 +862,59 @@ export const useGameStore = create<GameState>()(
             battle,
             battleReward: null,
             dungeon: { dungeonId, stage: 0, chest: EMPTY_CHEST, claimed: null },
+            tower: null,
           });
           EventBus.emit("battle:started", { battle });
+        }),
+
+      startTower: () =>
+        attempt(() => {
+          const { character, equipment } = get();
+          const hero = getHeroCombatProfile(character, equipment);
+          if (hero.level < TOWER_MIN_LEVEL) throw new Error(`Der Endlos-Turm ist erst ab Level ${TOWER_MIN_LEVEL} zugänglich.`);
+          const tower: TowerRun = { seed: newId(), floor: 1, chest: EMPTY_CHEST, blessings: [], secondWindUsed: false, offer: null, claimed: null };
+          const battle = towerBattle(tower, null);
+          set({ battle, battleReward: null, dungeon: null, tower });
+          EventBus.emit("battle:started", { battle });
+        }),
+
+      nextTowerFloor: () =>
+        attempt(() => {
+          const { battle, tower } = get();
+          if (!tower || !battle || battle.status !== "won" || tower.claimed) throw new Error("Kein Stockwerk gewonnen.");
+          if (tower.offer) throw new Error("Wähle zuerst einen Segen.");
+          const next = { ...tower, floor: tower.floor + 1 };
+          const nextBattle = towerBattle(next, battle.hero.hp);
+          set({ battle: nextBattle, battleReward: null, tower: next });
+          EventBus.emit("battle:started", { battle: nextBattle });
+        }),
+
+      chooseBlessing: (id) =>
+        attempt(() => {
+          const { battle, tower, character, equipment } = get();
+          if (!tower?.offer || !battle) throw new Error("Gerade gibt es keinen Segen zur Wahl.");
+          if (!tower.offer.includes(id)) throw new Error("Dieser Segen steht nicht zur Wahl.");
+          const blessings = [...tower.blessings, id];
+          // Rast und Vitalität wirken sofort auf die mitgenommenen Lebenspunkte
+          const base = getHeroCombatProfile(character, equipment);
+          const maxBefore = blessedProfile(base, tower.blessings).maxHp;
+          const maxAfter = blessedProfile(base, blessings).maxHp;
+          const healed =
+            id === "rest" ? Math.round(maxAfter * BLESSING.rest) : id === "vitality" ? maxAfter - maxBefore : 0;
+          const hp = Math.min(maxAfter, battle.hero.hp + healed);
+          const { records } = get();
+          set({
+            records: { ...records, towerBlessings: Math.max(records.towerBlessings, blessings.length) },
+            tower: { ...tower, blessings, offer: null },
+            battle: { ...battle, hero: { ...battle.hero, hp, maxHp: maxAfter } },
+          });
+        }),
+
+      leaveTowerWithChest: () =>
+        attempt(() => {
+          const { battle, tower } = get();
+          if (!tower || !battle || battle.status !== "won") throw new Error("Nur nach einem Sieg möglich.");
+          claimTowerChest();
         }),
 
       nextDungeonFight: () =>
@@ -836,6 +956,41 @@ export const useGameStore = create<GameState>()(
           set({ battle: result.state, battleReward: null });
           EventBus.emit("battle:events", { battle: result.state, events: result.events });
           if (result.state.status !== "won") return;
+
+          const { tower } = get();
+          if (tower && battle.towerFloor) {
+            // Turm: Beute in die Truhe (mit Stockwerk-Bonus, ohne Boss-Items), Rekord, Segen zur Wahl.
+            // Turm-Bosse zählen nicht als Bosssiege – sie kämpfen schwächer und haben keinen Respawn.
+            const { records, towerRecord } = get();
+            const hero = getHeroCombatProfile(character, equipment);
+            const creature = floorCreature(tower.seed, tower.floor, hero.level);
+            set({
+              records: {
+                ...records,
+                battlesWon: records.battlesWon + 1,
+                closeCall: records.closeCall || result.state.hero.hp < result.state.hero.maxHp * 0.05,
+                towerBest: Math.max(records.towerBest, tower.floor),
+                towerBosses: records.towerBosses + (creature.boss ? 1 : 0),
+              },
+            });
+            if (!creature.boss) questEvent({ kind: "kill", creatureId: creature.id, boss: false });
+            questEvent({ kind: "towerFloor", floor: tower.floor });
+            const elite = (result.state.elite?.length ?? 0) > 0;
+            const reward = rollBattleReward(creature, hero, newId(), Math.random, defeatedAdds(result.state), elite);
+            const scaled = towerReward(reward, tower.floor, tower.blessings, elite);
+            const level = getLevel(character.totalXp);
+            set({
+              battleReward: { ...scaled, levelBefore: level, levelAfter: level },
+              tower: {
+                ...tower,
+                chest: addToChest(tower.chest, scaled),
+                secondWindUsed: !!result.state.secondWindUsed,
+                offer: isBlessingFloor(tower.floor) ? blessingOffer(tower.seed, tower.floor, tower.blessings) : null,
+              },
+              towerRecord: recordFloor(towerRecord, tower.floor),
+            });
+            return;
+          }
 
           const { creature } = getCreature(battle.creatureId);
           const { records } = get();
@@ -896,9 +1051,10 @@ export const useGameStore = create<GameState>()(
           EventBus.emit("battle:events", { battle: result.state, events: result.events });
           // Flucht ist kein Scheitern: Die Truhe mit der Beute der gewonnenen Kämpfe bleibt.
           claimChest(false);
+          claimTowerChest();
         }),
 
-      leaveBattle: () => set({ battle: null, battleReward: null, dungeon: null }),
+      leaveBattle: () => set({ battle: null, battleReward: null, dungeon: null, tower: null }),
 
       consumePotion: (potionId) =>
         set((s) => ({ potions: { ...s.potions, [potionId]: Math.max(0, (s.potions[potionId] ?? 0) - 1) } })),
@@ -960,6 +1116,7 @@ export const useGameStore = create<GameState>()(
         records: s.records,
         achievements: s.achievements,
         cosmetics: s.cosmetics,
+        towerRecord: s.towerRecord,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),
