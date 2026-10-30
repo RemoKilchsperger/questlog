@@ -148,7 +148,7 @@ export function TowerResultActions({ battle, won }: { battle: BattleState; won: 
       {tower.offer ? (
         <div className="flex w-full flex-col items-center gap-2">
           <p className="font-pixel text-lg text-gold">✨ Wähle einen Segen</p>
-          <div className="grid w-full gap-2 sm:grid-cols-3">
+          <div className={`grid w-full gap-2 ${tower.offer.length > 3 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
             {tower.offer.map((id) => {
               const def = getBlessing(id);
               const have = stacks(tower.blessings, id);

@@ -41,7 +41,7 @@ import {
 } from "../domain/tower";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
-import { createItem, getItem, MAX_UPGRADE, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
+import { createItem, ensureEffect, getItem, MAX_UPGRADE, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
 import {
   ACHIEVEMENTS,
@@ -336,8 +336,11 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     questLog: { ...EMPTY_QUEST_LOG, ...saved.questLog },
     dailyQuests: saved.dailyQuests ?? EMPTY_BOARD,
     weeklyQuests: saved.weeklyQuests ?? EMPTY_BOARD,
-    inventory: saved.inventory ?? [],
-    equipment: { ...EMPTY_EQUIPMENT, ...saved.equipment },
+    // Legendäre Items älterer Stände bekommen ihren Spezialeffekt (itemEffects.ts)
+    inventory: (saved.inventory ?? []).map(ensureEffect),
+    equipment: Object.fromEntries(
+      Object.entries({ ...EMPTY_EQUIPMENT, ...saved.equipment }).map(([slot, item]) => [slot, item && ensureEffect(item)]),
+    ) as Equipment,
     potions: saved.potions ?? STARTER_POTIONS,
     shop: saved.shop ?? EMPTY_SHOP,
     lastShopReroll: saved.lastShopReroll ?? "",
@@ -985,7 +988,10 @@ export const useGameStore = create<GameState>()(
                 ...tower,
                 chest: addToChest(tower.chest, scaled),
                 secondWindUsed: !!result.state.secondWindUsed,
-                offer: isBlessingFloor(tower.floor) ? blessingOffer(tower.seed, tower.floor, tower.blessings) : null,
+                // Item-Effekt „Turmläufer“: ein Segen mehr zur Wahl
+                offer: isBlessingFloor(tower.floor)
+                  ? blessingOffer(tower.seed, tower.floor, tower.blessings, hero.itemEffects?.includes("towerRunner") ? 4 : 3)
+                  : null,
               },
               towerRecord: recordFloor(towerRecord, tower.floor),
             });

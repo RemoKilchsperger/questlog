@@ -1153,6 +1153,8 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `Deine Dornen treffen ${enemy} für ${e.damage} Schaden.`;
     case "secondWind":
       return `🕊️ Zweiter Atem! Du stehst mit ${e.heal} LP wieder auf.`;
+    case "endured":
+      return "🕊️ Unbeugsam! Du überlebst den tödlichen Treffer mit 1 LP.";
     case "immune":
       return `${enemy} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "explosion":

@@ -181,12 +181,12 @@ export function getBlessing(id: BlessingId): BlessingDef {
 /** Wie oft ein Segen gewählt wurde. */
 export const stacks = (blessings: readonly BlessingId[] | undefined, id: BlessingId) => (blessings ?? []).filter((b) => b === id).length;
 
-/** Drei verschiedene Segen zur Wahl nach diesem Stockwerk – einmalige nur, wenn noch nicht gewählt. */
-export function blessingOffer(seed: string, floor: number, taken: readonly BlessingId[]): BlessingId[] {
+/** Drei (mit „Turmläufer“ vier) verschiedene Segen zur Wahl nach diesem Stockwerk – einmalige nur, wenn noch nicht gewählt. */
+export function blessingOffer(seed: string, floor: number, taken: readonly BlessingId[], count = BLESSING_CHOICES): BlessingId[] {
   const rng = floorRng(seed, floor, "blessing");
   const pool = BLESSINGS.filter((b) => !(b.once && taken.includes(b.id))).map((b) => b.id);
   const offer: BlessingId[] = [];
-  while (offer.length < BLESSING_CHOICES && pool.length > 0) offer.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+  while (offer.length < count && pool.length > 0) offer.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
   return offer;
 }
 

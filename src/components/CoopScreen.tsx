@@ -888,6 +888,10 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}.`;
     case "immune":
       return `${name(e.target)} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
+    case "thorns":
+      return `Die Dornen von ${name(e.heroId)} treffen ${name(e.target)} für ${e.damage} Schaden.`;
+    case "endured":
+      return `🕊️ ${name(e.heroId)} ist unbeugsam und überlebt mit 1 LP.`;
     case "addHeal":
       return `${name(e.add)} heilt ${bossName} um ${e.heal} LP.`;
     case "enemyRegen":

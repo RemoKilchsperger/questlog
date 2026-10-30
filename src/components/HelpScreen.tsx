@@ -4,6 +4,7 @@ import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { ADD_ROLES, type AddRole } from "../domain/bossMechanics";
 import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL } from "../domain/elites";
 import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
+import { ITEM_EFFECTS } from "../domain/itemEffects";
 import { BLESSING_EVERY, BLESSINGS, BOSS_EVERY, TOWER_MIN_LEVEL } from "../domain/tower";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
@@ -346,6 +347,20 @@ export function HelpScreen() {
             {(["blade", "blunt", "pierce", "magic"] as const).map((kind) => (
               <li key={kind}>
                 {MATCHUP_LABELS[kind].icon} <b>{MATCHUP_LABELS[kind].name}:</b> {MATCHUP_LABELS[kind].detail}
+              </li>
+            ))}
+          </ul>
+          <H>Gegenstände mit Spezialeffekt</H>
+          <p>
+            Legendäre Items haben einen zufälligen Spezialeffekt, Boss-Items einen festen, der zu ihrem Boss passt. Du
+            siehst ihn im Tooltip und unter „Aktive Item-Effekte“ im Charakterbogen. Derselbe Effekt zählt nur einmal,
+            auch wenn du ihn doppelt trägst.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {ITEM_EFFECTS.map((e) => (
+              <li key={e.id}>
+                {e.icon} <b>{e.name}:</b> {e.description}
+                {e.pool === "boss" && <span className="text-legendary"> (nur Boss-Items)</span>}
               </li>
             ))}
           </ul>

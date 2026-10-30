@@ -1,3 +1,4 @@
+import { effectOf, rollItemEffect, rollsEffect } from "./itemEffects";
 import { ARMOR_CLASSES, BOSS_ARMOR_CLASS, getArmorClass, METAL_PREFIXES } from "./armorClasses";
 import { MAX_LEVEL } from "./leveling";
 import type {
@@ -457,7 +458,8 @@ export function createItem(
     const [stat] = pool.splice(Math.floor(rng() * pool.length), 1);
     bonuses[stat] = bonusValue(rarity, def.requiredLevel);
   }
-  return { uid, itemId, rarity, bonuses };
+  // Legendäre Items aus der normalen Beute bekommen einen Spezialeffekt – fest aus der uid
+  return { uid, itemId, rarity, bonuses, ...(rollsEffect(def, rarity) && { effect: rollItemEffect(uid, def.kind) }) };
 }
 
 /** Höchste Verbesserungsstufe beim Schmied. */
@@ -490,6 +492,7 @@ export function getItemStats(owned: OwnedItem): ItemStats {
     attack: upgradesArmor ? attack : upgradedValue(attack, upgrade),
     bonuses: owned.bonuses,
     upgrade,
+    effect: effectOf(owned, def),
   };
 }
 
@@ -499,4 +502,11 @@ export const SELL_RATE = 0.25;
 /** Verkaufspreis beim Händler: ein Viertel des Kaufpreises (mind. 1 Gold), seltene Stücke sind mehr wert. */
 export function sellPrice(owned: OwnedItem): number {
   return Math.max(1, Math.floor(getItem(owned.itemId).price * getRarity(owned.rarity).priceMultiplier * SELL_RATE));
+}
+
+/** Legendäre Items aus älteren Spielständen bekommen beim Laden ihren Spezialeffekt (fest aus der uid). */
+export function ensureEffect(item: OwnedItem): OwnedItem {
+  if (item.effect) return item;
+  const def = ITEMS_BY_ID.get(item.itemId);
+  return def && rollsEffect(def, item.rarity) ? { ...item, effect: rollItemEffect(item.uid, def.kind) } : item;
 }

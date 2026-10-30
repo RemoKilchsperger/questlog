@@ -1,3 +1,4 @@
+import type { ItemEffectId } from "./itemEffects";
 import type { AbilityId } from "./abilities";
 // Zentrale Datentypen. Bewusst frei von React/Zustand, damit dieselben
 // Typen später im Backend (Supabase Edge Function) und im Kampfsystem
@@ -91,6 +92,8 @@ export interface OwnedItem {
   bonuses: Partial<Stats>;
   /** Verbesserungsstufe beim Schmied (0 bzw. fehlend = nicht verbessert, siehe forge.ts). */
   upgrade?: number;
+  /** Spezialeffekt legendärer Items (itemEffects.ts) – Boss-Items haben ihren festen Effekt ohne Eintrag */
+  effect?: ItemEffectId;
 }
 
 /** Endgültige Werte eines Exemplars (Katalogwert × Seltenheit + Boni). */
@@ -102,6 +105,8 @@ export interface ItemStats {
   bonuses: Partial<Stats>;
   /** Verbesserungsstufe beim Schmied */
   upgrade: number;
+  /** Spezialeffekt (legendär oder Boss-Item) – fehlt bei allen anderen */
+  effect?: ItemEffectId | null;
 }
 
 export type Equipment = Record<EquipSlot, OwnedItem | null>;

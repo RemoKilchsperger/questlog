@@ -25,6 +25,8 @@ import { PixelAvatar } from "./PixelAvatar";
 import { AchievementsPanel, AvatarFrame, CosmeticsPicker, TitleBadge } from "./Achievements";
 import { XpBar } from "./XpBar";
 import { ClassCodex, HeroClassBadge } from "./HeroClassInfo";
+import { ItemEffectLine } from "./ItemTooltip";
+import { equippedEffects } from "../domain/combat";
 import { Hint } from "./HoverCard";
 
 const STAT_COLORS: Record<StatKey, string> = {
@@ -139,6 +141,8 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
           <StatTile label="Rüstung" value={combat.armor} icon="🛡️" accent="text-intellect" />
           <StatTile label="Angriff" value={combat.attack} icon="⚔️" accent="text-strength" />
         </section>
+
+        <ActiveItemEffects />
 
         {/* Attribute – Basis für das spätere Kampfsystem */}
         <section className="panel p-5">
@@ -343,5 +347,20 @@ function StatTile({
       <div className={`num text-xl leading-8 ${accent}`}>{formatNumber(value)}</div>
       <div className="text-xs text-muted">{label}</div>
     </div>
+  );
+}
+
+/** Spezialeffekte der angelegten legendären und Boss-Items – jeder zählt nur einmal. */
+function ActiveItemEffects() {
+  const equipment = useGameStore((s) => s.equipment);
+  const effects = equippedEffects(equipment);
+  if (effects.length === 0) return null;
+  return (
+    <section className="panel flex flex-col gap-2 p-5">
+      <h2 className="font-pixel text-2xl text-gold">Aktive Item-Effekte</h2>
+      {effects.map((id) => (
+        <ItemEffectLine key={id} id={id} />
+      ))}
+    </section>
   );
 }

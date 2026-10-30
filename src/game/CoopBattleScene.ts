@@ -484,6 +484,20 @@ export class CoopBattleScene extends Phaser.Scene {
       case "immune":
         this.float(this.unit(event.target), "IMMUN", "#a49cb8", 16, 50);
         break;
+      case "thorns": {
+        const foe = this.unit(event.target);
+        this.setHp(foe, Math.max(0, foe.hp - event.damage));
+        this.float(foe, `🌵 -${event.damage}`, "#7dd3a8", 16, 30);
+        break;
+      }
+      case "endured": {
+        const hero = this.unit(event.heroId);
+        this.setHp(hero, 1);
+        this.float(hero, "UNBEUGSAM!", "#f4c95d", 16, 30);
+        fx.ring(this, this.center(hero), 0xf4c95d, 50);
+        sfx.block();
+        break;
+      }
       case "addHeal": {
         // Lebenskraft fliesst vom Heiler zum Boss
         fx.siphon(this, this.center(this.unit(event.add)), this.center(this.boss), 0x7dd3a8, 10);

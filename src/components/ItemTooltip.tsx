@@ -8,6 +8,7 @@ import { useGameStore } from "../store/gameStore";
 import { BossSetInfo } from "./BossSetInfo";
 import { HoverCard } from "./HoverCard";
 import { ItemIcon } from "./ItemIcon";
+import { getItemEffect, type ItemEffectId } from "../domain/itemEffects";
 import { armorClassPerkText, bonusText, itemName, MAIN_STAT_TEXT, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 /** Zeigt beim Überfahren (oder Fokussieren) ein grosses Symbol mit allen Werten des Items. */
@@ -57,6 +58,7 @@ function ItemCard({ stats, hint }: { stats: ItemStats; hint?: string }) {
         <p className="text-xs text-muted">skaliert mit {STAT_LABELS[weaponStat(def.type as WeaponType)]}</p>
       )}
       {bonuses && <p className="text-sm text-xp">{bonuses}</p>}
+      {stats.effect && <ItemEffectLine id={stats.effect} />}
       {armorClassPerkText(def) && <p className="text-xs text-intellect">{armorClassPerkText(def)} (Rüstungsklasse)</p>}
       {def.bossId && (
         <>
@@ -69,5 +71,18 @@ function ItemCard({ stats, hint }: { stats: ItemStats; hint?: string }) {
       <p className="text-xs text-muted">benötigt Level {def.requiredLevel}</p>
       {hint && <p className="mt-1 text-xs text-gold">{hint}</p>}
     </>
+  );
+}
+
+/** Spezialeffekt eines legendären oder Boss-Items – golden hervorgehoben. */
+export function ItemEffectLine({ id, compact = false }: { id: ItemEffectId; compact?: boolean }) {
+  const effect = getItemEffect(id);
+  return (
+    <p className={`rounded-md border border-gold/40 bg-gold/10 px-2 py-1 text-left text-xs text-gold ${compact ? "" : "w-full"}`}>
+      <span className="font-bold">
+        {effect.icon} {effect.name}:
+      </span>{" "}
+      {effect.description}
+    </p>
   );
 }

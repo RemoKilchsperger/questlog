@@ -66,6 +66,16 @@ import type { Character, Equipment, Loot, OwnedItem } from "./types";
 import { attributeDamage, shieldArmorBonus } from "./weaponScaling";
 import { mainWeapon, matchupFactor, matchupOf, WEAPON_KIND, type DotKind } from "./matchups";
 import { BLESSING, stacks, type BlessingId } from "./tower";
+import {
+  critBurns,
+  EFFECT,
+  effectCritBonus,
+  effectDamageFactor,
+  effectOf,
+  has as hasEffect,
+  heroDotRounds,
+  type ItemEffectId,
+} from "./itemEffects";
 
 /** Kritische Trefferchance pro Charisma-Punkt (bis zur Obergrenze von 30 %). */
 export const CRIT_PER_CHARISMA = 0.002;
@@ -89,6 +99,8 @@ export interface HeroCombatProfile {
   critMultiplier: number;
   /** Hauptwaffe – ihre Schadensart zählt bei normalen Angriffen (matchups.ts). Fehlt bei älteren Profilen. */
   weapon?: SkillWeapon | null;
+  /** Spezialeffekte der angelegten Items (itemEffects.ts) – jeder nur einmal */
+  itemEffects?: ItemEffectId[];
 }
 
 /** Freigeschaltete Fähigkeiten aller angelegten Waffen (je Waffe erste, dann zweite), ohne Doppelte. */
@@ -118,6 +130,7 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
   const armorClasses = getArmorClassSummary(equipment);
   const heroClass = detectHeroClass(equipment);
   const bonus = classStatBonus(heroClass);
+  const itemEffects = equippedEffects(equipment);
   return {
     level,
     maxHp: Math.round((80 + (level - 1) * 12 + stats.endurance * 1.5) * getSetHpMultiplier(equipment) * (1 + bonus.hp)),
@@ -125,15 +138,25 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
     armor: Math.round((gear.armor + skillArmorBonus(character, equipment) + shieldArmorBonus(stats, equipment)) * (1 + bonus.armor)),
     // Die Klassen-Krit-Chance kommt über die normale Obergrenze hinaus dazu
     critChance: Math.min(0.3, 0.05 + stats.charisma * CRIT_PER_CHARISMA + armorClasses.crit) + bonus.crit,
-    goldBonus: Math.min(1, stats.charisma * 0.005) + bonus.gold,
-    maxMana: maxManaFor(level, stats.intellect) + armorClasses.mana,
+    goldBonus: Math.min(1, stats.charisma * 0.005) + bonus.gold + (hasEffect(itemEffects, "lucky") ? EFFECT.lucky : 0),
+    maxMana: maxManaFor(level, stats.intellect) + armorClasses.mana + (hasEffect(itemEffects, "prepared") ? EFFECT.prepared : 0),
     abilities: availableAbilities(character, equipment),
     heroClass,
     critMultiplier: bonus.critMultiplier,
     weapon: mainWeapon(
       [equipment.weapon1, equipment.weapon2].filter((o) => o !== null).map((o) => getItem(o.itemId).type as SkillWeapon),
     ),
+    itemEffects,
   };
+}
+
+/** Spezialeffekte der angelegten Items – derselbe Effekt zählt nur einmal. */
+export function equippedEffects(equipment: Equipment): ItemEffectId[] {
+  const effects = Object.values(equipment)
+    .filter((o): o is OwnedItem => o !== null)
+    .map((o) => effectOf(o, getItem(o.itemId)))
+    .filter((e): e is ItemEffectId => e !== null);
+  return [...new Set(effects)];
 }
 
 export type Side = "hero" | "enemy";
@@ -172,6 +195,8 @@ export type BattleEvent =
   | { type: "thorns"; damage: number; add?: string }
   /** Turm-Segen „Zweiter Atem“: Der Held steht einmal wieder auf */
   | { type: "secondWind"; heal: number }
+  /** Item-Effekt „Unbeugsam“: Der Held überlebt einen tödlichen Treffer mit 1 LP */
+  | { type: "endured" }
   /** Der Held setzt eine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "ability"; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
   /** Der Held heilt sich durch eine Fähigkeit (Heiliges Licht, Blutrausch) */
@@ -283,6 +308,10 @@ export interface BattleState {
   secondWindUsed?: boolean;
   /** Endlos-Turm: das Stockwerk dieses Kampfes (der Gegner kämpft auf dem Level des Helden) */
   towerFloor?: number;
+  /** Spezialeffekte der angelegten Items (itemEffects.ts) */
+  itemEffects?: ItemEffectId[];
+  /** „Unbeugsam“ hat in diesem Kampf schon gerettet */
+  endured?: boolean;
   /** Wirkungen auf den Helden */
   heroEffects: {
     /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
@@ -338,8 +367,10 @@ export function startBattle(
     cooldowns: {},
     heroClass: hero.heroClass,
     heroWeapon: hero.weapon ?? null,
+    ...(hero.itemEffects?.length && { itemEffects: hero.itemEffects }),
     enemyEffects: {},
-    heroEffects: {},
+    // „Wachsam“: Der erste gegnerische Angriff wird geblockt
+    heroEffects: hasEffect(hero.itemEffects, "vigilant") ? { bulwark: true } : {},
     adds: enemyAdds(creature, elite)
       .flatMap((add) => Array.from({ length: add.count }, () => add))
       .map((add, i) => {
@@ -433,7 +464,9 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
   const { effect } = potion;
   const factor =
     effect.kind === "heal"
-      ? (state.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) * (1 + BLESSING.alchemy * stacks(state.blessings, "alchemy"))
+      ? (state.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) *
+        (1 + BLESSING.alchemy * stacks(state.blessings, "alchemy")) *
+        (hasEffect(state.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1)
       : 1;
   const heal = Math.min(Math.round(potionHeal(potion, state.hero.maxHp) * factor), state.hero.maxHp - state.hero.hp);
   const buff = effect.kind === "heal" ? undefined : effect.kind;
@@ -599,7 +632,16 @@ export function attackRound(
     ...strongBase,
     damage:
       strongBase.damage * rageFactor(state.heroClass, hero.hp, hero.maxHp) * (1 + (heroEffects.empower?.percent ?? 0)),
+    // Item-Effekt „Letztes Gefecht“: mehr Rüstung bei wenig Lebenspunkten
+    armor:
+      hasEffect(state.itemEffects, "lastStand") && hero.hp < hero.maxHp * EFFECT.lastStand.threshold
+        ? Math.round(strongBase.armor * (1 + EFFECT.lastStand.armor))
+        : strongBase.armor,
   };
+  const effects = state.itemEffects;
+  const bossIsBoss = getCreature(state.creatureId).creature.boss;
+  /** Vom Item-Effekt „Frostbiss“ eingefrorene Gegner – sie setzen diese Runde aus */
+  const frozenByItem = new Set<Foe>();
 
   // 1. Aktion des Helden
   if (ability) {
@@ -643,16 +685,31 @@ export function attackRound(
     const headsman = foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(state.blessings, "executioner") : 1;
     const execute = finisher * headsman;
     const taken = takenBy(foe);
-    // Schwäche oder Resistenz gegen die Schadensart der Waffe
-    const matchup = heroKind ? matchupOf(foe.creatureId, heroKind) : null;
-    const kindFactor = matchupFactor(foe.creatureId, heroKind);
+    // Schwäche oder Resistenz gegen die Schadensart der Waffe – „Runenklinge“ zählt auch als Magie, wenn das wirksamer ist
+    const kind =
+      heroKind && hasEffect(effects, "runeblade") && matchupFactor(foe.creatureId, "magic") > matchupFactor(foe.creatureId, heroKind)
+        ? "magic"
+        : heroKind;
+    const matchup = kind ? matchupOf(foe.creatureId, kind) : null;
+    const kindFactor = matchupFactor(foe.creatureId, kind);
+    // Item-Effekte: Kriegstrommel, Henkersbeil, Aderlass, Elitejäger, Bossschlächter, Sog – dazu Allsehend (Krit)
+    const foeBoss = foe === boss && bossIsBoss;
+    const itemFactor = effectDamageFactor(effects, {
+      round: state.round,
+      foeHp: foe.c.hp,
+      foeMaxHp: foe.c.maxHp,
+      foeBleeding: foe.fx.bleed !== undefined,
+      foeBoss,
+      foeElite: foe === boss && (state.elite?.length ?? 0) > 0,
+    });
+    const critChance = strong.critChance + effectCritBonus(effects, foeBoss);
     const attacker: Combatant = ability
       ? {
           ...strong,
-          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share * taken * kindFactor,
-          critChance: ability.guaranteedCrit ? 1 : strong.critChance,
+          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share * taken * kindFactor * itemFactor,
+          critChance: ability.guaranteedCrit ? 1 : critChance,
         }
-      : { ...strong, damage: strong.damage * vulnerableOf(foe) * taken * kindFactor };
+      : { ...strong, damage: strong.damage * vulnerableOf(foe) * taken * kindFactor * itemFactor, critChance };
     const heroHit = rollHit(attacker, { ...foe.c, armor: armorOf(foe) }, rng);
     dealtByHero += Math.min(foe.c.hp, heroHit.damage);
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - heroHit.damage) };
@@ -669,6 +726,15 @@ export function attackRound(
       const damage = strong.damage * PLUNDERER_BLEED.percent * matchupFactor(foe.creatureId, "bleed");
       if (damage > 0 && (foe.fx.bleed?.damage ?? 0) <= damage) applyDot(foe, "bleed", strong.damage * PLUNDERER_BLEED.percent, PLUNDERER_BLEED.rounds);
     }
+    // Item-Effekte bei einem Treffer: Glut/Drachenfeuer, Giftzahn, Frostbiss, Manadieb
+    if (foe.c.hp > 0) {
+      if (heroHit.crit && critBurns(effects)) applyDot(foe, "burn", strong.damage * EFFECT.ember.percent, EFFECT.ember.rounds);
+      if (hasEffect(effects, "venomFang") && rng() < EFFECT.venomFang.chance) {
+        applyDot(foe, "poison", strong.damage * EFFECT.venomFang.percent, EFFECT.venomFang.rounds);
+      }
+      if (hasEffect(effects, "frostBite") && rng() < EFFECT.frostBite) frozenByItem.add(foe);
+    }
+    if (hasEffect(effects, "manaThief")) mana = Math.min(state.maxMana, mana + EFFECT.manaThief);
     addDown(foe);
   };
   for (let i = 0; i < (ability?.hits ?? 1) && boss.c.hp > 0; i++) {
@@ -686,8 +752,16 @@ export function attackRound(
   }
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
   if (!ability && state.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
+  // Item-Effekt „Kettenblitz“: Ein normaler Angriff springt auf einen zweiten Gegner über
+  if (!ability && hasEffect(effects, "chainLightning") && boss.c.hp > 0 && rng() < EFFECT.chainLightning.chance) {
+    const others = living().filter((f) => f !== target);
+    if (others.length > 0) strike(others[Math.floor(rng() * others.length)], EFFECT.chainLightning.share);
+  }
   // Lebensraub: Blutrausch und Plünderer
-  const lifesteal = lifestealShare(state.heroClass, ability) + BLESSING.bloodthirst * stacks(state.blessings, "bloodthirst");
+  const lifesteal =
+    lifestealShare(state.heroClass, ability) +
+    BLESSING.bloodthirst * stacks(state.blessings, "bloodthirst") +
+    (hasEffect(effects, "soulDrain") ? EFFECT.soulDrain : 0);
   if (lifesteal > 0 && dealtByHero > 0) {
     const heal = Math.min(hero.maxHp - hero.hp, Math.round(dealtByHero * lifesteal));
     hero = { ...hero, hp: hero.hp + heal };
@@ -721,11 +795,12 @@ export function attackRound(
   const stunned = new Set<Foe>();
   if (boss.c.hp > 0 && hero.hp > 0) {
     for (const foe of aoe === "all" ? living() : [target]) if (foe.c.hp > 0 && stunLands(ability, rng)) stunned.add(foe);
+    for (const foe of frozenByItem) if (foe.c.hp > 0) stunned.add(foe);
   }
   const elite = state.elite ?? [];
   /** Turm-Segen „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst. */
   const thorns = (foe: Foe, damage: number) => {
-    const share = BLESSING.thorns * stacks(state.blessings, "thorns");
+    const share = BLESSING.thorns * stacks(state.blessings, "thorns") + (hasEffect(effects, "thorns") ? EFFECT.thorns : 0);
     if (share <= 0 || damage <= 0 || foe.c.hp <= 0) return;
     const back = Math.max(1, Math.round(damage * share));
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - back) };
@@ -771,12 +846,14 @@ export function attackRound(
     // Bollwerk blockt den ganzen gegnerischen Zug – Boss und Begleiter samt Zusatzeffekten.
     const bulwark = heroEffects.bulwark;
     let blocked = false;
+    /** Eingefroren durch Frostbiss oder eine Fähigkeit? */
+    const freezeOf = (foe: Foe) => (frozenByItem.has(foe) ? { freeze: true as const } : freezeFlag(ability));
     if (stunned.has(boss) && !boss.fx.stunImmunity) {
-      events.push({ type: "stunned", ...freezeFlag(ability) });
+      events.push({ type: "stunned", ...freezeOf(boss) });
       // Bosse sind danach einige Runden immun
       if (getCreature(state.creatureId).creature.boss) boss.fx = { ...boss.fx, stunImmunity: freshStunImmunity() };
     } else {
-      if (stunned.has(boss)) events.push({ type: "stunResisted", ...freezeFlag(ability) });
+      if (stunned.has(boss)) events.push({ type: "stunResisted", ...freezeOf(boss) });
       const special = bossAbilityDue(state.creatureId, state.round);
       if (special) events.push({ type: "bossAbility", bossId: special.bossId, abilityId: special.id });
       if (bulwark) {
@@ -790,7 +867,15 @@ export function attackRound(
         const swift = elite.includes("swift");
         const attacker = {
           ...boss.c,
-          damage: boss.c.damage * (special?.multiplier ?? 1) * weakened * drums * rage * (swift ? SWIFT_SHARE : 1),
+          damage:
+            boss.c.damage *
+            (special?.multiplier ?? 1) *
+            weakened *
+            drums *
+            rage *
+            (swift ? SWIFT_SHARE : 1) *
+            // Item-Effekt „Standhaft“: Boss-Fähigkeiten treffen schwächer
+            (special && hasEffect(effects, "steadfast") ? 1 - EFFECT.steadfast : 1),
         };
         const defender = special?.ignoreArmor ? { ...strong, armor: 0 } : strong;
         // Parade/Vergeltung wirkt nur gegen den Boss – den grossen Treffer
@@ -829,7 +914,8 @@ export function attackRound(
         }
         // Elite „Giftig“: Wer getroffen wird, ist vergiftet
         if (elite.includes("poisonous") && dealt > 0 && hero.hp > 0) {
-          heroEffects = { ...heroEffects, poison: { damage: Math.max(1, Math.round(boss.c.damage * POISON.percent)), roundsLeft: POISON.rounds } };
+          const rounds = heroDotRounds(effects, "poison", POISON.rounds);
+          heroEffects = { ...heroEffects, poison: { damage: Math.max(1, Math.round(boss.c.damage * POISON.percent)), roundsLeft: rounds } };
         }
         if (special?.manaBurn) {
           const amount = Math.min(mana, special.manaBurn);
@@ -840,7 +926,9 @@ export function attackRound(
           const effect = special?.[kind];
           if (!effect) continue;
           const damage = Math.max(1, Math.round(boss.c.damage * drums * effect.percent));
-          heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: effect.rounds } };
+          // Reinheit kürzt, Drachenfeuer macht gegen Feuer immun
+          const rounds = heroDotRounds(effects, kind, effect.rounds);
+          if (rounds > 0) heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: rounds } };
         }
       }
     }
@@ -848,7 +936,7 @@ export function attackRound(
     for (const foe of adds) {
       if (foe.c.hp === 0 || boss.c.hp === 0 || hero.hp === 0) continue;
       if (stunned.has(foe)) {
-        events.push({ type: "stunned", ...freezeFlag(ability), ...foeTag(foe) });
+        events.push({ type: "stunned", ...freezeOf(foe), ...foeTag(foe) });
       } else if (foe.role === "healer") {
         const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * HEALER_HEAL));
         boss.c = { ...boss.c, hp: boss.c.hp + heal };
@@ -883,13 +971,25 @@ export function attackRound(
     }
   }
 
-  // Kleriker: Regeneration am Ende der Runde
-  if (status === "active" && state.heroClass === "cleric" && hero.hp > 0) {
-    const heal = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * CLERIC_REGEN));
+  // Kleriker und Item-Effekt „Lebensquell“: Regeneration am Ende der Runde
+  const regen = (state.heroClass === "cleric" ? CLERIC_REGEN : 0) + (hasEffect(effects, "wellspring") ? EFFECT.wellspring : 0);
+  if (status === "active" && regen > 0 && hero.hp > 0) {
+    const heal = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * regen));
     if (heal > 0) {
       hero = { ...hero, hp: hero.hp + heal };
       events.push({ type: "regen", heal });
     }
+  }
+
+  // Item-Effekt „Unbeugsam“: einmal pro Kampf mit 1 LP überleben (vor dem Zweiten Atem des Turms)
+  let endured = state.endured;
+  if (status === "lost" && hero.hp === 0 && boss.c.hp > 0 && !endured && hasEffect(effects, "unyielding")) {
+    const last = events.at(-1);
+    if (last?.type === "defeated" && last.side === "hero") events.pop();
+    hero = { ...hero, hp: 1 };
+    status = "active";
+    endured = true;
+    events.push({ type: "endured" });
   }
 
   // Turm-Segen „Zweiter Atem“: Wer fällt, steht einmal pro Lauf wieder auf (der Gegner lebt noch)
@@ -908,6 +1008,7 @@ export function attackRound(
     state: {
       ...state,
       ...(secondWindUsed && { secondWindUsed }),
+      ...(endured && { endured }),
       hero,
       enemy: boss.c,
       enemyEffects: tickEnemyEffects(boss.fx),
@@ -919,7 +1020,11 @@ export function attackRound(
       ...(phase && { phase }),
       heroEffects: { ...heroEffects, empower: tickBuff(heroEffects.empower) },
       mana: Math.min(state.maxMana, mana + MANA_REGEN),
-      cooldowns: tickCooldowns(state.cooldowns, ability),
+      // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen
+      cooldowns: tickCooldowns(
+        state.cooldowns,
+        ability && (hasEffect(effects, "quickHands") ? { id: ability.id, cooldown: ability.cooldown - 1 } : ability),
+      ),
       status,
       round: status === "active" ? state.round + 1 : state.round,
       potionUsedThisRound: false,
