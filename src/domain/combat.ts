@@ -38,6 +38,7 @@ import { bossAbilityDue } from "./bossAbilities";
 import { bossDamageDealtFactor, bossDamageTakenFactor, HEALER_HEAL, phaseDue, type AddRole } from "./bossMechanics";
 import {
   eliteStats,
+  enemyAdds,
   ELITE_REWARD_FACTOR,
   EXPLOSION_FACTOR,
   POISON,
@@ -63,6 +64,7 @@ import {
 } from "./heroClasses";
 import type { Character, Equipment, Loot, OwnedItem } from "./types";
 import { attributeDamage, shieldArmorBonus } from "./weaponScaling";
+import { mainWeapon, matchupFactor, matchupOf, WEAPON_KIND, type DotKind } from "./matchups";
 
 /** Kritische Trefferchance pro Charisma-Punkt (bis zur Obergrenze von 30 %). */
 export const CRIT_PER_CHARISMA = 0.002;
@@ -84,6 +86,8 @@ export interface HeroCombatProfile {
   heroClass: HeroClassId | null;
   /** Schadensfaktor kritischer Treffer (1,5, Assassine 2) */
   critMultiplier: number;
+  /** Hauptwaffe – ihre Schadensart zählt bei normalen Angriffen (matchups.ts). Fehlt bei älteren Profilen. */
+  weapon?: SkillWeapon | null;
 }
 
 /** Freigeschaltete Fähigkeiten aller angelegten Waffen (je Waffe erste, dann zweite), ohne Doppelte. */
@@ -125,6 +129,9 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
     abilities: availableAbilities(character, equipment),
     heroClass,
     critMultiplier: bonus.critMultiplier,
+    weapon: mainWeapon(
+      [equipment.weapon1, equipment.weapon2].filter((o) => o !== null).map((o) => getItem(o.itemId).type as SkillWeapon),
+    ),
   };
 }
 
@@ -149,7 +156,9 @@ export type BattleEvent =
    * `add`: der beteiligte Begleiter – Ziel des Helden bzw. Angreifer (fehlt: der Boss).
    * `shielded`: Ein Schildträger hat den Treffer auf den Boss gemindert.
    */
-  | { type: "hit"; attacker: Side; damage: number; crit: boolean; add?: string; shielded?: boolean }
+  | { type: "hit"; attacker: Side; damage: number; crit: boolean; add?: string; shielded?: boolean; matchup?: "weak" | "resist" }
+  /** Das Ziel ist gegen diesen Zustand immun (matchups.ts) – er wirkt nicht */
+  | { type: "immune"; kind: DotKind; add?: string }
   /** Ein Heiler unter den Begleitern heilt den Boss */
   | { type: "addHeal"; add: string; heal: number }
   /** Der Boss fällt in seine zweite Phase (bossMechanics.ts) – `rally`: diese Begleiter stehen mit vollen LP (wieder) da */
@@ -261,6 +270,8 @@ export interface BattleState {
   phase?: boolean;
   /** Elite-Gegner: seine Modifikatoren (elites.ts) – fehlt bei gewöhnlichen Gegnern */
   elite?: EliteAffix[];
+  /** Hauptwaffe des Helden – ihre Schadensart zählt bei normalen Angriffen (matchups.ts) */
+  heroWeapon?: SkillWeapon | null;
   /** Wirkungen auf den Helden */
   heroEffects: {
     /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
@@ -315,9 +326,10 @@ export function startBattle(
     abilities: hero.abilities,
     cooldowns: {},
     heroClass: hero.heroClass,
+    heroWeapon: hero.weapon ?? null,
     enemyEffects: {},
     heroEffects: {},
-    adds: (creature.adds ?? [])
+    adds: enemyAdds(creature, elite)
       .flatMap((add) => Array.from({ length: add.count }, () => add))
       .map((add, i) => {
         // Begleiter kämpfen auf dem Level ihres Bosses – so wirken ihre Faktoren bei jedem Boss gleich
@@ -494,6 +506,8 @@ export const freezeFlag = (ability: AbilityDef | null): { freeze?: true } => (ab
 /** Ein Gegner in der laufenden Runde: der Boss (ohne `add`) oder ein Begleiter. */
 interface Foe {
   add?: string;
+  /** Für Schwächen und Resistenzen (matchups.ts) */
+  creatureId: string;
   role?: AddRole;
   c: Combatant;
   fx: EnemyEffects;
@@ -535,8 +549,22 @@ export function attackRound(
   let mana = state.mana;
   let status: BattleStatus = "active";
   // Der Boss zuerst, dann die Begleiter – Kopien, die sich in dieser Runde ändern
-  const boss: Foe = { c: state.enemy, fx: state.enemyEffects };
-  const adds: Foe[] = (state.adds ?? []).map((a) => ({ add: a.uid, role: a.role, c: a.combatant, fx: a.effects }));
+  const boss: Foe = { creatureId: state.creatureId, c: state.enemy, fx: state.enemyEffects };
+  const adds: Foe[] = (state.adds ?? []).map((a) => ({ add: a.uid, creatureId: a.creatureId, role: a.role, c: a.combatant, fx: a.effects }));
+  /** Gift, Feuer oder Bluten auf einen Gegner legen – mit Schwäche/Resistenz; bei Immunität wirkt es nicht. */
+  const applyDot = (foe: Foe, kind: DotKind, base: number, rounds: number) => {
+    const factor = matchupFactor(foe.creatureId, kind);
+    if (factor === 0) {
+      events.push({ type: "immune", kind, ...foeTag(foe) });
+      return;
+    }
+    foe.fx = { ...foe.fx, [kind]: { damage: Math.max(1, Math.round(base * factor)), roundsLeft: rounds } };
+  };
+  /** Schadensart des Helden in dieser Runde: die Waffe der Fähigkeit, sonst die Hauptwaffe */
+  const heroKind = (() => {
+    const weapon = ability?.weapon ?? state.heroWeapon;
+    return weapon ? WEAPON_KIND[weapon] : null;
+  })();
   let phase = state.phase;
   /** Schildträger: Der Boss erleidet weniger Schaden, solange einer steht */
   const takenBy = (foe: Foe) => (foe === boss ? bossDamageTakenFactor(roleHolders(adds)) : 1);
@@ -575,9 +603,7 @@ export function attackRound(
       if (ability.armorBreak) foe.fx = { ...foe.fx, armorBreak: ability.armorBreak };
       for (const kind of OVER_TIME) {
         const effect = ability[kind];
-        if (!effect) continue;
-        const damage = Math.max(1, Math.round(strong.damage * effect.percent));
-        foe.fx = { ...foe.fx, [kind]: { damage, roundsLeft: effect.rounds } };
+        if (effect) applyDot(foe, kind, strong.damage * effect.percent, effect.rounds);
       }
     }
   }
@@ -593,23 +619,31 @@ export function attackRound(
     // Finisher (Meucheln): mehr Schaden gegen angeschlagene Gegner
     const execute = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
     const taken = takenBy(foe);
+    // Schwäche oder Resistenz gegen die Schadensart der Waffe
+    const matchup = heroKind ? matchupOf(foe.creatureId, heroKind) : null;
+    const kindFactor = matchupFactor(foe.creatureId, heroKind);
     const attacker: Combatant = ability
       ? {
           ...strong,
-          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share * taken,
+          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share * taken * kindFactor,
           critChance: ability.guaranteedCrit ? 1 : strong.critChance,
         }
-      : { ...strong, damage: strong.damage * vulnerableOf(foe) * taken };
+      : { ...strong, damage: strong.damage * vulnerableOf(foe) * taken * kindFactor };
     const heroHit = rollHit(attacker, { ...foe.c, armor: armorOf(foe) }, rng);
     dealtByHero += Math.min(foe.c.hp, heroHit.damage);
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - heroHit.damage) };
-    events.push({ type: "hit", attacker: "hero", ...heroHit, ...foeTag(foe), ...(taken < 1 && { shielded: true }) });
+    events.push({
+      type: "hit",
+      attacker: "hero",
+      ...heroHit,
+      ...foeTag(foe),
+      ...(taken < 1 && { shielded: true }),
+      ...((matchup === "weak" || matchup === "resist") && { matchup }),
+    });
     // Plünderer: kritische Treffer lassen bluten
     if (heroHit.crit && state.heroClass === "plunderer" && foe.c.hp > 0) {
-      const damage = Math.max(1, Math.round(strong.damage * PLUNDERER_BLEED.percent));
-      if ((foe.fx.bleed?.damage ?? 0) <= damage) {
-        foe.fx = { ...foe.fx, bleed: { damage, roundsLeft: PLUNDERER_BLEED.rounds } };
-      }
+      const damage = strong.damage * PLUNDERER_BLEED.percent * matchupFactor(foe.creatureId, "bleed");
+      if (damage > 0 && (foe.fx.bleed?.damage ?? 0) <= damage) applyDot(foe, "bleed", strong.damage * PLUNDERER_BLEED.percent, PLUNDERER_BLEED.rounds);
     }
     addDown(foe);
   };
@@ -744,7 +778,7 @@ export function attackRound(
           events.push({ type: "guarded", prevented: raw - dealt });
           let counter = guard.reflect ? Math.round(raw * guard.reflect) : 0;
           if (guard.counter && hero.hp > 0) {
-            const damage = strong.damage * guard.counter * takenBy(boss);
+            const damage = strong.damage * guard.counter * takenBy(boss) * matchupFactor(boss.creatureId, heroKind);
             counter += rollHit({ ...strong, damage }, { ...boss.c, armor: armorOf(boss) }, rng).damage;
           }
           if (counter > 0) {

@@ -3,6 +3,7 @@ import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { ADD_ROLES, type AddRole } from "../domain/bossMechanics";
 import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL } from "../domain/elites";
+import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
@@ -316,6 +317,20 @@ export function HelpScreen() {
           <H>Gebiete</H>
           <p>Jedes Gebiet öffnet sich ab seinem Mindestlevel und hat vier Kreaturen und einen Boss.</p>
           <Table head={["Gebiet", "Level"]} rows={AREAS.map((a) => [a.name, `${a.minLevel}–${a.maxLevel}`])} />
+          <H>Schwächen und Resistenzen</H>
+          <p>
+            Jeder Gegner nimmt von manchen Waffen mehr Schaden (+{Math.round((WEAK_FACTOR - 1) * 100)} %), von anderen
+            weniger (−{Math.round((1 - RESIST_FACTOR) * 100)} %), und manche sind gegen Gift, Feuer oder Bluten immun. Im
+            Kampf siehst du es am Gegner und an deinen Knöpfen (▲ wirksam, ▼ resistent). Normale Angriffe zählen mit deiner
+            Hauptwaffe, Fähigkeiten mit ihrer eigenen Waffe. Manchmal lohnt es sich, die Waffe oder die Klasse zu wechseln.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {(["blade", "blunt", "pierce", "magic"] as const).map((kind) => (
+              <li key={kind}>
+                {MATCHUP_LABELS[kind].icon} <b>{MATCHUP_LABELS[kind].name}:</b> {MATCHUP_LABELS[kind].detail}
+              </li>
+            ))}
+          </ul>
           <H>Elite-Gegner</H>
           <p>
             Jede normale Kreatur kann mit {Math.round(ELITE_CHANCE * 100)} % Chance als ★ Elite auftauchen – das zeigt

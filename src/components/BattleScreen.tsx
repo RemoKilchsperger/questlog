@@ -59,11 +59,15 @@ import {
   eliteChips,
   enemyStatusChips,
   heroStatusChips,
+  MatchupBadge,
+  matchupChips,
   PhaseWarning,
   StatusSide,
   TargetPicker,
 } from "./BattleStatus";
 import { getBossPhase } from "../domain/bossMechanics";
+import { MATCHUP_LABELS, matchupOf, WEAPON_KIND } from "../domain/matchups";
+import type { SkillWeapon } from "../domain/skills";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestProgressChips } from "./QuestScreen";
@@ -511,6 +515,7 @@ function Battle({ battle }: { battle: BattleState }) {
               title={battle.enemy.name}
               chips={[
                 ...eliteChips(battle.elite),
+                ...matchupChips(battle.creatureId),
                 ...bossMechanicChips(battle.creatureId, battle.phase, battle.adds ?? []),
                 ...enemyStatusChips(battle.enemyEffects),
               ]}
@@ -528,7 +533,7 @@ function Battle({ battle }: { battle: BattleState }) {
                 onClick={() => act(() => attack())}
                 className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                ⚔️ Angreifen
+                ⚔️ Angreifen <MatchupBadge matchup={matchupAgainst(battle, battle.heroWeapon ?? null)} />
               </motion.button>
               {battle.abilities.map((id) => (
                 <AbilityButton
@@ -537,6 +542,7 @@ function Battle({ battle }: { battle: BattleState }) {
                   blocker={abilityBlocker(battle, id)}
                   disabled={busy}
                   onClick={() => act(() => attack(id))}
+                  matchup={matchupAgainst(battle, getAbility(id).weapon)}
                 />
               ))}
             </div>
@@ -613,14 +619,28 @@ function Battle({ battle }: { battle: BattleState }) {
   );
 }
 
+/** Wie wirkt eine Waffe gegen das aktuelle Ziel (Boss oder gewählter Begleiter)? */
+function matchupAgainst(battle: BattleState, weapon: SkillWeapon | null) {
+  if (!weapon) return null;
+  const target = battle.adds?.find((a) => a.uid === battle.target)?.creatureId ?? battle.creatureId;
+  return matchupOf(target, WEAPON_KIND[weapon]);
+}
+
 /** Boss und Begleiter: Ziel wählen (auch per Klick in der Szene). */
 function BattleTargets({ battle, disabled }: { battle: BattleState; disabled: boolean }) {
   const choose = useGameStore((s) => s.battleTarget);
   return (
     <TargetPicker
       foes={[
-        { combatant: battle.enemy, effects: battle.enemyEffects, boss: true },
-        ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false, role: a.role })),
+        { combatant: battle.enemy, effects: battle.enemyEffects, boss: getCreature(battle.creatureId).creature.boss, creatureId: battle.creatureId },
+        ...(battle.adds ?? []).map((a) => ({
+          uid: a.uid,
+          combatant: a.combatant,
+          effects: a.effects,
+          boss: false,
+          role: a.role,
+          creatureId: a.creatureId,
+        })),
       ]}
       selected={battle.target}
       disabled={disabled}
@@ -1052,12 +1072,14 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
         : `Du trinkst ${getPotion(e.potionId).name} und heilst ${e.heal} LP.`;
     case "hit":
       return e.attacker === "hero"
-        ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.shielded ? " – der Schildträger schützt ihn" : ""}.`
+        ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}.`
         : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden.`;
     case "addHeal":
       return `${enemy} heilt ${battle.enemy.name} um ${e.heal} LP.`;
     case "enemyRegen":
       return `${enemy} regeneriert ${e.heal} LP.`;
+    case "immune":
+      return `${enemy} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "explosion":
       return e.blocked
         ? `${enemy} explodiert – dein Bollwerk fängt die Explosion ab.`

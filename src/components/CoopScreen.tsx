@@ -49,11 +49,15 @@ import {
   eliteChips,
   enemyStatusChips,
   heroStatusChips,
+  MatchupBadge,
+  matchupChips,
   PhaseWarning,
   StatusSide,
   TargetPicker,
 } from "./BattleStatus";
 import { getBossPhase } from "../domain/bossMechanics";
+import { MATCHUP_LABELS, matchupOf, WEAPON_KIND } from "../domain/matchups";
+import type { SkillWeapon } from "../domain/skills";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 
@@ -595,6 +599,9 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
       </p>
     );
   }
+  /** Wie wirkt eine Waffe gegen das eigene Ziel? */
+  const targetCreature = battle.adds?.find((a) => a.uid === target)?.creatureId ?? battle.bossId;
+  const against = (weapon: SkillWeapon | null | undefined) => (weapon ? matchupOf(targetCreature, WEAPON_KIND[weapon]) : null);
   const send = (ability?: CoopAction["ability"]) =>
     choose({ ...(potion && { potion }), ...(ability && { ability }), ...(target && { target }) });
   const fallen = battle.heroes.filter((h) => h.down && !h.revived);
@@ -617,6 +624,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
           title={battle.boss.name}
           chips={[
             ...eliteChips(battle.elite),
+            ...matchupChips(battle.bossId),
             ...bossMechanicChips(battle.bossId, battle.phase, battle.adds ?? []),
             ...enemyStatusChips(battle.bossEffects),
           ]}
@@ -625,8 +633,15 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
       {(battle.adds?.length ?? 0) > 0 && (
         <TargetPicker
           foes={[
-            { combatant: battle.boss, effects: battle.bossEffects, boss: true },
-            ...(battle.adds ?? []).map((a) => ({ uid: a.uid, combatant: a.combatant, effects: a.effects, boss: false, role: a.role })),
+            { combatant: battle.boss, effects: battle.bossEffects, boss: getCoopEnemy(battle.bossId).boss, creatureId: battle.bossId },
+            ...(battle.adds ?? []).map((a) => ({
+              uid: a.uid,
+              combatant: a.combatant,
+              effects: a.effects,
+              boss: false,
+              role: a.role,
+              creatureId: a.creatureId,
+            })),
           ]}
           selected={target}
           disabled={locked}
@@ -642,7 +657,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
             onClick={() => send()}
             className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            ⚔️ Angreifen
+            ⚔️ Angreifen <MatchupBadge matchup={against(me.weapon)} />
           </motion.button>
           {me.abilities.map((id) => (
             <AbilityButton
@@ -651,6 +666,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               blocker={coopAbilityBlocker(me, id)}
               disabled={locked}
               onClick={() => send(id)}
+              matchup={against(getAbility(id).weapon)}
             />
           ))}
         </div>
@@ -869,7 +885,9 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "counter":
       return `${name(e.heroId)} schlägt zurück: ${bossName} −${e.damage}.`;
     case "hit":
-      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.shielded ? " – der Schildträger schützt ihn" : ""}.`;
+      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}.`;
+    case "immune":
+      return `${name(e.target)} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "addHeal":
       return `${name(e.add)} heilt ${bossName} um ${e.heal} LP.`;
     case "enemyRegen":

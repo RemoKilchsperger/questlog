@@ -474,6 +474,15 @@ export class CoopBattleScene extends Phaser.Scene {
         else this.heroHits(event);
         // Der Schildträger fängt einen Teil ab – blauer Schimmer um den Boss
         if (event.shielded) this.time.delayedCall(150, () => fx.ring(this, this.center(this.boss), 0x7aa7f0, 75, 350));
+        // Schwäche oder Resistenz gegen die Waffe
+        if (event.matchup) {
+          const foe = this.unit(event.target);
+          const weak = event.matchup === "weak";
+          this.time.delayedCall(200, () => this.float(foe, weak ? "SCHWACHPUNKT!" : "RESISTENT", weak ? "#7dd3a8" : "#a49cb8", 14, 50));
+        }
+        break;
+      case "immune":
+        this.float(this.unit(event.target), "IMMUN", "#a49cb8", 16, 50);
         break;
       case "addHeal": {
         // Lebenskraft fliesst vom Heiler zum Boss

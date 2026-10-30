@@ -429,6 +429,8 @@ export class BattleScene extends Phaser.Scene {
             ? 1100
             : event.type === "ability" || event.type === "bossAbility"
             ? 600
+            : event.type === "immune"
+              ? 300
             : event.type === "manaBurn" || event.type === "drain" || event.type === "addHeal"
               ? 500
               : sideHit || event.type === "blocked" || (event.type === "stunned" && event.add)
@@ -547,6 +549,15 @@ export class BattleScene extends Phaser.Scene {
       else this.enemyHit(event, special);
       // Der Schildträger fängt einen Teil ab – blauer Schimmer um den Boss
       if (event.shielded) this.time.delayedCall(150, () => fx.ring(this, this.center("enemy"), 0x7aa7f0, 75, 350));
+      // Schwäche oder Resistenz gegen die Waffe
+      if (event.attacker === "hero" && event.matchup) {
+        const f = this.fighters[event.add ?? "enemy"];
+        const weak = event.matchup === "weak";
+        this.time.delayedCall(200, () => this.floatText(f.homeX, GROUND_Y - 150, weak ? "SCHWACHPUNKT!" : "RESISTENT", weak ? "#7dd3a8" : "#a49cb8", 18));
+      }
+    } else if (event.type === "immune") {
+      const f = this.fighters[event.add ?? "enemy"];
+      this.floatText(f.homeX, GROUND_Y - 140, "IMMUN", "#a49cb8", 20);
     } else if (event.type === "addHeal") {
       // Lebenskraft fliesst vom Heiler zum Boss
       const enemy = this.fighters.enemy;

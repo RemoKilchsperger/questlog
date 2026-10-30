@@ -8,6 +8,7 @@ import type { AbilityDef, Guard } from "../domain/abilities";
 import { ADD_ROLES, DRUMMER_BONUS, getBossPhase, SHIELD_DAMAGE_TAKEN, type AddRole } from "../domain/bossMechanics";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
 import { getEliteAffix, type EliteAffix } from "../domain/elites";
+import { getMatchups, MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR, type Matchup } from "../domain/matchups";
 import { BUFF_LABELS, type BuffKind } from "../domain/potions";
 import { Hint } from "./HoverCard";
 
@@ -134,6 +135,52 @@ export function bossMechanicChips(
   return chips;
 }
 
+/**
+ * Schwächen, Resistenzen und Immunitäten eines Gegners (matchups.ts): Schwächen
+ * lila wie andere Nachteile des Gegners, Resistenzen und Immunitäten rot.
+ */
+export function matchupChips(creatureId: string): StatusChip[] {
+  const { weak = [], resist = [], immune = [] } = getMatchups(creatureId);
+  const label = (kind: Matchup) => MATCHUP_LABELS[kind];
+  return [
+    ...weak.map((kind): StatusChip => ({
+      key: `weak-${kind}`,
+      icon: label(kind).icon,
+      text: `Schwach: ${label(kind).name}`,
+      tone: "foe",
+      title: `Erleidet ${pct(WEAK_FACTOR - 1)} mehr Schaden durch ${label(kind).name} (${label(kind).detail})`,
+    })),
+    ...resist.map((kind): StatusChip => ({
+      key: `resist-${kind}`,
+      icon: label(kind).icon,
+      text: `Resistent: ${label(kind).name}`,
+      tone: "bad",
+      title: `Erleidet ${pct(1 - RESIST_FACTOR)} weniger Schaden durch ${label(kind).name} (${label(kind).detail})`,
+    })),
+    ...immune.map((kind): StatusChip => ({
+      key: `immune-${kind}`,
+      icon: label(kind).icon,
+      text: `Immun: ${label(kind).name}`,
+      tone: "bad",
+      title: `${label(kind).name} wirkt nicht`,
+    })),
+  ];
+}
+
+/** Wie wirksam ein Angriff gegen das Ziel ist – als kleiner Hinweis an Angriff und Fähigkeiten. */
+export function MatchupBadge({ matchup }: { matchup: "weak" | "resist" | "immune" | null }) {
+  if (!matchup || matchup === "immune") return null;
+  return matchup === "weak" ? (
+    <span className="rounded bg-xp/20 px-1 text-xs text-xp" title={`Das Ziel ist schwach dagegen: +${pct(WEAK_FACTOR - 1)} Schaden`}>
+      ▲ wirksam
+    </span>
+  ) : (
+    <span className="rounded bg-danger/20 px-1 text-xs text-danger" title={`Das Ziel ist resistent: −${pct(1 - RESIST_FACTOR)} Schaden`}>
+      ▼ resistent
+    </span>
+  );
+}
+
 /** Modifikatoren eines Elite-Gegners (elites.ts) – rot getönt, sie helfen ihm. */
 export function eliteChips(elite: readonly EliteAffix[] | undefined): StatusChip[] {
   return (elite ?? []).map((id) => {
@@ -202,6 +249,8 @@ export interface TargetOption {
   boss: boolean;
   /** Aufgabe des Begleiters (Heiler, Schildträger, Trommler) */
   role?: AddRole;
+  /** Für Schwächen und Resistenzen (matchups.ts) */
+  creatureId: string;
 }
 
 /** Boss und Begleiter als Knöpfe: Lebenspunkte und Effekte im Blick, das gewählte Ziel hervorgehoben. */
@@ -217,9 +266,9 @@ export function TargetPicker({
   onChoose: (uid: string | undefined) => void;
 }) {
   return (
-    <ActionGroup label="Ziel" hint="Fällt der Boss, ist der Kampf gewonnen · Flächen-Fähigkeiten treffen mehrere">
+    <ActionGroup label="Ziel" hint="Fällt der Anführer, ist der Kampf gewonnen · Flächen-Fähigkeiten treffen mehrere">
       <div className="grid gap-2 sm:grid-cols-3">
-        {foes.map(({ uid, combatant, effects, boss, role }) => {
+        {foes.map(({ uid, combatant, effects, boss, role, creatureId }) => {
           const down = combatant.hp === 0;
           const isSelected = selected === uid;
           const roleDef = role && ADD_ROLES[role];
@@ -251,6 +300,12 @@ export function TargetPicker({
                 <span className="block h-full bg-danger" style={{ width: `${(combatant.hp / combatant.maxHp) * 100}%` }} />
               </span>
               <span className="flex min-h-4 flex-wrap gap-1 text-xs">
+                {matchupChips(creatureId).map((chip) => (
+                  <span key={chip.key} title={`${chip.text} – ${chip.title}`} className={chip.tone === "foe" ? "text-xp" : "text-danger"}>
+                    {chip.key.startsWith("weak") ? "▲" : chip.key.startsWith("resist") ? "▼" : "✕"}
+                    {chip.icon}
+                  </span>
+                ))}
                 {enemyStatusChips(effects).map((chip) => (
                   <span key={chip.key} title={chip.title}>
                     {chip.icon}
@@ -285,11 +340,14 @@ export function AbilityButton({
   blocker,
   disabled,
   onClick,
+  matchup = null,
 }: {
   ability: AbilityDef;
   blocker: string | null;
   disabled: boolean;
   onClick: () => void;
+  /** Schwäche/Resistenz des Ziels gegen die Waffe der Fähigkeit */
+  matchup?: "weak" | "resist" | "immune" | null;
 }) {
   // "Abklingzeit: noch 2 Runden." → "2 Runden"
   const cooling = blocker?.match(/^Abklingzeit: noch (.+)\.$/)?.[1] ?? null;
@@ -305,7 +363,10 @@ export function AbilityButton({
         {ability.icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="font-pixel block truncate text-intellect">{ability.name}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="font-pixel truncate text-intellect">{ability.name}</span>
+          <MatchupBadge matchup={matchup} />
+        </span>
         <span className="block truncate text-xs text-muted">
           {cooling ? (
             <span className="text-gold">⏳ wieder bereit in {cooling}</span>

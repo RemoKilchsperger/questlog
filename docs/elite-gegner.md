@@ -32,6 +32,7 @@ Ziel: mehr Abwechslung bei den normalen Kreaturen. Code: `src/domain/elites.ts`,
 | ☠️ Giftig | jeder Treffer vergiftet: 50 % seines Schadens pro Runde, 3 Runden | Heilung, kurzer Kampf |
 | ⚡ Flink | zwei Angriffe pro Runde mit je 75 % Schaden | Rüstung, Bollwerk |
 | 💥 Explosiv | explodiert beim Tod: doppelter Schaden, kann den Helden mitreissen | genug LP für den letzten Schlag, Bollwerk |
+| 🐺 Rudelführer | bringt einen Artgenossen mit (50 % LP, 50 % Schaden), der flieht, wenn der Rudelführer fällt | Ziel wählen, Flächen-Fähigkeiten |
 
 ## Abstimmung (Simulation)
 

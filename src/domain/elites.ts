@@ -7,10 +7,19 @@
 // Die Wirkungen stecken in combat.ts (`attackRound`), hier stehen die Regeln
 // und Zahlen.
 
-import type { CreatureDef } from "./creatures";
+import type { BossAdd, CreatureDef } from "./creatures";
 import { hash, seededRng } from "./random";
 
-export type EliteAffix = "armored" | "giant" | "regenerating" | "raging" | "vampiric" | "poisonous" | "swift" | "explosive";
+export type EliteAffix =
+  | "armored"
+  | "giant"
+  | "regenerating"
+  | "raging"
+  | "vampiric"
+  | "poisonous"
+  | "swift"
+  | "explosive"
+  | "packLeader";
 
 /** Chance, dass eine normale Kreatur Elite ist. */
 export const ELITE_CHANCE = 0.1;
@@ -37,6 +46,8 @@ export const POISON = { percent: 0.5, rounds: 3 };
 export const SWIFT_SHARE = 0.75;
 /** Explosiv: Beim Tod explodiert er mit diesem Vielfachen seines Schadens (Rüstung zählt, Bollwerk blockt). */
 export const EXPLOSION_FACTOR = 2;
+/** Rudelführer: bringt einen Artgenossen mit – mit diesem Anteil an Lebenspunkten und Schaden. */
+export const PACK_ADD = { hp: 0.5, damage: 0.5 };
 
 export interface EliteAffixDef {
   id: EliteAffix;
@@ -75,6 +86,12 @@ export const ELITE_AFFIXES: readonly EliteAffixDef[] = [
     name: "Explosiv",
     icon: "💥",
     description: `Explodiert, wenn er fällt: ${EXPLOSION_FACTOR}-facher Schaden – Bollwerk blockt die Explosion.`,
+  },
+  {
+    id: "packLeader",
+    name: "Rudelführer",
+    icon: "🐺",
+    description: `Bringt einen Artgenossen mit (${pct(PACK_ADD.hp)} Lebenspunkte, ${pct(PACK_ADD.damage)} Schaden). Fällt der Rudelführer, flieht er.`,
   },
 ];
 
@@ -115,4 +132,10 @@ export function eliteStats<T extends { maxHp: number; armor: number }>(stats: T,
  */
 export function coopElite(runId: string, stage: number, creature: CreatureDef): EliteAffix[] {
   return rollElite(creature, seededRng(hash(`${runId}|elite|${stage}`)));
+}
+
+/** Begleiter eines Gegners: die des Bosses, bei einem Rudelführer dazu ein Artgenosse. */
+export function enemyAdds(creature: CreatureDef, elite: readonly EliteAffix[]): BossAdd[] {
+  const pack: BossAdd[] = elite.includes("packLeader") ? [{ creatureId: creature.id, count: 1, ...PACK_ADD }] : [];
+  return [...(creature.adds ?? []), ...pack];
 }

@@ -35,6 +35,8 @@ import { BOSS_ITEMS, createItem, getBossItems, indexForLevel, ITEM_TYPES, ITEMS 
 import { lootPool } from "./loot";
 import { MAX_LEVEL, xpForNextLevel } from "./leveling";
 import { buyPotion, getPotion } from "./potions";
+import { matchupOf, WEAPON_KIND } from "./matchups";
+import type { SkillWeapon } from "./skills";
 import type { Character, Equipment, Rarity } from "./types";
 
 const xpForLevel = (level: number) => {
@@ -54,8 +56,8 @@ const heroAt = (level: number): Character => ({
   abilities: [],
 });
 
-/** Volle Ausrüstung des passenden Levels (Standard: gewöhnlich), zwei Schwerter. */
-const gearAt = (level: number, rarity: Rarity = "common"): Equipment => {
+/** Volle Ausrüstung des passenden Levels (Standard: gewöhnlich), zwei Waffen – Standard: Schwerter. */
+const gearAt = (level: number, rarity: Rarity = "common", weapon = "sword"): Equipment => {
   const item = (type: string) => createItem(`${type}-${indexForLevel(level)}`, rarity, type, () => 0.5);
   return {
     head: item("head"),
@@ -63,8 +65,8 @@ const gearAt = (level: number, rarity: Rarity = "common"): Equipment => {
     arms: item("arms"),
     legs: item("legs"),
     feet: item("feet"),
-    weapon1: item("sword"),
-    weapon2: createItem(`sword-${indexForLevel(level)}`, rarity, "sword2", () => 0.5),
+    weapon1: item(weapon),
+    weapon2: createItem(`${weapon}-${indexForLevel(level)}`, rarity, `${weapon}2`, () => 0.5),
   };
 };
 
@@ -398,10 +400,12 @@ describe("Gebiete und Balance", () => {
     }
   });
 
-  it("mit seltener Ausrüstung besiegt ein Held Kreaturen seines Levels meistens – ohne Fähigkeiten und Tränke", () => {
+  it("mit seltener Ausrüstung besiegt ein Held Kreaturen seines Levels meistens – ohne Fähigkeiten und Tränke, mit einer Waffe, die nicht abprallt", () => {
     for (const area of AREAS) {
       for (const creature of area.creatures.filter((c) => !c.boss)) {
-        const hero = getHeroCombatProfile(heroAt(creature.level), gearAt(creature.level, "rare"));
+        // Wer sich anpasst, nimmt eine Waffe, gegen die die Kreatur nicht resistent ist
+        const weapon = ["sword", "mace", "dagger"].find((w) => matchupOf(creature.id, WEAPON_KIND[w as SkillWeapon]) !== "resist")!;
+        const hero = getHeroCombatProfile(heroAt(creature.level), gearAt(creature.level, "rare", weapon));
         const rng = seeded(creature.level);
         const results = Array.from({ length: 100 }, () => simulate(hero, creature, rng));
         const winRate = results.filter((r) => r.status === "won").length / results.length;
@@ -413,19 +417,22 @@ describe("Gebiete und Balance", () => {
     }
   });
 
-  // Gut gespielter Champion: schwere Rüstung + Zweihandschwert (Standard: gewöhnlich), nur die Level-up-Punkte
-  // (60 % Stärke, 40 % Ausdauer), Skill und Fähigkeiten des Zweihandschwerts – die er auch einsetzt.
-  const champion = (level: number, rarity: Rarity = "common") => {
+  // Gut gespielter Held in schwerer Rüstung (Standard: gewöhnlich), nur die Level-up-Punkte (60 % Stärke,
+  // 40 % Ausdauer), Skill und Fähigkeiten seiner Zweihandwaffe – die er auch einsetzt. Champion mit
+  // Zweihandschwert; widersteht der Boss Klingen, passt er sich an und kommt als Wächter mit Grosshammer.
+  type HeavyWeapon = "greatsword" | "greathammer";
+  const weaponAgainst = (boss: CreatureDef): HeavyWeapon => (matchupOf(boss.id, "blade") === "resist" ? "greathammer" : "greatsword");
+  const champion = (level: number, rarity: Rarity = "common", weapon: HeavyWeapon = "greatsword") => {
     const points = 2 * (level - 1);
     const strength = Math.round(points * 0.6);
     const character: Character = {
       ...heroAt(level),
       stats: { strength: 1 + strength, intellect: 1, endurance: 1 + points - strength, charisma: 1 },
       spentPoints: points,
-      skills: { greatsword: 5 },
-      abilities: level >= 25 ? ["greatsword", "greatsword-2"] : ["greatsword"],
+      skills: { [weapon]: 5 },
+      abilities: level >= 25 ? [weapon, `${weapon}-2`] : [weapon],
     };
-    const equipment = { ...gearAt(level, rarity), weapon1: createItem(`greatsword-${indexForLevel(level)}`, rarity, "gs", () => 0.5), weapon2: null };
+    const equipment = { ...gearAt(level, rarity), weapon1: createItem(`${weapon}-${indexForLevel(level)}`, rarity, "gs", () => 0.5), weapon2: null };
     return getHeroCombatProfile(character, equipment);
   };
 
@@ -436,7 +443,8 @@ describe("Gebiete und Balance", () => {
    */
   const fightWell = (start: BattleState, rng: () => number, potions: boolean): BattleState => {
     let state = start;
-    expect(state.heroClass).toBe("champion");
+    expect(["champion", "warden"]).toContain(state.heroClass);
+    const weapon: HeavyWeapon = state.heroClass === "warden" ? "greathammer" : "greatsword";
     while (state.status === "active") {
       if (potions && state.hero.hp < state.hero.maxHp * 0.4) {
         const heal = start.enemy.level > 40 ? ["large", "medium", "small"] : ["medium", "small"];
@@ -446,7 +454,7 @@ describe("Gebiete und Balance", () => {
       state = setTarget(state, livingAdds(state).find((a) => a.role)?.uid);
       const ability = state.target
         ? undefined
-        : (["greatsword-2", "greatsword"] as const).find((id) => abilityBlocker(state, id) === null);
+        : ([`${weapon}-2`, weapon] as const).find((id) => abilityBlocker(state, id) === null);
       state = attackRound(state, rng, ability).state;
     }
     return state;
@@ -454,7 +462,7 @@ describe("Gebiete und Balance", () => {
 
   it("Gebietsbosse: ein gut gespielter Champion auf Boss-Level braucht seltene Ausrüstung und Heiltränke", () => {
     const fight = (boss: CreatureDef, rng: () => number, rarity: Rarity, potions: boolean) =>
-      fightWell(startBattle("b", "Held", champion(boss.level, rarity), boss), rng, potions).status === "won";
+      fightWell(startBattle("b", "Held", champion(boss.level, rarity, weaponAgainst(boss)), boss), rng, potions).status === "won";
     for (const area of AREAS) {
       const boss = area.creatures.at(-1)!;
       const rng = seeded(boss.level);
@@ -472,7 +480,8 @@ describe("Gebiete und Balance", () => {
   it("Dungeons bis Level 42: ein gut gespielter Champion schafft sie mit seltener Ausrüstung und Heiltränken meistens, gewöhnlich ausgerüstet ohne Tränke kommt er kaum zum Boss", () => {
     /** Erreichte Stufe – LP werden mitgenommen, keine Heilung zwischen den Kämpfen. */
     const run = (dungeon: (typeof DUNGEONS)[number], rng: () => number, rarity: Rarity, potions: boolean) => {
-      const hero = champion(dungeon.creatures.at(-1)!.level, rarity);
+      const boss = dungeon.creatures.at(-1)!;
+      const hero = champion(boss.level, rarity, weaponAgainst(boss));
       let hp = hero.maxHp;
       for (let i = 0; i < dungeon.creatures.length; i++) {
         const end = fightWell(startBattle("b", "Held", hero, dungeon.creatures[i], hp), rng, potions);

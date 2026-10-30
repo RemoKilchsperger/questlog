@@ -207,7 +207,7 @@ export const AREAS: readonly AreaDef[] = [
       c("flame-elemental", "Flammenelementar", "flame-elemental", 53),
       c("young-dragon", "Jungdrache", "dragon", 56),
       c("demon-guard", "Dämonenwächter", "demon", 58),
-      withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 1.55, { creatureId: "demon-guard", role: "shield" }),
+      withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 1.6, { creatureId: "demon-guard", role: "shield" }),
     ],
   },
 ];
@@ -238,7 +238,7 @@ export const DUNGEONS: readonly AreaDef[] = [
       d("mine-rat", "Minenratte", "mine-rat", 10, DUNGEON_POWER),
       d("kobold-blaster", "Kobold-Sprengmeister", "kobold", 11, DUNGEON_POWER),
       d("pit-spider", "Grubenspinne", "pit-spider", 11, DUNGEON_POWER),
-      withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 0.95, { creatureId: "kobold-blaster", role: "drummer", name: "Kobold-Trommler" }, 1.05),
+      withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 0.9, { creatureId: "kobold-blaster", role: "drummer", name: "Kobold-Trommler" }, 1.05),
     ],
   },
   {
