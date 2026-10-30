@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { AbilityDef, Guard } from "../domain/abilities";
 import { ADD_ROLES, DRUMMER_BONUS, getBossPhase, SHIELD_DAMAGE_TAKEN, type AddRole } from "../domain/bossMechanics";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
+import { getEliteAffix, type EliteAffix } from "../domain/elites";
 import { BUFF_LABELS, type BuffKind } from "../domain/potions";
 import { Hint } from "./HoverCard";
 
@@ -131,6 +132,14 @@ export function bossMechanicChips(
     chips.push({ key: "healer", icon: ADD_ROLES.healer.icon, text: "Wird geheilt", tone: "bad", title: ADD_ROLES.healer.description });
   }
   return chips;
+}
+
+/** Modifikatoren eines Elite-Gegners (elites.ts) – rot getönt, sie helfen ihm. */
+export function eliteChips(elite: readonly EliteAffix[] | undefined): StatusChip[] {
+  return (elite ?? []).map((id) => {
+    const def = getEliteAffix(id);
+    return { key: `elite-${id}`, icon: def.icon, text: def.name, tone: "bad", title: `Elite – ${def.name}: ${def.description}` };
+  });
 }
 
 /** So knapp über der Schwelle kündigt sich die zweite Phase an (Anteil der maximalen LP). */

@@ -50,6 +50,17 @@ import {
 } from "./combat";
 import { abilityForRound, getBossAbilities } from "./bossAbilities";
 import { bossDamageDealtFactor, bossDamageTakenFactor, HEALER_HEAL, phaseDue, type AddRole } from "./bossMechanics";
+import {
+  coopElite,
+  eliteStats,
+  EXPLOSION_FACTOR,
+  POISON,
+  RAGE_BONUS,
+  REGEN_SHARE,
+  SWIFT_SHARE,
+  VAMPIRE_SHARE,
+  type EliteAffix,
+} from "./elites";
 import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
@@ -393,6 +404,10 @@ export type CoopEvent =
   | { type: "addHeal"; add: string; heal: number }
   /** Der Boss fällt in seine zweite Phase (bossMechanics.ts) – `rally`: diese Begleiter stehen mit vollen LP (wieder) da */
   | { type: "bossPhase"; bossId: string; rally?: string[] }
+  /** Elite „Regenerierend“: Der Gegner heilt sich am Ende der Runde */
+  | { type: "enemyRegen"; heal: number }
+  /** Elite „Explosiv“: Der Gegner explodiert beim Tod und trifft alle stehenden Helden (Bollwerk blockt) */
+  | { type: "explosion"; hits: { heroId: string; damage: number; blocked?: boolean }[] }
   | { type: OverTimeKind; target: string; damage: number }
   | { type: "bossAbility"; bossId: string; abilityId: string; name: string }
   /** Mit `add`: ein Begleiter statt des Bosses */
@@ -429,6 +444,8 @@ export interface CoopBattleState {
   adds?: CoopAdd[];
   /** Der Boss ist in seiner zweiten Phase (bossMechanics.ts) – sie kommt nur einmal */
   phase?: boolean;
+  /** Elite-Gegner im Koop-Dungeon: seine Modifikatoren (elites.ts) – fehlt bei gewöhnlichen Gegnern */
+  elite?: EliteAffix[];
   status: CoopStatus;
   log: (CoopEvent & { round: number })[];
   /** Nur in Koop-Dungeons: welcher Dungeon, welcher Kampf. `bossId` ist dann der aktuelle Gegner. */
@@ -473,6 +490,7 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
   }
   const dungeon = isCoopDungeon(contentId) ? { id: contentId, stage: 0, runId: id } : undefined;
   const enemy = getCoopEnemy(dungeon ? getDungeon(contentId).creatures[0].id : getCoopBoss(contentId).id);
+  const elite = dungeon ? coopElite(dungeon.runId, 0, enemy.creature) : [];
   return {
     id,
     bossId: enemy.id,
@@ -504,9 +522,10 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
       down: false,
       revived: false,
     })),
-    boss: coopEnemyStats(enemy, players.length),
+    boss: eliteStats(coopEnemyStats(enemy, players.length), elite),
     bossEffects: {},
     adds: coopAdds(enemy, players.length),
+    ...(elite.length > 0 && { elite }),
     status: "active",
     log: [],
   };
@@ -551,10 +570,12 @@ export function dungeonCompleted(state: CoopBattleState): boolean {
 export function nextDungeonStage(state: CoopBattleState, id: string, now: number): CoopBattleState {
   if (!hasNextStage(state)) throw new Error("Es gibt keinen nächsten Kampf.");
   const enemy = nextStageEnemy(state)!;
+  const stage = state.dungeon!.stage + 1;
+  const elite = coopElite(state.dungeon!.runId, stage, enemy.creature);
   return {
     id,
     bossId: enemy.id,
-    dungeon: { ...state.dungeon!, stage: state.dungeon!.stage + 1 },
+    dungeon: { ...state.dungeon!, stage },
     round: 1,
     deadline: now + COOP_TURN_SECONDS * 1000,
     heroes: state.heroes.map((h) => ({
@@ -572,9 +593,10 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
       down: false,
       revived: false,
     })),
-    boss: coopEnemyStats(enemy, state.heroes.length),
+    boss: eliteStats(coopEnemyStats(enemy, state.heroes.length), elite),
     bossEffects: {},
     adds: coopAdds(enemy, state.heroes.length),
+    ...(elite.length > 0 && { elite }),
     status: "active",
     log: [],
   };
@@ -592,7 +614,8 @@ export function rollCoopDungeonChest(state: CoopBattleState, hero: HeroCombatPro
   let chest = EMPTY_CHEST;
   for (let i = 0; i < clearedStages(state); i++) {
     const rng = seededRng(hash(`${runId}|${i}|${playerId}`));
-    chest = addToChest(chest, rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng));
+    const elite = coopElite(runId, i, creatures[i]).length > 0;
+    chest = addToChest(chest, rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng, [], elite));
   }
   return chest;
 }
@@ -886,9 +909,36 @@ export function resolveRound(
 
   // 3. Gegnerphase: erst der Boss, dann die Begleiter
   let status: CoopStatus = "active";
+  const elite = state.elite ?? [];
+  /** Wie Gruppen-Fähigkeiten: Was alle trifft, trifft jeden mit dem Schaden wie solo (ohne Gruppenzuschlag) */
+  const soloScale = 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1);
+  /** Der Gegner fällt – ein explosiver Elite trifft alle stehenden Helden (Bollwerk blockt). Fallen alle, ist der Kampf verloren. */
+  const enemyDown = () => {
+    if (elite.includes("explosive")) {
+      const hits: { heroId: string; damage: number; blocked?: boolean }[] = [];
+      for (const hero of heroes.filter((h) => !h.down)) {
+        if (hero.effects.bulwark) {
+          hero.effects.bulwark = undefined;
+          hits.push({ heroId: hero.id, damage: 0, blocked: true });
+          continue;
+        }
+        const blast = rollHit({ ...boss.c, damage: (boss.c.damage * EXPLOSION_FACTOR) / soloScale, critChance: 0 }, buffed(hero), rng);
+        hero.combatant.hp = Math.max(0, hero.combatant.hp - blast.damage);
+        hits.push({ heroId: hero.id, damage: blast.damage });
+      }
+      events.push({ type: "explosion", hits });
+      for (const hero of heroes) knockDown(hero);
+    }
+    if (heroes.every((h) => h.down)) {
+      status = "lost";
+      events.push({ type: "wipe" });
+    } else {
+      status = "won";
+      events.push({ type: "victory" });
+    }
+  };
   if (boss.c.hp <= 0) {
-    status = "won";
-    events.push({ type: "victory" });
+    enemyDown();
   } else if (heroes.every((h) => h.down)) {
     status = "lost";
     events.push({ type: "wipe" });
@@ -927,17 +977,25 @@ export function resolveRound(
       // Geschwächt (Erdbeben, Fluch): weniger Schaden
       // Gruppen-Fähigkeiten der Dungeon-Bosse treffen alle – jeden mit dem Schaden wie solo, ohne den
       // Gruppenzuschlag. Fähigkeiten gegen ein Ziel haben ihn wie normale Angriffe.
-      const groupScale = special?.aoe && !enemy.raid ? 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1) : 1;
+      const groupScale = special?.aoe && !enemy.raid ? soloScale : 1;
+      // Elite: Rasend macht mehr Schaden (unter halben LP noch mehr), Flink schlägt zweimal schwächer zu
+      const rage = elite.includes("raging") ? 1 + (boss.c.hp < boss.c.maxHp / 2 ? RAGE_BONUS.low : RAGE_BONUS.base) : 1;
+      const swift = elite.includes("swift");
       const attacker = {
         ...boss.c,
-        damage: ((boss.c.damage * (special?.multiplier ?? 1)) / groupScale) * (1 - (boss.fx.weaken?.percent ?? 0)) * drums,
+        damage:
+          ((boss.c.damage * (special?.multiplier ?? 1)) / groupScale) *
+          (1 - (boss.fx.weaken?.percent ?? 0)) *
+          drums *
+          rage *
+          (swift ? SWIFT_SHARE : 1),
       };
       const targets = special?.aoe ? heroes.filter((h) => !h.down) : [pickBossTarget(heroes, rng)!];
       /**
-       * Lebensentzug: Fähigkeit (`drain`) bzw. normale Bisse (`lifesteal`) heilen den Boss. Trifft die
-       * Fähigkeit alle, teilt sich der Entzug auf – sonst heilte sich der Boss zu viert vierfach.
+       * Lebensentzug: Fähigkeit (`drain`) bzw. normale Bisse (`lifesteal`, Elite „Vampirisch“) heilen den Boss.
+       * Trifft die Fähigkeit alle, teilt sich der Entzug auf – sonst heilte sich der Boss zu viert vierfach.
        */
-      const drain = special ? (special.drain ?? 0) / targets.length : (enemy.lifesteal ?? 0);
+      const drain = special ? (special.drain ?? 0) / targets.length : (enemy.lifesteal ?? (elite.includes("vampiric") ? VAMPIRE_SHARE : 0));
       for (const target of targets) {
         if (target.effects.bulwark) {
           // Bollwerk blockt den Angriff samt Zusatzeffekten
@@ -946,12 +1004,14 @@ export function resolveRound(
           continue;
         }
         const defender = special?.ignoreArmor ? { ...buffed(target), armor: 0 } : buffed(target);
-        for (let i = 0; i < (special?.hits ?? 1) && target.combatant.hp > 0; i++) {
+        let taken = 0;
+        for (let i = 0; i < (special?.hits ?? (swift ? 2 : 1)) && target.combatant.hp > 0; i++) {
           const rolled = rollHit(attacker, defender, rng);
           // Parade/Vergeltung: nur ein Teil kommt durch, dann Konter bzw. Rückwurf (nur beim ersten Treffer)
           const guard = target.effects.guard;
           const hit = guard ? { ...rolled, damage: Math.max(1, Math.round(rolled.damage * guard.reduce)) } : rolled;
           target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
+          taken += hit.damage;
           events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
           if (guard) {
             target.effects.guard = undefined;
@@ -980,6 +1040,10 @@ export function resolveRound(
             if (!effect) continue;
             const damage = Math.max(1, Math.round(((boss.c.damage * drums) / groupScale) * effect.percent));
             target.effects[kind] = { damage, roundsLeft: effect.rounds };
+          }
+          // Elite „Giftig“: Wer getroffen wird, ist vergiftet
+          if (elite.includes("poisonous") && taken > 0) {
+            target.effects.poison = { damage: Math.max(1, Math.round(boss.c.damage * POISON.percent)), roundsLeft: POISON.rounds };
           }
         }
         if (special?.manaBurn && target.combatant.hp > 0) {
@@ -1020,11 +1084,20 @@ export function resolveRound(
     for (const hero of shielded) hero.effects.bulwark = undefined;
     if (boss.c.hp <= 0) {
       // Konter oder Rückwurf hat den Boss erledigt
-      status = "won";
-      events.push({ type: "victory" });
+      enemyDown();
     } else if (heroes.every((h) => h.down)) {
       status = "lost";
       events.push({ type: "wipe" });
+    }
+  }
+
+  // Elite „Regenerierend“: heilt sich am Ende der Runde – ausser er brennt
+  const burning = boss.fx.burn !== undefined || events.some((e) => e.type === "burn" && e.target === BOSS);
+  if (status === "active" && elite.includes("regenerating") && !burning) {
+    const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * REGEN_SHARE));
+    if (heal > 0) {
+      boss.c.hp += heal;
+      events.push({ type: "enemyRegen", heal });
     }
   }
 

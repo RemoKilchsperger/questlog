@@ -135,8 +135,16 @@ export class BattleScene extends Phaser.Scene {
 
     this.fighters = {
       hero: this.createFighter(hero, battle.hero.name, battle.hero.level, battle.hero.hp, battle.hero.maxHp),
-      enemy: this.createFighter(enemy, battle.enemy.name, battle.enemy.level, battle.enemy.hp, battle.enemy.maxHp),
+      enemy: this.createFighter(enemy, battle.elite ? `★ ${battle.enemy.name}` : battle.enemy.name, battle.enemy.level, battle.enemy.hp, battle.enemy.maxHp),
     };
+    // Elite-Gegner leuchten golden
+    if (battle.elite) {
+      for (const image of enemy.images) {
+        if (!image.preFX) continue;
+        image.preFX.padding = 8;
+        image.preFX.addGlow(0xf4c95d, 4, 0, false, 0.1, 12);
+      }
+    }
     // Begleiter: kleiner, der erste vor dem Boss, der zweite dahinter
     (battle.adds ?? []).forEach((add, i) => {
       const sprite = addSprite(add.creatureId);
@@ -417,7 +425,7 @@ export class BattleScene extends Phaser.Scene {
           ? event.type === "defeated" && event.add
             ? 450
             : 900
-          : event.type === "bossPhase"
+          : event.type === "bossPhase" || event.type === "explosion"
             ? 1100
             : event.type === "ability" || event.type === "bossAbility"
             ? 600
@@ -549,6 +557,14 @@ export class BattleScene extends Phaser.Scene {
         this.floatText(enemy.homeX, GROUND_Y - 105, `+${event.heal}`, "#7dd3a8", 26);
         this.tint(enemy, 0x9dffc8, 300);
       });
+    } else if (event.type === "enemyRegen") {
+      const enemy = this.fighters.enemy;
+      this.setHp("enemy", Math.min(enemy.maxHp, enemy.hp + event.heal));
+      this.floatText(enemy.homeX, GROUND_Y - 105, `+${event.heal}`, "#7dd3a8", 24);
+      fx.rise(this, this.center("enemy"), 0x7dd3a8, 8);
+      sfx.heal();
+    } else if (event.type === "explosion") {
+      this.showExplosion(event.damage, event.blocked === true);
     } else if (event.type === "bossPhase") {
       this.showBossPhase(event.bossId, event.rally ?? []);
     } else if (event.type === "selfHeal") {
@@ -1321,6 +1337,32 @@ export class BattleScene extends Phaser.Scene {
       fx.rise(this, this.center("enemy"), 0xc23a3a, 14, 90);
     }
     for (const uid of rally) this.reviveAdd(uid);
+  }
+
+  /** Elite „Explosiv“: Der Gegner zerbirst in einer Feuerwolke, die Druckwelle trifft den Helden. */
+  private showExplosion(damage: number, blocked: boolean) {
+    const enemy = this.fighters.enemy;
+    const at = this.center("enemy");
+    this.tweens.killTweensOf(enemy.body);
+    sfx.explosion();
+    fx.flash(this, 0xf08a2c, 0.35, 200);
+    fx.burst(this, at, 0xf08a2c, 26, 120, 8);
+    fx.burst(this, at, 0xffe28f, 16, 80, 6);
+    fx.ring(this, at, 0xf08a2c, 160, 450);
+    this.cameras.main.shake(300, 0.015);
+    this.tweens.add({ targets: enemy.body, alpha: 0, scale: enemy.body.scale * 1.3, duration: 300 });
+    fx.groundWave(this, { x: enemy.homeX, y: GROUND_Y }, { x: this.fighters.hero.homeX, y: GROUND_Y }, 0xf08a2c, 350, () => {
+      const hero = this.fighters.hero;
+      if (blocked) {
+        this.floatText(hero.homeX, GROUND_Y - 115, "GEBLOCKT!", "#7aa7f0", 28);
+        fx.ring(this, { x: hero.homeX, y: GROUND_Y - 70 }, 0xa9c6ff, 110);
+        sfx.block();
+        this.bulwark?.destroy();
+        this.bulwark = null;
+      } else {
+        this.impact("hero", damage, false, 0.012);
+      }
+    });
   }
 
   /** Sammelruf: Der Begleiter steht (wieder) auf, mit vollen Lebenspunkten. */

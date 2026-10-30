@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { ADD_ROLES, type AddRole } from "../domain/bossMechanics";
+import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL } from "../domain/elites";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
@@ -315,6 +316,20 @@ export function HelpScreen() {
           <H>Gebiete</H>
           <p>Jedes Gebiet öffnet sich ab seinem Mindestlevel und hat vier Kreaturen und einen Boss.</p>
           <Table head={["Gebiet", "Level"]} rows={AREAS.map((a) => [a.name, `${a.minLevel}–${a.maxLevel}`])} />
+          <H>Elite-Gegner</H>
+          <p>
+            Jede normale Kreatur kann mit {Math.round(ELITE_CHANCE * 100)} % Chance als ★ Elite auftauchen – das zeigt
+            sich erst im Kampf. Elite-Gegner haben einen Modifikator, ab Level {ELITE_DOUBLE_LEVEL} manchmal zwei. Dafür
+            geben sie doppelte Erfahrung, doppeltes Gold und sichere Beute mit besserer Seltenheit – auch im Koop-Dungeon,
+            dort trifft eine Explosion die ganze Gruppe.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {ELITE_AFFIXES.map((a) => (
+              <li key={a.id}>
+                {a.icon} <b>{a.name}:</b> {a.description}
+              </li>
+            ))}
+          </ul>
           <H>Boss-Fähigkeiten</H>
           <p>
             Bosse setzen alle paar Runden eine besondere Attacke ein. Sie wird eine Runde vorher angekündigt: Ein Bollwerk

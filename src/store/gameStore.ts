@@ -24,6 +24,7 @@ import {
   type DungeonChest,
 } from "../domain/combat";
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type BossRespawns } from "../domain/creatures";
+import { rollElite } from "../domain/elites";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, getItem, MAX_UPGRADE, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
@@ -774,7 +775,7 @@ export const useGameStore = create<GameState>()(
           if (area.dungeon) throw new Error("Dungeon-Gegner kämpfen nur im Dungeon.");
           const wait = respawnLeft(get().bossRespawns, creatureId);
           if (wait > 0) throw new Error(`${creature.name} erscheint erst in ${formatRespawn(wait)} wieder.`);
-          const battle = startBattle(newId(), character.name, hero, creature);
+          const battle = startBattle(newId(), character.name, hero, creature, hero.maxHp, rollElite(creature));
           set({ battle, battleReward: null, dungeon: null });
           EventBus.emit("battle:started", { battle });
         }),
@@ -787,7 +788,7 @@ export const useGameStore = create<GameState>()(
           if (hero.level < dungeon.minLevel) {
             throw new Error(`${dungeon.name} ist erst ab Level ${dungeon.minLevel} zugänglich.`);
           }
-          const battle = startBattle(newId(), character.name, hero, dungeon.creatures[0]);
+          const battle = startBattle(newId(), character.name, hero, dungeon.creatures[0], hero.maxHp, rollElite(dungeon.creatures[0]));
           set({
             battle,
             battleReward: null,
@@ -805,7 +806,7 @@ export const useGameStore = create<GameState>()(
           if (stage >= creatures.length) throw new Error("Der Dungeon ist schon abgeschlossen.");
           // Keine Heilung zwischen den Kämpfen: die Lebenspunkte werden mitgenommen.
           const hero = getHeroCombatProfile(character, equipment);
-          const next = startBattle(newId(), character.name, hero, creatures[stage], battle.hero.hp);
+          const next = startBattle(newId(), character.name, hero, creatures[stage], battle.hero.hp, rollElite(creatures[stage]));
           set({ battle: next, battleReward: null, dungeon: { ...dungeon, stage } });
           EventBus.emit("battle:started", { battle: next });
         }),
@@ -854,7 +855,8 @@ export const useGameStore = create<GameState>()(
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
           for (const add of adds) questEvent({ kind: "kill", creatureId: add.id, boss: false });
-          const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds);
+          const elite = (result.state.elite?.length ?? 0) > 0;
+          const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds, elite);
           if (dungeon) {
             // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende.
             const level = getLevel(character.totalXp);

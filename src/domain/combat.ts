@@ -36,6 +36,17 @@ import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potio
 import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { bossDamageDealtFactor, bossDamageTakenFactor, HEALER_HEAL, phaseDue, type AddRole } from "./bossMechanics";
+import {
+  eliteStats,
+  ELITE_REWARD_FACTOR,
+  EXPLOSION_FACTOR,
+  POISON,
+  RAGE_BONUS,
+  REGEN_SHARE,
+  SWIFT_SHARE,
+  VAMPIRE_SHARE,
+  type EliteAffix,
+} from "./elites";
 import { getSetHpMultiplier } from "./bossSets";
 import { abilitiesOf, freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
@@ -143,6 +154,10 @@ export type BattleEvent =
   | { type: "addHeal"; add: string; heal: number }
   /** Der Boss fällt in seine zweite Phase (bossMechanics.ts) – `rally`: diese Begleiter stehen mit vollen LP (wieder) da */
   | { type: "bossPhase"; bossId: string; rally?: string[] }
+  /** Elite „Regenerierend“: Der Gegner heilt sich am Ende der Runde */
+  | { type: "enemyRegen"; heal: number }
+  /** Elite „Explosiv“: Der Gegner explodiert beim Tod – `blocked`: Bollwerk hat die Explosion abgefangen */
+  | { type: "explosion"; damage: number; blocked?: boolean }
   /** Der Held setzt eine Fähigkeit ein – die Treffer folgen als "hit" */
   | { type: "ability"; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
   /** Der Held heilt sich durch eine Fähigkeit (Heiliges Licht, Blutrausch) */
@@ -244,6 +259,8 @@ export interface BattleState {
   target?: string;
   /** Der Boss ist in seiner zweiten Phase (bossMechanics.ts) – sie kommt nur einmal */
   phase?: boolean;
+  /** Elite-Gegner: seine Modifikatoren (elites.ts) – fehlt bei gewöhnlichen Gegnern */
+  elite?: EliteAffix[];
   /** Wirkungen auf den Helden */
   heroEffects: {
     /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
@@ -272,8 +289,9 @@ export function startBattle(
   hero: HeroCombatProfile,
   creature: CreatureDef,
   heroHp: number = hero.maxHp,
+  elite: readonly EliteAffix[] = [],
 ): BattleState {
-  const enemy = getCreatureStats(creature);
+  const enemy = eliteStats(getCreatureStats(creature), elite);
   return {
     id,
     creatureId: creature.id,
@@ -314,6 +332,7 @@ export function startBattle(
           effects: {},
         };
       }),
+    ...(elite.length > 0 && { elite: [...elite] }),
     status: "active",
     log: [],
   };
@@ -645,9 +664,24 @@ export function attackRound(
   if (boss.c.hp > 0 && hero.hp > 0) {
     for (const foe of aoe === "all" ? living() : [target]) if (foe.c.hp > 0 && stunLands(ability, rng)) stunned.add(foe);
   }
+  const elite = state.elite ?? [];
+  /** Der Gegner fällt – ein explosiver Elite reisst den Helden womöglich mit (Bollwerk blockt). */
+  const enemyDown = () => {
+    if (elite.includes("explosive") && hero.hp > 0) {
+      if (heroEffects.bulwark) {
+        heroEffects = { ...heroEffects, bulwark: undefined };
+        events.push({ type: "explosion", damage: 0, blocked: true });
+      } else {
+        const blast = rollHit({ ...boss.c, damage: boss.c.damage * EXPLOSION_FACTOR, critChance: 0 }, strong, rng);
+        hero = { ...hero, hp: Math.max(0, hero.hp - blast.damage) };
+        events.push({ type: "explosion", damage: blast.damage });
+      }
+    }
+    status = hero.hp === 0 ? "lost" : "won";
+    events.push({ type: "defeated", side: hero.hp === 0 ? "hero" : "enemy" });
+  };
   if (boss.c.hp === 0) {
-    status = "won";
-    events.push({ type: "defeated", side: "enemy" });
+    enemyDown();
   } else if (hero.hp === 0) {
     status = "lost";
     events.push({ type: "defeated", side: "hero" });
@@ -684,13 +718,19 @@ export function attackRound(
       } else {
         // Geschwächte Gegner machen weniger Schaden
         const weakened = 1 - (boss.fx.weaken?.percent ?? 0);
-        const attacker = { ...boss.c, damage: boss.c.damage * (special?.multiplier ?? 1) * weakened * drums };
+        // Elite: Rasend macht mehr Schaden (unter halben LP noch mehr), Flink schlägt zweimal schwächer zu
+        const rage = elite.includes("raging") ? 1 + (boss.c.hp < boss.c.maxHp / 2 ? RAGE_BONUS.low : RAGE_BONUS.base) : 1;
+        const swift = elite.includes("swift");
+        const attacker = {
+          ...boss.c,
+          damage: boss.c.damage * (special?.multiplier ?? 1) * weakened * drums * rage * (swift ? SWIFT_SHARE : 1),
+        };
         const defender = special?.ignoreArmor ? { ...strong, armor: 0 } : strong;
         // Parade/Vergeltung wirkt nur gegen den Boss – den grossen Treffer
         const guard = heroEffects.guard;
         let dealt = 0;
         let raw = 0;
-        for (let i = 0; i < (special?.hits ?? 1) && hero.hp > 0; i++) {
+        for (let i = 0; i < (special?.hits ?? (swift ? 2 : 1)) && hero.hp > 0; i++) {
           const enemyHit = rollHit(attacker, defender, rng);
           // Parade/Vergeltung: nur ein Teil des Schadens kommt durch
           const damage = guard ? Math.max(1, Math.round(enemyHit.damage * guard.reduce)) : enemyHit.damage;
@@ -712,10 +752,16 @@ export function attackRound(
             events.push({ type: "counter", damage: counter });
           }
         }
-        if (special?.drain) {
-          const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(dealt * special.drain));
+        // Lebensentzug der Boss-Fähigkeit bzw. Elite „Vampirisch“
+        const drain = special?.drain ?? (elite.includes("vampiric") ? VAMPIRE_SHARE : 0);
+        if (drain > 0 && boss.c.hp > 0) {
+          const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(dealt * drain));
           boss.c = { ...boss.c, hp: boss.c.hp + heal };
           if (heal > 0) events.push({ type: "drain", heal });
+        }
+        // Elite „Giftig“: Wer getroffen wird, ist vergiftet
+        if (elite.includes("poisonous") && dealt > 0 && hero.hp > 0) {
+          heroEffects = { ...heroEffects, poison: { damage: Math.max(1, Math.round(boss.c.damage * POISON.percent)), roundsLeft: POISON.rounds } };
         }
         if (special?.manaBurn) {
           const amount = Math.min(mana, special.manaBurn);
@@ -751,11 +797,20 @@ export function attackRound(
     }
     if (blocked) heroEffects = { ...heroEffects, bulwark: undefined };
     if (boss.c.hp === 0) {
-      status = "won";
-      events.push({ type: "defeated", side: "enemy" });
+      enemyDown();
     } else if (hero.hp === 0) {
       status = "lost";
       events.push({ type: "defeated", side: "hero" });
+    }
+  }
+
+  // Elite „Regenerierend“: heilt sich am Ende der Runde – ausser er brennt
+  const burning = boss.fx.burn !== undefined || events.some((e) => e.type === "burn" && e.target === "enemy" && !e.add);
+  if (status === "active" && elite.includes("regenerating") && !burning) {
+    const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * REGEN_SHARE));
+    if (heal > 0) {
+      boss.c = { ...boss.c, hp: boss.c.hp + heal };
+      events.push({ type: "enemyRegen", heal });
     }
   }
 
@@ -888,7 +943,22 @@ export function rollBattleReward(
   uid: string,
   rng: () => number = Math.random,
   addsDefeated: readonly CreatureDef[] = [],
+  elite = false,
 ): BattleReward {
+  // Elite: sichere Beute mit den Seltenheiten eines Bosses, doppelte Erfahrung und sicheres, doppeltes Gold
+  if (elite) {
+    const { dropChance, weights } = getCreatureLoot({ ...creature, boss: true });
+    const potionDrop = getCreaturePotionDrop(creature);
+    const { min, max } = getCreatureGoldDrop(creature);
+    return {
+      xp: getCreatureXp(creature, hero.level) * ELITE_REWARD_FACTOR,
+      loot: rollDrop(dropChance, weights, creature.level, uid, rng),
+      potions: rng() < potionDrop.chance ? { potionId: potionDrop.potionId, count: potionDrop.count } : null,
+      bossLoot: null,
+      buffPotion: rollBuffPotion(rng),
+      gold: Math.round((min + Math.floor(rng() * (max - min + 1))) * ELITE_REWARD_FACTOR * (1 + hero.goldBonus)),
+    };
+  }
   const { dropChance, weights } = getCreatureLoot(creature);
   const potionDrop = getCreaturePotionDrop(creature);
   const addXp = addsDefeated.reduce((sum, add) => sum + Math.round(getCreatureXp(add, hero.level) * ADD_REWARD_SHARE), 0);

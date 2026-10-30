@@ -126,7 +126,15 @@ export class CoopBattleScene extends Phaser.Scene {
       const member = members.find((m) => m.id === hero.id);
       this.heroes.set(hero.id, this.addHero(hero.id, xs[index], member, hero.name, hero.combatant.hp, hero.combatant.maxHp, hero.id === myId));
     });
-    this.boss = this.addBoss(def.sprite, def.name, def.level, state.boss.hp, state.boss.maxHp, def.boss);
+    this.boss = this.addBoss(def.sprite, state.elite ? `★ ${def.name}` : def.name, def.level, state.boss.hp, state.boss.maxHp, def.boss);
+    // Elite-Gegner leuchten golden
+    if (state.elite) {
+      for (const image of this.boss.images) {
+        if (!image.preFX) continue;
+        image.preFX.padding = 8;
+        image.preFX.addGlow(0xf4c95d, 4, 0, false, 0.1, 12);
+      }
+    }
     (state.adds ?? []).forEach((add, i) => {
       // Begleiter mit Rolle tragen ihr Zeichen vor dem Namen (💚 Heiler, 🛡️ Schildträger, 🥁 Trommler)
       const label = add.role ? `${ADD_ROLES[add.role].icon} ${add.combatant.name}` : add.combatant.name;
@@ -405,7 +413,7 @@ export class CoopBattleScene extends Phaser.Scene {
         (aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked" || event.type === "manaBurn")) ||
         event.type === "drain" ||
         event.type === "addDown";
-      const long = event.type === "bossPhase";
+      const long = event.type === "bossPhase" || event.type === "explosion";
       // Steinschlag, Fluchkreis und Strudel treffen erst nach ihrer Animation – dafür Zeit lassen
       const slowImpact = event.type === "hit" && event.attacker === BOSS && special !== null && SLOW_IMPACT.has(special);
       delay +=
@@ -480,6 +488,15 @@ export class CoopBattleScene extends Phaser.Scene {
       }
       case "bossPhase":
         this.showBossPhase(event.bossId, event.rally ?? []);
+        break;
+      case "enemyRegen":
+        this.setHp(this.boss, Math.min(this.boss.maxHp, this.boss.hp + event.heal));
+        this.float(this.boss, `+${event.heal}`, "#7dd3a8", 20, 40);
+        fx.rise(this, this.center(this.boss), 0x7dd3a8, 8);
+        sfx.heal();
+        break;
+      case "explosion":
+        this.showExplosion(event.hits);
         break;
       case "addDown":
         this.addFalls(event.add, false);
@@ -1171,6 +1188,32 @@ export class CoopBattleScene extends Phaser.Scene {
       fx.rise(this, this.center(this.boss), 0xc23a3a, 14, 90);
     }
     for (const uid of rally) this.addRises(uid);
+  }
+
+  /** Elite „Explosiv“: Der Gegner zerbirst in einer Feuerwolke, die Druckwelle trifft alle Helden. */
+  private showExplosion(hits: { heroId: string; damage: number; blocked?: boolean }[]) {
+    const at = this.center(this.boss);
+    this.tweens.killTweensOf(this.boss.body);
+    sfx.explosion();
+    fx.flash(this, 0xf08a2c, 0.35, 200);
+    fx.burst(this, at, 0xf08a2c, 26, 120, 8);
+    fx.burst(this, at, 0xffe28f, 16, 80, 6);
+    fx.ring(this, at, 0xf08a2c, 180, 450);
+    this.cameras.main.shake(300, 0.015);
+    this.tweens.add({ targets: this.boss.body, alpha: 0, scale: this.boss.body.scale * 1.3, duration: 300 });
+    this.time.delayedCall(350, () => {
+      for (const hit of hits) {
+        const hero = this.heroes.get(hit.heroId);
+        if (!hero) continue;
+        if (hit.blocked) {
+          this.float(hero, "GEBLOCKT!", "#7aa7f0", 18, 30);
+          fx.ring(this, this.center(hero), 0xa9c6ff, 70);
+        } else {
+          this.impact(hero, hit.damage, false);
+        }
+      }
+      if (hits.some((h) => h.blocked)) sfx.block();
+    });
   }
 
   /** Sammelruf: Der Begleiter steht (wieder) auf, mit vollen Lebenspunkten. */

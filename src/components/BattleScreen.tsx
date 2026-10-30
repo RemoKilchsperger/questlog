@@ -56,13 +56,14 @@ import {
   AbilityButton,
   ActionGroup,
   bossMechanicChips,
+  eliteChips,
   enemyStatusChips,
   heroStatusChips,
   PhaseWarning,
   StatusSide,
   TargetPicker,
 } from "./BattleStatus";
-import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
+import { getBossPhase } from "../domain/bossMechanics";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestProgressChips } from "./QuestScreen";
@@ -271,7 +272,6 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
   const quests = useCreatureQuests(creature.id);
   const respawn = useRespawn(creature.id);
   const bossAbilities = getBossAbilities(creature.id);
-  const phase = getBossPhase(creature.id);
   const stats = getCreatureStats(creature);
   const potionDrop = getCreaturePotionDrop(creature);
   const goldDrop = getCreatureGoldDrop(creature);
@@ -318,21 +318,6 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           </Hint>
           {dangerText && <span className={danger > 0 ? "text-danger" : "text-xp"}>{dangerText}</span>}
         </div>
-        {creature.adds?.map((add) => (
-          <p key={add.name ?? add.creatureId + (add.role ?? "")} className="mt-1 text-xs text-danger">
-            Begleiter: {add.count > 1 && `${add.count}× `}
-            {add.role && `${ADD_ROLES[add.role].icon} `}
-            {add.name ?? getCreature(add.creatureId).creature.name}
-            {add.role
-              ? ` (${ADD_ROLES[add.role].name}) – ${ADD_ROLES[add.role].description}`
-              : " – schwächer als sonst, greift aber jede Runde mit an."}
-          </p>
-        ))}
-        {phase && (
-          <p className="mt-1 text-xs text-danger">
-            Zweite Phase unter {Math.round(phase.at * 100)} % LP: {phase.icon} {phase.name} – {phase.description}
-          </p>
-        )}
         {bossAbilities.map((a) => (
           <p key={a.id} className="mt-1 text-xs text-danger">
             Fähigkeit: {a.icon} {a.name} – {bossAbilities.length > 1 ? "im Wechsel " : ""}alle {a.every} Runden.{" "}
@@ -476,6 +461,11 @@ function Battle({ battle }: { battle: BattleState }) {
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-pixel text-2xl">
             {area.name} <span className="text-base text-muted">· {creature.name}</span>
+            {battle.elite && (
+              <Hint text="Elite-Gegner: stärker als sonst, dafür doppelte Erfahrung, doppeltes Gold und sichere Beute.">
+                <span className="ml-2 text-base text-legendary">★ Elite</span>
+              </Hint>
+            )}
           </h2>
           <div className="flex items-center gap-3">
             <SoundControl />
@@ -519,7 +509,11 @@ function Battle({ battle }: { battle: BattleState }) {
             </StatusSide>
             <StatusSide
               title={battle.enemy.name}
-              chips={[...bossMechanicChips(battle.creatureId, battle.phase, battle.adds ?? []), ...enemyStatusChips(battle.enemyEffects)]}
+              chips={[
+                ...eliteChips(battle.elite),
+                ...bossMechanicChips(battle.creatureId, battle.phase, battle.adds ?? []),
+                ...enemyStatusChips(battle.enemyEffects),
+              ]}
             />
           </div>
           {(battle.adds?.length ?? 0) > 0 && <BattleTargets battle={battle} disabled={!active} />}
@@ -731,6 +725,9 @@ function BattleResult({ battle }: { battle: BattleState }) {
                 {reward.levelAfter - reward.levelBefore > 1 ? "e" : ""}
               </span>
             </motion.p>
+          )}
+          {battle.elite && (
+            <p className="text-legendary">★ Elite besiegt: doppelte Erfahrung, doppeltes Gold und sichere Beute.</p>
           )}
           <p>
             Du erhältst <span className="num text-xp">+{reward.xp} XP</span>
@@ -1059,6 +1056,12 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
         : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden.`;
     case "addHeal":
       return `${enemy} heilt ${battle.enemy.name} um ${e.heal} LP.`;
+    case "enemyRegen":
+      return `${enemy} regeneriert ${e.heal} LP.`;
+    case "explosion":
+      return e.blocked
+        ? `${enemy} explodiert – dein Bollwerk fängt die Explosion ab.`
+        : `${enemy} explodiert und trifft dich für ${e.damage} Schaden!`;
     case "bossPhase": {
       const phase = getBossPhase(e.bossId);
       return phase ? `${battle.enemy.name}: ${phase.icon} ${phase.name}! ${phase.description}` : `${battle.enemy.name} wird wütend!`;

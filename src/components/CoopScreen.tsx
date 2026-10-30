@@ -46,6 +46,7 @@ import {
   AbilityButton,
   ActionGroup,
   bossMechanicChips,
+  eliteChips,
   enemyStatusChips,
   heroStatusChips,
   PhaseWarning,
@@ -440,6 +441,11 @@ function CoopBattle() {
           <h2 className="font-pixel text-2xl">
             Koop · {dungeon && <span className="text-muted">{dungeon.name} · </span>}
             <span className="text-legendary">{boss.name}</span>
+            {battle.elite && (
+              <Hint text="Elite-Gegner: stärker als sonst, dafür doppelte Erfahrung, doppeltes Gold und sichere Beute in der Truhe.">
+                <span className="ml-2 text-base text-legendary">★ Elite</span>
+              </Hint>
+            )}
             {dungeon && (
               <span className="num ml-2 text-sm text-muted">
                 Kampf {battle.dungeon!.stage + 1}/{dungeon.creatures.length}
@@ -609,7 +615,11 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         </StatusSide>
         <StatusSide
           title={battle.boss.name}
-          chips={[...bossMechanicChips(battle.bossId, battle.phase, battle.adds ?? []), ...enemyStatusChips(battle.bossEffects)]}
+          chips={[
+            ...eliteChips(battle.elite),
+            ...bossMechanicChips(battle.bossId, battle.phase, battle.adds ?? []),
+            ...enemyStatusChips(battle.bossEffects),
+          ]}
         />
       </div>
       {(battle.adds?.length ?? 0) > 0 && (
@@ -862,6 +872,10 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.shielded ? " – der Schildträger schützt ihn" : ""}.`;
     case "addHeal":
       return `${name(e.add)} heilt ${bossName} um ${e.heal} LP.`;
+    case "enemyRegen":
+      return `${bossName} regeneriert ${e.heal} LP.`;
+    case "explosion":
+      return `${bossName} explodiert! ${e.hits.map((h) => (h.blocked ? `${name(h.heroId)} blockt` : `${name(h.heroId)} −${h.damage}`)).join(", ")}.`;
     case "bossPhase": {
       const phase = getBossPhase(e.bossId);
       return phase ? `${bossName}: ${phase.icon} ${phase.name}! ${phase.description}` : `${bossName} wird wütend!`;
