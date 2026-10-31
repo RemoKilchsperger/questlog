@@ -31,6 +31,7 @@ import {
   type CreatureDef,
 } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
+import { foodEffectText, getFood, withMeal } from "../domain/food";
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { questsForCreature, trackedQuests } from "../domain/quests";
@@ -423,8 +424,11 @@ function HeroPanel() {
   const character = useGameStore((s) => s.character);
   const equipment = useGameStore((s) => s.equipment);
   const potions = useGameStore((s) => s.potions);
-  const hero = getHeroCombatProfile(character, equipment);
+  const meal = useGameStore((s) => s.meal);
+  // Die Werte zeigen das gegessene Gericht schon mit – so wirkt es im nächsten Einsatz
+  const hero = withMeal(getHeroCombatProfile(character, equipment), meal);
   const frame = useGameStore((s) => s.cosmetics.frame);
+  const food = meal ? getFood(meal) : null;
 
   return (
     <section className="panel flex flex-col items-center gap-3 self-start p-5 text-center">
@@ -446,6 +450,12 @@ function HeroPanel() {
           accent="text-intellect"
         />
       </div>
+      {food && (
+        <p className="w-full rounded-md border-2 border-xp/60 bg-xp/10 px-2 py-1 text-xs">
+          {food.icon} Satt von <span className="font-semibold">{food.name}</span>:{" "}
+          <span className="text-xp">{foodEffectText(food)}</span> im nächsten Kampf, Dungeon, Turm-Lauf oder Koop-Kampf
+        </p>
+      )}
       <p className="text-xs text-muted">
         Jede Waffe macht mehr Schaden mit ihrem Attribut (siehe Charakter-Tab). Ausdauer gibt dazu Lebenspunkte,
         Intelligenz Mana, Charisma kritische Treffer und Gold nach einem Sieg (+{Math.round(hero.goldBonus * 100)} %).

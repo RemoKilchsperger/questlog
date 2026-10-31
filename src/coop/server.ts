@@ -7,6 +7,7 @@
 // was ein Client über sich behauptet, zählt nicht.
 
 import { getHeroCombatProfile } from "../domain/combat";
+import { withMeal } from "../domain/food";
 import {
   COOP_MAX_PLAYERS,
   COOP_MIN_PLAYERS,
@@ -45,7 +46,7 @@ export const COOP_ROW_TTL_HOURS = 24;
  * mit neutralen Werten ergänzt.
  */
 export function memberFromSave(id: string, save: unknown, username: string | null): CoopMember {
-  const saved = save as { state?: { character?: Partial<Character>; equipment?: Partial<Equipment> }; version?: number } | null;
+  const saved = save as { state?: { character?: Partial<Character>; equipment?: Partial<Equipment>; meal?: string | null }; version?: number } | null;
   const state = saved?.state;
   if (!state?.character) throw new CoopError("Kein Cloud-Spielstand gefunden – bitte einmal online speichern.");
   const raw = state.character;
@@ -66,7 +67,8 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
     username,
     level: getLevel(character.totalXp),
     equipment,
-    profile: getHeroCombatProfile(character, equipment),
+    // Gericht aus der Taverne: wirkt auch im Koop (der Client isst es beim Kampfbeginn auf)
+    profile: withMeal(getHeroCombatProfile(character, equipment), state.meal),
     ready: false,
   };
 }

@@ -96,8 +96,26 @@ stärkere Wirkung gilt für Heilung und Verstärkung, aber nur im Solo-Kampf (Ge
 | 2 | Gasthaus | kräftigere Gerichte |
 | 3 | Festhalle | Festmahle mit mehreren Buffs |
 
-Die Taverne verkauft später **Buff-Food**. Die Logik dafür fehlt noch: Gebäude, Stufen und Menü stehen,
-das Menü zeigt vorerst nur „Die Speisekarte folgt bald“.
+Die Taverne verkauft **Buff-Food** (`food.ts`). Ein Gericht wirkt für den nächsten Einsatz:
+
+- einen Kampf im Gebiet,
+- einen ganzen Dungeon (alle Kämpfe bis zum Ausstieg oder Endboss),
+- einen Lauf im Endlos-Turm,
+- einen Koop-Kampf (Raid-Boss oder Koop-Dungeon).
+
+Man isst nur ein Gericht auf einmal. Wer satt ist, kann erst nach dem nächsten Einsatz wieder essen. Das
+Gericht wird beim Start aufgegessen, auch wenn man danach flieht oder verliert. Die Wirkung steckt in den
+Kampfwerten (`withMeal`), alles relativ, damit es auf jedem Level gleich viel bringt. Der Preis steigt mit
+dem Level: Grundpreis × (1 + (Level − 1) / 10).
+
+| Stufe | Gerichte | Grundpreis |
+|---|---|---|
+| 1 Schankstube | 🍲 Eintopf +10 % LP · 🌭 Bratwurst +8 % Schaden · 🧀 Käsebrot +15 % Rüstung | 10 |
+| 2 Gasthaus | 🍖 Wildbraten +15 % Schaden · 🥣 Bergkäsesuppe +20 % LP · 🐟 Gebratene Forelle +5 % Krit · 🍄 Pilzpfanne +25 % Mana | 20 |
+| 3 Festhalle | 🍗 Rittermahl +12 % Schaden, +20 % Rüstung · 🥘 Festbraten +20 % LP, +10 % Schaden · 🥧 Zauberpastete +25 % Mana, +5 % Krit, +8 % Schaden · 🎂 Glückskuchen +30 % Gold, +10 % LP | 40 |
+
+Im Koop berechnet der Server die Kampfwerte aus dem Cloud-Spielstand, das gegessene Gericht steht dort im
+Feld `meal`. Der Client isst es auf, sobald der Koop-Kampf beginnt.
 
 ### 🎯 Trainingsplatz
 
@@ -215,8 +233,7 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
 ## Spätere Erweiterungen
 
 - **Lagerhaus:** mehr Inventarplätze
-- **Taverne:** Buff-Food (Logik folgt), später vielleicht Treffpunkt für den Koop oder ein Söldner als
-  Begleiter
+- **Taverne:** später vielleicht Treffpunkt für den Koop oder ein Söldner als Begleiter
 
 ## Entscheidungen
 
