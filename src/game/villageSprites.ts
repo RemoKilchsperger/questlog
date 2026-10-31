@@ -26,6 +26,7 @@ const PALETTE: Readonly<Record<string, string>> = {
   p: "#efe6cc", // Papier
   y: "#f4d27a", // Fensterlicht
   o: "#e6b84a", // Gold
+  O: "#a8792a", // Gold dunkel
   f: "#f39a2e", // Feuer
   F: "#c8442a", // Glut
   m: "#9097a1", // Eisen
@@ -34,6 +35,7 @@ const PALETTE: Readonly<Record<string, string>> = {
   t: "#4fc0a8", // Trank türkis
   g: "#6fa35a", // Kraut
   G: "#3d6b3a", // Kraut dunkel
+  a: "#d98a2b", // Bier
 };
 
 const def = (grid: readonly string[]): SpriteDef => ({ grid, palette: PALETTE });
@@ -393,19 +395,262 @@ const ALCHEMIST_3 = stamp(
   piece(22, ["t.t.", "MMMM", "MMMM", ".MM."], 0),
 );
 
+/* ───────────── Taverne ───────────── */
+
+/** Schanktresen unter einem Strohdach, daneben ein Fass. */
+const TAVERN_1 = [
+  "..SSSSSSSSSSSSSSSSSS....",
+  ".SssssssssssssssssssS...",
+  "SSSSSSSSSSSSSSSSSSSSSS..",
+  "..2................2....",
+  "..2...cc.....cc....2....",
+  "..2...aa.....aa....2....",
+  "..2...aa.....aa....2.22.",
+  "1111111111111111111.2112",
+  "2222222222222222222.2222",
+  "..2111111111111112..2112",
+  "..2111111111111112..2222",
+  "..2222222222222222..2112",
+];
+
+const TAVERN_2 = stamp(
+  sym(
+    [
+      ".............S",
+      "...........SSs",
+      ".........SSsss",
+      ".......SSsssss",
+      ".....SSsssssss",
+      "...SSsssssssss",
+      ".SSsssssssssss",
+      "SSSSSSSSSSSSSS",
+      "..222222222222",
+      "..2cc2cccc2ccc",
+      "..2c2cyyc2c2cc",
+      "..22ccyycc2c2c",
+      "..2c2cccc2ccc2",
+      "..222222222222",
+      "..2ccccc2ccc33",
+      "..2cyyyc2cc333",
+      "..2cyyyc2cc333",
+      "..2ccccc2cc333",
+      "..2ccccc2cc333",
+      "..222222222333",
+      "..444444444444",
+    ],
+    14,
+  ),
+  // Aushängeschild mit Bierkrug
+  piece(13, ["22222", "2cc.2", "2aa22", "2aa.2", "22222"], 23),
+);
+
+const TAVERN_3 = stamp(
+  sym(
+    [
+      "................R",
+      "..............RRr",
+      "............RRrrr",
+      "..........RRrrrrr",
+      "........RRrrrrrrr",
+      "......RRrrrrrrrrr",
+      "....RRrrrrrrrrrrr",
+      "..RRrrrrrrrrrrrrr",
+      "RRRRRRRRRRRRRRRRR",
+      "..222222222222222",
+      "..2c2cc2cyyc2cccc",
+      "..22ccc2cyyc2cccc",
+      "..2c2cc2cccc2cccc",
+      "..222222222222222",
+      "..2cccc2cccc2cc33",
+      "..2cyyc2cyyc2c333",
+      "..2cyyc2cyyc2c333",
+      "..2cccc2cccc2c333",
+      "..2cccc2cccc2c333",
+      "..222222222222333",
+      "..444444444444444",
+      ".4444444444444444",
+    ],
+    17,
+  ),
+  // Grosser Krug über der Tür, Wimpel auf dem Dach, Fässer davor
+  piece(9, ["22222222", "2cccccc2", "2aaaaaa2", "2aaaaaa2", "22222222"], 13),
+  piece(0, ["2CC", "2C.", "2.."], 17),
+  piece(18, ["222", "121", "222", "121"], 0),
+  piece(18, ["222", "121", "222", "121"], 31),
+);
+
+/* ───────────── Trainingsplatz ───────────── */
+
+/** Strohpuppe an einem Pfosten und ein Waffenständer. */
+const TRAINING_1 = [
+  "...ss...........o.o.o",
+  "..ssss..........m.m.m",
+  "..sSSs..........m.m.m",
+  "2222222.........m.m.m",
+  "..ssss.........222222",
+  "..sCCs.........2m.m.m",
+  "..ssss.........2.....",
+  "...22..........222222",
+  "...22..........2....2",
+  ".222222........2....2",
+];
+
+const TRAINING_2 = stamp(
+  [
+    "...ss.....................",
+    "..ssss.........CCCCC......",
+    "..sSSs........CcccccC.....",
+    "2222222......CcCCCCcC.....",
+    "..ssss.......CcCooCcC.....",
+    "..sCCs.......CcCooCcC.....",
+    "..ssss.......CcCCCCcC.....",
+    "...22.........CcccccC.....",
+    "...22..........CCCCC......",
+    "...22...........2.2.......",
+    "...22..........2...2......",
+    "2.2.2.2.2.2.2.2.2.2.2.2.2.",
+    "22222222222222222222222222",
+    "2.2.2.2.2.2.2.2.2.2.2.2.2.",
+  ],
+  // Waffenständer rechts
+  piece(0, ["o.o.o", "m.m.m", "m.m.m", "m.m.m", "22222", "2...2", "2...2", "2...2"], 21),
+);
+
+const TRAINING_3 = stamp(
+  sym(
+    [
+      "...............B",
+      ".............BBb",
+      "...........BBbbb",
+      ".........BBbbbbb",
+      ".......BBbbbbbbb",
+      ".....BBbbbbbbbbb",
+      "...BBbbbbbbbbbbb",
+      ".BBbbbbbbbbbbbbb",
+      "BBBBBBBBBBBBBBBB",
+      "..44444444444444",
+      "..4cccc4cccc4ccc",
+      "..4cyyc4cyyc4ccc",
+      "..4cyyc4cyyc4ccc",
+      "..4cccc4cccc4ccc",
+      "..44444444444444",
+      "..4cccc4cccc4c33",
+      "..4cyyc4cyyc4333",
+      "..4cyyc4cyyc4333",
+      "..4cccc4cccc4333",
+      "..44444444444333",
+      "..55555555555555",
+    ],
+    16,
+  ),
+  // Wappen mit gekreuzten Schwertern über der Tür
+  piece(9, ["CCCCCCCC", "CmCCCCmC", "CCmCCmCC", ".CCmmCC.", ".CoCCoC.", "..CCCC.."], 12),
+);
+
+/* ───────────── Statue ───────────── */
+
+/** Runenstein auf einem Sockel. */
+const STATUE_1 = sym(
+  [
+    "...44",
+    "..444",
+    "..454",
+    "..44o",
+    "..45o",
+    "..4oo",
+    "..45o",
+    "..444",
+    "..454",
+    ".5555",
+    "55555",
+  ],
+  5,
+);
+
+const STATUE_2 = stamp(
+  sym(
+    [
+      "......44",
+      ".....444",
+      ".....454",
+      "......44",
+      "...44444",
+      "..444454",
+      "..44.454",
+      "..44.454",
+      "..4..454",
+      ".....454",
+      ".....44.",
+      ".....44.",
+      ".....44.",
+      "....444.",
+      "..555555",
+      "..454444",
+      "..4444oo",
+      "..454444",
+      ".5555555",
+      "55555555",
+    ],
+    8,
+  ),
+  // Erhobenes Schwert in der rechten Hand
+  piece(0, ["..m", "..m", "..m", "..m", ".ooo", "..4", "..4"], 11),
+);
+
+const STATUE_3 = stamp(
+  sym(
+    [
+      "...........oo",
+      "..........ooo",
+      "..........oOo",
+      "...........oo",
+      "........ooooo",
+      ".......oooooO",
+      ".......oo.ooO",
+      ".......oo.ooO",
+      ".......o..ooO",
+      "..........ooO",
+      "..........oo.",
+      "..........oo.",
+      "..........oo.",
+      ".........ooo.",
+      ".......555555",
+      ".......444444",
+      ".......4444oo",
+      ".......444444",
+      "......5555555",
+      "..2..55555555",
+      ".fFf.44444444",
+      "..2.444444444",
+      "..2.555555555",
+      "..2555555555555",
+    ],
+    13,
+  ),
+  // Schwert hoch erhoben, Krone auf dem Kopf
+  piece(0, ["..o", "..o", "..o", "..o", ".OOO", "..o", "..o"], 16),
+  piece(0, ["o.o.o"], 10),
+);
+
 const SPRITES: Readonly<Record<BuildingId, readonly (readonly string[])[]>> = {
   merchant: [MERCHANT_0, MERCHANT_1, MERCHANT_2, MERCHANT_3],
   smith: [PLOT, SMITH_1, SMITH_2, SMITH_3],
   board: [PLOT, BOARD_1, BOARD_2, BOARD_3],
   alchemist: [PLOT, ALCHEMIST_1, ALCHEMIST_2, ALCHEMIST_3],
+  tavern: [PLOT, TAVERN_1, TAVERN_2, TAVERN_3],
+  training: [PLOT, TRAINING_1, TRAINING_2, TRAINING_3],
+  statue: [PLOT, STATUE_1, STATUE_2, STATUE_3],
 };
 
-/** Plätze im Dorfbild (Pixel im Hintergrund-Raster): Mitte und Unterkante jedes Gebäudes. */
+/** Plätze im Dorfbild (Pixel im Raster VILLAGE_WIDTH × BG_HEIGHT): Mitte und Unterkante jedes Gebäudes. */
 export const VILLAGE_SLOTS: readonly { id: BuildingId; x: number; base: number }[] = [
-  { id: "merchant", x: 23, base: 69 },
-  { id: "smith", x: 67, base: 69 },
-  { id: "board", x: 113, base: 69 },
-  { id: "alchemist", x: 156, base: 69 },
+  { id: "merchant", x: 24, base: 69 },
+  { id: "smith", x: 66, base: 69 },
+  { id: "tavern", x: 108, base: 69 },
+  { id: "statue", x: 150, base: 69 },
+  { id: "board", x: 192, base: 69 },
+  { id: "alchemist", x: 234, base: 69 },
+  { id: "training", x: 276, base: 69 },
 ];
 
 const cache = new Map<string, SpriteDef>();

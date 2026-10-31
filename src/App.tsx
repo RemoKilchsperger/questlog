@@ -160,7 +160,7 @@ export default function App() {
         {tab === "equipment" && <EquipmentScreen />}
         {tab === "village" &&
           (villageView === "build" ? (
-            <VillageScreen onOpen={(id) => (id === "board" ? setTab("quests") : setVillageView(id))} />
+            <VillageScreen />
           ) : villageView === "merchant" ? (
             <ShopScreen />
           ) : villageView === "smith" ? (

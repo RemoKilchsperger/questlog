@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BUILDINGS, canBuild, MAX_BUILDING_TIER, type BuildingDef, type BuildingId } from "../domain/village";
-import { BG_HEIGHT, BG_WIDTH, paintVillage } from "../game/backgrounds";
+import { BG_HEIGHT, paintVillage, VILLAGE_WIDTH } from "../game/backgrounds";
 import { sfx } from "../game/sfx";
 import { renderSprite } from "../game/sprites";
 import { getBuildingSprite, VILLAGE_SLOTS } from "../game/villageSprites";
@@ -10,11 +10,11 @@ import { Hint } from "./HoverCard";
 import { spriteUrl } from "./spriteImage";
 
 /** Anteil am Dorfbild in Prozent – das Bild wächst mit der Breite mit. */
-const pctX = (px: number) => `${(px / BG_WIDTH) * 100}%`;
+const pctX = (px: number) => `${(px / VILLAGE_WIDTH) * 100}%`;
 const pctY = (px: number) => `${(px / BG_HEIGHT) * 100}%`;
 
 /**
- * Das Dorf als Pixel-Bild: Hintergrund aus backgrounds.ts, darüber die vier
+ * Das Dorf als Pixel-Bild: Hintergrund aus backgrounds.ts, darüber die sieben
  * Gebäude auf ihrer Stufe. Der Hintergrund wächst mit der Summe aller Stufen mit.
  */
 export function VillageScene({
@@ -33,13 +33,13 @@ export function VillageScene({
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, BG_WIDTH, BG_HEIGHT);
+    ctx.clearRect(0, 0, VILLAGE_WIDTH, BG_HEIGHT);
     paintVillage(ctx, progress);
   }, [progress]);
 
   return (
     <section className="panel relative overflow-hidden p-0" aria-label="Dein Dorf">
-      <canvas ref={canvas} width={BG_WIDTH} height={BG_HEIGHT} className="pixelated block w-full" />
+      <canvas ref={canvas} width={VILLAGE_WIDTH} height={BG_HEIGHT} className="pixelated block w-full" />
       {VILLAGE_SLOTS.map((slot) => (
         <BuildingSpot
           key={slot.id}

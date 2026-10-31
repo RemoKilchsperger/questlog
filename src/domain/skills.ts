@@ -3,12 +3,14 @@
 // = +10 %), beim Schild stattdessen dessen Rüstung. Alle Waffentypen sind
 // unabhängig voneinander lernbar – auch Zweihandwaffen. Kampf-Fähigkeiten gibt
 // es hier nicht mehr: Sie liegen auf den Waffen selbst (abilities.ts).
-// Gegen Gold lassen sich alle Skillpunkte zurücksetzen.
+// Gegen Gold lassen sich alle Skillpunkte zurücksetzen – sobald im Dorf ein
+// Trainingsplatz steht, ausgebaut günstiger bis kostenlos.
 
 import { getSetGearMultiplier } from "./bossSets";
 import { getItem, getItemStats } from "./items";
 import { getLevel } from "./leveling";
 import type { Character, Equipment, ItemType, WeaponType } from "./types";
+import { TRAINING_RESET_FACTOR, type BuildingTier } from "./village";
 
 /** Alle Waffentypen inkl. Schild – Schild-Ränge erhöhen die Rüstung statt des Schadens. */
 export type SkillWeapon = WeaponType;
@@ -74,28 +76,30 @@ export function learnSkill(character: Character, weapon: SkillWeapon): Character
 }
 
 /**
- * Gold für das Zurücksetzen aller Skillpunkte: 12.5 × Level × (1 + Level/10). Lv. 20 → 750.
+ * Gold für das Zurücksetzen aller Skillpunkte: 12.5 × Level × (1 + Level/10), Lv. 20 → 750 –
+ * mal den Faktor des Trainingsplatzes (Stufe 2 halb so viel, Stufe 3 gratis).
  * Bewusst günstig, damit sich das Ausprobieren anderer Klassen und Builds lohnt.
  */
-export function skillResetCost(level: number): number {
-  return Math.round(12.5 * level * (1 + level / 10));
+export function skillResetCost(level: number, training: BuildingTier = 1): number {
+  return Math.round(12.5 * level * (1 + level / 10) * (TRAINING_RESET_FACTOR[training] ?? 1));
 }
 
 /** Warum die Skillpunkte gerade nicht zurückgesetzt werden können – oder null. */
-export function skillResetBlocker(character: Character): string | null {
+export function skillResetBlocker(character: Character, training: BuildingTier): string | null {
+  if (TRAINING_RESET_FACTOR[training] === null) return "Baue zuerst den Trainingsplatz im Dorf.";
   const spent = SKILL_TREE.some((n) => skillRank(character, n.weapon) > 0);
   if (!spent) return "Du hast noch keine Skillpunkte vergeben.";
-  if (character.gold < skillResetCost(getLevel(character.totalXp))) return "Nicht genug Gold.";
+  if (character.gold < skillResetCost(getLevel(character.totalXp), training)) return "Nicht genug Gold.";
   return null;
 }
 
 /** Setzt alle Ränge zurück – die Skillpunkte sind wieder frei. */
-export function resetSkills(character: Character): Character {
-  const blocker = skillResetBlocker(character);
+export function resetSkills(character: Character, training: BuildingTier): Character {
+  const blocker = skillResetBlocker(character, training);
   if (blocker) throw new Error(blocker);
   return {
     ...character,
-    gold: character.gold - skillResetCost(getLevel(character.totalXp)),
+    gold: character.gold - skillResetCost(getLevel(character.totalXp), training),
     skills: {},
   };
 }
