@@ -77,14 +77,15 @@ export function SkillTree() {
   );
 }
 
-/** Alle Skillpunkte gegen Gold zurücksetzen – mit Rückfrage. */
-function SkillReset() {
+/** Alle Skillpunkte gegen Gold zurücksetzen – mit Rückfrage. Braucht den Trainingsplatz im Dorf. */
+export function SkillReset() {
   const character = useGameStore((s) => s.character);
+  const training = useGameStore((s) => s.village.training);
   const reset = useGameStore((s) => s.resetSkills);
   const [confirm, setConfirm] = useState(false);
   const close = useCallback(() => setConfirm(false), []);
-  const cost = skillResetCost(getLevel(character.totalXp));
-  const blocker = skillResetBlocker(character);
+  const cost = skillResetCost(getLevel(character.totalXp), training);
+  const blocker = skillResetBlocker(character, training);
 
   return (
     <>
@@ -95,8 +96,15 @@ function SkillReset() {
         title={blocker ?? "Alle Ränge zurücksetzen"}
         className="rounded-md border-2 border-danger/70 bg-danger/10 px-3 py-2 text-sm text-danger hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        ↺ Zurücksetzen <Gold amount={cost} className="font-bold" />
+        {training === 0 ? (
+          "🔒 Zurücksetzen"
+        ) : (
+          <>
+            ↺ Zurücksetzen {cost > 0 ? <Gold amount={cost} className="font-bold" /> : "(gratis)"}
+          </>
+        )}
       </motion.button>
+      {training === 0 && <span className="text-center text-xs text-muted">Braucht den 🎯 Trainingsplatz im Dorf</span>}
       <ConfirmDialog
         open={confirm}
         title="Skillpunkte zurücksetzen?"
@@ -108,8 +116,14 @@ function SkillReset() {
         }}
       >
         <p>
-          Für <Gold amount={cost} className="font-bold text-gold" /> vergisst du alle Ränge. Alle Skillpunkte sind
-          danach wieder frei und du kannst sie neu verteilen.
+          {cost > 0 ? (
+            <>
+              Für <Gold amount={cost} className="font-bold text-gold" /> vergisst du alle Ränge.
+            </>
+          ) : (
+            "Du vergisst alle Ränge – die Kampfschule nimmt dafür nichts."
+          )}{" "}
+          Alle Skillpunkte sind danach wieder frei und du kannst sie neu verteilen.
         </p>
       </ConfirmDialog>
     </>

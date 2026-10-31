@@ -1,8 +1,8 @@
 # Dorf-Ausbau
 
 Das Dorf ist nicht von Anfang an fertig, der Spieler baut es selbst auf. Zu Beginn gibt es nur einen
-Strassenhändler mit wenig Ware. Schmiede, Anschlagtafel und Alchemist muss man erst bauen und kann sie
-danach in Stufen ausbauen. Bauen kostet Gold und Material, das Monster im jeweiligen Gebiet fallen lassen.
+Strassenhändler mit wenig Ware. Schmiede, Anschlagtafel, Alchemist, Taverne, Trainingsplatz und Statue
+muss man erst bauen und kann sie danach in Stufen ausbauen. Bauen kostet Gold und Material, das Monster im jeweiligen Gebiet fallen lassen.
 
 Status: **umgesetzt** (Idee #17 in docs/ideen.md). Code: `src/domain/village.ts` (Material, Gebäude,
 Kosten, Wirkung der Stufen), Store `gameStore.ts` (`village`, `materials`, `build`), Oberfläche
@@ -87,6 +87,43 @@ zusätzlichen Aufträge.
 Hier ist Stufe 1 der heutige Stand, weil Angriffs- und Rüstungstränke heute nur als Beute fallen. Die
 stärkere Wirkung gilt für Heilung und Verstärkung, aber nur im Solo-Kampf (Gebiete, Dungeons, Turm).
 
+### 🍺 Taverne
+
+| Stufe | Name | Wirkung |
+|---|---|---|
+| 0 | – | nicht vorhanden |
+| 1 | Schankstube | einfache Gerichte |
+| 2 | Gasthaus | kräftigere Gerichte |
+| 3 | Festhalle | Festmahle mit mehreren Buffs |
+
+Die Taverne verkauft später **Buff-Food**. Die Logik dafür fehlt noch: Gebäude, Stufen und Menü stehen,
+das Menü zeigt vorerst nur „Die Speisekarte folgt bald“.
+
+### 🎯 Trainingsplatz
+
+| Stufe | Name | Wirkung |
+|---|---|---|
+| 0 | – | Skillpunkte zurücksetzen nicht möglich |
+| 1 | Übungsplatz | Skillpunkte zurücksetzen gegen Gold (12.5 × Level × (1 + Level/10)) |
+| 2 | Trainingsplatz | Zurücksetzen kostet 50 % weniger |
+| 3 | Kampfschule | Zurücksetzen ist kostenlos |
+
+Der Knopf im Skills-Tab bleibt, ist ohne Trainingsplatz aber gesperrt. Das Menü des Trainingsplatzes hat
+denselben Knopf. Attribute zurücksetzen hängt nicht vom Trainingsplatz ab.
+
+### 🗿 Statue
+
+| Stufe | Name | Wirkung |
+|---|---|---|
+| 0 | – | kein XP-Bonus |
+| 1 | Gedenkstein | +5 % XP |
+| 2 | Heldenstatue | +10 % XP |
+| 3 | Goldenes Denkmal | +15 % XP |
+
+Der Bonus gilt für XP aus Solo-Kämpfen, Dungeons, dem Turm und abgegebenen Quests (`statueXp` in
+village.ts). Kampf-Ergebnis und Truhen zeigen die XP schon mit Bonus. Im Koop gilt er nicht, wie das
+übrige Dorf.
+
 ### 🎯 Steckbriefe (Kopfgeld-Tafel)
 
 - Jeden Tag 2 Steckbriefe für Kreaturen aus den Tagesaufträgen deines Levels, jeder mit 2 festen
@@ -121,6 +158,9 @@ Vorschlag pro Gebäude:
 | Schmiede | 400 G, 20 🐺 | 2'500 G, 25 ❄️, 10 🦎 | 10'000 G, 30 🐉, 15 ❄️ |
 | Anschlagtafel | 150 G, 10 🐺 | 1'500 G, 25 💎, 10 🐺 | 6'000 G, 30 💀, 15 💎 |
 | Alchemist | 300 G, 15 🦎 | 2'000 G, 25 ❄️, 10 🦎 | 8'000 G, 30 🐉, 15 ❄️ |
+| Taverne | 250 G, 15 🐺 | 1'800 G, 25 💎, 10 🦎 | 7'000 G, 30 💀, 15 💎 |
+| Trainingsplatz | 300 G, 20 🐺 | 2'000 G, 25 ❄️, 10 🐺 | 8'000 G, 30 💀, 15 ❄️ |
+| Statue | 500 G, 20 🦎 | 3'000 G, 25 💎, 10 🦎 | 12'000 G, 30 🐉, 15 💀 |
 
 Weil die Material-Stufen an Gebiete gebunden sind, braucht es **keine zusätzlichen Level-Sperren**.
 Wer Stufe 3 bauen will, muss in den Schattenruinen oder im Drachenhort bestehen.
@@ -146,15 +186,17 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
   nicht gebautes Gebäude erscheint als Bauplatz mit Kosten und dem Knopf „Bauen“, ein gebautes Gebäude
   mit der nächsten Stufe und deren Kosten.
 - Die Kosten sind klar sichtbar, mit fehlenden Mengen in Rot („30 💀 – du hast 12“).
-- Ganz oben steht das **Dorfbild** (`VillageScene.tsx`): ein Pixel-Hintergrund mit den vier
-  Gebäuden auf ihrer aktuellen Stufe (Raster in `src/game/villageSprites.ts`, z. B. Bauplatz → Esse →
-  Haus → Halle). Der Hintergrund (`paintVillage` in backgrounds.ts) wächst mit der Summe aller Stufen
-  (0–12) mit: alle 2 Stufen ein Haus mehr auf dem Hügel, der Weg wird von Erde zu Kies (ab 4) und
-  Pflaster (ab 8), der Zaun von Pflöcken zu Holzzaun (ab 3), Palisade (ab 7) und Steinmauer (ab 11).
-  Dazu kommen Blumen (ab 2), Laternen (ab 5) und Wimpel (ab 10).
-- Ein Klick auf ein gebautes Gebäude öffnet sein Menü: Händler, Schmied und Alchemist als Unter-Tab
-  im Dorf, die Anschlagtafel den Quest-Tab. Ein Klick auf einen Bauplatz öffnet den Bau-Dialog, wenn
-  Gold und Material reichen, sonst springt er zur Karte mit den Kosten.
+- Ganz oben steht das **Dorfbild** (`VillageScene.tsx`): ein Pixel-Hintergrund (`VILLAGE_WIDTH` = 300
+  Pixel breit, breiter als die Kampfszene) mit den sieben Gebäuden auf ihrer aktuellen Stufe (Raster in
+  `src/game/villageSprites.ts`, z. B. Bauplatz → Esse → Haus → Halle). Der Hintergrund (`paintVillage`
+  in backgrounds.ts) wächst mit der Summe aller Stufen (0–21) mit: alle 2 Stufen ein Haus mehr auf dem
+  Hügel, der Weg wird von Erde zu Kies (ab 7) und Pflaster (ab 14), der Zaun von Pflöcken zu Holzzaun
+  (ab 5), Palisade (ab 12) und Steinmauer (ab 19). Dazu kommen Blumen (ab 3), Laternen (ab 9) und
+  Wimpel (ab 18).
+- Ein Klick auf ein gebautes Gebäude öffnet sein Menü als **Popup** über dem Dorf, so bleibt man im
+  Ausbau-Tab. Händler, Schmied und Alchemist gibt es zusätzlich als Unter-Tab, die Anschlagtafel auch
+  im Quest-Tab. Ein Klick auf einen Bauplatz öffnet den Bau-Dialog, wenn Gold und Material reichen,
+  sonst springt er zur Karte mit den Kosten.
 - Über Gebäuden, die man gerade ausbauen kann, hüpft ein 🔨. Ein Klick darauf öffnet den Bau-Dialog.
   Nach dem Bauen federt das neue Bild hoch und es staubt. Die Karten zeigen dasselbe Pixelbild.
 - **Tränke gibt es beim Alchemisten** (eigener Unter-Tab, gesperrte Sorten mit der nötigen Stufe). Bis
@@ -167,14 +209,14 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
 ## Erfolge
 
 - **Grundstein:** erstes Gebäude gebaut
-- **Dorfgründer:** alle vier Gebäude mindestens auf Stufe 1
-- **Baumeister:** alle vier Gebäude auf Stufe 3
+- **Dorfgründer:** alle Gebäude mindestens auf Stufe 1
+- **Baumeister:** alle Gebäude auf Stufe 3
 
 ## Spätere Erweiterungen
 
 - **Lagerhaus:** mehr Inventarplätze
-- **Trainingsplatz:** Attribute und Skillpunkte gegen Gold neu verteilen
-- **Taverne:** Treffpunkt für den Koop, eventuell ein Söldner als Begleiter
+- **Taverne:** Buff-Food (Logik folgt), später vielleicht Treffpunkt für den Koop oder ein Söldner als
+  Begleiter
 
 ## Entscheidungen
 

@@ -86,6 +86,7 @@ import {
   build,
   DUNGEON_MATERIAL_FACTOR,
   EMPTY_VILLAGE,
+  statueXp,
   MERCHANT_RULES,
   potionPower,
   scaleMaterials,
@@ -149,7 +150,7 @@ interface GameState {
   resetAttributes: () => void;
   /** Steigert einen Waffen-Skill um einen Rang (kostet einen Skillpunkt). */
   learnSkill: (weapon: SkillWeapon) => void;
-  /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`). */
+  /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`) – braucht den Trainingsplatz. */
   resetSkills: () => void;
   dismissReward: () => void;
   resetGame: () => void;
@@ -534,9 +535,10 @@ export const useGameStore = create<GameState>()(
 
       /** Schreibt die Belohnung einer abgegebenen Quest gut und zeigt sie an. */
       const grantQuestReward = (def: QuestDef, source: QuestSource, extra: Partial<GameState>) => {
-        const { character, inventory, bossCollection } = get();
+        const { character, inventory, bossCollection, village } = get();
+        const xp = statueXp(def.reward.xp, village.statue);
         const levelBefore = getLevel(character.totalXp);
-        const totalXp = character.totalXp + def.reward.xp;
+        const totalXp = character.totalXp + xp;
         const levelAfter = getLevel(totalXp);
         const loot = rollQuestLoot(def.reward, levelAfter, newId());
         set({
@@ -548,7 +550,7 @@ export const useGameStore = create<GameState>()(
             id: newId(),
             questTitle: def.title,
             source,
-            xp: def.reward.xp,
+            xp,
             gold: def.reward.gold,
             loot,
             levelBefore,
@@ -765,7 +767,7 @@ export const useGameStore = create<GameState>()(
       learnSkill: (weapon) => attempt(() => set((s) => ({ character: learnSkill(s.character, weapon) }))),
 
 
-      resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character) }))),
+      resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character, s.village.training) }))),
 
       dismissReward: () => set({ lastReward: null }),
 
@@ -1049,7 +1051,8 @@ export const useGameStore = create<GameState>()(
             if (!creature.boss) questEvent({ kind: "kill", creatureId: creature.id, boss: false });
             questEvent({ kind: "towerFloor", floor: tower.floor });
             const elite = (result.state.elite?.length ?? 0) > 0;
-            const reward = rollBattleReward(creature, hero, newId(), Math.random, defeatedAdds(result.state), elite);
+            const rolled = rollBattleReward(creature, hero, newId(), Math.random, defeatedAdds(result.state), elite);
+            const reward = { ...rolled, xp: statueXp(rolled.xp, get().village.statue) };
             const scaled = towerReward(reward, tower.floor, tower.blessings, elite);
             const level = getLevel(character.totalXp);
             set({
@@ -1087,7 +1090,9 @@ export const useGameStore = create<GameState>()(
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
           for (const add of adds) questEvent({ kind: "kill", creatureId: add.id, boss: false });
-          const rolled = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds, elite);
+          const raw = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds, elite);
+          // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
+          const rolled = { ...raw, xp: statueXp(raw.xp, get().village.statue) };
           if (dungeon) {
             // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende. Material gibt es doppelt.
             const reward = { ...rolled, materials: scaleMaterials(rolled.materials, DUNGEON_MATERIAL_FACTOR) };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { BuildingTier } from "../domain/village";
-import { BG_HEIGHT, BG_WIDTH } from "./backgrounds";
+import { BUILDINGS, type BuildingTier } from "../domain/village";
+import { BG_HEIGHT, VILLAGE_WIDTH } from "./backgrounds";
 import { renderSprite } from "./sprites";
 import { getBuildingSprite, VILLAGE_SLOTS } from "./villageSprites";
 
@@ -19,7 +19,7 @@ describe("Dorfbild", () => {
       for (const tier of TIERS) {
         const { left, right, top } = span(slot, tier);
         expect(left, `${slot.id} ${tier}`).toBeGreaterThanOrEqual(0);
-        expect(right, `${slot.id} ${tier}`).toBeLessThanOrEqual(BG_WIDTH);
+        expect(right, `${slot.id} ${tier}`).toBeLessThanOrEqual(VILLAGE_WIDTH);
         expect(top, `${slot.id} ${tier}`).toBeGreaterThanOrEqual(0);
         expect(slot.base).toBeLessThanOrEqual(BG_HEIGHT);
       }
@@ -28,6 +28,10 @@ describe("Dorfbild", () => {
   it("voll ausgebaute Nachbarn überdecken sich nicht", () => {
     for (let i = 1; i < VILLAGE_SLOTS.length; i++)
       expect(span(VILLAGE_SLOTS[i - 1], 3).right).toBeLessThanOrEqual(span(VILLAGE_SLOTS[i], 3).left);
+  });
+
+  it("jedes Gebäude hat einen Platz im Dorfbild", () => {
+    expect(new Set(VILLAGE_SLOTS.map((s) => s.id))).toEqual(new Set(BUILDINGS.map((b) => b.id)));
   });
 
   it("jede Stufe sieht anders aus", () => {

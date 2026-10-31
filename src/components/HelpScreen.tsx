@@ -220,7 +220,10 @@ export function HelpScreen() {
             </li>
             <li>Nach dem Einsatz ist eine Fähigkeit 1–4 Runden gesperrt – je stärker, desto länger.</li>
           </ul>
-          <p>Gegen Gold kannst du alle Skillpunkte zurücksetzen und neu verteilen. Der Preis steigt mit deinem Level.</p>
+          <p>
+            Sobald im Dorf ein 🎯 Trainingsplatz steht, kannst du gegen Gold alle Skillpunkte zurücksetzen und neu verteilen.
+            Der Preis steigt mit deinem Level – auf Stufe 2 kostet es die Hälfte, in der Kampfschule (Stufe 3) nichts.
+          </p>
         </Topic>
 
         <Topic id="equipment" title="🎒 Ausrüstung">
@@ -275,8 +278,9 @@ export function HelpScreen() {
 
         <Topic id="village" title="🏘️ Dorf">
           <p>
-            Das Dorf baust du selbst auf. Am Anfang gibt es nur einen Strassenhändler – Schmiede, Anschlagtafel und Alchemist
-            musst du erst bauen. Jedes Gebäude hat drei Stufen und ist sofort fertig. Bauen kostet Gold und Material.
+            Das Dorf baust du selbst auf. Am Anfang gibt es nur einen Strassenhändler – Schmiede, Anschlagtafel, Alchemist,
+            Taverne, Trainingsplatz und Statue musst du erst bauen. Jedes Gebäude hat drei Stufen und ist sofort fertig. Bauen
+            kostet Gold und Material. Ein Klick auf ein Gebäude im Dorfbild öffnet sein Menü.
           </p>
           <H>🧱 Material</H>
           <p>

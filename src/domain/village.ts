@@ -1,5 +1,6 @@
 // Dorf-Ausbau: Das Dorf baut der Spieler selbst auf. Am Anfang gibt es nur einen
-// Strassenhändler – Schmiede, Anschlagtafel und Alchemist muss man bauen und kann
+// Strassenhändler – Schmiede, Anschlagtafel, Alchemist, Taverne, Trainingsplatz
+// und Statue muss man bauen und kann
 // sie in Stufen ausbauen (0 = nicht gebaut, höchstens 3). Bauen kostet Gold und
 // Material, das Monster im jeweiligen Gebiet sicher fallen lassen. Stufe 2
 // entspricht jeweils dem früheren festen Dorf, Stufe 3 bringt etwas Neues dazu.
@@ -79,7 +80,7 @@ export function materialEntries(stock: MaterialStock | undefined): { def: Materi
 
 /* ───────────── Gebäude ───────────── */
 
-export type BuildingId = "merchant" | "smith" | "board" | "alchemist";
+export type BuildingId = "merchant" | "smith" | "board" | "alchemist" | "tavern" | "training" | "statue";
 export type BuildingTier = 0 | 1 | 2 | 3;
 export const MAX_BUILDING_TIER = 3;
 
@@ -87,7 +88,7 @@ export const MAX_BUILDING_TIER = 3;
 export type Village = Record<BuildingId, BuildingTier>;
 
 /** Neue (und alle bestehenden) Spielstände beginnen mit einem leeren Dorf. */
-export const EMPTY_VILLAGE: Village = { merchant: 0, smith: 0, board: 0, alchemist: 0 };
+export const EMPTY_VILLAGE: Village = { merchant: 0, smith: 0, board: 0, alchemist: 0, tavern: 0, training: 0, statue: 0 };
 
 export interface BuildCost {
   gold: number;
@@ -196,6 +197,72 @@ export const BUILDINGS: readonly BuildingDef[] = [
         icon: "🏛️",
         effect: "Grosse Heiltränke kaufbar, alle Tränke wirken 25 % stärker",
         cost: cost(8000, { dragonScale: 30, frostFur: 15 }),
+      },
+    ],
+  },
+  {
+    id: "tavern",
+    name: "Taverne",
+    icon: "🍺",
+    description: "Kocht Buff-Food, das dich für eine Weile stärkt. Die Küche öffnet bald.",
+    tiers: [
+      { name: "Bauplatz", icon: "🪧", effect: "Noch keine Taverne" },
+      { name: "Schankstube", icon: "🍲", effect: "Einfache Gerichte (folgt bald)", cost: cost(250, { wolfPelt: 15 }) },
+      {
+        name: "Gasthaus",
+        icon: "🏠",
+        effect: "Kräftigere Gerichte (folgt bald)",
+        cost: cost(1800, { crystalShard: 25, lizardScale: 10 }),
+      },
+      {
+        name: "Festhalle",
+        icon: "🏛️",
+        effect: "Festmahle mit mehreren Buffs (folgt bald)",
+        cost: cost(7000, { boneDust: 30, crystalShard: 15 }),
+      },
+    ],
+  },
+  {
+    id: "training",
+    name: "Trainingsplatz",
+    icon: "🎯",
+    description: "Hier lernst du um: Ohne Trainingsplatz lassen sich die Skillpunkte nicht zurücksetzen.",
+    tiers: [
+      { name: "Bauplatz", icon: "🪧", effect: "Skillpunkte zurücksetzen nicht möglich" },
+      { name: "Übungsplatz", icon: "🪵", effect: "Skillpunkte zurücksetzen gegen Gold", cost: cost(300, { wolfPelt: 20 }) },
+      {
+        name: "Trainingsplatz",
+        icon: "🏠",
+        effect: "Zurücksetzen kostet 50 % weniger",
+        cost: cost(2000, { frostFur: 25, wolfPelt: 10 }),
+      },
+      {
+        name: "Kampfschule",
+        icon: "🏛️",
+        effect: "Zurücksetzen ist kostenlos",
+        cost: cost(8000, { boneDust: 30, frostFur: 15 }),
+      },
+    ],
+  },
+  {
+    id: "statue",
+    name: "Statue",
+    icon: "🗿",
+    description: "Ein Denkmal deiner Taten – es spornt dich an: Du bekommst mehr XP.",
+    tiers: [
+      { name: "Bauplatz", icon: "🪧", effect: "Kein XP-Bonus" },
+      { name: "Gedenkstein", icon: "🪨", effect: "+5 % XP aus Kämpfen und Quests", cost: cost(500, { lizardScale: 20 }) },
+      {
+        name: "Heldenstatue",
+        icon: "🗿",
+        effect: "+10 % XP aus Kämpfen und Quests",
+        cost: cost(3000, { crystalShard: 25, lizardScale: 10 }),
+      },
+      {
+        name: "Goldenes Denkmal",
+        icon: "🏆",
+        effect: "+15 % XP aus Kämpfen und Quests",
+        cost: cost(12000, { dragonScale: 30, boneDust: 15 }),
       },
     ],
   },
@@ -325,3 +392,14 @@ export function potionPower(alchemist: BuildingTier): number {
 
 /** Ab welcher Stufe der Anschlagtafel es die Tages-Jagden, die übrigen Aufträge und die Steckbriefe gibt. */
 export const BOARD_TIERS = { hunts: 1, all: 2, bounties: 3 } as const;
+
+/** Statue: XP-Bonus pro Stufe auf alle XP aus Solo-Kämpfen und Quests (0.1 = +10 %). */
+export const STATUE_XP_BONUS: Readonly<Record<BuildingTier, number>> = { 0: 0, 1: 0.05, 2: 0.1, 3: 0.15 };
+
+/** XP mit dem Bonus der Statue. */
+export function statueXp(xp: number, statue: BuildingTier): number {
+  return Math.round(xp * (1 + STATUE_XP_BONUS[statue]));
+}
+
+/** Trainingsplatz: Faktor auf die Kosten fürs Zurücksetzen der Skillpunkte – null heisst gesperrt. */
+export const TRAINING_RESET_FACTOR: Readonly<Record<BuildingTier, number | null>> = { 0: null, 1: 1, 2: 0.5, 3: 0 };

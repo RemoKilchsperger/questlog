@@ -9,6 +9,8 @@ export const BG_WIDTH = 180;
 export const BG_HEIGHT = 80;
 /** Erste Bodenzeile – die Kämpfer stehen knapp darunter (GROUND_Y / BG_SCALE). */
 export const BG_GROUND = 60;
+/** Das Dorfbild ist breiter, damit alle sieben Gebäude nebeneinander Platz haben. */
+export const VILLAGE_WIDTH = 300;
 
 type Painter = (p: Canvas) => void;
 
@@ -38,6 +40,8 @@ class Canvas {
   constructor(
     private ctx: CanvasRenderingContext2D,
     seed: string,
+    /** Breite der Leinwand – das Dorf ist breiter als die Kampfszene */
+    readonly width = BG_WIDTH,
   ) {
     this.rnd = seeded(seed);
   }
@@ -48,7 +52,7 @@ class Canvas {
   }
 
   px(x: number, y: number, color: string) {
-    if (x < 0 || y < 0 || x >= BG_WIDTH || y >= BG_HEIGHT) return;
+    if (x < 0 || y < 0 || x >= this.width || y >= BG_HEIGHT) return;
     this.ctx.fillStyle = color;
     this.ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
   }
@@ -65,7 +69,7 @@ class Canvas {
       const t = ((y - top) / span) * (colors.length - 1);
       const i = Math.min(colors.length - 2, Math.floor(t));
       const f = t - i;
-      for (let x = 0; x < BG_WIDTH; x++) {
+      for (let x = 0; x < this.width; x++) {
         this.px(x, y, f * 16 > BAYER[y % 4][x % 4] ? colors[i + 1] : colors[i]);
       }
     }
@@ -78,7 +82,7 @@ class Canvas {
   haze(y: number, height: number, color: string, density = 6) {
     const phase = this.rnd() * 10;
     const alpha = Math.min(1, density / 16);
-    for (let x = 0; x < BG_WIDTH; x++) {
+    for (let x = 0; x < this.width; x++) {
       const wobble = Math.round(Math.sin(x / 9 + phase) * 1.5 + Math.sin(x / 4 + phase * 2) * 0.7);
       const top = y + wobble;
       const bottom = y + height - wobble;
@@ -99,7 +103,7 @@ class Canvas {
     const { freq = 1, peaky = false, to = BG_GROUND } = opts;
     const phase = this.rnd() * 100;
     const heights: number[] = [];
-    for (let x = 0; x < BG_WIDTH; x++) {
+    for (let x = 0; x < this.width; x++) {
       let w = Math.sin((x / 23) * freq + phase) * 0.6 + Math.sin((x / 9) * freq + phase * 2) * 0.3;
       if (peaky) w = 1 - Math.abs(Math.sin((x / 28) * freq + phase)) * 2 + Math.sin(x / 5 + phase) * 0.15;
       const h = Math.round(base - w * amp - this.rnd() * 1.2);
@@ -155,8 +159,8 @@ class Canvas {
   /** Bodenstreifen ab BG_GROUND: Oberkante, Schichten und Sprenkel. */
   ground(top: string, layers: string[], speckle: string[], count = 70) {
     this.gradient(BG_GROUND, BG_HEIGHT, layers);
-    this.rect(0, BG_GROUND, BG_WIDTH, 1, top);
-    for (let i = 0; i < count; i++) this.px(this.int(0, BG_WIDTH), this.int(BG_GROUND + 2, BG_HEIGHT), speckle[i % speckle.length]);
+    this.rect(0, BG_GROUND, this.width, 1, top);
+    for (let i = 0; i < count; i++) this.px(this.int(0, this.width), this.int(BG_GROUND + 2, BG_HEIGHT), speckle[i % speckle.length]);
   }
 
   /** Zufällige Einzelpixel im Bereich (Sterne, Funken, Glühwürmchen). */
@@ -569,24 +573,25 @@ const PAINTERS: Record<string, Painter> = {
 /* ───────────── Dorf ───────────── */
 
 /** Häuser der Dorfbewohner auf dem Hügel – mit jedem zweiten Ausbau kommt eines dazu. */
-const HILL_HOUSES = [92, 40, 128, 14, 64, 168];
-/** Lücken zwischen den Gebäuden: dort stehen Laternen und Fahnen. */
-const VILLAGE_GAPS = [45, 90, 135];
+const HILL_HOUSES = [150, 92, 210, 40, 256, 128, 14, 180, 64, 284];
+/** Lücken zwischen den Gebäuden (VILLAGE_SLOTS): dort stehen Laternen und Fahnen. */
+const VILLAGE_GAPS = [45, 87, 129, 171, 213, 255];
 
 /**
- * Hintergrund des Dorfs. `progress` = Summe aller Gebäudestufen (0–12): Je weiter
- * das Dorf ausgebaut ist, desto mehr Häuser stehen auf dem Hügel, desto besser
- * sind Weg und Zaun, und es kommen Blumen, Laternen und Wimpel dazu.
+ * Hintergrund des Dorfs (VILLAGE_WIDTH × BG_HEIGHT). `progress` = Summe aller
+ * Gebäudestufen (0–21): Je weiter das Dorf ausgebaut ist, desto mehr Häuser stehen
+ * auf dem Hügel, desto besser sind Weg und Zaun, und es kommen Blumen, Laternen
+ * und Wimpel dazu.
  * Jede Schicht hat ihren eigenen Zufall, damit sich das Bild beim Ausbau nur
  * dort ändert, wo etwas dazukommt.
  */
 export function paintVillage(ctx: CanvasRenderingContext2D, progress: number): void {
-  const layer = (name: string) => new Canvas(ctx, `village-${name}`);
+  const layer = (name: string) => new Canvas(ctx, `village-${name}`, VILLAGE_WIDTH);
 
   const sky = layer("sky");
   sky.gradient(0, BG_GROUND, ["#232a4a", "#3a4470", "#655f8a", "#8f7590"]);
-  sky.scatter(16, [0, 0, BG_WIDTH, 20], ["#cfd6ff", "#8f98c9"]);
-  sky.circle(150, 11, 5, "#f4e6b0");
+  sky.scatter(16, [0, 0, VILLAGE_WIDTH, 20], ["#cfd6ff", "#8f98c9"]);
+  sky.circle(250, 11, 5, "#f4e6b0");
   sky.ridge(40, 6, "#3e4a66", { freq: 0.6 });
   const hill = sky.ridge(50, 3, "#2d4636", { freq: 1.1 });
 
@@ -601,7 +606,7 @@ export function paintVillage(ctx: CanvasRenderingContext2D, progress: number): v
   }
 
   const trees = layer("trees");
-  for (let x = 2; x < BG_WIDTH; x += trees.int(14, 22)) trees.pine(x, BG_GROUND, trees.int(10, 15), "#1d3529", { trunk: "#1a1410" });
+  for (let x = 2; x < VILLAGE_WIDTH; x += trees.int(14, 22)) trees.pine(x, BG_GROUND, trees.int(10, 15), "#1d3529", { trunk: "#1a1410" });
 
   const ground = layer("ground");
   ground.ground("#5d8a4a", ["#4a6e3a", "#3e5c31", "#334d29"], ["#6f9c58", "#2c4424", "#57804a"]);
@@ -609,18 +614,18 @@ export function paintVillage(ctx: CanvasRenderingContext2D, progress: number): v
   paintVillageFence(layer("fence"), progress);
   paintVillagePath(layer("path"), progress);
 
-  if (progress >= 2) {
+  if (progress >= 3) {
     const flowers = layer("flowers");
     const colors = ["#e86a8a", "#f4d27a", "#b48ae0", "#f5f2ea"];
-    for (let i = 0; i < 6 + progress * 2; i++) {
-      const x = flowers.int(0, BG_WIDTH);
+    for (let i = 0; i < 10 + progress * 2; i++) {
+      const x = flowers.int(0, VILLAGE_WIDTH);
       const y = flowers.int(76, BG_HEIGHT - 1);
       flowers.px(x, y + 1, "#3d6b3a");
       flowers.px(x, y, colors[i % colors.length]);
     }
   }
 
-  if (progress >= 5) {
+  if (progress >= 9) {
     const lamps = layer("lamps");
     for (const x of VILLAGE_GAPS) {
       lamps.glow(x, 60, 5, "#f4d27a");
@@ -630,17 +635,17 @@ export function paintVillage(ctx: CanvasRenderingContext2D, progress: number): v
     }
   }
 
-  if (progress >= 10) {
+  if (progress >= 18) {
     // Wimpel an Fahnenstangen und eine Wimpelkette quer über den Platz
     const flags = layer("flags");
     const colors = ["#c0503a", "#e6b84a", "#56698a", "#6fa35a"];
     for (const [i, x] of VILLAGE_GAPS.entries()) {
       flags.rect(x + 2, 40, 1, 30, "#4a2e19");
-      flags.rect(x + 3, 40, 4, 3, colors[i]);
-      flags.rect(x + 3, 43, 2, 1, colors[i]);
+      flags.rect(x + 3, 40, 4, 3, colors[i % colors.length]);
+      flags.rect(x + 3, 43, 2, 1, colors[i % colors.length]);
     }
-    for (let x = 0; x < BG_WIDTH; x++) {
-      const y = 22 + Math.round(Math.abs(Math.sin((x / BG_WIDTH) * Math.PI * 3)) * -4 + 4);
+    for (let x = 0; x < VILLAGE_WIDTH; x++) {
+      const y = 22 + Math.round(Math.abs(Math.sin((x / VILLAGE_WIDTH) * Math.PI * 3)) * -4 + 4);
       flags.px(x, y, "#2b2230");
       if (x % 6 === 2) {
         const c = colors[(x / 6) % colors.length | 0];
@@ -654,25 +659,25 @@ export function paintVillage(ctx: CanvasRenderingContext2D, progress: number): v
 /** Zaun hinter den Gebäuden: ein paar Pflöcke → Holzzaun → Palisade → Steinmauer. */
 function paintVillageFence(p: Canvas, progress: number) {
   const base = BG_GROUND + 2;
-  if (progress < 3) {
-    for (let x = 4; x < BG_WIDTH; x += p.int(18, 30)) p.rect(x, base - 4, 1, 4, "#6b4423");
-  } else if (progress < 7) {
-    for (let x = 1; x < BG_WIDTH; x += 6) p.rect(x, base - 6, 1, 6, "#6b4423");
-    p.rect(0, base - 5, BG_WIDTH, 1, "#8a6038");
-    p.rect(0, base - 2, BG_WIDTH, 1, "#8a6038");
-  } else if (progress < 11) {
-    for (let x = 0; x < BG_WIDTH; x += 2) {
+  if (progress < 5) {
+    for (let x = 4; x < VILLAGE_WIDTH; x += p.int(18, 30)) p.rect(x, base - 4, 1, 4, "#6b4423");
+  } else if (progress < 12) {
+    for (let x = 1; x < VILLAGE_WIDTH; x += 6) p.rect(x, base - 6, 1, 6, "#6b4423");
+    p.rect(0, base - 5, VILLAGE_WIDTH, 1, "#8a6038");
+    p.rect(0, base - 2, VILLAGE_WIDTH, 1, "#8a6038");
+  } else if (progress < 19) {
+    for (let x = 0; x < VILLAGE_WIDTH; x += 2) {
       const h = 8 + (x % 4 === 0 ? 1 : 0);
       p.rect(x, base - h, 2, h, x % 4 === 0 ? "#7a5030" : "#6b4423");
       p.px(x, base - h - 1, "#4a2e19");
     }
-    p.rect(0, base - 6, BG_WIDTH, 1, "#4a2e19");
+    p.rect(0, base - 6, VILLAGE_WIDTH, 1, "#4a2e19");
   } else {
-    p.rect(0, base - 9, BG_WIDTH, 9, "#8d877c");
+    p.rect(0, base - 9, VILLAGE_WIDTH, 9, "#8d877c");
     for (let y = base - 9; y < base; y += 3)
-      for (let x = (y % 2) * 3; x < BG_WIDTH; x += 6) p.rect(x, y, 1, 3, "#6a655d");
-    for (let y = base - 6; y < base; y += 3) p.rect(0, y, BG_WIDTH, 1, "#6a655d");
-    for (let x = 0; x < BG_WIDTH; x += 6) p.rect(x, base - 11, 3, 2, "#8d877c");
+      for (let x = (y % 2) * 3; x < VILLAGE_WIDTH; x += 6) p.rect(x, y, 1, 3, "#6a655d");
+    for (let y = base - 6; y < base; y += 3) p.rect(0, y, VILLAGE_WIDTH, 1, "#6a655d");
+    for (let x = 0; x < VILLAGE_WIDTH; x += 6) p.rect(x, base - 11, 3, 2, "#8d877c");
   }
 }
 
@@ -680,22 +685,22 @@ function paintVillageFence(p: Canvas, progress: number) {
 function paintVillagePath(p: Canvas, progress: number) {
   const top = 70;
   const bottom = 75;
-  if (progress < 4) {
-    p.rect(0, top, BG_WIDTH, bottom - top, "#7a5a3a");
-    p.rect(0, top + 1, BG_WIDTH, 1, "#6a4c30");
-    p.rect(0, bottom - 2, BG_WIDTH, 1, "#6a4c30");
-    p.scatter(20, [0, top, BG_WIDTH, bottom - 1], ["#8c6a46"]);
-  } else if (progress < 8) {
-    p.rect(0, top, BG_WIDTH, bottom - top, "#8c8478");
-    p.scatter(120, [0, top, BG_WIDTH, bottom - 1], ["#a59d90", "#6f685e", "#9a9286"]);
+  if (progress < 7) {
+    p.rect(0, top, VILLAGE_WIDTH, bottom - top, "#7a5a3a");
+    p.rect(0, top + 1, VILLAGE_WIDTH, 1, "#6a4c30");
+    p.rect(0, bottom - 2, VILLAGE_WIDTH, 1, "#6a4c30");
+    p.scatter(20, [0, top, VILLAGE_WIDTH, bottom - 1], ["#8c6a46"]);
+  } else if (progress < 14) {
+    p.rect(0, top, VILLAGE_WIDTH, bottom - top, "#8c8478");
+    p.scatter(120, [0, top, VILLAGE_WIDTH, bottom - 1], ["#a59d90", "#6f685e", "#9a9286"]);
   } else {
-    p.rect(0, top, BG_WIDTH, bottom - top, "#5e5850");
+    p.rect(0, top, VILLAGE_WIDTH, bottom - top, "#5e5850");
     for (let y = top; y < bottom; y += 2)
-      for (let x = (y / 2) % 2 === 0 ? 0 : 2; x < BG_WIDTH; x += 4) {
+      for (let x = (y / 2) % 2 === 0 ? 0 : 2; x < VILLAGE_WIDTH; x += 4) {
         p.rect(x, y, 3, 1, p.rnd() < 0.5 ? "#a39b8d" : "#958d80");
       }
   }
-  p.rect(0, top - 1, BG_WIDTH, 1, "#4a6e3a");
+  p.rect(0, top - 1, VILLAGE_WIDTH, 1, "#4a6e3a");
 }
 
 /** Gibt es für dieses Gebiet einen gemalten Hintergrund? */

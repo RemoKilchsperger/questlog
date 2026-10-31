@@ -41,6 +41,15 @@ export function QuestScreen() {
   );
 }
 
+/** Nur die Anschlagtafel – als Popup im Dorf. */
+export function BoardScreen() {
+  const now = useNow();
+  const today = dateKey(now);
+  const refreshQuestBoards = useGameStore((s) => s.refreshQuestBoards);
+  useEffect(() => refreshQuestBoards(), [today, refreshQuestBoards]);
+  return <BoardPanel now={now} />;
+}
+
 /** Wie viele Quests erfüllt sind und auf die Abgabe warten – für das Abzeichen am Tab. */
 export function useReadyQuestCount(): number {
   return useGameStore((s) =>

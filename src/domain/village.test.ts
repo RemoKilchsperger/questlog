@@ -28,6 +28,8 @@ import {
   nextBuildCost,
   potionPower,
   SMITH_RULES,
+  statueXp,
+  TRAINING_RESET_FACTOR,
   type Village,
 } from "./village";
 
@@ -111,7 +113,7 @@ describe("Bauen", () => {
   });
 
   it("höher als Stufe 3 geht nicht", () => {
-    const full: Village = { merchant: 3, smith: 3, board: 3, alchemist: 3 };
+    const full: Village = { merchant: 3, smith: 3, board: 3, alchemist: 3, tavern: 3, training: 3, statue: 3 };
     expect(nextBuildCost(full, "smith")).toBeNull();
     expect(canBuild(full, "smith", 1e9, { dragonScale: 999 })).toBe(false);
     expect(() => build(full, "smith", 1e9, {})).toThrow(/ausgebaut/);
@@ -235,6 +237,21 @@ describe("Anschlagtafel", () => {
   });
 });
 
+describe("Statue", () => {
+  it("bringt mit jeder Stufe mehr XP: +5 %, +10 %, +15 %", () => {
+    expect(statueXp(200, 0)).toBe(200);
+    expect(statueXp(200, 1)).toBe(210);
+    expect(statueXp(200, 2)).toBe(220);
+    expect(statueXp(200, 3)).toBe(230);
+  });
+});
+
+describe("Trainingsplatz", () => {
+  it("ohne ihn kein Zurücksetzen, ausgebaut günstiger bis gratis", () => {
+    expect(TRAINING_RESET_FACTOR).toEqual({ 0: null, 1: 1, 2: 0.5, 3: 0 });
+  });
+});
+
 describe("Erfolge im Dorf", () => {
   const progress = (id: string, village: Village) =>
     ACHIEVEMENTS.find((a) => a.id === id)!.progress({
@@ -249,7 +266,7 @@ describe("Erfolge im Dorf", () => {
   it("Grundstein, Dorfgründer und Baumeister", () => {
     expect(progress("foundation", EMPTY_VILLAGE)).toBe(0);
     expect(progress("foundation", { ...EMPTY_VILLAGE, board: 1 })).toBe(1);
-    expect(progress("village-founder", { merchant: 1, smith: 1, board: 1, alchemist: 0 })).toBe(3);
-    expect(progress("master-builder", { merchant: 3, smith: 3, board: 3, alchemist: 2 })).toBe(3);
+    expect(progress("village-founder", { ...EMPTY_VILLAGE, merchant: 1, smith: 1, board: 1 })).toBe(3);
+    expect(progress("master-builder", { ...EMPTY_VILLAGE, merchant: 3, smith: 3, board: 3, alchemist: 2 })).toBe(3);
   });
 });

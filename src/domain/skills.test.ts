@@ -96,7 +96,7 @@ describe("Skills zurücksetzen", () => {
     const trained = learnTimes(learnTimes(heroAt(20), "sword", MAX_SKILL_RANK), "greataxe", 2);
     expect(unspentSkillPoints(trained)).toBe(19 - MAX_SKILL_RANK - 2);
 
-    const reset = resetSkills(rich(trained, 5000));
+    const reset = resetSkills(rich(trained, 5000), 1);
     expect(reset.skills).toEqual({});
     expect(unspentSkillPoints(reset)).toBe(19);
     expect(reset.gold).toBe(5000 - skillResetCost(20));
@@ -104,8 +104,16 @@ describe("Skills zurücksetzen", () => {
 
   it("nicht ohne genug Gold oder ohne vergebene Punkte", () => {
     const trained = learnTimes(heroAt(20), "sword", 1);
-    expect(skillResetBlocker(rich(trained, skillResetCost(20) - 1))).toMatch(/Gold/);
-    expect(() => resetSkills(rich(trained, 0))).toThrow();
-    expect(skillResetBlocker(rich(heroAt(20), 99_999))).toMatch(/noch keine/);
+    expect(skillResetBlocker(rich(trained, skillResetCost(20) - 1), 1)).toMatch(/Gold/);
+    expect(() => resetSkills(rich(trained, 0), 1)).toThrow();
+    expect(skillResetBlocker(rich(heroAt(20), 99_999), 1)).toMatch(/noch keine/);
+  });
+
+  it("braucht den Trainingsplatz – ausgebaut wird es günstiger bis gratis", () => {
+    const trained = learnTimes(heroAt(20), "sword", 1);
+    expect(skillResetBlocker(rich(trained, 99_999), 0)).toMatch(/Trainingsplatz/);
+    expect(skillResetCost(20, 2)).toBe(375);
+    expect(skillResetCost(20, 3)).toBe(0);
+    expect(resetSkills(rich(trained, 0), 3).skills).toEqual({});
   });
 });

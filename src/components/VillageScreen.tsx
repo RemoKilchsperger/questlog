@@ -16,28 +16,36 @@ import {
 } from "../domain/village";
 import { getBuildingSprite } from "../game/villageSprites";
 import { useGameStore } from "../store/gameStore";
+import { AlchemistScreen } from "./AlchemistScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { formatNumber, Gold } from "./Gold";
 import { Hint } from "./HoverCard";
+import { Modal } from "./Modal";
 import { PixelSprite } from "./PixelSprite";
+import { BoardScreen } from "./QuestScreen";
+import { ShopScreen } from "./ShopScreen";
+import { SmithScreen } from "./SmithScreen";
+import { StatueScreen, TavernScreen, TrainingScreen } from "./VillageMenus";
 import { VillageScene } from "./VillageScene";
 
 /**
- * Dorf-Ausbau: das Dorfbild, der Materialvorrat und die vier Gebäude mit ihrer
- * nächsten Stufe. `onOpen` öffnet das Menü eines Gebäudes (Händler, Schmied …).
+ * Dorf-Ausbau: das Dorfbild, der Materialvorrat und alle Gebäude mit ihrer
+ * nächsten Stufe. Ein Klick auf ein Gebäude öffnet sein Menü (Händler, Schmied …) als Popup.
  */
-export function VillageScreen({ onOpen }: { onOpen: (id: BuildingId) => void }) {
+export function VillageScreen() {
   const [pending, setPending] = useState<BuildingDef | null>(null);
   const close = useCallback(() => setPending(null), []);
+  const [opened, setOpened] = useState<BuildingDef | null>(null);
+  const closeMenu = useCallback(() => setOpened(null), []);
   const build = useGameStore((s) => s.build);
   const village = useGameStore((s) => s.village);
 
   /**
-   * Klick auf ein Gebäude im Dorfbild: Steht es, öffnet sich sein Menü. Ein Bauplatz
+   * Klick auf ein Gebäude im Dorfbild: Steht es, öffnet sich sein Menü als Popup. Ein Bauplatz
    * fragt gleich nach dem Bauen, wenn es reicht – sonst geht es zur Karte mit den Kosten.
    */
   const select = (def: BuildingDef) => {
-    if (village[def.id] > 0 || def.id === "merchant") return onOpen(def.id);
+    if (village[def.id] > 0 || def.id === "merchant") return setOpened(def);
     const { character, materials } = useGameStore.getState();
     if (canBuild(village, def.id, character.gold, materials)) return setPending(def);
     document.getElementById(`building-${def.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -52,6 +60,14 @@ export function VillageScreen({ onOpen }: { onOpen: (id: BuildingId) => void }) 
           <BuildingCard key={def.id} def={def} onBuild={() => setPending(def)} />
         ))}
       </div>
+      <Modal
+        open={opened !== null}
+        title={opened ? `${opened.icon} ${opened.tiers[village[opened.id]].name}` : ""}
+        onClose={closeMenu}
+        wide
+      >
+        {opened && <BuildingMenu id={opened.id} onClose={closeMenu} />}
+      </Modal>
       <ConfirmDialog
         open={pending !== null}
         title={pending ? `${pending.name} ausbauen?` : ""}
@@ -79,6 +95,26 @@ export function VillageScreen({ onOpen }: { onOpen: (id: BuildingId) => void }) 
       </ConfirmDialog>
     </div>
   );
+}
+
+/** Das Menü eines Gebäudes im Popup. */
+function BuildingMenu({ id, onClose }: { id: BuildingId; onClose: () => void }) {
+  switch (id) {
+    case "merchant":
+      return <ShopScreen />;
+    case "smith":
+      return <SmithScreen onOpenVillage={onClose} />;
+    case "alchemist":
+      return <AlchemistScreen onOpenVillage={onClose} />;
+    case "board":
+      return <BoardScreen />;
+    case "tavern":
+      return <TavernScreen />;
+    case "training":
+      return <TrainingScreen />;
+    case "statue":
+      return <StatueScreen />;
+  }
 }
 
 /** Vorrat aller Materialien – mit dem Gebiet, in dem sie fallen. */
