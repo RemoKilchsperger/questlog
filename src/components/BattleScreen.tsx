@@ -505,6 +505,7 @@ function Battle({ battle }: { battle: BattleState }) {
   const drink = useGameStore((s) => s.battleDrinkPotion);
   const battleFlee = useGameStore((s) => s.battleFlee);
   const gold = useGameStore((s) => s.character.gold);
+  const mealInUse = useGameStore((s) => s.mealInUse);
   const { creature, area } = getCreature(battle.creatureId);
   const fleePrice = fleeCost(creature, gold);
   const [confirmFlee, setConfirmFlee] = useState(false);
@@ -577,7 +578,7 @@ function Battle({ battle }: { battle: BattleState }) {
         <section className="panel flex flex-col gap-4 p-4">
           {/* Zustand: links du, rechts der Gegner */}
           <div className="grid gap-2 sm:grid-cols-2">
-            <StatusSide title="Du" chips={heroStatusChips(battle.buffs, battle.heroEffects)}>
+            <StatusSide title="Du" chips={heroStatusChips(battle.buffs, battle.heroEffects, mealInUse)}>
               <Hint text={`Mana für Fähigkeiten – füllt sich um ${MANA_REGEN} pro Runde auf.`} className="block">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-intellect">💧</span>

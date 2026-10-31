@@ -188,6 +188,8 @@ interface GameState {
   mealInUse: string | null;
   /** Isst ein Gericht in der Taverne – nur, wenn man nicht mehr satt ist. */
   eat: (foodId: string) => void;
+  /** Gericht, das im laufenden Koop-Kampf wirkt – nur für die Anzeige (wird nicht gespeichert) */
+  coopMeal: string | null;
   /** Ein Koop-Kampf hat begonnen: das Gericht ist aufgegessen (der Server hat es schon eingerechnet). */
   finishMealInCoop: () => void;
 
@@ -691,6 +693,7 @@ export const useGameStore = create<GameState>()(
       materials: {},
       meal: null,
       mealInUse: null,
+      coopMeal: null,
       lastReward: null,
 
       setTitle: (achievementId) =>
@@ -831,6 +834,7 @@ export const useGameStore = create<GameState>()(
           materials: {},
           meal: null,
           mealInUse: null,
+          coopMeal: null,
           lastReward: null,
         }),
 
@@ -947,7 +951,7 @@ export const useGameStore = create<GameState>()(
           set({ meal: result.meal, character: { ...character, gold: result.gold } });
         }),
 
-      finishMealInCoop: () => set({ meal: null }),
+      finishMealInCoop: () => set((s) => ({ meal: null, coopMeal: s.meal })),
 
       build: (id) =>
         attempt(() => {

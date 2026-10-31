@@ -8,6 +8,7 @@ import type { AbilityDef, Guard } from "../domain/abilities";
 import { ADD_ROLES, DRUMMER_BONUS, getBossPhase, SHIELD_DAMAGE_TAKEN, type AddRole } from "../domain/bossMechanics";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
 import { getEliteAffix, type EliteAffix } from "../domain/elites";
+import { FOODS, foodEffectText } from "../domain/food";
 import { getMatchups, MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR, type Matchup } from "../domain/matchups";
 import { BUFF_LABELS, type BuffKind } from "../domain/potions";
 import { Hint } from "./HoverCard";
@@ -45,9 +46,23 @@ function guardChip(guard: Guard): StatusChip {
   return { key: "guard", icon: "🛡️", text: `Abwehr ${reduce}`, tone: "good", title: `Nächster Angriff ${reduce}` };
 }
 
-/** Was gerade auf dem Helden wirkt – Verstärkungen zuerst, dann Schaden über Zeit. */
-export function heroStatusChips(buffs: Partial<Record<BuffKind, ActiveBuff>>, effects: HeroEffects): StatusChip[] {
+/** Was gerade auf dem Helden wirkt – das Gericht aus der Taverne und Verstärkungen zuerst, dann Schaden über Zeit. */
+export function heroStatusChips(
+  buffs: Partial<Record<BuffKind, ActiveBuff>>,
+  effects: HeroEffects,
+  meal?: string | null,
+): StatusChip[] {
   const chips: StatusChip[] = [];
+  const food = meal ? FOODS.find((f) => f.id === meal) : undefined;
+  if (food) {
+    chips.push({
+      key: "meal",
+      icon: food.icon,
+      text: foodEffectText(food),
+      tone: "good",
+      title: `${food.name} aus der Taverne – wirkt bis zum Ende des Einsatzes`,
+    });
+  }
   for (const [kind, buff] of Object.entries(buffs) as [BuffKind, ActiveBuff][]) {
     chips.push({
       key: kind,
