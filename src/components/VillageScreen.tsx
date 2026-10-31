@@ -10,23 +10,42 @@ import {
   nextBuildCost,
   type BuildCost,
   type BuildingDef,
+  type BuildingId,
   type MaterialId,
   type MaterialStock,
 } from "../domain/village";
+import { getBuildingSprite } from "../game/villageSprites";
 import { useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { formatNumber, Gold } from "./Gold";
 import { Hint } from "./HoverCard";
+import { PixelSprite } from "./PixelSprite";
+import { VillageScene } from "./VillageScene";
 
-/** Dorf-Ausbau: Materialvorrat und die vier Gebäude mit ihrer nächsten Stufe. */
-export function VillageScreen() {
+/**
+ * Dorf-Ausbau: das Dorfbild, der Materialvorrat und die vier Gebäude mit ihrer
+ * nächsten Stufe. `onOpen` öffnet das Menü eines Gebäudes (Händler, Schmied …).
+ */
+export function VillageScreen({ onOpen }: { onOpen: (id: BuildingId) => void }) {
   const [pending, setPending] = useState<BuildingDef | null>(null);
   const close = useCallback(() => setPending(null), []);
   const build = useGameStore((s) => s.build);
   const village = useGameStore((s) => s.village);
 
+  /**
+   * Klick auf ein Gebäude im Dorfbild: Steht es, öffnet sich sein Menü. Ein Bauplatz
+   * fragt gleich nach dem Bauen, wenn es reicht – sonst geht es zur Karte mit den Kosten.
+   */
+  const select = (def: BuildingDef) => {
+    if (village[def.id] > 0 || def.id === "merchant") return onOpen(def.id);
+    const { character, materials } = useGameStore.getState();
+    if (canBuild(village, def.id, character.gold, materials)) return setPending(def);
+    document.getElementById(`building-${def.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
     <div className="flex flex-col gap-4">
+      <VillageScene onSelect={select} onBuild={setPending} />
       <MaterialPanel />
       <div className="grid gap-4 sm:grid-cols-2">
         {BUILDINGS.map((def) => (
@@ -71,7 +90,10 @@ function MaterialPanel() {
     <section className="panel p-4">
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-pixel text-2xl">🏘️ Dorf</h2>
-        <Gold amount={gold} className="text-lg font-bold text-gold" />
+        <span className="flex items-baseline gap-3">
+          {import.meta.env.DEV && <TestResourcesButton />}
+          <Gold amount={gold} className="text-lg font-bold text-gold" />
+        </span>
       </div>
       <p className="mb-3 text-xs text-muted">
         Baue dein Dorf aus: Jedes Gebäude hat drei Stufen und wird sofort fertig. Bauen kostet Gold und Material – jedes
@@ -104,6 +126,25 @@ function MaterialPanel() {
   );
 }
 
+/** Nur auf localhost (`npm run dev`): Gold und Material zum Ausprobieren des Ausbaus. */
+function TestResourcesButton() {
+  const grant = () =>
+    useGameStore.setState((s) => ({
+      character: { ...s.character, gold: s.character.gold + 100_000 },
+      materials: Object.fromEntries(MATERIALS.map((m) => [m.id, (s.materials[m.id] ?? 0) + 500])),
+    }));
+  return (
+    <button
+      type="button"
+      onClick={grant}
+      title="Nur im Entwicklungsmodus sichtbar"
+      className="rounded-md border-2 border-dashed border-night-700 px-2 py-0.5 text-xs text-muted hover:text-parchment"
+    >
+      🧪 +100'000 Gold, +500 Material
+    </button>
+  );
+}
+
 function BuildingCard({ def, onBuild }: { def: BuildingDef; onBuild: () => void }) {
   const tier = useGameStore((s) => s.village[def.id]);
   const gold = useGameStore((s) => s.character.gold);
@@ -115,19 +156,22 @@ function BuildingCard({ def, onBuild }: { def: BuildingDef; onBuild: () => void 
   const affordable = canBuild(village, def.id, gold, materials);
 
   return (
-    <section className={`panel flex flex-col gap-3 p-4 ${tier === MAX_BUILDING_TIER ? "border-gold/60" : ""}`}>
+    <section
+      id={`building-${def.id}`}
+      className={`panel flex scroll-mt-4 flex-col gap-3 p-4 ${tier === MAX_BUILDING_TIER ? "border-gold/60" : ""}`}
+    >
       <div className="flex items-start gap-3">
         <motion.span
           key={tier}
           initial={{ scale: 0.5, rotate: -8 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 14 }}
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-md border-2 border-night-700 bg-night-800 text-3xl ${
+          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-md border-2 border-night-700 bg-night-800 p-1 ${
             tier === 0 && def.id !== "merchant" ? "grayscale opacity-60" : ""
           }`}
           aria-hidden
         >
-          {current.icon}
+          <PixelSprite sprite={getBuildingSprite(def.id, tier)} size={44} />
         </motion.span>
         <div className="min-w-0 flex-1">
           <h3 className="font-pixel text-xl">

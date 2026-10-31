@@ -146,12 +146,23 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
   nicht gebautes Gebäude erscheint als Bauplatz mit Kosten und dem Knopf „Bauen“, ein gebautes Gebäude
   mit der nächsten Stufe und deren Kosten.
 - Die Kosten sind klar sichtbar, mit fehlenden Mengen in Rot („30 💀 – du hast 12“).
-- Das Bild des Gebäudes ändert sich mit jeder Stufe (z. B. Bauplatz → Esse → Haus → Halle). Eine
-  eigene Dorf-Szene gibt es noch nicht, die Bilder sind vorerst Symbole auf den Karten.
+- Ganz oben steht das **Dorfbild** (`VillageScene.tsx`): ein Pixel-Hintergrund mit den vier
+  Gebäuden auf ihrer aktuellen Stufe (Raster in `src/game/villageSprites.ts`, z. B. Bauplatz → Esse →
+  Haus → Halle). Der Hintergrund (`paintVillage` in backgrounds.ts) wächst mit der Summe aller Stufen
+  (0–12) mit: alle 2 Stufen ein Haus mehr auf dem Hügel, der Weg wird von Erde zu Kies (ab 4) und
+  Pflaster (ab 8), der Zaun von Pflöcken zu Holzzaun (ab 3), Palisade (ab 7) und Steinmauer (ab 11).
+  Dazu kommen Blumen (ab 2), Laternen (ab 5) und Wimpel (ab 10).
+- Ein Klick auf ein gebautes Gebäude öffnet sein Menü: Händler, Schmied und Alchemist als Unter-Tab
+  im Dorf, die Anschlagtafel den Quest-Tab. Ein Klick auf einen Bauplatz öffnet den Bau-Dialog, wenn
+  Gold und Material reichen, sonst springt er zur Karte mit den Kosten.
+- Über Gebäuden, die man gerade ausbauen kann, hüpft ein 🔨. Ein Klick darauf öffnet den Bau-Dialog.
+  Nach dem Bauen federt das neue Bild hoch und es staubt. Die Karten zeigen dasselbe Pixelbild.
+- **Tränke gibt es beim Alchemisten** (eigener Unter-Tab, gesperrte Sorten mit der nötigen Stufe). Bis
+  er gebaut ist, verkauft der Händler unter seiner Ware kleine Heiltränke, danach nicht mehr.
 - Im Kampf-Ergebnis, in der Dungeon- und Turm-Truhe und in der Koop-Truhe steht das erhaltene Material,
   zum Beispiel „+1 🐺 Wolfsfell“.
 - Ohne Schmiede zeigt der Schmied-Tab einen Bauplatz mit Link zum Ausbau, ohne Anschlagtafel zeigt der
-  Quest-Tab einen Hinweis statt der Aufträge. Gesperrte Tränke stehen mit der nötigen Alchemisten-Stufe da.
+  Quest-Tab einen Hinweis statt der Aufträge, ohne Alchemist zeigt der Alchemist-Tab einen Bauplatz.
 
 ## Erfolge
 

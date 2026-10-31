@@ -327,7 +327,8 @@ export function HelpScreen() {
           </ul>
           <H>⚗️ Alchemist und Tränke</H>
           <p>
-            Kleine Heiltränke hat schon der Strassenhändler. Alle anderen verkauft der Alchemist, je nach Stufe. Der
+            Tränke kaufst du beim Alchemisten (Dorf → Alchemist), je nach Stufe. Bis er gebaut ist, hat der Händler ein
+            paar kleine Heiltränke. Der
             Meisteralchemist macht alle Tränke {pct(MASTER_POTION_BONUS)} stärker (nur solo, nicht im Koop).
           </p>
           <Table
@@ -336,7 +337,7 @@ export function HelpScreen() {
               `${p.icon} ${p.name}`,
               potionEffectText(p),
               <Gold amount={p.price} />,
-              p.alchemist === 0 ? "Strassenhändler" : `${getBuilding("alchemist").tiers[p.alchemist].name} (Stufe ${p.alchemist})`,
+              p.alchemist === 0 ? "Händler, bis der Alchemist steht" : `${getBuilding("alchemist").tiers[p.alchemist].name} (Stufe ${p.alchemist})`,
             ])}
           />
           <H>⚒️ Schmied</H>

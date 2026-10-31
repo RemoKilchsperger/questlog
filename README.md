@@ -192,8 +192,9 @@ mit 25 % LP auf, der Host entscheidet nach jedem Sieg über Weiter oder Aussteig
 Dungeon-Bosse haben zwei Fähigkeiten im Wechsel (`bossAbilities.ts`): eine gegen ein Ziel, eine gegen die Gruppe.
 Solo treffen beide den Helden, im Koop trifft die zweite alle – jeden mit Solo-Schaden × 0.75.
 
-**Tränke:** Kleiner Heiltrank 20 % LP und Heiltrank 40 % gibt es beim Händler. Grosser Heiltrank 60 %,
-Angriffstrank (+30 % Schaden, 3 Runden) und Rüstungstrank (+100 % Rüstung, 3 Runden) gibt es nur als Beute.
+**Tränke:** Kleiner Heiltrank 20 % LP, Heiltrank 40 %, Grosser Heiltrank 60 %, Angriffstrank (+30 % Schaden,
+3 Runden) und Rüstungstrank (+100 % Rüstung, 3 Runden) verkauft der Alchemist, je nach Ausbaustufe. Bis er gebaut
+ist, hat der Händler kleine Heiltränke. Dazu fallen Tränke als Beute.
 
 **Technik:** Die Kampflogik ist reine Domain-Logik (getestet, inkl. Balance-Simulation). Die Phaser-Szene
 (`src/game/BattleScene.ts`) zeichnet nur und animiert die Ereignisse, die der Store über den `EventBus`

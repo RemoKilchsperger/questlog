@@ -1,19 +1,19 @@
 import { motion } from "motion/react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatCountdown, nextBoundary } from "../domain/calendar";
 import { getItemStats, sellPrice as baseSellPrice } from "../domain/items";
 import { getLevel } from "../domain/leveling";
-import { POTIONS, potionEffectText } from "../domain/potions";
+import { POTIONS } from "../domain/potions";
 import { rerollCost, rerollsLeft, SHOP_ROTATION_HOURS, shopPrice, shopSlot } from "../domain/shop";
 import type { OwnedItem, Rarity } from "../domain/types";
 import { getBuilding, MERCHANT_RULES } from "../domain/village";
 import { useGameStore } from "../store/gameStore";
+import { PotionList } from "./AlchemistScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Gold } from "./Gold";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemRow } from "./ItemRow";
-import { POTION_COLORS } from "./potionUi";
 import { itemName, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { useNow } from "./useNow";
 
@@ -83,12 +83,10 @@ export function ShopScreen() {
   );
 }
 
-type View = "wares" | "potions";
-
 function Offers() {
   const gold = useGameStore((s) => s.character.gold);
   const { name } = useMerchant();
-  const [view, setView] = useState<View>("wares");
+  const alchemistBuilt = useGameStore((s) => s.village.alchemist > 0);
 
   return (
     <section className="panel p-5">
@@ -96,15 +94,15 @@ function Offers() {
         <h2 className="font-pixel text-2xl">{name}</h2>
         <Gold amount={gold} className="text-lg font-bold text-gold" />
       </div>
-      <div className="mb-3 flex gap-1">
-        <ViewChip active={view === "wares"} onClick={() => setView("wares")}>
-          🎒 Ware
-        </ViewChip>
-        <ViewChip active={view === "potions"} onClick={() => setView("potions")}>
-          🧪 Tränke
-        </ViewChip>
-      </div>
-      {view === "wares" ? <WareOffers /> : <PotionOffers />}
+      <WareOffers />
+      {/* Bis der Alchemist steht, hat der Händler ein paar kleine Heiltränke – danach gibt es Tränke nur dort. */}
+      {!alchemistBuilt && (
+        <div className="mt-4">
+          <h3 className="font-pixel mb-1 text-lg">🧪 Tränke</h3>
+          <p className="mb-2 text-xs text-muted">Weitere Tränke verkauft der Alchemist, sobald du ihn gebaut hast.</p>
+          <PotionList potions={POTIONS.filter((p) => p.alchemist === 0)} />
+        </div>
+      )}
     </section>
   );
 }
@@ -230,77 +228,5 @@ function RarityChances({ chances }: { chances: readonly { rarity: Rarity; chance
         </span>
       ))}
     </>
-  );
-}
-
-function PotionOffers() {
-  const gold = useGameStore((s) => s.character.gold);
-  const potions = useGameStore((s) => s.potions);
-  const buyPotion = useGameStore((s) => s.buyPotion);
-  const alchemist = useGameStore((s) => s.village.alchemist);
-  const alchemistTiers = getBuilding("alchemist").tiers;
-
-  return (
-    <>
-      <p className="mb-2 text-xs text-muted">
-        Heiltränke stellen im Kampf Lebenspunkte wieder her. Pro Runde darfst du einen Trank trinken – und jede Sorte
-        nur einmal pro Kampf. Kleine Heiltränke hat der Händler immer, alle anderen verkauft der Alchemist – je weiter
-        er ausgebaut ist, desto mehr. Sonst gibt es sie nur als Kampfbeute.
-        {alchemist >= 3 && <span className="text-xp"> Beim Meisteralchemisten wirken alle Tränke 25 % stärker.</span>}
-      </p>
-      <ul className="flex flex-col gap-2">
-        {POTIONS.map((p) => {
-          const locked = p.alchemist > alchemist;
-          return (
-          <li
-            key={p.id}
-            className={`flex items-center gap-3 rounded-md border-2 border-night-700 bg-night-800 p-2 ${locked ? "opacity-50" : ""}`}
-          >
-            <span className="text-2xl" aria-hidden>
-              {p.icon}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold">{p.name}</p>
-              <p className="text-xs">
-                <span className={POTION_COLORS[p.effect.kind]}>{potionEffectText(p)}</span>
-                <span className="ml-2 text-muted">im Besitz: {potions[p.id] ?? 0}</span>
-              </p>
-            </div>
-            {locked ? (
-              <span className="text-right text-xs text-muted">
-                🔒 {alchemistTiers[p.alchemist].name}
-                <br />
-                (Alchemist Stufe {p.alchemist})
-              </span>
-            ) : (
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              disabled={locked || gold < p.price}
-              onClick={() => buyPotion(p.id)}
-              title={locked ? undefined : gold < p.price ? "Nicht genug Gold" : "Kaufen"}
-              className="rounded-md border-2 border-gold bg-gold/15 px-2 py-0.5 text-sm text-gold hover:bg-gold/25 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Gold amount={p.price} className="font-bold" />
-            </motion.button>
-            )}
-          </li>
-          );
-        })}
-      </ul>
-    </>
-  );
-}
-
-function ViewChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-md border-2 px-3 py-1 text-sm ${
-        active ? "border-gold text-gold" : "border-night-700 text-muted hover:text-parchment"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

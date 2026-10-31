@@ -9,6 +9,7 @@ import { Hud } from "./components/Hud";
 import { QuestScreen, useReadyQuestCount } from "./components/QuestScreen";
 import { RewardToast } from "./components/RewardToast";
 import { AchievementToast } from "./components/Achievements";
+import { AlchemistScreen } from "./components/AlchemistScreen";
 import { ShopScreen } from "./components/ShopScreen";
 import { SkillTree } from "./components/SkillTree";
 import { SmithScreen } from "./components/SmithScreen";
@@ -20,7 +21,7 @@ import { isLobbyCode } from "./coop/protocol";
 
 type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard" | "help";
 /** Untermenü des Dorfs */
-type VillageView = "build" | "merchant" | "smith";
+type VillageView = "build" | "merchant" | "smith" | "alchemist";
 
 /** Einladungslink zu einer Koop-Lobby: #/koop/<code> – null, wenn die Adresse keiner ist. */
 function readCoopInvite(): string | null {
@@ -42,6 +43,7 @@ export default function App() {
   const [profileName, setProfileName] = useState<string | null>(() => readRoute()?.username ?? null);
   const [villageView, setVillageView] = useState<VillageView>("build");
   const smithBuilt = useGameStore((s) => s.village.smith > 0);
+  const alchemistBuilt = useGameStore((s) => s.village.alchemist > 0);
   const [characterView, setCharacterView] = useState<CharacterView>("details");
   const newAchievements = useGameStore((s) => s.achievementQueue.length);
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
@@ -145,6 +147,9 @@ export default function App() {
           <SubTabButton active={villageView === "smith"} onClick={() => setVillageView("smith")}>
             ⚒️ Schmied{!smithBuilt && " 🔒"}
           </SubTabButton>
+          <SubTabButton active={villageView === "alchemist"} onClick={() => setVillageView("alchemist")}>
+            ⚗️ Alchemist{!alchemistBuilt && " 🔒"}
+          </SubTabButton>
         </nav>
       )}
 
@@ -155,11 +160,13 @@ export default function App() {
         {tab === "equipment" && <EquipmentScreen />}
         {tab === "village" &&
           (villageView === "build" ? (
-            <VillageScreen />
+            <VillageScreen onOpen={(id) => (id === "board" ? setTab("quests") : setVillageView(id))} />
           ) : villageView === "merchant" ? (
             <ShopScreen />
-          ) : (
+          ) : villageView === "smith" ? (
             <SmithScreen onOpenVillage={() => setVillageView("build")} />
+          ) : (
+            <AlchemistScreen onOpenVillage={() => setVillageView("build")} />
           ))}
         {tab === "battle" && <BattleScreen />}
         {tab === "leaderboard" && <Leaderboard username={profileName} />}
