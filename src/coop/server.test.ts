@@ -56,6 +56,12 @@ describe("Koop-Server: Kampfwerte aus dem Cloud-Spielstand", () => {
   it("ohne Spielstand geht es nicht", () => {
     expect(() => memberFromSave("x", null, null)).toThrow(CoopError);
   });
+
+  it("rechnet das Gericht aus der Taverne ein", () => {
+    const save = saveAt(30, "x");
+    const fed = memberFromSave("x", { ...save, state: { ...save.state, meal: "stew" } }, null);
+    expect(fed.profile.maxHp).toBe(Math.round(member("x", 30).profile.maxHp * 1.1));
+  });
 });
 
 describe("Koop-Server: Lobby", () => {

@@ -118,3 +118,63 @@ describe("Händler: alle gewöhnlichen verkaufen", () => {
     expect(store().character.gold).toBeGreaterThan(0);
   });
 });
+
+describe("Taverne: Buff-Food", () => {
+  beforeEach(() => {
+    store().resetGame();
+    useGameStore.setState((s) => ({
+      character: { ...s.character, gold: 1000, totalXp: 1e9 },
+      village: { ...s.village, tavern: 3 },
+    }));
+  });
+
+  it("ohne Taverne gibt es nichts zu essen", () => {
+    useGameStore.setState((s) => ({ village: { ...s.village, tavern: 0 } }));
+    store().eat("stew");
+    expect(store().meal).toBeNull();
+  });
+
+  it("ein Gericht wirkt genau einen Kampf im Gebiet", () => {
+    store().startBattle("grey-wolf");
+    const hungry = store().battle!.hero.maxHp;
+    store().eat("stew");
+    expect(store().meal).toBe("stew");
+    // Satt: ein zweites Gericht geht nicht
+    store().eat("sausage");
+    expect(store().meal).toBe("stew");
+    store().startBattle("grey-wolf");
+    expect(store().battle!.hero.maxHp).toBe(Math.round(hungry * 1.1));
+    expect(store().meal).toBeNull();
+    store().startBattle("grey-wolf");
+    expect(store().battle!.hero.maxHp).toBe(hungry);
+  });
+
+  it("im Dungeon wirkt es in allen Kämpfen", () => {
+    store().eat("roast");
+    store().startDungeon("abandoned-mine");
+    const first = store().battle!.hero.damage;
+    expect(store().meal).toBeNull();
+    winCurrent();
+    store().nextDungeonFight();
+    expect(store().battle!.hero.damage).toBeCloseTo(first);
+    expect(store().mealInUse).toBe("roast");
+  });
+
+  it("im Turm wirkt es den ganzen Lauf", () => {
+    store().eat("soup");
+    store().startTower();
+    const maxHp = store().battle!.hero.maxHp;
+    expect(store().meal).toBeNull();
+    winCurrent();
+    if (store().tower!.offer) store().chooseBlessing(store().tower!.offer![0]);
+    store().nextTowerFloor();
+    expect(store().battle!.hero.maxHp).toBeGreaterThanOrEqual(maxHp);
+    expect(store().mealInUse).toBe("soup");
+  });
+
+  it("das Gericht bleibt im Spielstand", () => {
+    store().eat("stew");
+    expect(repairSave({ character: store().character, meal: store().meal }).meal).toBe("stew");
+    expect(repairSave({ character: store().character }).meal).toBeNull();
+  });
+});

@@ -7,6 +7,7 @@ import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
 import { ITEM_EFFECTS } from "../domain/itemEffects";
 import { BLESSING_EVERY, BLESSINGS, BOSS_EVERY, TOWER_MIN_LEVEL } from "../domain/tower";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
+import { FOODS, foodEffectText, foodPrice } from "../domain/food";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
   BULWARK_SHARE,
@@ -342,6 +343,21 @@ export function HelpScreen() {
               potionEffectText(p),
               <Gold amount={p.price} />,
               p.alchemist === 0 ? "Händler, bis der Alchemist steht" : `${getBuilding("alchemist").tiers[p.alchemist].name} (Stufe ${p.alchemist})`,
+            ])}
+          />
+          <H>🍺 Taverne und Buff-Food</H>
+          <p>
+            In der Taverne isst du ein Gericht, das dich für den nächsten Einsatz stärkt: einen Kampf im Gebiet, einen
+            ganzen Dungeon, einen Lauf im Endlos-Turm oder einen Koop-Kampf (Raid-Boss oder Koop-Dungeon). Du kannst nur
+            ein Gericht auf einmal essen. Die Preise steigen mit deinem Level, angegeben ist der Preis auf Level 1.
+          </p>
+          <Table
+            head={["Gericht", "Wirkung", "Preis (Lv. 1)", "Zu kaufen ab"]}
+            rows={FOODS.map((f) => [
+              `${f.icon} ${f.name}`,
+              foodEffectText(f),
+              <Gold amount={foodPrice(f, 1)} />,
+              `${getBuilding("tavern").tiers[f.tavern].name} (Stufe ${f.tavern})`,
             ])}
           />
           <H>⚒️ Schmied</H>

@@ -124,6 +124,9 @@ export const useCoopStore = create<CoopState>()((set, get) => {
       EventBus.emit("coop:events", { state: next.state, events: next.last_events });
     }
 
+    // Kampfbeginn: das Gericht aus der Taverne ist aufgegessen – der Server hat es in die Kampfwerte eingerechnet
+    if (prev?.id === next.id && prev.phase === "lobby" && next.phase === "battle") useGameStore.getState().finishMealInCoop();
+
     // Ende erlebt (Sieg, Niederlage oder Ausstieg aus dem Dungeon): eigene Beute – nur einmal
     let result = get().result;
     const runId = next.state?.dungeon?.runId ?? next.state?.id;

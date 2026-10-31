@@ -44,6 +44,7 @@ import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopC
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, ensureItemExtras, getItem, MAX_UPGRADE, weaponAbilities, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
+import { eatMeal, withMeal } from "../domain/food";
 import {
   ACHIEVEMENTS,
   EMPTY_RECORDS,
@@ -181,6 +182,15 @@ interface GameState {
   potions: PotionStock;
   buyPotion: (potionId: string) => void;
 
+  /** Gegessenes Gericht aus der Taverne (food.ts) – wirkt beim nächsten Kampf, Dungeon, Turm-Lauf oder Koop-Kampf */
+  meal: string | null;
+  /** Gericht, das im laufenden Kampf, Dungeon oder Turm-Lauf wirkt (wird nicht gespeichert) */
+  mealInUse: string | null;
+  /** Isst ein Gericht in der Taverne – nur, wenn man nicht mehr satt ist. */
+  eat: (foodId: string) => void;
+  /** Ein Koop-Kampf hat begonnen: das Gericht ist aufgegessen (der Server hat es schon eingerechnet). */
+  finishMealInCoop: () => void;
+
   /** Ausbaustufen der Gebäude im Dorf (village.ts) */
   village: Village;
   /** Baumaterial aus Kämpfen */
@@ -311,6 +321,7 @@ type SaveState = Pick<
   | "towerRecord"
   | "village"
   | "materials"
+  | "meal"
 >;
 
 const createCharacter = (): Character => ({
@@ -384,6 +395,7 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     // Dorf-Ausbau: auch bestehende Spielstände beginnen mit einem leeren Dorf
     village: { ...EMPTY_VILLAGE, ...saved.village },
     materials: saved.materials ?? {},
+    meal: saved.meal ?? null,
   };
 }
 
@@ -606,9 +618,9 @@ export const useGameStore = create<GameState>()(
       };
 
       /** Kampfwerte für Solo-Kämpfe – mit der Trankwirkung des Alchemisten (im Koop gilt das Dorf nicht). */
-      const soloHero = () => {
+      const soloHero = (meal = get().mealInUse) => {
         const { character, equipment, village } = get();
-        return { ...getHeroCombatProfile(character, equipment), potionPower: potionPower(village.alchemist) };
+        return withMeal({ ...getHeroCombatProfile(character, equipment), potionPower: potionPower(village.alchemist) }, meal);
       };
 
       /** Schreibt die Dungeon-Truhe gut und merkt sie sich für die Truhen-Animation. */
@@ -677,6 +689,8 @@ export const useGameStore = create<GameState>()(
       towerRecord: EMPTY_TOWER_RECORD,
       village: EMPTY_VILLAGE,
       materials: {},
+      meal: null,
+      mealInUse: null,
       lastReward: null,
 
       setTitle: (achievementId) =>
@@ -815,6 +829,8 @@ export const useGameStore = create<GameState>()(
           towerRecord: EMPTY_TOWER_RECORD,
           village: EMPTY_VILLAGE,
           materials: {},
+          meal: null,
+          mealInUse: null,
           lastReward: null,
         }),
 
@@ -924,6 +940,15 @@ export const useGameStore = create<GameState>()(
           set({ potions: result.stock, character: { ...character, gold: result.gold } });
         }),
 
+      eat: (foodId) =>
+        attempt(() => {
+          const { meal, character, village } = get();
+          const result = eatMeal(meal, character.gold, foodId, getLevel(character.totalXp), village.tavern);
+          set({ meal: result.meal, character: { ...character, gold: result.gold } });
+        }),
+
+      finishMealInCoop: () => set({ meal: null }),
+
       build: (id) =>
         attempt(() => {
           const { village, character, materials } = get();
@@ -940,7 +965,8 @@ export const useGameStore = create<GameState>()(
           get().refreshQuestBoards();
           const { character, dailyQuests, village } = get();
           const { creature, area } = getCreature(creatureId);
-          const hero = soloHero();
+          const { meal } = get();
+          const hero = soloHero(meal);
           if (hero.level < area.minLevel) throw new Error(`${area.name} ist erst ab Level ${area.minLevel} zugänglich.`);
           if (area.dungeon) throw new Error("Dungeon-Gegner kämpfen nur im Dungeon.");
           const wait = respawnLeft(get().bossRespawns, creatureId);
@@ -948,7 +974,7 @@ export const useGameStore = create<GameState>()(
           // Offener Steckbrief: die gesuchte Kreatur erscheint genau so als Elite
           const elite = openBounty(dailyQuests, creatureId, village.board) ?? rollElite(creature);
           const battle = startBattle(newId(), character.name, hero, creature, hero.maxHp, elite);
-          set({ battle, battleReward: null, dungeon: null, tower: null });
+          set({ battle, battleReward: null, dungeon: null, tower: null, meal: null, mealInUse: meal });
           EventBus.emit("battle:started", { battle });
         }),
 
@@ -956,7 +982,8 @@ export const useGameStore = create<GameState>()(
         attempt(() => {
           const { character } = get();
           const dungeon = getDungeon(dungeonId);
-          const hero = soloHero();
+          const { meal } = get();
+          const hero = soloHero(meal);
           if (hero.level < dungeon.minLevel) {
             throw new Error(`${dungeon.name} ist erst ab Level ${dungeon.minLevel} zugänglich.`);
           }
@@ -966,15 +993,21 @@ export const useGameStore = create<GameState>()(
             battleReward: null,
             dungeon: { dungeonId, stage: 0, chest: EMPTY_CHEST, claimed: null },
             tower: null,
+            // Das Gericht wirkt im ganzen Dungeon
+            meal: null,
+            mealInUse: meal,
           });
           EventBus.emit("battle:started", { battle });
         }),
 
       startTower: () =>
         attempt(() => {
-          const hero = soloHero();
+          const { meal } = get();
+          const hero = soloHero(meal);
           if (hero.level < TOWER_MIN_LEVEL) throw new Error(`Der Endlos-Turm ist erst ab Level ${TOWER_MIN_LEVEL} zugänglich.`);
           const tower: TowerRun = { seed: newId(), floor: 1, chest: EMPTY_CHEST, blessings: [], secondWindUsed: false, offer: null, claimed: null };
+          // Das Gericht wirkt den ganzen Lauf über
+          set({ meal: null, mealInUse: meal });
           const battle = towerBattle(tower, null);
           set({ battle, battleReward: null, dungeon: null, tower });
           EventBus.emit("battle:started", { battle });
@@ -998,7 +1031,7 @@ export const useGameStore = create<GameState>()(
           if (!tower.offer.includes(id)) throw new Error("Dieser Segen steht nicht zur Wahl.");
           const blessings = [...tower.blessings, id];
           // Rast und Vitalität wirken sofort auf die mitgenommenen Lebenspunkte
-          const base = getHeroCombatProfile(character, equipment);
+          const base = withMeal(getHeroCombatProfile(character, equipment), get().mealInUse);
           const maxBefore = blessedProfile(base, tower.blessings).maxHp;
           const maxAfter = blessedProfile(base, blessings).maxHp;
           const healed =
@@ -1052,7 +1085,7 @@ export const useGameStore = create<GameState>()(
 
       battleAttack: (ability) =>
         attempt(() => {
-          const { battle, character, equipment, dungeon } = get();
+          const { battle, character, dungeon } = get();
           if (!battle) return;
           const result = attackRound(battle, Math.random, ability);
           set({ battle: result.state, battleReward: null });
@@ -1064,7 +1097,7 @@ export const useGameStore = create<GameState>()(
             // Turm: Beute in die Truhe (mit Stockwerk-Bonus, ohne Boss-Items), Rekord, Segen zur Wahl.
             // Turm-Bosse zählen nicht als Bosssiege – sie kämpfen schwächer und haben keinen Respawn.
             const { records, towerRecord } = get();
-            const hero = getHeroCombatProfile(character, equipment);
+            const hero = soloHero();
             const creature = floorCreature(tower.seed, tower.floor, hero.level);
             set({
               records: {
@@ -1117,7 +1150,7 @@ export const useGameStore = create<GameState>()(
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
           for (const add of adds) questEvent({ kind: "kill", creatureId: add.id, boss: false });
-          const raw = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds, elite);
+          const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
           const rolled = { ...raw, xp: statueXp(raw.xp, get().village.statue) };
           if (dungeon) {
@@ -1229,6 +1262,7 @@ export const useGameStore = create<GameState>()(
         towerRecord: s.towerRecord,
         village: s.village,
         materials: s.materials,
+        meal: s.meal,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),
