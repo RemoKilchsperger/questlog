@@ -32,6 +32,7 @@ import {
 } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
 import { foodEffectText, getFood, withMeal } from "../domain/food";
+import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked } from "../domain/heroic";
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { questsForCreature, trackedQuests } from "../domain/quests";
@@ -282,6 +283,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
   const boss = dungeon.creatures.at(-1)!;
   const bossAbilities = getBossAbilities(boss.id);
   const questActive = useGameStore((s) => `dungeon-${dungeon.id}` in s.questLog.active);
+  const heroicOpen = useGameStore((s) => open && isHeroicUnlocked(boss.id, s.records.bossesDefeated));
 
   return (
     <li
@@ -305,6 +307,17 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
         >
           Betreten
         </motion.button>
+        {heroicOpen && (
+          <Hint text={heroicText(boss.id)} className="shrink-0">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => startDungeon(dungeon.id, true)}
+              className="font-pixel shrink-0 rounded-md border-2 border-epic bg-epic/15 px-3 py-1 text-epic hover:bg-epic/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ☠️ Heroisch
+            </motion.button>
+          </Hint>
+        )}
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
         {dungeon.creatures.map((creature, i) => (
@@ -338,6 +351,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
 
 function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel: number }) {
   const startBattle = useGameStore((s) => s.startBattle);
+  const heroicOpen = useGameStore((s) => isHeroicUnlocked(creature.id, s.records.bossesDefeated));
   const quests = useCreatureQuests(creature.id);
   const respawn = useRespawn(creature.id);
   const bossAbilities = getBossAbilities(creature.id);
@@ -395,15 +409,29 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
         ))}
         <BossDrops creature={creature} />
       </div>
-      <motion.button
-        whileTap={{ scale: 0.9 }}
-        disabled={respawn > 0}
-        onClick={() => startBattle(creature.id)}
-        title={respawn > 0 ? `Der Boss erscheint in ${formatRespawn(respawn)} wieder` : undefined}
-        className="font-pixel shrink-0 rounded-md border-2 border-danger bg-danger/15 px-3 py-1 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {respawn > 0 ? <>⏳ <span className="num">{formatRespawn(respawn)}</span></> : "Kämpfen"}
-      </motion.button>
+      <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          disabled={respawn > 0}
+          onClick={() => startBattle(creature.id)}
+          title={respawn > 0 ? `Der Boss erscheint in ${formatRespawn(respawn)} wieder` : undefined}
+          className="font-pixel shrink-0 rounded-md border-2 border-danger bg-danger/15 px-3 py-1 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {respawn > 0 ? <>⏳ <span className="num">{formatRespawn(respawn)}</span></> : "Kämpfen"}
+        </motion.button>
+        {heroicOpen && (
+          <Hint text={heroicText(creature.id)} className="block">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              disabled={respawn > 0}
+              onClick={() => startBattle(creature.id, true)}
+              className="font-pixel w-full rounded-md border-2 border-epic bg-epic/15 px-3 py-1 text-epic hover:bg-epic/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ☠️ Heroisch
+            </motion.button>
+          </Hint>
+        )}
+      </div>
     </li>
   );
 }
@@ -548,10 +576,16 @@ function Battle({ battle }: { battle: BattleState }) {
               area.name
             )}{" "}
             <span className="text-base text-muted">· {creature.name}</span>
-            {battle.elite && (
-              <Hint text="Elite-Gegner: stärker als sonst, dafür doppelte Erfahrung, doppeltes Gold und sichere Beute.">
-                <span className="ml-2 text-base text-legendary">★ Elite</span>
+            {battle.heroic ? (
+              <Hint text={heroicText(battle.creatureId)}>
+                <span className="ml-2 text-base text-epic">☠️ Heroisch</span>
               </Hint>
+            ) : (
+              battle.elite && (
+                <Hint text="Elite-Gegner: stärker als sonst, dafür doppelte Erfahrung, doppeltes Gold und sichere Beute.">
+                  <span className="ml-2 text-base text-legendary">★ Elite</span>
+                </Hint>
+              )
             )}
           </h2>
           <div className="flex items-center gap-3">
@@ -831,8 +865,14 @@ function BattleResult({ battle }: { battle: BattleState }) {
               </span>
             </motion.p>
           )}
-          {battle.elite && (
-            <p className="text-legendary">★ Elite besiegt: doppelte Erfahrung, doppeltes Gold und sichere Beute.</p>
+          {battle.heroic ? (
+            <p className="text-epic">
+              ☠️ Heroischer Boss besiegt: {Math.round((HEROIC_REWARD_FACTOR - 1) * 100)} % mehr Erfahrung und Gold.
+            </p>
+          ) : (
+            battle.elite && (
+              <p className="text-legendary">★ Elite besiegt: doppelte Erfahrung, doppeltes Gold und sichere Beute.</p>
+            )
           )}
           <p>
             Du erhältst <span className="num text-xp">+{reward.xp} XP</span>

@@ -45,6 +45,7 @@ import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, ensureItemExtras, getItem, MAX_UPGRADE, weaponAbilities, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
 import { eatMeal, withMeal } from "../domain/food";
+import { heroicAffixes, isHeroicUnlocked, makeHeroic } from "../domain/heroic";
 import {
   ACHIEVEMENTS,
   EMPTY_RECORDS,
@@ -223,7 +224,8 @@ interface GameState {
   battle: BattleState | null;
   /** Belohnung des zuletzt gewonnenen Kampfes. */
   battleReward: BattleRewardEvent | null;
-  startBattle: (creatureId: string) => void;
+  /** Startet einen Kampf im Gebiet – `heroic`: ein besiegter Boss auf heroischer Stufe (heroic.ts). */
+  startBattle: (creatureId: string, heroic?: boolean) => void;
   battleDrinkPotion: (potionId: string) => void;
   /** Angriff der Runde – ohne Argument normal, sonst mit der Fähigkeit dieses Waffentyps. */
   battleAttack: (ability?: AbilityId) => void;
@@ -236,7 +238,7 @@ interface GameState {
   /** Laufender Dungeon (wird wie der Kampf nicht gespeichert). */
   dungeon: DungeonRun | null;
   /** Betritt einen Dungeon und startet den ersten Kampf. */
-  startDungeon: (dungeonId: string) => void;
+  startDungeon: (dungeonId: string, heroic?: boolean) => void;
   /** Nach einem Sieg: nächster Gegner, mit den übrig gebliebenen Lebenspunkten. */
   nextDungeonFight: () => void;
   /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
@@ -261,7 +263,8 @@ interface GameState {
   /** Schreibt die eigene Koop-Beute gut und gibt die Truhe für die Anzeige zurück. */
   grantCoopReward: (reward: BattleReward, bossId: string) => ClaimedChest;
   /** Truhe eines Koop-Dungeons gutschreiben – `completed`: Endboss besiegt (zählt für Erfolge). */
-  grantCoopDungeon: (chest: DungeonChest, dungeonId: string, completed: boolean) => ClaimedChest;
+  /** `heroic`: heroischer Koop-Dungeon – der Endboss zählt dann auch für „Heroisch“ */
+  grantCoopDungeon: (chest: DungeonChest, dungeonId: string, completed: boolean, heroic?: boolean) => ClaimedChest;
   /** Koop-Siege und besiegte Koop-Bosse (für Charakterbogen und Profil) */
   coopStats: CoopStats;
 }
@@ -274,6 +277,8 @@ export interface DungeonRun {
   chest: DungeonChest;
   /** Gutgeschriebene Truhe (Abschluss oder Verlassen) – die UI zeigt sie mit Animation. */
   claimed: ClaimedChest | null;
+  /** Heroischer Dungeon: der Endboss kämpft auf heroischer Stufe */
+  heroic?: boolean;
 }
 
 export interface TowerRun {
@@ -964,7 +969,7 @@ export const useGameStore = create<GameState>()(
           }
         }),
 
-      startBattle: (creatureId) =>
+      startBattle: (creatureId, heroic = false) =>
         attempt(() => {
           get().refreshQuestBoards();
           const { character, dailyQuests, village } = get();
@@ -975,14 +980,18 @@ export const useGameStore = create<GameState>()(
           if (area.dungeon) throw new Error("Dungeon-Gegner kämpfen nur im Dungeon.");
           const wait = respawnLeft(get().bossRespawns, creatureId);
           if (wait > 0) throw new Error(`${creature.name} erscheint erst in ${formatRespawn(wait)} wieder.`);
+          if (heroic && !isHeroicUnlocked(creatureId, get().records.bossesDefeated)) {
+            throw new Error(`Besiege ${creature.name} zuerst, dann kannst du ihn heroisch fordern.`);
+          }
           // Offener Steckbrief: die gesuchte Kreatur erscheint genau so als Elite
-          const elite = openBounty(dailyQuests, creatureId, village.board) ?? rollElite(creature);
-          const battle = startBattle(newId(), character.name, hero, creature, hero.maxHp, elite);
+          const elite = heroic ? heroicAffixes(creatureId) : (openBounty(dailyQuests, creatureId, village.board) ?? rollElite(creature));
+          const started = startBattle(newId(), character.name, hero, creature, hero.maxHp, elite);
+          const battle = heroic ? makeHeroic(started) : started;
           set({ battle, battleReward: null, dungeon: null, tower: null, meal: null, mealInUse: meal });
           EventBus.emit("battle:started", { battle });
         }),
 
-      startDungeon: (dungeonId) =>
+      startDungeon: (dungeonId, heroic = false) =>
         attempt(() => {
           const { character } = get();
           const dungeon = getDungeon(dungeonId);
@@ -991,11 +1000,15 @@ export const useGameStore = create<GameState>()(
           if (hero.level < dungeon.minLevel) {
             throw new Error(`${dungeon.name} ist erst ab Level ${dungeon.minLevel} zugänglich.`);
           }
+          const boss = dungeon.creatures.at(-1)!;
+          if (heroic && !isHeroicUnlocked(boss.id, get().records.bossesDefeated)) {
+            throw new Error(`Besiege ${boss.name} zuerst, dann kannst du den Dungeon heroisch betreten.`);
+          }
           const battle = startBattle(newId(), character.name, hero, dungeon.creatures[0], hero.maxHp, rollElite(dungeon.creatures[0]));
           set({
             battle,
             battleReward: null,
-            dungeon: { dungeonId, stage: 0, chest: EMPTY_CHEST, claimed: null },
+            dungeon: { dungeonId, stage: 0, chest: EMPTY_CHEST, claimed: null, ...(heroic && { heroic: true }) },
             tower: null,
             // Das Gericht wirkt im ganzen Dungeon
             meal: null,
@@ -1065,7 +1078,12 @@ export const useGameStore = create<GameState>()(
           if (stage >= creatures.length) throw new Error("Der Dungeon ist schon abgeschlossen.");
           // Keine Heilung zwischen den Kämpfen: die Lebenspunkte werden mitgenommen.
           const hero = soloHero();
-          const next = startBattle(newId(), character.name, hero, creatures[stage], battle.hero.hp, rollElite(creatures[stage]));
+          const creature = creatures[stage];
+          // Heroischer Dungeon: der Endboss kommt mit seiner Zusatzmechanik und mehr Lebenspunkten
+          const heroicBoss = dungeon.heroic && creature.boss;
+          const elite = heroicBoss ? heroicAffixes(creature.id) : rollElite(creature);
+          const started = startBattle(newId(), character.name, hero, creature, battle.hero.hp, elite);
+          const next = heroicBoss ? makeHeroic(started) : started;
           set({ battle: next, battleReward: null, dungeon: { ...dungeon, stage } });
           EventBus.emit("battle:started", { battle: next });
         }),
@@ -1136,6 +1154,7 @@ export const useGameStore = create<GameState>()(
           }
 
           const { creature } = getCreature(battle.creatureId);
+          const heroic = !!result.state.heroic;
           const { records } = get();
           set({
             records: {
@@ -1146,15 +1165,20 @@ export const useGameStore = create<GameState>()(
                   ? [...records.bossesDefeated, creature.id]
                   : records.bossesDefeated,
               closeCall: records.closeCall || result.state.hero.hp < result.state.hero.maxHp * 0.05,
+              heroicDefeated:
+                heroic && !records.heroicDefeated.includes(creature.id)
+                  ? [...records.heroicDefeated, creature.id]
+                  : records.heroicDefeated,
             },
             bossRespawns: startRespawn(get().bossRespawns, creature.id),
           });
-          const elite = (result.state.elite?.length ?? 0) > 0;
+          // Die Zusatzmechanik eines heroischen Bosses macht ihn nicht zum Elite-Gegner
+          const elite = (result.state.elite?.length ?? 0) > 0 && !heroic;
           questEvent({ kind: "kill", creatureId: creature.id, boss: creature.boss, elite });
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
           for (const add of adds) questEvent({ kind: "kill", creatureId: add.id, boss: false });
-          const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite);
+          const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
           const rolled = { ...raw, xp: statueXp(raw.xp, get().village.statue) };
           if (dungeon) {
@@ -1217,7 +1241,7 @@ export const useGameStore = create<GameState>()(
         return { ...chest, ...levels, completed: true };
       },
 
-      grantCoopDungeon: (chest, dungeonId, completed) => {
+      grantCoopDungeon: (chest, dungeonId, completed, heroic = false) => {
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         if (completed) {
           // Zählt wie ein Solo-Dungeon (Dungeonläufer, besiegter Boss) und als Koop-Sieg –
@@ -1230,6 +1254,8 @@ export const useGameStore = create<GameState>()(
               ...s.records,
               dungeonsCleared: s.records.dungeonsCleared.includes(dungeonId) ? s.records.dungeonsCleared : [...s.records.dungeonsCleared, dungeonId],
               bossesDefeated: s.records.bossesDefeated.includes(bossId) ? s.records.bossesDefeated : [...s.records.bossesDefeated, bossId],
+              heroicDefeated:
+                heroic && !s.records.heroicDefeated.includes(bossId) ? [...s.records.heroicDefeated, bossId] : s.records.heroicDefeated,
             },
           }));
           // Im Koop zählt der Endboss als besiegter Boss, dazu der abgeschlossene Dungeon

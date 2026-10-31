@@ -49,6 +49,7 @@ import {
   VAMPIRE_SHARE,
   type EliteAffix,
 } from "./elites";
+import { HEROIC_BOSS_LOOT_CHANCE, HEROIC_REWARD_FACTOR } from "./heroic";
 import { getSetHpMultiplier } from "./bossSets";
 import { freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
@@ -303,6 +304,8 @@ export interface BattleState {
   phase?: boolean;
   /** Elite-Gegner: seine Modifikatoren (elites.ts) – fehlt bei gewöhnlichen Gegnern */
   elite?: EliteAffix[];
+  /** Heroischer Boss (heroic.ts): `elite` ist seine Zusatzmechanik, er zählt aber nicht als Elite */
+  heroic?: boolean;
   /** Hauptwaffe des Helden – ihre Schadensart zählt bei normalen Angriffen (matchups.ts) */
   heroWeapon?: SkillWeapon | null;
   /** Endlos-Turm: Segen des Laufs (tower.ts) – wirken im Kampf (Fokus, Blutdurst, Henker, Dornen, Alchemie, Zweiter Atem) */
@@ -728,7 +731,7 @@ export function attackRound(
       foeMaxHp: foe.c.maxHp,
       foeBleeding: foe.fx.bleed !== undefined,
       foeBoss,
-      foeElite: foe === boss && (state.elite?.length ?? 0) > 0,
+      foeElite: foe === boss && (state.elite?.length ?? 0) > 0 && !state.heroic,
     });
     const critChance = strong.critChance + effectCritBonus(effects, foeBoss);
     const attacker: Combatant = ability
@@ -1155,9 +1158,14 @@ export function rollBuffPotion(rng: () => number = Math.random): string | null {
 export const BOSS_ITEM_DROP_CHANCE = 0.1;
 
 /** Boss-Items gibt es nur von ihrem Boss – immer legendär. */
-export function rollBossLoot(creature: CreatureDef, uid: string, rng: () => number = Math.random): Loot {
+export function rollBossLoot(
+  creature: CreatureDef,
+  uid: string,
+  rng: () => number = Math.random,
+  chance = BOSS_ITEM_DROP_CHANCE,
+): Loot {
   const items = getBossItems(creature.id);
-  if (items.length === 0 || rng() >= BOSS_ITEM_DROP_CHANCE) return null;
+  if (items.length === 0 || rng() >= chance) return null;
   return createItem(items[Math.floor(rng() * items.length)].id, "legendary", uid, rng);
 }
 
@@ -1175,6 +1183,8 @@ export function rollBattleReward(
   rng: () => number = Math.random,
   addsDefeated: readonly CreatureDef[] = [],
   elite = false,
+  /** Heroischer Boss (heroic.ts): öfter ein Boss-Item, mehr Erfahrung und Gold */
+  heroic = false,
 ): BattleReward {
   // Elite: sichere Beute mit den Seltenheiten eines Bosses, doppelte Erfahrung und sicheres, doppeltes Gold
   if (elite) {
@@ -1198,13 +1208,14 @@ export function rollBattleReward(
     (sum, add) => sum + getCreatureGold(add) * getCreatureGoldDrop(add).chance * ADD_REWARD_SHARE,
     0,
   );
+  const factor = heroic ? HEROIC_REWARD_FACTOR : 1;
   return {
-    xp: getCreatureXp(creature, hero.level) + addXp,
+    xp: Math.round((getCreatureXp(creature, hero.level) + addXp) * factor),
     loot: rollDrop(dropChance, weights, creature.level, uid, rng),
     potions: rng() < potionDrop.chance ? { potionId: potionDrop.potionId, count: potionDrop.count } : null,
-    bossLoot: rollBossLoot(creature, `${uid}-boss`, rng),
+    bossLoot: rollBossLoot(creature, `${uid}-boss`, rng, heroic ? HEROIC_BOSS_LOOT_CHANCE : BOSS_ITEM_DROP_CHANCE),
     buffPotion: rollBuffPotion(rng),
-    gold: Math.round((rollCreatureGold(creature, rng) + addGold) * (1 + hero.goldBonus)),
+    gold: Math.round((rollCreatureGold(creature, rng) + addGold) * (1 + hero.goldBonus) * factor),
     materials: creatureMaterials(creature),
   };
 }

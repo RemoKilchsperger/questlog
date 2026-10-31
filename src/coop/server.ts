@@ -14,9 +14,12 @@ import {
   coopContent,
   hasNextStage,
   nextDungeonStage,
+  parseCoopContent,
   resolveRound,
   startCoopBattle,
 } from "../domain/coopCombat";
+import { getDungeon } from "../domain/creatures";
+import { isHeroicUnlocked } from "../domain/heroic";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import { convertLinearCurveXp, getLevel } from "../domain/leveling";
 import type { Character, Equipment } from "../domain/types";
@@ -46,7 +49,12 @@ export const COOP_ROW_TTL_HOURS = 24;
  * mit neutralen Werten ergänzt.
  */
 export function memberFromSave(id: string, save: unknown, username: string | null): CoopMember {
-  const saved = save as { state?: { character?: Partial<Character>; equipment?: Partial<Equipment>; meal?: string | null }; version?: number } | null;
+  const saved = save as { state?: {
+    character?: Partial<Character>;
+    equipment?: Partial<Equipment>;
+    meal?: string | null;
+    records?: { bossesDefeated?: string[] };
+  }; version?: number } | null;
   const state = saved?.state;
   if (!state?.character) throw new CoopError("Kein Cloud-Spielstand gefunden – bitte einmal online speichern.");
   const raw = state.character;
@@ -69,6 +77,7 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
     equipment,
     // Gericht aus der Taverne: wirkt auch im Koop (der Client isst es beim Kampfbeginn auf)
     profile: withMeal(getHeroCombatProfile(character, equipment), state.meal),
+    bossesDefeated: state.records?.bossesDefeated ?? [],
     ready: false,
   };
 }
@@ -121,6 +130,14 @@ function create(bossId: string, ctx: ServerContext): CoopRow {
   if (!ctx.member) throw new CoopError("Kein Cloud-Spielstand gefunden.");
   if (ctx.member.level < content.level) {
     throw new CoopError(`${content.name} ist erst ab Level ${content.level} zugänglich.`);
+  }
+  // Heroisch erst, wenn der Host den Endboss schon besiegt hat
+  if (content.heroic) {
+    const { creatures } = getDungeon(parseCoopContent(bossId).id);
+    const boss = creatures[creatures.length - 1];
+    if (!isHeroicUnlocked(boss.id, ctx.member.bossesDefeated ?? [])) {
+      throw new CoopError(`Besiege ${boss.name} zuerst, dann kannst du den Dungeon heroisch betreten.`);
+    }
   }
   return {
     id: ctx.newId(),

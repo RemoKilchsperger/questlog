@@ -181,6 +181,15 @@ describe("Koop-Server: Dungeons", () => {
     expect(run(null, { type: "create", bossId: "abandoned-mine" }, "a")?.boss_id).toBe("abandoned-mine");
   });
 
+  it("heroisch erst, wenn der Host den Endboss besiegt hat", () => {
+    const heroic = "abandoned-mine:heroic";
+    expect(() => run(null, { type: "create", bossId: heroic }, "a")).toThrow(/Erzkönig/);
+    const save = saveAt(25, "a");
+    const veteran = memberFromSave("a", { ...save, state: { ...save.state, records: { bossesDefeated: ["ore-king"] } } }, null);
+    expect(run(null, { type: "create", bossId: heroic }, "a", { member: veteran })?.boss_id).toBe(heroic);
+    expect(() => run(null, { type: "create", bossId: "swamp-hydra:heroic" }, "a", { member: veteran })).toThrow(CoopError);
+  });
+
   it("nach einem Sieg bleibt der Kampf offen – nur der Host geht weiter", () => {
     const row = winFight(dungeonRow());
     expect(row.phase).toBe("battle");

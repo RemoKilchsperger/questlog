@@ -72,6 +72,7 @@ import {
   VAMPIRE_SHARE,
   type EliteAffix,
 } from "./elites";
+import { HEROIC_HP, heroicAffixes } from "./heroic";
 import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
@@ -325,20 +326,40 @@ export function coopBossStats(boss: CoopBossDef, players: number): Combatant {
 
 /* ───────────── Inhalt einer Lobby: Raid-Boss oder Dungeon ───────────── */
 
-/** Ist diese Lobby ein Dungeon (sonst ein Raid-Boss)? `id` steht in `boss_id` der Lobby. */
-export function isCoopDungeon(id: string): boolean {
-  return DUNGEONS.some((d) => d.id === id);
+/**
+ * Heroischer Koop-Dungeon: steht als Anhang in `boss_id` der Lobby (z. B.
+ * „abandoned-mine:heroic“) – so braucht die Tabelle keine eigene Spalte.
+ */
+export const HEROIC_SUFFIX = ":heroic";
+
+/** Inhalt einer Lobby ohne Anhang – und ob er heroisch ist. */
+export function parseCoopContent(id: string): { id: string; heroic: boolean } {
+  return id.endsWith(HEROIC_SUFFIX) ? { id: id.slice(0, -HEROIC_SUFFIX.length), heroic: true } : { id, heroic: false };
 }
 
-/** Name, Mindestlevel und Grafik des Inhalts einer Lobby. Wirft bei Unbekanntem. */
-export function coopContent(id: string): { name: string; level: number; sprite: string; description: string } {
-  if (isCoopDungeon(id)) {
-    const dungeon = getDungeon(id);
+/** Ist diese Lobby ein Dungeon (sonst ein Raid-Boss)? `id` steht in `boss_id` der Lobby. */
+export function isCoopDungeon(id: string): boolean {
+  const content = parseCoopContent(id).id;
+  return DUNGEONS.some((d) => d.id === content);
+}
+
+/** Name, Mindestlevel und Grafik des Inhalts einer Lobby. Wirft bei Unbekanntem (auch bei heroischen Raid-Bossen). */
+export function coopContent(id: string): { name: string; level: number; sprite: string; description: string; heroic: boolean } {
+  const { id: contentId, heroic } = parseCoopContent(id);
+  if (isCoopDungeon(contentId)) {
+    const dungeon = getDungeon(contentId);
     const boss = dungeon.creatures[dungeon.creatures.length - 1];
-    return { name: dungeon.name, level: dungeon.minLevel, sprite: boss.sprite, description: dungeon.description };
+    return {
+      name: heroic ? `${dungeon.name} (heroisch)` : dungeon.name,
+      level: dungeon.minLevel,
+      sprite: boss.sprite,
+      description: dungeon.description,
+      heroic,
+    };
   }
+  if (heroic) throw new Error("Raid-Bosse gibt es nicht heroisch.");
   const boss = getCoopBoss(id);
-  return { name: boss.name, level: boss.level, sprite: boss.sprite, description: boss.description };
+  return { name: boss.name, level: boss.level, sprite: boss.sprite, description: boss.description, heroic: false };
 }
 
 type OverTimeKind = "poison" | "burn" | "bleed";
@@ -490,6 +511,8 @@ export interface CoopBattleState {
   phase?: boolean;
   /** Elite-Gegner im Koop-Dungeon: seine Modifikatoren (elites.ts) – fehlt bei gewöhnlichen Gegnern */
   elite?: EliteAffix[];
+  /** Heroischer Endboss (heroic.ts): `elite` ist seine Zusatzmechanik, er zählt aber nicht als Elite */
+  heroic?: boolean;
   status: CoopStatus;
   log: (CoopEvent & { round: number })[];
   /** Nur in Koop-Dungeons: welcher Dungeon, welcher Kampf. `bossId` ist dann der aktuelle Gegner. */
@@ -502,6 +525,22 @@ export interface CoopDungeonRun {
   stage: number;
   /** Id des ersten Kampfs – bleibt für den ganzen Dungeon gleich (Startwert der Beute) */
   runId: string;
+  /** Heroischer Dungeon: der Endboss kämpft auf heroischer Stufe */
+  heroic?: boolean;
+}
+
+/** Kampf `stage` im Dungeon: der heroische Endboss oder ein Gegner, der vielleicht Elite ist. */
+function stageFoe(dungeon: CoopDungeonRun, stage: number, creature: CreatureDef): { elite: EliteAffix[]; heroic: boolean } {
+  if (dungeon.heroic && creature.boss) return { elite: heroicAffixes(creature.id), heroic: true };
+  return { elite: coopElite(dungeon.runId, stage, creature), heroic: false };
+}
+
+/** Grundwerte des Gegners – Elite-Modifikatoren und, beim heroischen Boss, mehr Lebenspunkte. */
+function foeStats(enemy: CoopEnemy, players: number, elite: readonly EliteAffix[], heroic: boolean): Combatant {
+  const stats = eliteStats(coopEnemyStats(enemy, players), elite);
+  if (!heroic) return stats;
+  const maxHp = Math.round(stats.maxHp * HEROIC_HP);
+  return { ...stats, maxHp, hp: maxHp };
 }
 
 /**
@@ -532,9 +571,12 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
   if (new Set(players.map((p) => p.id)).size !== players.length || players.some((p) => p.id === BOSS || p.id.startsWith("add-"))) {
     throw new Error("Ungültige Spieler-Ids.");
   }
-  const dungeon = isCoopDungeon(contentId) ? { id: contentId, stage: 0, runId: id } : undefined;
-  const enemy = getCoopEnemy(dungeon ? getDungeon(contentId).creatures[0].id : getCoopBoss(contentId).id);
-  const elite = dungeon ? coopElite(dungeon.runId, 0, enemy.creature) : [];
+  const content = parseCoopContent(contentId);
+  const dungeon: CoopDungeonRun | undefined = isCoopDungeon(content.id)
+    ? { id: content.id, stage: 0, runId: id, ...(content.heroic && { heroic: true }) }
+    : undefined;
+  const enemy = getCoopEnemy(dungeon ? getDungeon(content.id).creatures[0].id : getCoopBoss(content.id).id);
+  const { elite, heroic } = dungeon ? stageFoe(dungeon, 0, enemy.creature) : { elite: [], heroic: false };
   return {
     id,
     bossId: enemy.id,
@@ -569,10 +611,11 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
       down: false,
       revived: false,
     })),
-    boss: eliteStats(coopEnemyStats(enemy, players.length), elite),
+    boss: foeStats(enemy, players.length, elite, heroic),
     bossEffects: {},
     adds: coopAdds(enemy, players.length, elite),
     ...(elite.length > 0 && { elite }),
+    ...(heroic && { heroic }),
     status: "active",
     log: [],
   };
@@ -618,7 +661,7 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
   if (!hasNextStage(state)) throw new Error("Es gibt keinen nächsten Kampf.");
   const enemy = nextStageEnemy(state)!;
   const stage = state.dungeon!.stage + 1;
-  const elite = coopElite(state.dungeon!.runId, stage, enemy.creature);
+  const { elite, heroic } = stageFoe(state.dungeon!, stage, enemy.creature);
   return {
     id,
     bossId: enemy.id,
@@ -641,10 +684,11 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
       down: false,
       revived: false,
     })),
-    boss: eliteStats(coopEnemyStats(enemy, state.heroes.length), elite),
+    boss: foeStats(enemy, state.heroes.length, elite, heroic),
     bossEffects: {},
     adds: coopAdds(enemy, state.heroes.length, elite),
     ...(elite.length > 0 && { elite }),
+    ...(heroic && { heroic }),
     status: "active",
     log: [],
   };
@@ -662,8 +706,10 @@ export function rollCoopDungeonChest(state: CoopBattleState, hero: HeroCombatPro
   let chest = EMPTY_CHEST;
   for (let i = 0; i < clearedStages(state); i++) {
     const rng = seededRng(hash(`${runId}|${i}|${playerId}`));
-    const elite = coopElite(runId, i, creatures[i]).length > 0;
-    const reward = rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng, [], elite);
+    // Der heroische Endboss zählt nicht als Elite, gibt aber mehr (heroic.ts)
+    const foe = stageFoe(state.dungeon, i, creatures[i]);
+    const elite = !foe.heroic && foe.elite.length > 0;
+    const reward = rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng, [], elite, foe.heroic);
     // Dungeons geben doppelt so viel Baumaterial – wie solo
     chest = addToChest(chest, { ...reward, materials: scaleMaterials(reward.materials, DUNGEON_MATERIAL_FACTOR) });
   }
@@ -941,7 +987,7 @@ export function resolveRound(
         foeMaxHp: foe.c.maxHp,
         foeBleeding: foe.fx.bleed !== undefined,
         foeBoss,
-        foeElite: foe === boss && (state.elite?.length ?? 0) > 0,
+        foeElite: foe === boss && (state.elite?.length ?? 0) > 0 && !state.heroic,
       });
       const critChance = strong.critChance + effectCritBonus(effects, foeBoss);
       const attacker: Combatant = ability

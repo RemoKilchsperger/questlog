@@ -15,6 +15,7 @@ import { COOP_BOSSES, type CoopStats } from "./coopCombat";
 import { getLevel } from "./leveling";
 import { QUESTS, type QuestLog } from "./quests";
 import type { HeroClassId } from "./heroClasses";
+import { HEROIC_AFFIX } from "./heroic";
 import type { Character } from "./types";
 import { BUILDINGS, buildingsAtLeast, MAX_BUILDING_TIER, type Village } from "./village";
 
@@ -49,6 +50,8 @@ export interface Records {
   towerBlessings: number;
   /** Alle Fähigkeiten, die je auf einer eigenen Waffe lagen */
   abilitiesSeen: AbilityId[];
+  /** Ids heroisch besiegter Bosse (heroic.ts) */
+  heroicDefeated: string[];
 }
 
 export const EMPTY_RECORDS: Records = {
@@ -68,6 +71,7 @@ export const EMPTY_RECORDS: Records = {
   towerBosses: 0,
   towerBlessings: 0,
   abilitiesSeen: [],
+  heroicDefeated: [],
 };
 
 /** Alles, woraus sich der Fortschritt berechnet. */
@@ -109,6 +113,8 @@ export interface AchievementDef {
 }
 
 const BOSS_ITEM_BOSS = new Map(BOSS_ITEMS.map((i) => [i.id, i.bossId]));
+/** Wie viele Bosse es heroisch gibt */
+const HEROIC_BOSS_COUNT = Object.keys(HEROIC_AFFIX).length;
 const areaBossIds = AREAS.map((a) => a.creatures.find((c) => c.boss)!.id);
 const dungeonBossToDungeon = new Map(DUNGEONS.map((d) => [d.creatures.find((c) => c.boss)!.id, d.id]));
 
@@ -175,6 +181,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: "fighter", name: "Kämpfer", icon: "⚔️", category: "combat", description: "{n} Kämpfe gewonnen", tiers: [25, 250, 500], title: "Kriegsveteran", progress: (i) => i.records.battlesWon },
   { id: "boss-slayer", name: "Bossbezwinger", icon: "💀", category: "combat", description: "{n} verschiedene Gebietsbosse besiegt", tiers: [1, 3, 6], title: "Bossbezwinger", progress: (i) => areaBossIds.filter((b) => bossesDefeated(i).has(b)).length },
   { id: "dungeon-runner", name: "Dungeonläufer", icon: "🗝️", category: "combat", description: "{n} verschiedene Dungeons abgeschlossen", tiers: [1, 2, 4], title: "Dungeonmeister", progress: (i) => dungeonsCleared(i).size },
+  { id: "heroic", name: "Heroisch", icon: "☠️", category: "combat", description: "{n} verschiedene heroische Bosse besiegt", tiers: [1, 5, HEROIC_BOSS_COUNT], title: "Held der Helden", progress: (i) => i.records.heroicDefeated.length },
   { id: "dragon-slayer", name: "Drachentöter", icon: "🐉", category: "combat", description: "Den Uralten Drachen Ignaroth besiegt", tiers: [1], title: "Drachentöter", progress: (i) => (bossesDefeated(i).has("ignaroth") ? 1 : 0) },
   // Endlos-Turm
   { id: "tower-climber", name: "Himmelsstürmer", icon: "🗼", category: "tower", description: "Im Endlos-Turm Stockwerk {n} geschafft", tiers: [10, 25, 50], title: "Himmelsstürmer", progress: (i) => i.records.towerBest },
