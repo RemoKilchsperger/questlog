@@ -32,7 +32,10 @@ export function floorPower(floor: number): number {
 export const isBossFloor = (floor: number) => floor % BOSS_EVERY === 0;
 export const isBlessingFloor = (floor: number) => floor % BLESSING_EVERY === 0;
 
-const NORMAL_POOL: readonly CreatureDef[] = [...AREAS, ...DUNGEONS].flatMap((a) => a.creatures.filter((c) => !c.boss));
+// Dungeons haben jeden Gegner zweimal – im Turm zählt jeder nur einmal
+const NORMAL_POOL: readonly CreatureDef[] = [...AREAS, ...DUNGEONS]
+  .flatMap((a) => a.creatures.filter((c) => !c.boss && !c.midBoss))
+  .filter((c, i, all) => all.findIndex((o) => o.id === c.id) === i);
 const BOSS_POOL: readonly CreatureDef[] = [...AREAS, ...DUNGEONS].flatMap((a) => a.creatures.filter((c) => c.boss));
 
 /** Zufall eines Laufs für ein Stockwerk – gleich beim Neuladen der Seite (Startwert aus Lauf und Stockwerk). */

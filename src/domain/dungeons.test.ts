@@ -4,6 +4,7 @@ import { getHeroCombatProfile, rollBossLoot, startBattle } from "./combat";
 import { AREAS, DUNGEONS, getCreature, getCreatureStats, getDungeon } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
 import { getBossItems } from "./items";
+import { coopElite, rollElite } from "./elites";
 import type { Character } from "./types";
 
 const hero: Character = {
@@ -17,6 +18,27 @@ const hero: Character = {
 };
 
 describe("Dungeons", () => {
+  it("acht Kämpfe: drei Gegner, Zwischenboss, dieselben drei noch einmal, Endboss", () => {
+    for (const dungeon of DUNGEONS) {
+      const ids = dungeon.creatures.map((c) => c.id);
+      expect(ids, dungeon.name).toHaveLength(8);
+      expect(ids.slice(4, 7)).toEqual(ids.slice(0, 3));
+      expect(dungeon.creatures.filter((c) => c.midBoss)).toEqual([dungeon.creatures[3]]);
+    }
+  });
+
+  it("der Zwischenboss ist immer Elite mit zwei verschiedenen Modifikatoren – solo und im Koop", () => {
+    for (const dungeon of DUNGEONS) {
+      const midBoss = dungeon.creatures[3];
+      for (let i = 0; i < 20; i++) {
+        const affixes = rollElite(midBoss);
+        expect(affixes).toHaveLength(2);
+        expect(new Set(affixes).size).toBe(2);
+        expect(coopElite(`run-${i}`, 3, midBoss)).toHaveLength(2);
+      }
+    }
+  });
+
   it("vier Dungeons ab Level 10, 25, 40 und 60 – jeder mit mehreren Gegnern und einem Boss am Ende", () => {
     expect(DUNGEONS.map((d) => d.minLevel)).toEqual([10, 25, 40, 60]);
     for (const dungeon of DUNGEONS) {

@@ -96,7 +96,7 @@ const BATTLE_VIEW_KEY = "questlog-battle-view";
 
 const BATTLE_VIEWS: Record<BattleView, { label: string; intro: string }> = {
   areas: { label: "🌲 Gebiete", intro: "Kreaturen und Bosse der Gebiete – jedes öffnet sich ab seinem Mindestlevel." },
-  dungeons: { label: "🗝️ Dungeons", intro: "Mehrere Kämpfe hintereinander ohne Heilung, am Ende ein Boss mit eigenem Set – solo oder im Koop." },
+  dungeons: { label: "🗝️ Dungeons", intro: "Acht Kämpfe hintereinander ohne Heilung, in der Mitte ein Zwischenboss, am Ende ein Boss mit eigenem Set – solo oder im Koop." },
   tower: { label: "🗼 Endlos-Turm", intro: "So hoch wie möglich: Stockwerk für Stockwerk stärkere Gegner, Segen und eine Wochen-Rangliste." },
   coop: { label: "🤝 Koop-Bosse", intro: "Raid-Bosse für 2–4 Helden – mit eigenen Sets." },
 };
@@ -258,7 +258,8 @@ function SoloDungeons({ heroLevel }: { heroLevel: number }) {
   return (
     <>
       <p className="mb-4 text-sm text-muted">
-        Mehrere Gegner hintereinander und ein Boss am Ende. Die Gegner sind stärker als draussen, und zwischen den
+        Acht Gegner hintereinander: nach drei Kämpfen ein Zwischenboss (Elite mit zwei Modifikatoren), am Ende der
+        Boss. Die Gegner sind stärker als draussen, und zwischen den
         Kämpfen heilst du nicht – nur dein Mana füllt sich wieder auf. Tränke helfen. Der Boss lässt mit{" "}
         {Math.round(BOSS_ITEM_DROP_CHANCE * 100)} % ein Teil seines einzigartigen Sets fallen.
       </p>
@@ -307,10 +308,13 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
         {dungeon.creatures.map((creature, i) => (
-          <Hint key={creature.id} text={`${i + 1}. Kampf: ${creature.name}${creature.boss ? " (Boss)" : ""} · Lv. ${creature.level}`}>
+          <Hint
+            key={i}
+            text={`${i + 1}. Kampf: ${creature.name}${creature.boss ? " (Boss)" : creature.midBoss ? " (Zwischenboss: Elite mit zwei Modifikatoren)" : ""} · Lv. ${creature.level}`}
+          >
             <div className="flex flex-col items-center text-center">
-              <CreatureSprite sprite={creature.sprite} size={creature.boss ? 48 : 36} />
-              <span className={`text-[10px] leading-tight ${creature.boss ? "text-legendary" : "text-muted"}`}>
+              <CreatureSprite sprite={creature.sprite} size={creature.boss ? 48 : creature.midBoss ? 42 : 36} />
+              <span className={`text-[10px] leading-tight ${creature.boss ? "text-legendary" : creature.midBoss ? "text-epic" : "text-muted"}`}>
                 {i + 1}. Lv. {creature.level}
               </span>
             </div>
@@ -1036,7 +1040,7 @@ function DungeonProgress({ area }: { area: AreaDef }) {
       </span>
       {area.creatures.map((creature, i) => (
         <span
-          key={creature.id}
+          key={i}
           className={`rounded px-1.5 py-0.5 ${
             i < stage
               ? "bg-xp/15 text-xp line-through"
@@ -1044,7 +1048,9 @@ function DungeonProgress({ area }: { area: AreaDef }) {
                 ? "bg-gold/20 text-gold"
                 : creature.boss
                   ? "bg-night-800 text-legendary"
-                  : "bg-night-800 text-muted"
+                  : creature.midBoss
+                    ? "bg-night-800 text-epic"
+                    : "bg-night-800 text-muted"
           }`}
         >
           {i < stage ? "✓ " : ""}

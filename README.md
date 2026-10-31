@@ -180,7 +180,8 @@ Klassen, Boss-Sets und leichte Rüstung kommen jeweils noch dazu.
 Frostgipfel (31–40), Schattenruinen (41–50), Drachenhort (51–60). Je 4 Kreaturen und ein Boss.
 
 **Dungeons:** Verlassene Mine (ab 10), Versunkener Tempel (ab 25), Gewitterturm (ab 40),
-Abgrund der Leere (ab 60). Vier Kämpfe ohne Heilung dazwischen, Beute in einer Truhe, die bei einer
+Abgrund der Leere (ab 60). Acht Kämpfe ohne Heilung dazwischen: drei Gegner, ein Zwischenboss (Elite
+mit zwei Modifikatoren), dieselben drei Gegner noch einmal, Endboss. Beute in einer Truhe, die bei einer
 Niederlage verloren geht.
 
 **Koop** (`coopCombat.ts`, Plan in `docs/koop-kampf.md`): 2–4 Spieler gegen Sumpfhydra (20),
