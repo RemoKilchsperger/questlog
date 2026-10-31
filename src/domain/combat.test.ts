@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STUN_IMMUNITY_ROUNDS } from "./abilities";
+import { STUN_IMMUNITY_ROUNDS, type AbilityId } from "./abilities";
 import {
   abilityBlocker,
   attackRound,
@@ -53,7 +53,6 @@ const heroAt = (level: number): Character => ({
   stats: { strength: level, intellect: level, endurance: level, charisma: level },
   spentPoints: 0,
   skills: {},
-  abilities: [],
 });
 
 /** Volle Ausrüstung des passenden Levels (Standard: gewöhnlich), zwei Waffen – Standard: Schwerter. */
@@ -157,7 +156,7 @@ describe("Kampfrunde", () => {
     expect(stun(wolf.state).events).toContainEqual({ type: "stunned" });
   });
 
-  it("Eissplitter und Schockwelle betäuben nur mit einer Chance – Eissplitter frieren ein", () => {
+  it("Eisstrahl und Schockwelle betäuben nur mit einer Chance – Eisstrahl friert ein", () => {
     const setup = (): BattleState => {
       const b = startBattle("b", "Held", { ...hero, maxMana: 999, abilities: ["staff-3", "greathammer-3"] }, getCreature("cave-eye").creature);
       // Ohne Begleiter – hier geht es nur um die Betäubung des Bosses
@@ -418,7 +417,7 @@ describe("Gebiete und Balance", () => {
   });
 
   // Gut gespielter Held in schwerer Rüstung (Standard: gewöhnlich), nur die Level-up-Punkte (60 % Stärke,
-  // 40 % Ausdauer), Skill und Fähigkeiten seiner Zweihandwaffe – die er auch einsetzt. Champion mit
+  // 40 % Ausdauer), Skill und drei Fähigkeiten seiner Zweihandwaffe – die er auch einsetzt. Champion mit
   // Zweihandschwert; widersteht der Boss Klingen, passt er sich an und kommt als Wächter mit Grosshammer.
   type HeavyWeapon = "greatsword" | "greathammer";
   const weaponAgainst = (boss: CreatureDef): HeavyWeapon => (matchupOf(boss.id, "blade") === "resist" ? "greathammer" : "greatsword");
@@ -430,9 +429,11 @@ describe("Gebiete und Balance", () => {
       stats: { strength: 1 + strength, intellect: 1, endurance: 1 + points - strength, charisma: 1 },
       spentPoints: points,
       skills: { [weapon]: 5 },
-      abilities: level >= 25 ? [weapon, `${weapon}-2`] : [weapon],
     };
-    const equipment = { ...gearAt(level, rarity), weapon1: createItem(`${weapon}-${indexForLevel(level)}`, rarity, "gs", () => 0.5), weapon2: null };
+    // Eine durchschnittliche Waffe: die beiden klassischen Fähigkeiten und eine neue (abilities.ts)
+    const abilities: AbilityId[] = [weapon, `${weapon}-2`, `${weapon}-4`];
+    const weapon1 = { ...createItem(`${weapon}-${indexForLevel(level)}`, rarity, "gs", () => 0.5), abilities };
+    const equipment = { ...gearAt(level, rarity), weapon1, weapon2: null };
     return getHeroCombatProfile(character, equipment);
   };
 

@@ -29,8 +29,6 @@ export interface Character {
   attributeResets?: number;
   /** Ränge im Skilltree pro Waffentyp (src/domain/skills.ts). */
   skills: Partial<Record<WeaponType, number>>;
-  /** Freigeschaltete Kampf-Fähigkeiten – ab Rang 3 im Waffentyp (src/domain/skills.ts). */
-  abilities: AbilityId[];
 }
 
 /** Rüstungsplätze am Körper. */
@@ -94,6 +92,8 @@ export interface OwnedItem {
   upgrade?: number;
   /** Spezialeffekt legendärer Items (itemEffects.ts) – Boss-Items haben ihren festen Effekt ohne Eintrag */
   effect?: ItemEffectId;
+  /** Kampf-Fähigkeiten einer Waffe (abilities.ts) – fehlt bei Rüstung; ältere Waffen würfeln sie aus der uid */
+  abilities?: AbilityId[];
 }
 
 /** Endgültige Werte eines Exemplars (Katalogwert × Seltenheit + Boni). */
@@ -107,6 +107,8 @@ export interface ItemStats {
   upgrade: number;
   /** Spezialeffekt (legendär oder Boss-Item) – fehlt bei allen anderen */
   effect?: ItemEffectId | null;
+  /** Kampf-Fähigkeiten (nur Waffen und Schilde) */
+  abilities: AbilityId[];
 }
 
 export type Equipment = Record<EquipSlot, OwnedItem | null>;

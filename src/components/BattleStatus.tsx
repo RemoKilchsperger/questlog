@@ -32,6 +32,17 @@ interface HeroEffects {
   bulwark?: boolean;
   guard?: Guard;
   empower?: ActiveBuff;
+  damageTaken?: ActiveBuff;
+  charged?: number;
+  renew?: ActiveBuff;
+}
+
+/** Plakette für eine Abwehr gegen den nächsten Angriff (Parade, Vergeltung, Ausweichschuss, …). */
+function guardChip(guard: Guard): StatusChip {
+  const reduce = `−${pct(1 - guard.reduce)} Schaden`;
+  if (guard.reflect) return { key: "guard", icon: "🔁", text: "Vergeltung", tone: "good", title: `Nächster Angriff ${reduce}, der Schaden fliegt zurück` };
+  if (guard.counter) return { key: "guard", icon: "🤺", text: "Konter", tone: "good", title: `Nächster Angriff ${reduce}, danach Konter` };
+  return { key: "guard", icon: "🛡️", text: `Abwehr ${reduce}`, tone: "good", title: `Nächster Angriff ${reduce}` };
 }
 
 /** Was gerade auf dem Helden wirkt – Verstärkungen zuerst, dann Schaden über Zeit. */
@@ -48,16 +59,27 @@ export function heroStatusChips(buffs: Partial<Record<BuffKind, ActiveBuff>>, ef
     });
   }
   if (effects.empower) {
-    chips.push({ key: "empower", icon: "📯", text: `+${pct(effects.empower.percent)} Schaden`, rounds: effects.empower.roundsLeft, tone: "good", title: "Kriegsschrei" });
+    chips.push({ key: "empower", icon: "📯", text: `+${pct(effects.empower.percent)} Schaden`, rounds: effects.empower.roundsLeft, tone: "good", title: "Verstärkt durch eine Fähigkeit" });
+  }
+  if (effects.charged) {
+    chips.push({ key: "charged", icon: "🌋", text: `Ausgeholt ×${effects.charged}`, tone: "good", title: `Der nächste Angriff macht ${effects.charged}-fachen Schaden` });
+  }
+  if (effects.damageTaken) {
+    const less = effects.damageTaken.percent < 0;
+    chips.push({
+      key: "damageTaken",
+      icon: less ? "🧱" : "😤",
+      text: `${less ? "−" : "+"}${pct(Math.abs(effects.damageTaken.percent))} erlittener Schaden`,
+      rounds: effects.damageTaken.roundsLeft,
+      tone: less ? "good" : "bad",
+      title: less ? "Schildwall: Du erleidest weniger Schaden" : "Wutschrei: Du erleidest mehr Schaden",
+    });
+  }
+  if (effects.renew) {
+    chips.push({ key: "renew", icon: "💚", text: `+${pct(effects.renew.percent)} LP pro Runde`, rounds: effects.renew.roundsLeft, tone: "good", title: "Arkane Heilung" });
   }
   if (effects.bulwark) chips.push({ key: "bulwark", icon: "🛡️", text: "Bollwerk", tone: "good", title: "Blockt den nächsten Angriff komplett" });
-  if (effects.guard) {
-    chips.push(
-      effects.guard.reflect
-        ? { key: "guard", icon: "🔁", text: "Vergeltung", tone: "good", title: "Halbiert den nächsten Angriff und wirft den Schaden zurück" }
-        : { key: "guard", icon: "🤺", text: "Parade", tone: "good", title: "Halbiert den nächsten Angriff, danach Konter" },
-    );
-  }
+  if (effects.guard) chips.push(guardChip(effects.guard));
   const dots = [
     ["poison", "☠️", "Gift"],
     ["burn", "🔥", "Feuer"],

@@ -33,7 +33,7 @@ const xpFor = (level: number) => {
   return xp;
 };
 const profile = getHeroCombatProfile(
-  { name: "Held", totalXp: xpFor(20), gold: 0, essence: 0, stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 }, spentPoints: 0, skills: {}, abilities: [] },
+  { name: "Held", totalXp: xpFor(20), gold: 0, essence: 0, stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 }, spentPoints: 0, skills: {} },
   { ...EMPTY_EQUIPMENT, weapon1: createItem("sword-0", "common", "w1") },
 );
 const rng = (value: number) => () => value;

@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
+import { getAbility } from "../domain/abilities";
 import { getHeroCombatProfile } from "../domain/combat";
 import { displacedSlots, slotsFor } from "../domain/equipment";
 import { getItemStats } from "../domain/items";
@@ -62,6 +63,13 @@ export function ItemRow({
             </Hint>
           )}
           <span className={tooLow ? "text-danger" : "text-muted"}>ab Lv. {def.requiredLevel}</span>
+          {stats.abilities.length > 0 && (
+            <Hint text={`Fähigkeiten: ${stats.abilities.map((id) => getAbility(id).name).join(", ")}`}>
+              <span aria-label={`Fähigkeiten: ${stats.abilities.map((id) => getAbility(id).name).join(", ")}`}>
+                {stats.abilities.map((id) => getAbility(id).icon).join(" ")}
+              </span>
+            </Hint>
+          )}
         </div>
         {bonuses && <p className="text-xs text-xp">{bonuses}</p>}
       </div>

@@ -17,7 +17,6 @@ const hero: Character = {
   stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
   spentPoints: 0,
   skills: {},
-  abilities: ["staff", "bow", "shield", "greathammer", "scepter", "mace"],
 };
 
 const own = (id: string) => createItem(id, "common", id);
@@ -109,8 +108,8 @@ describe("Klassen: Werte und Fähigkeiten", () => {
     expect(classAbility("bow", "ranger").hits).toBe(5);
     expect(classAbility("shield", "paladin").manaCost).toBe(10);
     expect(classAbility("greathammer", "warden").stun).toBeUndefined();
-    expect(classAbility("greathammer-2", "warden").weaken).toEqual({ percent: 0.4, rounds: 3 });
-    expect(classAbility("greathammer-2", null).weaken).toEqual({ percent: 0.4, rounds: 2 });
+    expect(classAbility("greathammer-2", "warden").weaken).toEqual({ percent: 0.3, rounds: 3 });
+    expect(classAbility("greathammer-2", null).weaken).toEqual({ percent: 0.3, rounds: 2 });
     expect(classAbility("scepter", "warlock").poison).toEqual({ percent: expect.closeTo(0.6), rounds: 4 });
     expect(classAbility("staff", null)).toEqual(getAbility("staff"));
   });

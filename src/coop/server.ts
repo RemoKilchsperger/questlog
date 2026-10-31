@@ -58,7 +58,6 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1, ...raw.stats },
     spentPoints: raw.spentPoints ?? 0,
     skills: raw.skills ?? {},
-    abilities: raw.abilities ?? [],
   };
   const equipment: Equipment = { ...EMPTY_EQUIPMENT, ...state.equipment };
   return {

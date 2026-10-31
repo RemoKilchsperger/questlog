@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ABILITIES, getAbility, MANA_REGEN, maxManaFor } from "./abilities";
+import { fullWeapon } from "../test/weapons";
+import { ABILITIES, abilitiesOf, getAbility, MANA_REGEN, maxManaFor, type AbilityId } from "./abilities";
 import { abilityBlocker, attackRound, getHeroCombatProfile, startBattle, type BattleState } from "./combat";
 import { getBossAbility, roundsUntilBossAbility } from "./bossAbilities";
 import { AREAS, getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
 import { createItem, getItemStats, ITEM_TYPES } from "./items";
 import { xpForNextLevel } from "./leveling";
-import { clampSkills, MAX_SKILL_RANK, SKILL_BONUS_PER_RANK, unspentSkillPoints } from "./skills";
+import { clampSkills, MAX_SKILL_RANK, SKILL_BONUS_PER_RANK, unspentSkillPoints, type SkillWeapon } from "./skills";
 import type { Character, Equipment } from "./types";
 
 const hero: Character = {
@@ -17,14 +18,12 @@ const hero: Character = {
   stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
   spentPoints: 0,
   skills: {},
-  // Fähigkeiten-Tests: alle freigeschaltet (das Freischalten selbst testet skills.test.ts)
-  abilities: ABILITIES.filter((a) => a.tier === 1).map((a) => a.id),
 };
 
 const withWeapons = (...ids: string[]): Equipment => ({
   ...EMPTY_EQUIPMENT,
-  weapon1: ids[0] ? createItem(ids[0], "common", "w1") : null,
-  weapon2: ids[1] ? createItem(ids[1], "common", "w2") : null,
+  weapon1: ids[0] ? fullWeapon(ids[0], "common", "w1") : null,
+  weapon2: ids[1] ? fullWeapon(ids[1], "common", "w2") : null,
 });
 
 /** Kampf gegen einen sehr zähen Wolf – so endet keine Runde mit einem Sieg. */
@@ -42,15 +41,21 @@ describe("Fähigkeiten", () => {
     for (const a of ABILITIES) expect(a.id.startsWith(a.weapon), a.id).toBe(true);
   });
 
-  it("Zweihandwaffen haben eine dritte Fähigkeit (Id = Waffe-3)", () => {
-    const twoHanded = ITEM_TYPES.filter((t) => t.kind === "weapon" && t.twoHanded).map((t) => `${t.type}-3`);
-    expect(ABILITIES.filter((a) => a.tier === 3).map((a) => a.id).sort()).toEqual(twoHanded.sort());
+  it("Pools: Einhandwaffen und Schild haben 4 Fähigkeiten, Zweihandwaffen 6 (Id = Waffe-Nummer)", () => {
+    for (const t of ITEM_TYPES.filter((t) => t.kind === "weapon" || t.type === "shield")) {
+      const pool = abilitiesOf(t.type as SkillWeapon);
+      expect(pool.length, t.type).toBe(t.twoHanded ? 6 : 4);
+      expect(pool.map((a) => a.id)).toEqual(pool.map((a) => (a.tier === 1 ? t.type : `${t.type}-${a.tier}`)));
+    }
   });
 
-  it("verfügbar sind die Fähigkeiten der angelegten Waffen", () => {
-    expect(battleWith(withWeapons("sword-0", "axe-0")).abilities).toEqual(["sword", "axe"]);
-    expect(battleWith(withWeapons("sword-0", "shield-0")).abilities).toEqual(["sword", "shield"]);
-    expect(abilityBlocker(battleWith(withWeapons("sword-0")), "axe")).toMatch(/Waffe/);
+  it("verfügbar sind die Fähigkeiten der angelegten Waffen – erst die der ersten Hand, ohne Doppelte", () => {
+    const sword = { ...createItem("sword-0", "common", "a"), abilities: ["sword", "sword-3"] as AbilityId[] };
+    const axe = { ...createItem("axe-0", "common", "b"), abilities: ["axe-2", "axe-4"] as AbilityId[] };
+    const twin = { ...sword, uid: "c", abilities: ["sword-3", "sword-4"] as AbilityId[] };
+    expect(battleWith({ ...EMPTY_EQUIPMENT, weapon1: sword, weapon2: axe }).abilities).toEqual(["sword", "sword-3", "axe-2", "axe-4"]);
+    expect(battleWith({ ...EMPTY_EQUIPMENT, weapon1: sword, weapon2: twin }).abilities).toEqual(["sword", "sword-3", "sword-4"]);
+    expect(abilityBlocker(battleWith({ ...EMPTY_EQUIPMENT, weapon1: sword }), "sword-2")).toMatch(/Waffe/);
   });
 
   it("kostet Mana, Mana regeneriert jede Runde", () => {

@@ -29,11 +29,11 @@ import {
   rollCreatureGold,
   type CreatureDef,
 } from "./creatures";
-import { createItem, getBossItems, getItem } from "./items";
+import { createItem, getBossItems, getItem, weaponAbilities } from "./items";
 import { getLevel } from "./leveling";
 import { rollDrop } from "./loot";
 import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potions";
-import { hasAbility, skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
+import { skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { bossDamageDealtFactor, bossDamageTakenFactor, HEALER_HEAL, phaseDue, type AddRole } from "./bossMechanics";
 import {
@@ -49,7 +49,7 @@ import {
   type EliteAffix,
 } from "./elites";
 import { getSetHpMultiplier } from "./bossSets";
-import { abilitiesOf, freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
+import { freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   classStatBonus,
@@ -103,12 +103,10 @@ export interface HeroCombatProfile {
   itemEffects?: ItemEffectId[];
 }
 
-/** Freigeschaltete Fähigkeiten aller angelegten Waffen (je Waffe erste, dann zweite), ohne Doppelte. */
-export function availableAbilities(character: Character, equipment: Equipment): AbilityId[] {
-  const types = new Set(
-    [equipment.weapon1, equipment.weapon2].filter((o) => o !== null).map((o) => getItem(o.itemId).type as SkillWeapon),
-  );
-  return [...types].flatMap((type) => abilitiesOf(type).filter((a) => hasAbility(character, a.id)).map((a) => a.id));
+/** Fähigkeiten der angelegten Waffen (erst die der ersten Hand, dann die der zweiten), ohne Doppelte. */
+export function availableAbilities(equipment: Equipment): AbilityId[] {
+  const weapons = [equipment.weapon1, equipment.weapon2].filter((o) => o !== null);
+  return [...new Set(weapons.flatMap(weaponAbilities))];
 }
 
 /**
@@ -140,7 +138,7 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
     critChance: Math.min(0.3, 0.05 + stats.charisma * CRIT_PER_CHARISMA + armorClasses.crit) + bonus.crit,
     goldBonus: Math.min(1, stats.charisma * 0.005) + bonus.gold + (hasEffect(itemEffects, "lucky") ? EFFECT.lucky : 0),
     maxMana: maxManaFor(level, stats.intellect) + armorClasses.mana + (hasEffect(itemEffects, "prepared") ? EFFECT.prepared : 0),
-    abilities: availableAbilities(character, equipment),
+    abilities: availableAbilities(equipment),
     heroClass,
     critMultiplier: bonus.critMultiplier,
     weapon: mainWeapon(
@@ -201,6 +199,8 @@ export type BattleEvent =
   | { type: "ability"; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
   /** Der Held heilt sich durch eine Fähigkeit (Heiliges Licht, Blutrausch) */
   | { type: "selfHeal"; heal: number }
+  /** Läuterung: Gift, Feuer und Bluten auf dem Helden sind weg */
+  | { type: "cleansed" }
   /** Parade/Vergeltung fängt einen Teil des gegnerischen Angriffs ab … */
   | { type: "guarded"; prevented: number }
   /** … und der Gegner erleidet Konter- bzw. Rückwurfschaden */
@@ -324,6 +324,12 @@ export interface BattleState {
     guard?: Guard;
     /** Kriegsschrei: mehr Schaden */
     empower?: ActiveBuff;
+    /** Schildwall/Wutschrei: erlittener Schaden × (1 + percent) – negativ: weniger */
+    damageTaken?: ActiveBuff;
+    /** Titanenschlag: Faktor auf den Schaden der nächsten Aktion */
+    charged?: number;
+    /** Arkane Heilung: heilt `percent` der max. LP am Rundenende */
+    renew?: ActiveBuff;
   };
   status: BattleStatus;
   /** Alle Ereignisse mit Rundennummer – für das Kampfprotokoll. */
@@ -533,7 +539,7 @@ export function tickCooldowns(
 /** Warum diese Fähigkeit gerade nicht geht – oder null. */
 export function abilityBlocker(state: BattleState, id: AbilityId): string | null {
   if (state.status !== "active") return "Der Kampf ist vorbei.";
-  if (!state.abilities.includes(id)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
+  if (!state.abilities.includes(id)) return "Diese Fähigkeit liegt auf keiner deiner angelegten Waffen.";
   const wait = state.cooldowns?.[id] ?? 0;
   if (wait > 0) return cooldownText(wait);
   const manaCost = abilityCost(state, id);
@@ -547,13 +553,13 @@ export function abilityCost(state: Pick<BattleState, "heroClass" | "blessings">,
   return Math.round(manaCost * Math.max(0, 1 - BLESSING.focus * stacks(state.blessings, "focus")));
 }
 
-/** Betäubt die Fähigkeit den Gegner? Manche nur mit einer Chance (Eissplitter, Schockwelle). */
+/** Betäubt die Fähigkeit den Gegner? Manche nur mit einer Chance (Eisstrahl, Schockwelle). */
 export function stunLands(ability: AbilityDef | null, rng: () => number): boolean {
   if (!ability?.stun) return false;
   return ability.stunChance === undefined || rng() < ability.stunChance;
 }
 
-/** Kennzeichnet Betäubungs-Ereignisse der Eissplitter als Einfrieren. */
+/** Kennzeichnet Betäubungs-Ereignisse des Eisstrahls als Einfrieren. */
 export const freezeFlag = (ability: AbilityDef | null): { freeze?: true } => (ability?.freeze ? { freeze: true } : {});
 
 /** Ein Gegner in der laufenden Runde: der Boss (ohne `add`) oder ein Begleiter. */
@@ -613,11 +619,15 @@ export function attackRound(
     }
     foe.fx = { ...foe.fx, [kind]: { damage: Math.max(1, Math.round(base * factor)), roundsLeft: rounds } };
   };
-  /** Schadensart des Helden in dieser Runde: die Waffe der Fähigkeit, sonst die Hauptwaffe */
+  /** Schadensart des Helden in dieser Runde: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe */
   const heroKind = (() => {
+    if (ability?.kind) return ability.kind;
     const weapon = ability?.weapon ?? state.heroWeapon;
     return weapon ? WEAPON_KIND[weapon] : null;
   })();
+  // Titanenschlag: Die Aktion nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
+  const charge = heroEffects.charged ?? 1;
+  if (heroEffects.charged) heroEffects = { ...heroEffects, charged: undefined };
   let phase = state.phase;
   /** Schildträger: Der Boss erleidet weniger Schaden, solange einer steht */
   const takenBy = (foe: Foe) => (foe === boss ? bossDamageTakenFactor(roleHolders(adds)) : 1);
@@ -657,6 +667,14 @@ export function attackRound(
       hero = { ...hero, hp: hero.hp + heal };
       if (heal > 0) events.push({ type: "selfHeal", heal });
     }
+    if (ability.cleanse && (heroEffects.poison || heroEffects.burn || heroEffects.bleed)) {
+      heroEffects = { ...heroEffects, poison: undefined, burn: undefined, bleed: undefined };
+      events.push({ type: "cleansed" });
+    }
+    if (ability.damageTaken) heroEffects = { ...heroEffects, damageTaken: { percent: ability.damageTaken.percent, roundsLeft: ability.damageTaken.rounds } };
+    if (ability.charge) heroEffects = { ...heroEffects, charged: ability.charge };
+    if (ability.renew) heroEffects = { ...heroEffects, renew: { percent: ability.renew.percent, roundsLeft: ability.renew.rounds } };
+    if (ability.manaGain) mana = Math.min(state.maxMana, mana + ability.manaGain);
     // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner
     for (const foe of aoe === "all" ? living() : [target]) {
       if (ability.weaken) foe.fx = { ...foe.fx, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
@@ -683,7 +701,8 @@ export function attackRound(
     const finisher = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
     // Turm-Segen „Henker“: mehr Schaden gegen angeschlagene Gegner
     const headsman = foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(state.blessings, "executioner") : 1;
-    const execute = finisher * headsman;
+    // Ausbluten: mehr Schaden gegen blutende Gegner
+    const execute = finisher * headsman * (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1);
     const taken = takenBy(foe);
     // Schwäche oder Resistenz gegen die Schadensart der Waffe – „Runenklinge“ zählt auch als Magie, wenn das wirksamer ist
     const kind =
@@ -706,10 +725,10 @@ export function attackRound(
     const attacker: Combatant = ability
       ? {
           ...strong,
-          damage: strong.damage * ability.multiplier * execute * vulnerableOf(foe) * share * taken * kindFactor * itemFactor,
+          damage: strong.damage * ability.multiplier * execute * charge * vulnerableOf(foe) * share * taken * kindFactor * itemFactor,
           critChance: ability.guaranteedCrit ? 1 : critChance,
         }
-      : { ...strong, damage: strong.damage * vulnerableOf(foe) * taken * kindFactor * itemFactor, critChance };
+      : { ...strong, damage: strong.damage * headsman * charge * share * vulnerableOf(foe) * taken * kindFactor * itemFactor, critChance };
     const heroHit = rollHit(attacker, { ...foe.c, armor: armorOf(foe) }, rng);
     dealtByHero += Math.min(foe.c.hp, heroHit.damage);
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - heroHit.damage) };
@@ -798,6 +817,8 @@ export function attackRound(
     for (const foe of frozenByItem) if (foe.c.hp > 0) stunned.add(foe);
   }
   const elite = state.elite ?? [];
+  /** Schildwall/Wutschrei: Faktor auf den Schaden, den der Held erleidet */
+  const hurt = Math.max(0, 1 + (heroEffects.damageTaken?.percent ?? 0));
   /** Turm-Segen „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst. */
   const thorns = (foe: Foe, damage: number) => {
     const share = BLESSING.thorns * stacks(state.blessings, "thorns") + (hasEffect(effects, "thorns") ? EFFECT.thorns : 0);
@@ -814,7 +835,7 @@ export function attackRound(
         heroEffects = { ...heroEffects, bulwark: undefined };
         events.push({ type: "explosion", damage: 0, blocked: true });
       } else {
-        const blast = rollHit({ ...boss.c, damage: boss.c.damage * EXPLOSION_FACTOR, critChance: 0 }, strong, rng);
+        const blast = rollHit({ ...boss.c, damage: boss.c.damage * EXPLOSION_FACTOR * hurt, critChance: 0 }, strong, rng);
         hero = { ...hero, hp: Math.max(0, hero.hp - blast.damage) };
         events.push({ type: "explosion", damage: blast.damage });
       }
@@ -873,6 +894,7 @@ export function attackRound(
             weakened *
             drums *
             rage *
+            hurt *
             (swift ? SWIFT_SHARE : 1) *
             // Item-Effekt „Standhaft“: Boss-Fähigkeiten treffen schwächer
             (special && hasEffect(effects, "steadfast") ? 1 - EFFECT.steadfast : 1),
@@ -946,7 +968,7 @@ export function attackRound(
         blocked = true;
       } else {
         const weakened = 1 - (foe.fx.weaken?.percent ?? 0);
-        const enemyHit = rollHit({ ...foe.c, damage: foe.c.damage * weakened }, strong, rng);
+        const enemyHit = rollHit({ ...foe.c, damage: foe.c.damage * weakened * hurt }, strong, rng);
         hero = { ...hero, hp: Math.max(0, hero.hp - enemyHit.damage) };
         events.push({ type: "hit", attacker: "enemy", ...enemyHit, ...foeTag(foe) });
         thorns(foe, enemyHit.damage);
@@ -971,8 +993,11 @@ export function attackRound(
     }
   }
 
-  // Kleriker und Item-Effekt „Lebensquell“: Regeneration am Ende der Runde
-  const regen = (state.heroClass === "cleric" ? CLERIC_REGEN : 0) + (hasEffect(effects, "wellspring") ? EFFECT.wellspring : 0);
+  // Kleriker, Item-Effekt „Lebensquell“ und Arkane Heilung: Regeneration am Ende der Runde
+  const regen =
+    (state.heroClass === "cleric" ? CLERIC_REGEN : 0) +
+    (hasEffect(effects, "wellspring") ? EFFECT.wellspring : 0) +
+    (heroEffects.renew?.percent ?? 0);
   if (status === "active" && regen > 0 && hero.hp > 0) {
     const heal = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * regen));
     if (heal > 0) {
@@ -1018,7 +1043,12 @@ export function attackRound(
       // Ist das gewählte Ziel gefallen, geht es wieder gegen den Boss
       target: target.add !== undefined && target.c.hp > 0 ? target.add : undefined,
       ...(phase && { phase }),
-      heroEffects: { ...heroEffects, empower: tickBuff(heroEffects.empower) },
+      heroEffects: {
+        ...heroEffects,
+        empower: tickBuff(heroEffects.empower),
+        damageTaken: tickBuff(heroEffects.damageTaken),
+        renew: tickBuff(heroEffects.renew),
+      },
       mana: Math.min(state.maxMana, mana + MANA_REGEN),
       // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen
       cooldowns: tickCooldowns(

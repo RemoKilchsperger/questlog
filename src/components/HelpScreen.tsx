@@ -39,14 +39,7 @@ import {
 } from "../domain/quests";
 import { STAT_LABELS } from "../domain/stats";
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
-import {
-  ABILITY_UNLOCK_RANK,
-  MAX_SKILL_RANK,
-  SECOND_ABILITY_COST,
-  SECOND_ABILITY_LEVEL,
-  SKILL_BONUS_PER_RANK,
-  SKILL_POINTS_PER_LEVEL,
-} from "../domain/skills";
+import { MAX_SKILL_RANK, SKILL_BONUS_PER_RANK, SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import { formatNumber, Gold } from "./Gold";
 
 /** 0.05 → "5 %" */
@@ -189,11 +182,11 @@ export function HelpScreen() {
           </p>
           <H>Fähigkeiten</H>
           <p>
-            Ab Rang {ABILITY_UNLOCK_RANK} in einem Waffentyp schaltest du für einen weiteren Skillpunkt seine erste
-            Kampf-Fähigkeit frei. Ab Level {SECOND_ABILITY_LEVEL} gibt es für {SECOND_ABILITY_COST} Skillpunkte die zweite – auch ohne die erste.
-            Zweihandwaffen haben noch eine dritte Fähigkeit, die gleich viel kostet und ab demselben Level verfügbar ist. Im
-            Skilltree zeigt ein Symbol pro Fähigkeit, was sie kann, wenn du darüberfährst. Im Kampf stehen die Fähigkeiten der
-            gerade angelegten Waffen bereit.
+            Kampf-Fähigkeiten liegen auf den Waffen selbst. Jede Waffe trägt einen zufälligen Teil der Fähigkeiten ihres
+            Typs: Einhandwaffen und Schilde 2 von 4, Zweihandwaffen 3 von 6. Welche es sind, steht im Tooltip der Waffe – so
+            ist jeder Waffenfund eine kleine Überraschung. Mit zwei Einhandwaffen (oder Waffe und Schild) hast du bis zu vier
+            Fähigkeiten. Im Skilltree siehst du unter jedem Waffentyp alle möglichen; die deiner angelegten Waffen leuchten.
+            Im Kampf stehen die Fähigkeiten der gerade angelegten Waffen bereit.
           </p>
           <ul className="list-disc space-y-1 pl-5">
             <li>Eine Fähigkeit ersetzt den normalen Angriff einer Runde und kostet Mana.</li>
@@ -392,9 +385,11 @@ export function HelpScreen() {
             fliehen. Besiegte Begleiter geben etwas Erfahrung und Gold.
           </p>
           <p>
-            Flächen-Fähigkeiten treffen mehrere Gegner: Klingensturm, Erdbeben und Schockwelle alle, Schwertwirbel und
-            Pfeilhagel verteilen ihre Treffer zufällig, Spalter und Meteor treffen Umstehende mit halbem Schaden. Ein
-            Bollwerk blockt den ganzen gegnerischen Zug, Parade und Vergeltung wirken nur gegen den Boss.
+            Flächen-Fähigkeiten treffen mehrere Gegner: Klingensturm, Erdbeben, Schockwelle, Hackwirbel und Wirbelwind alle,
+            Schwertwirbel und Pfeilhagel verteilen ihre Treffer zufällig, Spalter und Meteor treffen Umstehende mit halbem
+            Schaden, der Kettenblitz mit 60 %. Ein Bollwerk (auch Schattenschritt) blockt den ganzen gegnerischen Zug,
+            Abwehr-Fähigkeiten wie Parade, Vergeltung oder Konterstellung wirken nur gegen den Boss. Schildwall und Wutschrei
+            ändern den Schaden aller Gegner.
           </p>
           <p>
             Im Koop-Dungeon bringen die Endbosse ihre Begleiter ebenfalls mit. Jeder wählt sein eigenes Ziel, die

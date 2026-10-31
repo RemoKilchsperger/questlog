@@ -1,33 +1,33 @@
-// Kampf-Fähigkeiten: Jeder Waffentyp (auch der Schild) bringt zwei Fähigkeiten
-// mit, Zweihandwaffen drei – sie können nicht wie Einhandwaffen die Fähigkeiten
-// zweier Waffen kombinieren. Fähigkeiten kosten Mana und ersetzen den normalen
-// Angriff einer Runde. Sie müssen im Skilltree freigeschaltet werden: alle ab
-// Rang 3 in der Waffe, die zweite und dritte zusätzlich ab Level 25 – unabhängig
-// voneinander (siehe skills.ts). Verfügbar sind die freigeschalteten Fähigkeiten
-// aller angelegten Waffen.
+// Kampf-Fähigkeiten: Jeder Waffentyp (auch der Schild) hat einen Pool von vier
+// Fähigkeiten, Zweihandwaffen von sechs. Jede Waffe trägt die Hälfte davon – fest
+// aus ihrer uid gewürfelt (`rollWeaponAbilities`): Einhandwaffen 2, Zweihandwaffen 3.
+// Zwei Einhandwaffen (oder Waffe und Schild) bringen so bis zu vier Fähigkeiten mit.
+// Fähigkeiten kosten Mana und ersetzen den normalen Angriff einer Runde. Verfügbar
+// sind die Fähigkeiten aller angelegten Waffen.
 //
 // Abklingzeit: Nach dem Einsatz ist eine Fähigkeit 1–4 Runden gesperrt – je
 // stärker, desto länger. So lohnt es sich, den richtigen Moment abzupassen.
 //
-// Ids: Die erste Fähigkeit heisst wie der Waffentyp ("sword"), die zweite
-// bekommt "-2" angehängt ("sword-2"), die dritte "-3" ("staff-3") – so bleiben
-// alte Spielstände gültig.
+// Ids: Die erste Fähigkeit heisst wie der Waffentyp ("sword"), die weiteren
+// bekommen ihre Nummer angehängt ("sword-2" … "sword-4", "staff-6").
 //
 // Mana: zu Kampfbeginn voll, +MANA_REGEN pro Runde. Das Maximum wächst mit
 // Level und Intelligenz (siehe `maxManaFor`).
 
+import type { DamageKind } from "./matchups";
+import { hash, seededRng } from "./random";
 import type { SkillWeapon } from "./skills";
 
-/** Waffentypen mit dritter Fähigkeit: die Zweihandwaffen. */
+/** Waffentypen mit sechs Fähigkeiten: die Zweihandwaffen. */
 export type TwoHandedWeapon = "greatsword" | "greataxe" | "greathammer" | "staff" | "bow";
 
-export type AbilityId = SkillWeapon | `${SkillWeapon}-2` | `${TwoHandedWeapon}-3`;
+export type AbilityId = SkillWeapon | `${SkillWeapon}-${2 | 3 | 4}` | `${TwoHandedWeapon}-${5 | 6}`;
 
 export interface AbilityDef {
   id: AbilityId;
   weapon: SkillWeapon;
-  /** 1 = erste Fähigkeit der Waffe, 2 = zweite, 3 = dritte (nur Zweihandwaffen) */
-  tier: 1 | 2 | 3;
+  /** Nummer im Pool der Waffe: 1–4, bei Zweihandwaffen 1–6 */
+  tier: 1 | 2 | 3 | 4 | 5 | 6;
   name: string;
   icon: string;
   manaCost: number;
@@ -83,6 +83,27 @@ export interface AbilityDef {
   weaken?: { percent: number; rounds: number };
   /** Verwundbar: der Gegner erleidet `percent` mehr Schaden für `rounds` Runden */
   vulnerable?: { percent: number; rounds: number };
+  /** Schadensart der Fähigkeit statt der der Waffe (Heiliger Hammer: Magie) */
+  kind?: DamageKind;
+  /** Entfernt Gift, Feuer und Bluten vom Helden */
+  cleanse?: boolean;
+  /**
+   * Erlittener Schaden des Helden: `percent` mehr (negativ: weniger) für `rounds`
+   * Runden – ab dieser Runde (Schildwall −30 %, Wutschrei +20 %)
+   */
+  damageTaken?: { percent: number; rounds: number };
+  /** Zieht im Koop die Bedrohung auf den Helden wie Bollwerk */
+  taunt?: boolean;
+  /** Mehr Schaden gegen blutende Gegner (0.6 = +60 %) */
+  bleedBonus?: number;
+  /** Ausholen: Der nächste Angriff bzw. die nächste Fähigkeit macht so viel Schaden (Faktor) */
+  charge?: number;
+  /** Heilung über Zeit: `percent` der max. LP am Ende von `rounds` Runden – ab dieser Runde */
+  renew?: { percent: number; rounds: number };
+  /** Koop: Die anderen Helden bekommen diesen Anteil der Heilung (`heal` und `renew`) */
+  groupHeal?: number;
+  /** Gibt so viel Mana zurück */
+  manaGain?: number;
 }
 
 export type AbilityAoe = "all" | "spread" | { splash: number };
@@ -172,12 +193,12 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "💥",
     manaCost: 30,
     cooldown: 3,
-    multiplier: 1.5,
+    multiplier: 1.2,
     armorBreak: 0.2,
     bleed: { percent: 0.25, rounds: 3 },
     aoe: { splash: 0.5 },
     description:
-      "Spaltet die Panzerung: −20 % Rüstung des Gegners für den Rest des Kampfes, dazu blutet er 3 Runden lang. Umstehende Gegner erleiden halben Schaden.",
+      "Ein Hieb mit 1,2-fachem Schaden, der die Panzerung spaltet: −20 % Rüstung des Gegners für den Rest des Kampfes, dazu blutet er 3 Runden lang. Umstehende Gegner erleiden halben Schaden.",
   },
   {
     id: "mace",
@@ -223,10 +244,10 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "🔥",
     manaCost: 40,
     cooldown: 2,
-    multiplier: 1.7,
+    multiplier: 1.9,
     ignoreArmor: true,
     burn: { percent: 0.3, rounds: 2 },
-    description: "Ein Feuerball mit 1,7-fachem Schaden, der Rüstung ignoriert und den Gegner 2 Runden lang in Brand setzt.",
+    description: "Ein Feuerball mit 1,9-fachem Schaden, der Rüstung ignoriert und den Gegner 2 Runden lang in Brand setzt.",
   },
   {
     id: "bow",
@@ -337,11 +358,11 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "🌋",
     manaCost: 40,
     cooldown: 3,
-    multiplier: 1.3,
+    multiplier: 1,
     ignoreArmor: true,
-    weaken: { percent: 0.4, rounds: 2 },
+    weaken: { percent: 0.3, rounds: 2 },
     aoe: "all",
-    description: "Der Boden bebt unter allen Gegnern: 1,3-facher Schaden, der Rüstung ignoriert – sie machen 2 Runden lang 40 % weniger Schaden.",
+    description: "Der Boden bebt unter allen Gegnern: voller Schaden, der Rüstung ignoriert – sie machen 2 Runden lang 30 % weniger Schaden.",
   },
   {
     id: "scepter-2",
@@ -365,11 +386,11 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "☄️",
     manaCost: 60,
     cooldown: 4,
-    multiplier: 2.6,
+    multiplier: 2.3,
     ignoreArmor: true,
     burn: { percent: 0.3, rounds: 3 },
     aoe: { splash: 0.5 },
-    description: "Ein Meteor mit 2,6-fachem Schaden, der Rüstung ignoriert und das Ziel 3 Runden lang in Brand setzt. Umstehende Gegner erleiden halben Schaden.",
+    description: "Ein Meteor mit 2,3-fachem Schaden, der Rüstung ignoriert und das Ziel 3 Runden lang in Brand setzt. Umstehende Gegner erleiden halben Schaden.",
   },
   {
     id: "bow-2",
@@ -406,12 +427,12 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Klingensturm",
     icon: "🌪️",
     manaCost: 40,
-    cooldown: 3,
-    multiplier: 0.8,
-    hits: 3,
-    vulnerable: { percent: 0.15, rounds: 2 },
+    cooldown: 4,
+    multiplier: 0.7,
+    hits: 2,
+    vulnerable: { percent: 0.1, rounds: 2 },
     aoe: "all",
-    description: "Drei wuchtige Hiebe gegen alle Gegner – jeder kann kritisch treffen. Danach erleiden sie 2 Runden lang 15 % mehr Schaden.",
+    description: "Zwei wuchtige Hiebe gegen alle Gegner – jeder kann kritisch treffen. Danach erleiden sie 2 Runden lang 10 % mehr Schaden.",
   },
   {
     id: "greataxe-3",
@@ -443,17 +464,17 @@ export const ABILITIES: readonly AbilityDef[] = [
     id: "staff-3",
     weapon: "staff",
     tier: 3,
-    name: "Eissplitter",
+    name: "Eisstrahl",
     icon: "❄️",
     manaCost: 40,
     cooldown: 3,
-    multiplier: 1.3,
+    multiplier: 1.5,
     ignoreArmor: true,
     stun: true,
     stunChance: 0.4,
     freeze: true,
     description:
-      "Schwebende Eissplitter mit 1,3-fachem Schaden, die Rüstung ignorieren – mit 40 % Chance friert der Gegner ein und setzt eine Runde aus.",
+      "Ein eisiger Strahl mit 1,5-fachem Schaden, der Rüstung ignoriert – mit 40 % Chance friert der Gegner ein und setzt eine Runde aus.",
   },
   {
     id: "bow-3",
@@ -467,6 +488,359 @@ export const ABILITIES: readonly AbilityDef[] = [
     guard: { reduce: 0.4 },
     description: "Ein Schuss mit 1,2-fachem Schaden, dann Rückzug: Der nächste gegnerische Angriff macht 60 % weniger Schaden.",
   },
+  // ───────────── Erweiterte Pools: Einhand bis 4, Zweihand bis 6 ─────────────
+  {
+    id: "dagger-3",
+    weapon: "dagger",
+    tier: 3,
+    name: "Giftklinge",
+    icon: "🐍",
+    manaCost: 25,
+    cooldown: 2,
+    multiplier: 0.8,
+    poison: { percent: 0.35, rounds: 3 },
+    description: "Ein Stich mit vergifteter Klinge – der Gegner erleidet 3 Runden lang Giftschaden.",
+  },
+  {
+    id: "dagger-4",
+    weapon: "dagger",
+    tier: 4,
+    name: "Schattenschritt",
+    icon: "🌑",
+    manaCost: 25,
+    cooldown: 3,
+    multiplier: 0.8,
+    bulwark: true,
+    description: "Ein Stich, dann verschwindest du in den Schatten: Der nächste gegnerische Angriff geht komplett ins Leere.",
+  },
+  {
+    id: "sword-3",
+    weapon: "sword",
+    tier: 3,
+    name: "Tiefe Wunde",
+    icon: "🩸",
+    manaCost: 30,
+    cooldown: 2,
+    multiplier: 1.3,
+    bleed: { percent: 0.3, rounds: 3 },
+    description: "Ein tiefer Schnitt mit 1,3-fachem Schaden – der Gegner blutet 3 Runden lang.",
+  },
+  {
+    id: "sword-4",
+    weapon: "sword",
+    tier: 4,
+    name: "Entwaffnen",
+    icon: "🤚",
+    manaCost: 25,
+    cooldown: 3,
+    multiplier: 1,
+    weaken: { percent: 0.3, rounds: 2 },
+    description: "Ein Hieb gegen die Waffenhand: Der Gegner macht 2 Runden lang 30 % weniger Schaden.",
+  },
+  {
+    id: "axe-3",
+    weapon: "axe",
+    tier: 3,
+    name: "Hackwirbel",
+    icon: "🌪️",
+    manaCost: 30,
+    cooldown: 2,
+    multiplier: 0.9,
+    aoe: "all",
+    description: "Ein Wirbel aus Axthieben trifft alle Gegner mit 0,9-fachem Schaden.",
+  },
+  {
+    id: "axe-4",
+    weapon: "axe",
+    tier: 4,
+    name: "Spaltschlag",
+    icon: "🪵",
+    manaCost: 25,
+    cooldown: 3,
+    multiplier: 1.3,
+    armorBreak: 0.25,
+    description:
+      "Ein Hieb mit 1,3-fachem Schaden, der die Rüstung spaltet: −25 % Rüstung des Gegners für den Rest des Kampfes.",
+  },
+  {
+    id: "mace-3",
+    weapon: "mace",
+    tier: 3,
+    name: "Läuterung",
+    icon: "🕊️",
+    manaCost: 25,
+    cooldown: 3,
+    multiplier: 0,
+    hits: 0,
+    heal: 0.2,
+    cleanse: true,
+    description:
+      "Statt anzugreifen: Du heilst dich um 20 % deiner Lebenspunkte und befreist dich von Gift, Feuer und Bluten.",
+  },
+  {
+    id: "mace-4",
+    weapon: "mace",
+    tier: 4,
+    name: "Heiliger Hammer",
+    icon: "🌟",
+    manaCost: 30,
+    cooldown: 2,
+    multiplier: 1.4,
+    kind: "magic",
+    description: "Ein Schlag voll heiliger Kraft mit 1,4-fachem Schaden – er zählt als Magie statt als Wucht.",
+  },
+  {
+    id: "scepter-3",
+    weapon: "scepter",
+    tier: 3,
+    name: "Seelenfeuer",
+    icon: "🟣",
+    manaCost: 30,
+    cooldown: 2,
+    multiplier: 0.7,
+    ignoreArmor: true,
+    burn: { percent: 0.4, rounds: 3 },
+    description: "Dunkles Feuer mit 0,7-fachem Schaden, das Rüstung ignoriert – der Gegner brennt 3 Runden lang.",
+  },
+  {
+    id: "scepter-4",
+    weapon: "scepter",
+    tier: 4,
+    name: "Lebensentzug",
+    icon: "🧪",
+    manaCost: 35,
+    cooldown: 3,
+    multiplier: 1.5,
+    ignoreArmor: true,
+    lifesteal: 0.5,
+    description:
+      "Saugt dem Gegner das Leben aus: 1,5-facher Schaden, der Rüstung ignoriert – du heilst dich um die Hälfte davon.",
+  },
+  {
+    id: "shield-3",
+    weapon: "shield",
+    tier: 3,
+    name: "Schildstoss",
+    icon: "💢",
+    manaCost: 25,
+    cooldown: 3,
+    multiplier: 1,
+    stun: true,
+    stunChance: 0.6,
+    description:
+      "Ein Stoss mit dem Schildrand – mit 60 % Chance ist der Gegner betäubt und kann nicht zurückschlagen.",
+  },
+  {
+    id: "shield-4",
+    weapon: "shield",
+    tier: 4,
+    name: "Schildwall",
+    icon: "🧱",
+    manaCost: 30,
+    cooldown: 4,
+    multiplier: 0.6,
+    damageTaken: { percent: -0.5, rounds: 3 },
+    taunt: true,
+    description:
+      "Ein Schildhieb mit 0,6-fachem Schaden, dann gehst du in Deckung: 3 Runden lang erleidest du 50 % weniger Schaden. Im Koop ziehst du die Aufmerksamkeit der Gegner auf dich.",
+  },
+  {
+    id: "greatsword-4",
+    weapon: "greatsword",
+    tier: 4,
+    name: "Kreuzhieb",
+    icon: "✖️",
+    manaCost: 35,
+    cooldown: 2,
+    multiplier: 0.9,
+    hits: 2,
+    bleed: { percent: 0.25, rounds: 2 },
+    description: "Zwei gekreuzte Hiebe mit je 0,9-fachem Schaden – jeder kann kritisch treffen, der Gegner blutet 2 Runden lang.",
+  },
+  {
+    id: "greatsword-5",
+    weapon: "greatsword",
+    tier: 5,
+    name: "Konterstellung",
+    icon: "🗡️",
+    manaCost: 30,
+    cooldown: 3,
+    multiplier: 1,
+    guard: { reduce: 0.6, counter: 1.5 },
+    description: "Ein Hieb, dann in Stellung: Der nächste gegnerische Angriff macht 40 % weniger Schaden und du konterst mit 1,5-fachem Schaden.",
+  },
+  {
+    id: "greatsword-6",
+    weapon: "greatsword",
+    tier: 6,
+    name: "Heldenmut",
+    icon: "🦁",
+    manaCost: 35,
+    cooldown: 4,
+    multiplier: 1,
+    heal: 0.15,
+    empower: { percent: 0.15, rounds: 2 },
+    description:
+      "Ein Hieb voller Heldenmut: Du heilst dich um 15 % deiner Lebenspunkte und machst in den nächsten 2 Runden 15 % mehr Schaden.",
+  },
+  {
+    id: "greataxe-4",
+    weapon: "greataxe",
+    tier: 4,
+    name: "Wirbelwind",
+    icon: "🌀",
+    manaCost: 40,
+    cooldown: 3,
+    multiplier: 0.7,
+    hits: 2,
+    aoe: "all",
+    description: "Zwei kreisende Hiebe gegen alle Gegner mit je 0,7-fachem Schaden – jeder kann kritisch treffen.",
+  },
+  {
+    id: "greataxe-5",
+    weapon: "greataxe",
+    tier: 5,
+    name: "Wutschrei",
+    icon: "😤",
+    manaCost: 25,
+    cooldown: 4,
+    multiplier: 1,
+    empower: { percent: 0.4, rounds: 3 },
+    damageTaken: { percent: 0.2, rounds: 4 },
+    description:
+      "Ein Hieb mit wildem Schrei: In den nächsten 3 Runden machst du 40 % mehr Schaden – aber du erleidest ab sofort 20 % mehr.",
+  },
+  {
+    id: "greataxe-6",
+    weapon: "greataxe",
+    tier: 6,
+    name: "Ausbluten",
+    icon: "🔪",
+    manaCost: 30,
+    cooldown: 2,
+    multiplier: 1.4,
+    bleedBonus: 0.6,
+    description:
+      "Ein Hieb mit 1,4-fachem Schaden in die offene Wunde – gegen blutende Gegner 60 % stärker.",
+  },
+  {
+    id: "greathammer-4",
+    weapon: "greathammer",
+    tier: 4,
+    name: "Zertrümmern",
+    icon: "🪨",
+    manaCost: 35,
+    cooldown: 3,
+    multiplier: 1.2,
+    armorBreak: 0.25,
+    description: "Ein Hieb mit 1,2-fachem Schaden, der die Panzerung zertrümmert: −25 % Rüstung des Gegners für den Rest des Kampfes.",
+  },
+  {
+    id: "greathammer-5",
+    weapon: "greathammer",
+    tier: 5,
+    name: "Unerschütterlich",
+    icon: "⛰️",
+    manaCost: 30,
+    cooldown: 4,
+    multiplier: 0,
+    hits: 0,
+    heal: 0.15,
+    guard: { reduce: 0.5 },
+    description: "Statt anzugreifen: Du heilst dich um 15 % deiner Lebenspunkte, der nächste gegnerische Angriff macht nur halben Schaden.",
+  },
+  {
+    id: "greathammer-6",
+    weapon: "greathammer",
+    tier: 6,
+    name: "Titanenschlag",
+    icon: "🌋",
+    manaCost: 45,
+    cooldown: 4,
+    multiplier: 0,
+    hits: 0,
+    charge: 3,
+    description: "Statt anzugreifen holst du weit aus: Dein nächster Angriff oder deine nächste Fähigkeit macht dreifachen Schaden.",
+  },
+  {
+    id: "staff-4",
+    weapon: "staff",
+    tier: 4,
+    name: "Kettenblitz",
+    icon: "⚡",
+    manaCost: 40,
+    cooldown: 3,
+    multiplier: 1.3,
+    ignoreArmor: true,
+    aoe: { splash: 0.6 },
+    description: "Ein Blitz mit 1,3-fachem Schaden, der Rüstung ignoriert – er springt auf alle anderen Gegner über (60 % Schaden).",
+  },
+  {
+    id: "staff-5",
+    weapon: "staff",
+    tier: 5,
+    name: "Arkane Heilung",
+    icon: "💚",
+    manaCost: 40,
+    cooldown: 4,
+    multiplier: 0,
+    hits: 0,
+    heal: 0.2,
+    renew: { percent: 0.05, rounds: 3 },
+    groupHeal: 0.5,
+    description:
+      "Statt anzugreifen: Du heilst dich sofort um 20 % deiner Lebenspunkte und 3 Runden lang um je 5 %. Im Koop heilt sie alle Mitspieler halb so stark.",
+  },
+  {
+    id: "staff-6",
+    weapon: "staff",
+    tier: 6,
+    name: "Arkaner Schild",
+    icon: "🔮",
+    manaCost: 20,
+    cooldown: 3,
+    multiplier: 0,
+    hits: 0,
+    guard: { reduce: 0.4 },
+    manaGain: 15,
+    description: "Statt anzugreifen: Ein Schild aus Magie – der nächste gegnerische Angriff macht 60 % weniger Schaden, und du gewinnst 15 Mana zurück.",
+  },
+  {
+    id: "bow-4",
+    weapon: "bow",
+    tier: 4,
+    name: "Giftpfeil",
+    icon: "🟢",
+    manaCost: 25,
+    cooldown: 2,
+    multiplier: 1,
+    poison: { percent: 0.35, rounds: 3 },
+    description: "Ein vergifteter Pfeil – der Gegner erleidet 3 Runden lang Giftschaden.",
+  },
+  {
+    id: "bow-5",
+    weapon: "bow",
+    tier: 5,
+    name: "Brandpfeil",
+    icon: "🔥",
+    manaCost: 30,
+    cooldown: 2,
+    multiplier: 1.1,
+    burn: { percent: 0.3, rounds: 3 },
+    description: "Ein brennender Pfeil mit 1,1-fachem Schaden – der Gegner brennt 3 Runden lang.",
+  },
+  {
+    id: "bow-6",
+    weapon: "bow",
+    tier: 6,
+    name: "Kopfschuss",
+    icon: "🦅",
+    manaCost: 40,
+    cooldown: 4,
+    multiplier: 1.5,
+    guaranteedCrit: true,
+    description: "Ein Schuss genau zwischen die Augen: 1,5-facher Schaden, trifft immer kritisch.",
+  },
 ];
 
 export function getAbility(id: AbilityId): AbilityDef {
@@ -478,6 +852,20 @@ export function getAbility(id: AbilityId): AbilityDef {
 /** Fähigkeiten eines Waffentyps, erste zuerst. */
 export function abilitiesOf(weapon: SkillWeapon): AbilityDef[] {
   return ABILITIES.filter((a) => a.weapon === weapon);
+}
+
+/** So viele Fähigkeiten trägt eine Waffe: die Hälfte ihres Pools – Einhand 2 von 4, Zweihand 3 von 6. */
+export function abilitySlots(weapon: SkillWeapon): number {
+  return abilitiesOf(weapon).length / 2;
+}
+
+/** Die Fähigkeiten einer Waffe – fest aus ihrer uid gewürfelt, in der Reihenfolge des Pools. */
+export function rollWeaponAbilities(uid: string, weapon: SkillWeapon): AbilityId[] {
+  const rng = seededRng(hash(`abilities|${uid}`));
+  const pool = abilitiesOf(weapon).map((a) => a.id);
+  const picked = new Set<AbilityId>();
+  while (picked.size < abilitySlots(weapon)) picked.add(pool[Math.floor(rng() * pool.length)]);
+  return pool.filter((id) => picked.has(id));
 }
 
 /** Ist das eine bekannte Fähigkeits-Id? (für Daten von aussen, z. B. Koop-Befehle) */

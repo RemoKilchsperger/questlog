@@ -7,6 +7,7 @@
 // zählt rückwirkend. Kämpfe, besiegte Bosse und Dungeons werden erst ab
 // Einführung der Erfolge in `records` mitgezählt.
 
+import type { AbilityId } from "./abilities";
 import { BOSS_SETS } from "./bossSets";
 import { BOSS_ITEMS } from "./items";
 import { AREAS, DUNGEONS } from "./creatures";
@@ -45,6 +46,8 @@ export interface Records {
   towerBest: number;
   towerBosses: number;
   towerBlessings: number;
+  /** Alle Fähigkeiten, die je auf einer eigenen Waffe lagen */
+  abilitiesSeen: AbilityId[];
 }
 
 export const EMPTY_RECORDS: Records = {
@@ -63,6 +66,7 @@ export const EMPTY_RECORDS: Records = {
   towerBest: 0,
   towerBosses: 0,
   towerBlessings: 0,
+  abilitiesSeen: [],
 };
 
 /** Alles, woraus sich der Fortschritt berechnet. */
@@ -160,7 +164,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: "perfect-day", name: "Perfekter Tag", icon: "🌟", category: "quests", description: "{n}-mal alle Tagesaufträge eines Tages abgegeben", tiers: [1, 10, 30], title: "Perfektionist", progress: (i) => i.records.perfectBonusDays },
   // Charakter
   { id: "climber", name: "Aufsteiger", icon: "⬆️", category: "character", description: "Level {n} erreicht", tiers: [10, 30, 60], title: "Legende", progress: (i) => getLevel(i.character.totalXp) },
-  { id: "scholar", name: "Gelehrter", icon: "📖", category: "character", description: "{n} Fähigkeiten freigeschaltet", tiers: [1, 8, 22], title: "Gelehrter", progress: (i) => i.character.abilities.length },
+  { id: "scholar", name: "Gelehrter", icon: "📖", category: "character", description: "{n} verschiedene Fähigkeiten auf deinen Waffen gehabt", tiers: [5, 20, 45], title: "Gelehrter", progress: (i) => i.records.abilitiesSeen.length },
   { id: "gear-score", name: "Gut gerüstet", icon: "🛡️", category: "character", description: "Gear Score {n} erreicht", tiers: [15, 50, 100], title: "Unbezwingbar", progress: (i) => i.records.maxGearScore },
   { id: "classes", name: "Wandelbar", icon: "🎭", category: "character", description: "{n} verschiedene Klassen gespielt", tiers: [1, 4, 11], title: "Wandelbar", progress: (i) => i.records.classesWorn.length },
   // Kampf

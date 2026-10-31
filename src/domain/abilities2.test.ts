@@ -1,23 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { ABILITIES, getAbility, type AbilityId } from "./abilities";
+import { fullWeapon } from "../test/weapons";
+import { ABILITIES, abilitiesOf, abilitySlots, getAbility, rollWeaponAbilities, type AbilityId } from "./abilities";
 import { attackRound, getHeroCombatProfile, startBattle, type BattleState, type HeroCombatProfile } from "./combat";
 import { resolveRound, startCoopBattle } from "./coopCombat";
 import { getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { createItem } from "./items";
+import { createItem, ensureItemExtras, weaponAbilities } from "./items";
 import { xpForNextLevel } from "./leveling";
-import {
-  abilityUnlockBlocker,
-  learnSkill,
-  MAX_SKILL_RANK,
-  SECOND_ABILITY_COST,
-  SECOND_ABILITY_LEVEL,
-  unlockAbility,
-  unspentSkillPoints,
-} from "./skills";
-import type { Character, Equipment } from "./types";
+import type { Character, Equipment, WeaponType } from "./types";
 
-const heroAt = (level: number, abilities: AbilityId[] = []): Character => {
+const heroAt = (level: number): Character => {
   let totalXp = 0;
   for (let l = 1; l < level; l++) totalXp += xpForNextLevel(l);
   return {
@@ -28,22 +20,15 @@ const heroAt = (level: number, abilities: AbilityId[] = []): Character => {
     stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
     spentPoints: 0,
     skills: {},
-    abilities,
   };
 };
-const master = (character: Character, weapon: Parameters<typeof learnSkill>[1]) => {
-  let next = character;
-  for (let i = 0; i < MAX_SKILL_RANK; i++) next = learnSkill(next, weapon);
-  return next;
-};
-const allAbilities = ABILITIES.map((a) => a.id);
 const withWeapons = (...ids: string[]): Equipment => ({
   ...EMPTY_EQUIPMENT,
-  weapon1: ids[0] ? createItem(ids[0], "common", "w1") : null,
-  weapon2: ids[1] ? createItem(ids[1], "common", "w2") : null,
+  weapon1: ids[0] ? fullWeapon(ids[0], "common", "w1") : null,
+  weapon2: ids[1] ? fullWeapon(ids[1], "common", "w2") : null,
 });
 const profileWith = (...weapons: string[]): HeroCombatProfile =>
-  getHeroCombatProfile(heroAt(30, allAbilities), withWeapons(...weapons));
+  getHeroCombatProfile(heroAt(30), withWeapons(...weapons));
 /** Kampf gegen einen sehr zähen Wolf */
 const battleWith = (...weapons: string[]): BattleState => {
   const battle = startBattle("b", "Held", profileWith(...weapons), getCreature("grey-wolf").creature);
@@ -55,24 +40,45 @@ const heroDamage = (events: ReturnType<typeof attackRound>["events"]) =>
 const enemyDamage = (events: ReturnType<typeof attackRound>["events"]) =>
   events.reduce((sum, e) => sum + (e.type === "hit" && e.attacker === "enemy" ? e.damage : 0), 0);
 
-describe("Zweite Fähigkeiten: Freischalten", () => {
-  it("braucht Rang 3, Level 25 und 2 Skillpunkte – unabhängig von der ersten Fähigkeit", () => {
-    const low = master(heroAt(SECOND_ABILITY_LEVEL - 1), "sword");
-    expect(abilityUnlockBlocker(low, "sword-2")).toMatch(/Level 25/);
+describe("Fähigkeiten auf der Waffe", () => {
+  const types: WeaponType[] = ["dagger", "sword", "axe", "mace", "scepter", "shield", "greatsword", "greataxe", "greathammer", "staff", "bow"];
 
-    // Die zweite geht auch ohne die erste
-    const ready = master(heroAt(SECOND_ABILITY_LEVEL), "sword");
-    expect(abilityUnlockBlocker(ready, "sword-2")).toBeNull();
-    const second = unlockAbility(ready, "sword-2");
-    expect(unspentSkillPoints(second)).toBe(unspentSkillPoints(ready) - SECOND_ABILITY_COST);
-    expect(abilityUnlockBlocker(second, "sword")).toBeNull();
-    expect(abilityUnlockBlocker(master(heroAt(30), "axe"), "sword-2")).toMatch(/Rang 3/);
+  it("jede Waffe trägt die Hälfte ihres Pools – fest aus der uid, in Pool-Reihenfolge", () => {
+    for (const type of types) {
+      const pool = abilitiesOf(type).map((a) => a.id);
+      const item = createItem(`${type}-10`, "common", `u-${type}`);
+      expect(item.abilities, type).toHaveLength(abilitySlots(type));
+      expect(item.abilities).toEqual(pool.filter((id) => item.abilities!.includes(id)));
+      expect(createItem(`${type}-10`, "legendary", `u-${type}`).abilities).toEqual(item.abilities);
+    }
+    expect(abilitySlots("sword")).toBe(2);
+    expect(abilitySlots("shield")).toBe(2);
+    expect(abilitySlots("staff")).toBe(3);
+    expect(createItem("head-10", "common", "h").abilities).toBeUndefined();
   });
 
-  it("im Kampf stehen pro Waffe beide Fähigkeiten zur Wahl", () => {
-    expect(profileWith("sword-30", "axe-30").abilities).toEqual(["sword", "sword-2", "axe", "axe-2"]);
-    const onlyFirst = getHeroCombatProfile(heroAt(30, ["sword"]), withWeapons("sword-30"));
-    expect(onlyFirst.abilities).toEqual(["sword"]);
+  it("über viele Drops kommt jede Fähigkeit eines Pools vor, keine viel häufiger als andere", () => {
+    for (const type of types) {
+      const counts = new Map<AbilityId, number>();
+      for (let i = 0; i < 600; i++) for (const id of rollWeaponAbilities(`d${i}`, type)) counts.set(id, (counts.get(id) ?? 0) + 1);
+      for (const a of abilitiesOf(type)) expect(counts.get(a.id) ?? 0, a.id).toBeGreaterThan(220);
+    }
+  });
+
+  it("ältere Waffen ohne gespeicherte Fähigkeiten bekommen dieselben wie ein neuer Drop – auch beim Koop-Server", () => {
+    const old = { uid: "old-sword", itemId: "sword-10", rarity: "rare" as const, bonuses: {} };
+    expect(weaponAbilities(old)).toEqual(rollWeaponAbilities("old-sword", "sword"));
+    expect(ensureItemExtras(old).abilities).toEqual(rollWeaponAbilities("old-sword", "sword"));
+    const chosen = { ...old, abilities: ["sword-4"] as AbilityId[] };
+    expect(ensureItemExtras(chosen).abilities).toEqual(["sword-4"]);
+    expect(ensureItemExtras({ uid: "h", itemId: "head-10", rarity: "rare", bonuses: {} }).abilities).toBeUndefined();
+  });
+
+  it("im Kampf stehen die Fähigkeiten der angelegten Waffen bereit – ganz ohne Skillpunkte", () => {
+    const sword = createItem("sword-30", "common", "s1");
+    const axe = createItem("axe-30", "common", "a1");
+    const profile = getHeroCombatProfile(heroAt(1), { ...EMPTY_EQUIPMENT, weapon1: sword, weapon2: axe });
+    expect(profile.abilities).toEqual([...sword.abilities!, ...axe.abilities!]);
   });
 });
 
@@ -186,7 +192,7 @@ describe("Zweite Fähigkeiten im Koop", () => {
   it("Erdbeben schwächt den Boss für die ganze Gruppe", () => {
     const battle = coop(["greathammer-30"]);
     const result = resolveRound(battle, { a: { ability: "greathammer-2" } }, rng(0.5), 0);
-    expect(result.state.bossEffects.weaken).toEqual({ percent: 0.4, roundsLeft: 1 });
+    expect(result.state.bossEffects.weaken).toEqual({ percent: 0.3, roundsLeft: 1 });
   });
 
   it("Heiliges Licht heilt im Koop nur den Anwender", () => {

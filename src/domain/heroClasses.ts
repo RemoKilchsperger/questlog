@@ -57,7 +57,7 @@ export const HERO_CLASSES: readonly HeroClassDef[] = [
   { id: "paladin", name: "Paladin", icon: "🛡️", armorClass: "heavy", weapons: "Streitkolben und Schild", bonus: "+10 % Schaden, +20 % Rüstung, Bollwerk kostet die Hälfte, Bollwerk und Vergeltung schlagen mit halbem Schaden zu (Schildstoss), im Koop doppelte Bedrohung", matches: (w) => w.includes("mace") && w.includes("shield") },
   { id: "berserker", name: "Berserker", icon: "💢", armorClass: "heavy", weapons: "Grossaxt", bonus: "Unter 50 % Lebenspunkten +30 % Schaden", matches: has("greataxe") },
   { id: "champion", name: "Champion", icon: "👑", armorClass: "heavy", weapons: "Zweihandschwert", bonus: "+15 % Schaden und +10 % Lebenspunkte", matches: has("greatsword") },
-  { id: "warden", name: "Wächter", icon: "🏔️", armorClass: "heavy", weapons: "Grosshammer", bonus: "+15 % Lebenspunkte und +10 % Rüstung, Erdbeben schwächt den Gegner 3 statt 2 Runden", matches: has("greathammer") },
+  { id: "warden", name: "Wächter", icon: "🏔️", armorClass: "heavy", weapons: "Grosshammer", bonus: "+15 % Lebenspunkte und +10 % Rüstung, Schwächungen wie Erdbeben wirken 1 Runde länger", matches: has("greathammer") },
 ];
 
 export function getHeroClass(id: HeroClassId): HeroClassDef {
@@ -102,7 +102,7 @@ export function classStatBonus(id: HeroClassId | null): ClassStatBonus {
 /**
  * Fähigkeit so, wie die Klasse sie verändert: Magier (alle Fähigkeiten
  * günstiger und stärker), Hexer (stärkere, längere Zustände), Waldläufer
- * (Pfeilhagel mit 5 Pfeilen), Paladin (halbes Bollwerk, Schildstoss), Wächter (längeres Erdbeben).
+ * (Pfeilhagel mit 5 Pfeilen), Paladin (halbes Bollwerk, Schildstoss), Wächter (längere Schwächung).
  */
 export function classAbility(id: AbilityId, heroClass: HeroClassId | null | undefined): AbilityDef {
   const base = getAbility(id);
@@ -120,7 +120,7 @@ export function classAbility(id: AbilityId, heroClass: HeroClassId | null | unde
       if (id === "shield") return { ...base, manaCost: Math.round(base.manaCost / 2), ...SHIELD_BASH };
       return id === "shield-2" ? { ...base, ...SHIELD_BASH } : base;
     case "warden":
-      return base.weaken && id === "greathammer-2" ? { ...base, weaken: { ...base.weaken, rounds: base.weaken.rounds + 1 } } : base;
+      return base.weaken ? { ...base, weaken: { ...base.weaken, rounds: base.weaken.rounds + 1 } } : base;
     default:
       return base;
   }

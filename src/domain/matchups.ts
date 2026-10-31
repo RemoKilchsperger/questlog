@@ -4,13 +4,14 @@
 // geht. Gilt solo und im Koop.
 //
 // Schadensarten der Waffen – normale Angriffe zählen mit der Hauptwaffe (die
-// erste Waffe, die kein Schild ist), Fähigkeiten mit ihrer eigenen Waffe:
+// erste Waffe, die kein Schild ist), Fähigkeiten mit ihrer eigenen Waffe (Heiliger Hammer: Magie):
 //   - Klingen: Schwert, Zweihandschwert, Axt, Grossaxt
 //   - Wucht:   Streitkolben, Grosshammer, Schild
 //   - Stich:   Dolch, Bogen
 //   - Magie:   Stab, Zepter
 // Dazu Gift, Feuer und Bluten (Schaden über Zeit).
 
+import type { AbilityDef } from "./abilities";
 import type { SkillWeapon } from "./skills";
 
 export type DamageKind = "blade" | "blunt" | "pierce" | "magic";
@@ -35,6 +36,11 @@ export const WEAPON_KIND: Record<SkillWeapon, DamageKind> = {
   staff: "magic",
   scepter: "magic",
 };
+
+/** Schadensart einer Fähigkeit – null, wenn sie nicht trifft (Heilung, Schutz). */
+export function abilityKind(ability: Pick<AbilityDef, "weapon" | "kind" | "hits">): DamageKind | null {
+  return ability.hits === 0 ? null : (ability.kind ?? WEAPON_KIND[ability.weapon]);
+}
 
 export const MATCHUP_LABELS: Record<Matchup, { name: string; icon: string; detail: string }> = {
   blade: { name: "Klingen", icon: "⚔️", detail: "Schwert, Zweihandschwert, Axt, Grossaxt" },

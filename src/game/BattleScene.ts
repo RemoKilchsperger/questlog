@@ -4,6 +4,7 @@
 
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
+import { animationOf } from "./abilityAnimations";
 import { getBossAbilityById } from "../domain/bossAbilities";
 import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
 import type { BattleEvent, BattleState, Side } from "../domain/combat";
@@ -702,7 +703,7 @@ export class BattleScene extends Phaser.Scene {
     this.tint(hero, 0xffe28f, 300);
     sfx.ability();
     const at = this.center("hero");
-    switch (id) {
+    switch (animationOf(id)) {
       case "dagger": // in Rauch auflösen
         fx.burst(this, at, 0x5a3a8a, 16, 60);
         sfx.whoosh(0.2);
@@ -817,7 +818,7 @@ export class BattleScene extends Phaser.Scene {
         fx.ring(this, at, 0xffe66b, 50, 300);
         sfx.magic();
         break;
-      case "staff-3": // Eissplitter: Splitter bilden sich und schweben über dem Helden
+      case "staff-3": // Eisstrahl: Splitter bilden sich und schweben über dem Helden
         if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -30, duration: 220, yoyo: true, hold: 300 });
         this.iceShards = fx.iceShards(this, at);
         sfx.magic();
@@ -868,7 +869,7 @@ export class BattleScene extends Phaser.Scene {
     const hit = (shake = 0) => this.impact(defender, event.damage, event.crit, shake);
     const hero = this.fighters.hero;
     const target = this.center(defender);
-    switch (id) {
+    switch (id && animationOf(id)) {
       case "dagger": {
         // Hinter dem Gegner auftauchen, zustechen, zurück in den Schatten
         const body = hero.body;

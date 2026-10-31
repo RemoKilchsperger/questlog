@@ -1,14 +1,10 @@
 import { motion } from "motion/react";
 import { useCallback, useState } from "react";
-import { abilitiesOf, type AbilityDef } from "../domain/abilities";
+import { abilitiesOf, abilitySlots, type AbilityDef } from "../domain/abilities";
+import { availableAbilities } from "../domain/combat";
 import { getItem, getItemType } from "../domain/items";
 import { getLevel } from "../domain/leveling";
 import {
-  ABILITY_COST,
-  ABILITY_UNLOCK_RANK,
-  abilityCost,
-  abilityUnlockBlocker,
-  hasAbility,
   MAX_SKILL_RANK,
   SKILL_BONUS_PER_RANK,
   SKILL_POINTS_PER_LEVEL,
@@ -18,8 +14,6 @@ import {
   skillResetBlocker,
   skillResetCost,
   unspentSkillPoints,
-  SECOND_ABILITY_COST,
-  SECOND_ABILITY_LEVEL,
   type SkillNode,
 } from "../domain/skills";
 import { useGameStore } from "../store/gameStore";
@@ -33,7 +27,9 @@ const percent = (value: number) => `${Math.round(value * 100)} %`;
 /** Waffen-Skilltree: Skillpunkte aus Level-ups in Schadensboni pro Waffentyp stecken. */
 export function SkillTree() {
   const character = useGameStore((s) => s.character);
+  const equipment = useGameStore((s) => s.equipment);
   const unspent = unspentSkillPoints(character);
+  const equippedAbilities = availableAbilities(equipment);
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,9 +39,10 @@ export function SkillTree() {
           <p className="text-sm text-muted">
             Pro Level-up erhältst du {SKILL_POINTS_PER_LEVEL} Skillpunkt. Jeder Rang erhöht den Schaden aller Waffen
             dieses Typs um {percent(SKILL_BONUS_PER_RANK)} (höchstens {MAX_SKILL_RANK} Ränge), beim Schild dessen
-            Rüstung. Jeder Waffentyp – auch Zweihandwaffen – lässt sich unabhängig lernen. Ab Rang {ABILITY_UNLOCK_RANK} kannst du für{" "}
-            {ABILITY_COST} Skillpunkt die erste Kampf-Fähigkeit der Waffe freischalten – ab Level {SECOND_ABILITY_LEVEL} für{" "}
-            {SECOND_ABILITY_COST} Skillpunkte auch die zweite, unabhängig von der ersten. Fahre über ein Symbol, um zu sehen, was es kann.
+            Rüstung. Jeder Waffentyp – auch Zweihandwaffen – lässt sich unabhängig lernen. Kampf-Fähigkeiten bringen die
+            Waffen selbst mit: Einhandwaffen und Schilde je 2 aus ihren 4 möglichen, Zweihandwaffen 3 aus 6. Unter jedem
+            Waffentyp siehst du, welche es gibt – leuchtend die deiner angelegten Waffen. Fahre über ein Symbol, um zu sehen,
+            was es kann.
           </p>
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -65,10 +62,12 @@ export function SkillTree() {
         {SKILL_TREE.map((node) => (
           <section key={node.weapon} className="panel flex flex-col items-stretch gap-2 p-4">
             <SkillCard node={node} />
-            <div className="flex items-center gap-2">
-              <span className="flex-1 text-xs text-muted">Fähigkeiten ab Rang {ABILITY_UNLOCK_RANK}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="basis-full text-xs text-muted">
+                Mögliche Fähigkeiten · {abilitySlots(node.weapon)} pro Waffe
+              </span>
               {abilitiesOf(node.weapon).map((ability) => (
-                <AbilityIcon key={ability.id} ability={ability} />
+                <AbilityIcon key={ability.id} ability={ability} equipped={equippedAbilities.includes(ability.id)} />
               ))}
             </div>
           </section>
@@ -93,7 +92,7 @@ function SkillReset() {
         whileTap={{ scale: 0.95 }}
         disabled={blocker !== null}
         onClick={() => setConfirm(true)}
-        title={blocker ?? "Alle Ränge und Fähigkeiten zurücksetzen"}
+        title={blocker ?? "Alle Ränge zurücksetzen"}
         className="rounded-md border-2 border-danger/70 bg-danger/10 px-3 py-2 text-sm text-danger hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
       >
         ↺ Zurücksetzen <Gold amount={cost} className="font-bold" />
@@ -109,8 +108,8 @@ function SkillReset() {
         }}
       >
         <p>
-          Für <Gold amount={cost} className="font-bold text-gold" /> vergisst du alle Ränge und freigeschalteten
-          Fähigkeiten. Alle Skillpunkte sind danach wieder frei und du kannst sie neu verteilen.
+          Für <Gold amount={cost} className="font-bold text-gold" /> vergisst du alle Ränge. Alle Skillpunkte sind
+          danach wieder frei und du kannst sie neu verteilen.
         </p>
       </ConfirmDialog>
     </>
@@ -177,67 +176,35 @@ function SkillCard({ node }: { node: SkillNode }) {
 }
 
 /**
- * Symbol einer Kampf-Fähigkeit unter dem Waffen-Skill: freigeschaltet, jetzt
- * freischaltbar (Klick) oder noch gesperrt. Beim Überfahren erklärt eine Karte,
- * was die Fähigkeit kann und was sie braucht.
+ * Symbol einer Kampf-Fähigkeit unter dem Waffen-Skill – leuchtend, wenn sie auf
+ * einer angelegten Waffe liegt. Beim Überfahren erklärt eine Karte, was sie kann.
  */
-function AbilityIcon({ ability }: { ability: AbilityDef }) {
-  const character = useGameStore((s) => s.character);
-  const unlock = useGameStore((s) => s.unlockAbility);
-  const learned = hasAbility(character, ability.id);
-  const blocker = abilityUnlockBlocker(character, ability.id);
-  const ready = !learned && blocker === null;
-  const look = learned
-    ? "border-intellect bg-intellect/15"
-    : ready
-      ? "border-xp bg-xp/10 hover:bg-xp/20"
-      : "border-night-700 bg-night-900";
-
+function AbilityIcon({ ability, equipped }: { ability: AbilityDef; equipped: boolean }) {
   return (
-    <HoverCard card={<AbilityCardContent ability={ability} learned={learned} blocker={blocker} />} border={learned ? "border-intellect/70" : "border-night-700"}>
-      <motion.button
-        whileTap={ready ? { scale: 0.85 } : undefined}
-        onClick={() => ready && unlock(ability.id)}
-        aria-label={`${ability.name}${learned ? " (freigeschaltet)" : ready ? " freischalten" : " (gesperrt)"}`}
-        className={`relative flex h-11 w-11 items-center justify-center rounded-md border-2 text-2xl ${look} ${ready ? "cursor-pointer" : "cursor-default"}`}
+    <HoverCard card={<AbilityCardContent ability={ability} equipped={equipped} />} border={equipped ? "border-intellect/70" : "border-night-700"}>
+      <span
+        aria-label={`${ability.name}${equipped ? " (auf deiner Waffe)" : ""}`}
+        className={`flex h-10 w-10 cursor-default items-center justify-center rounded-md border-2 text-2xl ${
+          equipped ? "border-intellect bg-intellect/15" : "border-night-700 bg-night-900"
+        }`}
       >
-        <span aria-hidden className={learned || ready ? "" : "opacity-40 grayscale"}>
+        <span aria-hidden className={equipped ? "" : "opacity-60"}>
           {ability.icon}
         </span>
-        {ready && (
-          <span aria-hidden className="num absolute -right-1.5 -top-1.5 rounded-full bg-xp px-1 text-xs leading-4 text-night-950">
-            +
-          </span>
-        )}
-        {!learned && !ready && (
-          <span aria-hidden className="absolute -bottom-1 -right-1 text-xs">
-            🔒
-          </span>
-        )}
-      </motion.button>
+      </span>
     </HoverCard>
   );
 }
 
 /** Inhalt der Hover-Karte einer Fähigkeit. */
-function AbilityCardContent({ ability, learned, blocker }: { ability: AbilityDef; learned: boolean; blocker: string | null }) {
-  const cost = abilityCost(ability.id);
-  const costText = `${cost} Skillpunkt${cost > 1 ? "e" : ""}`;
-  const weapon = getItemType(ability.weapon).label;
-  const needs =
-    ability.tier === 1
-      ? `${weapon} auf Rang ${ABILITY_UNLOCK_RANK}`
-      : `${weapon} auf Rang ${ABILITY_UNLOCK_RANK} und Level ${SECOND_ABILITY_LEVEL}`;
-
+export function AbilityCardContent({ ability, equipped }: { ability: AbilityDef; equipped?: boolean }) {
   return (
     <>
       <div className="rounded-md bg-night-950/60 px-4 py-2 text-5xl" aria-hidden>
         {ability.icon}
       </div>
       <p className="font-pixel text-lg leading-tight text-intellect">{ability.name}</p>
-      <p className="text-xs text-muted">
-        {["Erste", "Zweite", "Dritte"][ability.tier - 1]} Fähigkeit · {weapon}
-      </p>
+      <p className="text-xs text-muted">Fähigkeit · {getItemType(ability.weapon).label}</p>
       <p className="num text-sm">
         <span className="text-intellect">💧 {ability.manaCost} Mana</span>
         <span className="text-muted"> · </span>
@@ -246,18 +213,7 @@ function AbilityCardContent({ ability, learned, blocker }: { ability: AbilityDef
         </span>
       </p>
       <p className="text-sm">{ability.description}</p>
-      {learned ? (
-        <p className="mt-1 text-xs text-xp">✨ Freigeschaltet</p>
-      ) : blocker === null ? (
-        <p className="mt-1 text-xs text-gold">Klicken zum Freischalten: {costText}</p>
-      ) : (
-        <>
-          <p className="mt-1 text-xs text-muted">
-            Braucht: {needs} · {costText}
-          </p>
-          <p className="text-xs text-danger">🔒 {blocker}</p>
-        </>
-      )}
+      {equipped && <p className="mt-1 text-xs text-xp">✨ Auf deiner angelegten Waffe</p>}
     </>
   );
 }

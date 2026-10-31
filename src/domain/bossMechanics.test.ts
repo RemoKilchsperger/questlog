@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { ABILITIES } from "./abilities";
 import { BOSS_PHASES, DRUMMER_BONUS, getBossPhase, HEALER_HEAL, SHIELD_DAMAGE_TAKEN } from "./bossMechanics";
 import { attackRound, getHeroCombatProfile, setTarget, startBattle, type BattleEvent, type BattleState } from "./combat";
 import {
@@ -29,7 +28,6 @@ const hero = (): Character => {
     stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
     spentPoints: 0,
     skills: {},
-    abilities: ABILITIES.map((a) => a.id),
   };
 };
 const profile = getHeroCombatProfile(hero(), { ...EMPTY_EQUIPMENT, weapon1: createItem("sword-0", "common", "w1") });

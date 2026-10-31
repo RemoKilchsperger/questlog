@@ -1,3 +1,4 @@
+import { rollWeaponAbilities, type AbilityId } from "./abilities";
 import { effectOf, rollItemEffect, rollsEffect } from "./itemEffects";
 import { ARMOR_CLASSES, BOSS_ARMOR_CLASS, getArmorClass, METAL_PREFIXES } from "./armorClasses";
 import { MAX_LEVEL } from "./leveling";
@@ -12,6 +13,7 @@ import type {
   Rarity,
   StatKey,
   Stats,
+  WeaponType,
 } from "./types";
 
 export const ARMOR_SLOTS: readonly ArmorSlot[] = ["head", "chest", "arms", "legs", "feet"];
@@ -458,8 +460,22 @@ export function createItem(
     const [stat] = pool.splice(Math.floor(rng() * pool.length), 1);
     bonuses[stat] = bonusValue(rarity, def.requiredLevel);
   }
-  // Legendäre Items aus der normalen Beute bekommen einen Spezialeffekt – fest aus der uid
-  return { uid, itemId, rarity, bonuses, ...(rollsEffect(def, rarity) && { effect: rollItemEffect(uid, def.kind) }) };
+  // Legendäre Items aus der normalen Beute bekommen einen Spezialeffekt, Waffen ihre Fähigkeiten – beides fest aus der uid
+  return {
+    uid,
+    itemId,
+    rarity,
+    bonuses,
+    ...(rollsEffect(def, rarity) && { effect: rollItemEffect(uid, def.kind) }),
+    ...(def.kind === "weapon" && { abilities: rollWeaponAbilities(uid, def.type as WeaponType) }),
+  };
+}
+
+/** Kampf-Fähigkeiten eines Exemplars: gespeichert oder (ältere Waffen) aus der uid – Rüstung hat keine. */
+export function weaponAbilities(owned: OwnedItem): AbilityId[] {
+  const def = getItem(owned.itemId);
+  if (def.kind !== "weapon") return [];
+  return owned.abilities ?? rollWeaponAbilities(owned.uid, def.type as WeaponType);
 }
 
 /** Höchste Verbesserungsstufe beim Schmied. */
@@ -493,6 +509,7 @@ export function getItemStats(owned: OwnedItem): ItemStats {
     bonuses: owned.bonuses,
     upgrade,
     effect: effectOf(owned, def),
+    abilities: weaponAbilities(owned),
   };
 }
 
@@ -504,9 +521,16 @@ export function sellPrice(owned: OwnedItem): number {
   return Math.max(1, Math.floor(getItem(owned.itemId).price * getRarity(owned.rarity).priceMultiplier * SELL_RATE));
 }
 
-/** Legendäre Items aus älteren Spielständen bekommen beim Laden ihren Spezialeffekt (fest aus der uid). */
-export function ensureEffect(item: OwnedItem): OwnedItem {
-  if (item.effect) return item;
+/**
+ * Items aus älteren Spielständen bekommen beim Laden, was ein neuer Drop hätte (fest aus der uid):
+ * legendäre ihren Spezialeffekt, Waffen ihre Fähigkeiten.
+ */
+export function ensureItemExtras(item: OwnedItem): OwnedItem {
   const def = ITEMS_BY_ID.get(item.itemId);
-  return def && rollsEffect(def, item.rarity) ? { ...item, effect: rollItemEffect(item.uid, def.kind) } : item;
+  if (!def) return item;
+  return {
+    ...item,
+    ...(!item.effect && rollsEffect(def, item.rarity) && { effect: rollItemEffect(item.uid, def.kind) }),
+    ...(!item.abilities && def.kind === "weapon" && { abilities: rollWeaponAbilities(item.uid, def.type as WeaponType) }),
+  };
 }

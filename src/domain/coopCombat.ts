@@ -397,6 +397,12 @@ export interface CoopHero {
     guard?: Guard;
     /** Kriegsschrei: mehr Schaden */
     empower?: ActiveBuff;
+    /** Schildwall/Wutschrei: erlittener Schaden × (1 + percent) – negativ: weniger */
+    damageTaken?: ActiveBuff;
+    /** Titanenschlag: Faktor auf den Schaden der nächsten Aktion */
+    charged?: number;
+    /** Arkane Heilung: heilt `percent` der max. LP am Rundenende */
+    renew?: ActiveBuff;
   };
   threat: number;
   /** Auf 0 LP gefallen – handelt nicht und wird nicht angegriffen */
@@ -408,8 +414,10 @@ export interface CoopHero {
 export type CoopEvent =
   | { type: "potion"; heroId: string; targetId: string; potionId: string; heal: number; buff?: BuffKind; revive?: boolean }
   | { type: "ability"; heroId: string; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
-  /** Ein Held heilt sich durch eine Fähigkeit */
-  | { type: "selfHeal"; heroId: string; heal: number }
+  /** Ein Held heilt sich durch eine Fähigkeit – `by`: Ein Mitspieler hat geheilt (Arkane Heilung) */
+  | { type: "selfHeal"; heroId: string; heal: number; by?: string }
+  /** Läuterung: Gift, Feuer und Bluten auf dem Helden sind weg */
+  | { type: "cleansed"; heroId: string }
   /** Parade/Vergeltung fängt Schaden ab und trifft den Boss */
   | { type: "guarded"; heroId: string; prevented: number }
   | { type: "counter"; heroId: string; damage: number }
@@ -693,7 +701,7 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
 
 /** Warum diese Fähigkeit nicht geht – oder null. */
 export function coopAbilityBlocker(hero: CoopHero, id: AbilityId): string | null {
-  if (!hero.abilities.includes(id)) return "Dafür brauchst du die passende Waffe und die freigeschaltete Fähigkeit.";
+  if (!hero.abilities.includes(id)) return "Diese Fähigkeit liegt auf keiner deiner angelegten Waffen.";
   const wait = hero.cooldowns?.[id] ?? 0;
   if (wait > 0) return cooldownText(wait);
   const { manaCost } = classAbility(id, hero.heroClass);
@@ -842,9 +850,12 @@ export function resolveRound(
 
     const ability = action.ability && !coopAbilityBlocker(hero, action.ability) ? classAbility(action.ability, hero.heroClass) : null;
     const aoe = ability?.aoe;
-    // Schadensart: die Waffe der Fähigkeit, sonst die Hauptwaffe (matchups.ts)
+    // Schadensart: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe (matchups.ts)
     const heroWeapon = ability?.weapon ?? hero.weapon;
-    const heroKind = heroWeapon ? WEAPON_KIND[heroWeapon] : null;
+    const heroKind = ability?.kind ?? (heroWeapon ? WEAPON_KIND[heroWeapon] : null);
+    // Titanenschlag: Die Aktion nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
+    const charge = hero.effects.charged ?? 1;
+    hero.effects.charged = undefined;
     // Ziel: ein lebender Begleiter – sonst der Boss
     const target = adds.find((f) => f.id === action.target && f.c.hp > 0) ?? boss;
     const plain = buffed(hero);
@@ -865,11 +876,25 @@ export function resolveRound(
       if (ability.guard) hero.effects.guard = ability.guard;
       // +1, weil die Verstärkung erst ab der nächsten Runde zählt
       if (ability.empower) hero.effects.empower = { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 };
-      if (ability.heal) {
-        const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(hero.combatant.maxHp * ability.heal));
-        hero.combatant.hp += heal;
-        if (heal > 0) events.push({ type: "selfHeal", heroId: hero.id, heal });
+      // Heilung – Arkane Heilung heilt die Mitspieler mit `groupHeal` mit
+      const healed = ability.groupHeal ? heroes.filter((h) => !h.down) : [hero];
+      for (const h of healed) {
+        const share = h === hero ? 1 : ability.groupHeal!;
+        if (ability.heal) {
+          const heal = Math.min(h.combatant.maxHp - h.combatant.hp, Math.round(h.combatant.maxHp * ability.heal * share));
+          h.combatant.hp += heal;
+          if (heal > 0) events.push({ type: "selfHeal", heroId: h.id, heal, ...(h !== hero && { by: hero.id }) });
+        }
+        if (ability.renew) h.effects.renew = { percent: ability.renew.percent * share, roundsLeft: ability.renew.rounds };
       }
+      if (ability.cleanse && (hero.effects.poison || hero.effects.burn || hero.effects.bleed)) {
+        hero.effects = { ...hero.effects, poison: undefined, burn: undefined, bleed: undefined };
+        events.push({ type: "cleansed", heroId: hero.id });
+      }
+      if (ability.damageTaken) hero.effects.damageTaken = { percent: ability.damageTaken.percent, roundsLeft: ability.damageTaken.rounds };
+      if (ability.charge) hero.effects.charged = ability.charge;
+      if (ability.manaGain) hero.mana = Math.min(hero.maxMana, hero.mana + ability.manaGain);
+      if (ability.taunt) taunts.push(hero);
       // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner
       for (const foe of aoe === "all" ? living() : [target]) {
         if (ability.weaken) foe.fx = { ...foe.fx, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
@@ -891,8 +916,10 @@ export function resolveRound(
     let dealt = 0;
     /** Ein Treffer des Helden – `share` < 1 bei Splash-Schaden auf Umstehende. */
     const strike = (foe: Foe, share = 1) => {
-      // Finisher (Meucheln) und Verwundbarkeit des Gegners
-      const execute = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
+      // Finisher (Meucheln), Ausbluten und Verwundbarkeit des Gegners
+      const execute =
+        (ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1) *
+        (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1);
       const vulnerable = 1 + (foe.fx.vulnerable?.percent ?? 0);
       const taken = takenBy(foe);
       const effects = hero.itemEffects;
@@ -917,10 +944,10 @@ export function resolveRound(
       const attacker: Combatant = ability
         ? {
             ...strong,
-            damage: strong.damage * ability.multiplier * execute * vulnerable * share * taken * kindFactor * itemFactor,
+            damage: strong.damage * ability.multiplier * execute * charge * vulnerable * share * taken * kindFactor * itemFactor,
             critChance: ability.guaranteedCrit ? 1 : critChance,
           }
-        : { ...strong, damage: strong.damage * vulnerable * taken * kindFactor * itemFactor, critChance };
+        : { ...strong, damage: strong.damage * charge * share * vulnerable * taken * kindFactor * itemFactor, critChance };
       const armor = ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0)));
       const hit = rollHit(attacker, { ...foe.c, armor }, rng);
       dealt += Math.min(foe.c.hp, hit.damage);
@@ -1021,6 +1048,8 @@ export function resolveRound(
   const elite = state.elite ?? [];
   /** Wie Gruppen-Fähigkeiten: Was alle trifft, trifft jeden mit dem Schaden wie solo (ohne Gruppenzuschlag) */
   const soloScale = 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1);
+  /** Schildwall/Wutschrei: Faktor auf den Schaden, den ein Held erleidet */
+  const hurt = (hero: CoopHero) => Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0));
   /** Der Gegner fällt – ein explosiver Elite trifft alle stehenden Helden (Bollwerk blockt). Fallen alle, ist der Kampf verloren. */
   const enemyDown = () => {
     if (elite.includes("explosive")) {
@@ -1031,7 +1060,7 @@ export function resolveRound(
           hits.push({ heroId: hero.id, damage: 0, blocked: true });
           continue;
         }
-        const blast = rollHit({ ...boss.c, damage: (boss.c.damage * EXPLOSION_FACTOR) / soloScale, critChance: 0 }, buffed(hero), rng);
+        const blast = rollHit({ ...boss.c, damage: ((boss.c.damage * EXPLOSION_FACTOR) / soloScale) * hurt(hero), critChance: 0 }, buffed(hero), rng);
         hero.combatant.hp = Math.max(0, hero.combatant.hp - blast.damage);
         hits.push({ heroId: hero.id, damage: blast.damage });
       }
@@ -1115,8 +1144,10 @@ export function resolveRound(
         }
         const defender = special?.ignoreArmor ? { ...buffed(target), armor: 0 } : buffed(target);
         // Item-Effekt „Standhaft“: Boss-Fähigkeiten treffen schwächer
-        const attackerFor =
-          special && hasEffect(target.itemEffects, "steadfast") ? { ...attacker, damage: attacker.damage * (1 - EFFECT.steadfast) } : attacker;
+        const attackerFor = {
+          ...attacker,
+          damage: attacker.damage * hurt(target) * (special && hasEffect(target.itemEffects, "steadfast") ? 1 - EFFECT.steadfast : 1),
+        };
         let taken = 0;
         for (let i = 0; i < (special?.hits ?? (swift ? 2 : 1)) && target.combatant.hp > 0; i++) {
           const rolled = rollHit(attackerFor, defender, rng);
@@ -1195,7 +1226,7 @@ export function resolveRound(
         events.push({ type: "blocked", heroId: target.id, add: add.id });
         continue;
       }
-      const hit = rollHit({ ...add.c, damage: add.c.damage * (1 - (add.fx.weaken?.percent ?? 0)) }, buffed(target), rng);
+      const hit = rollHit({ ...add.c, damage: add.c.damage * (1 - (add.fx.weaken?.percent ?? 0)) * hurt(target) }, buffed(target), rng);
       target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
       events.push({ type: "hit", attacker: add.id, target: target.id, ...hit });
       thorns(target, add, hit.damage);
@@ -1224,8 +1255,11 @@ export function resolveRound(
   // Kleriker: Regeneration am Ende der Runde
   if (status === "active") {
     for (const hero of heroes) {
-      // Kleriker und Item-Effekt „Lebensquell“
-      const regen = (hero.heroClass === "cleric" ? CLERIC_REGEN : 0) + (hasEffect(hero.itemEffects, "wellspring") ? EFFECT.wellspring : 0);
+      // Kleriker, Item-Effekt „Lebensquell“ und Arkane Heilung
+      const regen =
+        (hero.heroClass === "cleric" ? CLERIC_REGEN : 0) +
+        (hasEffect(hero.itemEffects, "wellspring") ? EFFECT.wellspring : 0) +
+        (hero.effects.renew?.percent ?? 0);
       if (hero.down || regen <= 0) continue;
       const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(hero.combatant.maxHp * regen));
       if (heal > 0) {
@@ -1239,7 +1273,7 @@ export function resolveRound(
   const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
   heroes = heroes.map((h) => ({
     ...h,
-    effects: { ...h.effects, empower: tick(h.effects.empower) },
+    effects: { ...h.effects, empower: tick(h.effects.empower), damageTaken: tick(h.effects.damageTaken), renew: tick(h.effects.renew) },
     cooldowns: tickCooldowns(h.cooldowns, used.get(h.id) ?? null),
     threat: Math.round(h.threat * (1 - THREAT_DECAY)),
     mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + MANA_REGEN),

@@ -4,22 +4,15 @@ import { EMPTY_EQUIPMENT } from "./equipment";
 import { createItem, getItemStats } from "./items";
 import { xpForNextLevel } from "./leveling";
 import {
-  ABILITY_COST,
-  ABILITY_UNLOCK_RANK,
-  abilityCost,
-  abilityUnlockBlocker,
   learnSkill,
   MAX_SKILL_RANK,
   resetSkills,
-  SECOND_ABILITY_COST,
-  SECOND_ABILITY_LEVEL,
   skillResetBlocker,
   skillResetCost,
   SKILL_BONUS_PER_RANK,
   skillBlocker,
   skillDamageBonus,
   skillRank,
-  unlockAbility,
   unspentSkillPoints,
 } from "./skills";
 import type { Character, Equipment } from "./types";
@@ -36,7 +29,6 @@ const heroAt = (level: number): Character => {
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
     spentPoints: 0,
     skills: {},
-    abilities: [],
   };
 };
 
@@ -82,41 +74,13 @@ describe("Skilltree", () => {
     );
   });
 
-  it("Fähigkeiten gibt es ab Rang 3 – für einen weiteren Skillpunkt", () => {
+  it("Fähigkeiten kosten keine Skillpunkte – sie kommen mit der Waffe, auch ohne Rang", () => {
     const sword = createItem("sword-30", "common", "s");
     const equipment: Equipment = { ...EMPTY_EQUIPMENT, weapon1: sword };
-    expect(getHeroCombatProfile(heroAt(20), equipment).abilities).toEqual([]);
-
-    const trained = learnTimes(heroAt(20), "sword", ABILITY_UNLOCK_RANK - 1);
-    expect(abilityUnlockBlocker(trained, "sword")).toMatch(/Rang 3/);
-
-    const master = learnSkill(trained, "sword");
-    expect(abilityUnlockBlocker(master, "sword")).toBeNull();
-    const unlocked = unlockAbility(master, "sword");
-    expect(unspentSkillPoints(unlocked)).toBe(unspentSkillPoints(master) - ABILITY_COST);
-    expect(getHeroCombatProfile(unlocked, equipment).abilities).toEqual(["sword"]);
-    expect(abilityUnlockBlocker(unlocked, "sword")).toMatch(/Bereits/);
-    // Ohne passende Waffe bleibt die Fähigkeit im Kampf weg.
-    expect(getHeroCombatProfile(unlocked, EMPTY_EQUIPMENT).abilities).toEqual([]);
-  });
-
-  it("die dritte Fähigkeit der Zweihandwaffen gibt es wie die zweite ab Level 25 für 2 Skillpunkte", () => {
-    const young = learnTimes(heroAt(SECOND_ABILITY_LEVEL - 1), "staff", ABILITY_UNLOCK_RANK);
-    expect(abilityUnlockBlocker(young, "staff-3")).toMatch(/Level 25/);
-
-    const grown = learnTimes(heroAt(SECOND_ABILITY_LEVEL), "staff", ABILITY_UNLOCK_RANK);
-    expect(abilityCost("staff-3")).toBe(SECOND_ABILITY_COST);
-    expect(abilityUnlockBlocker(grown, "staff-3")).toBeNull();
-    const unlocked = unlockAbility(grown, "staff-3");
-    expect(unspentSkillPoints(unlocked)).toBe(unspentSkillPoints(grown) - SECOND_ABILITY_COST);
-    const staff = { ...EMPTY_EQUIPMENT, weapon1: createItem("staff-30", "common", "s") };
-    expect(getHeroCombatProfile(unlocked, staff).abilities).toEqual(["staff-3"]);
-  });
-
-  it("ohne freie Skillpunkte lässt sich keine Fähigkeit freischalten", () => {
-    const master = learnTimes(heroAt(MAX_SKILL_RANK + 1), "dagger", MAX_SKILL_RANK);
-    expect(unspentSkillPoints(master)).toBe(0);
-    expect(abilityUnlockBlocker(master, "dagger")).toMatch(/Skillpunkte/);
+    expect(getHeroCombatProfile(heroAt(1), equipment).abilities).toEqual(sword.abilities);
+    expect(getHeroCombatProfile(heroAt(20), EMPTY_EQUIPMENT).abilities).toEqual([]);
+    // Alle Skillpunkte fliessen in die Ränge: elf Waffentypen à fünf Ränge
+    expect(unspentSkillPoints(heroAt(20))).toBe(19);
   });
 });
 
@@ -128,14 +92,12 @@ describe("Skills zurücksetzen", () => {
     expect(skillResetCost(40)).toBeGreaterThan(skillResetCost(20));
   });
 
-  it("gibt alle Ränge und Fähigkeiten als freie Skillpunkte zurück", () => {
-    const hero = unlockAbility(learnTimes(heroAt(20), "sword", MAX_SKILL_RANK), "sword");
-    const trained = learnTimes(hero, "greataxe", 2);
-    expect(unspentSkillPoints(trained)).toBe(19 - MAX_SKILL_RANK - ABILITY_COST - 2);
+  it("gibt alle Ränge als freie Skillpunkte zurück", () => {
+    const trained = learnTimes(learnTimes(heroAt(20), "sword", MAX_SKILL_RANK), "greataxe", 2);
+    expect(unspentSkillPoints(trained)).toBe(19 - MAX_SKILL_RANK - 2);
 
     const reset = resetSkills(rich(trained, 5000));
     expect(reset.skills).toEqual({});
-    expect(reset.abilities).toEqual([]);
     expect(unspentSkillPoints(reset)).toBe(19);
     expect(reset.gold).toBe(5000 - skillResetCost(20));
   });

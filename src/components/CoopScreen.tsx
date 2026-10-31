@@ -56,8 +56,7 @@ import {
   TargetPicker,
 } from "./BattleStatus";
 import { getBossPhase } from "../domain/bossMechanics";
-import { MATCHUP_LABELS, matchupOf, WEAPON_KIND } from "../domain/matchups";
-import type { SkillWeapon } from "../domain/skills";
+import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 
@@ -599,9 +598,9 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
       </p>
     );
   }
-  /** Wie wirkt eine Waffe gegen das eigene Ziel? */
+  /** Wie wirkt eine Schadensart gegen das eigene Ziel? */
   const targetCreature = battle.adds?.find((a) => a.uid === target)?.creatureId ?? battle.bossId;
-  const against = (weapon: SkillWeapon | null | undefined) => (weapon ? matchupOf(targetCreature, WEAPON_KIND[weapon]) : null);
+  const against = (kind: DamageKind | null) => (kind ? matchupOf(targetCreature, kind) : null);
   const send = (ability?: CoopAction["ability"]) =>
     choose({ ...(potion && { potion }), ...(ability && { ability }), ...(target && { target }) });
   const fallen = battle.heroes.filter((h) => h.down && !h.revived);
@@ -657,7 +656,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
             onClick={() => send()}
             className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            ⚔️ Angreifen <MatchupBadge matchup={against(me.weapon)} />
+            ⚔️ Angreifen <MatchupBadge matchup={against(me.weapon ? WEAPON_KIND[me.weapon] : null)} />
           </motion.button>
           {me.abilities.map((id) => (
             <AbilityButton
@@ -666,7 +665,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               blocker={coopAbilityBlocker(me, id)}
               disabled={locked}
               onClick={() => send(id)}
-              matchup={against(getAbility(id).weapon)}
+              matchup={against(abilityKind(getAbility(id)))}
             />
           ))}
         </div>
@@ -879,7 +878,9 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "ability":
       return `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
     case "selfHeal":
-      return `${name(e.heroId)} heilt sich um ${e.heal} LP.`;
+      return e.by ? `${name(e.by)} heilt ${name(e.heroId)} um ${e.heal} LP.` : `${name(e.heroId)} heilt sich um ${e.heal} LP.`;
+    case "cleansed":
+      return `${name(e.heroId)} ist geläutert – Gift, Feuer und Bluten sind weg.`;
     case "guarded":
       return `${name(e.heroId)} wehrt ${e.prevented} Schaden ab.`;
     case "counter":

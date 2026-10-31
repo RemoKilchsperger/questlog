@@ -15,7 +15,6 @@ const hero: Character = {
   stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
   spentPoints: 0,
   skills: {},
-  abilities: [],
 };
 /** Komplettes Rüstungsset einer Klasse auf Index 90 (Lv. 28). */
 const fullSet = (cls: "light" | "medium" | "heavy"): Equipment => {

@@ -4,7 +4,7 @@ import { resolveRound, startCoopBattle } from "./coopCombat";
 import { getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
 import { BOSS_EFFECTS, EFFECT, effectOf, ITEM_EFFECTS, rollItemEffect, type ItemEffectId } from "./itemEffects";
-import { BOSS_ITEMS, createItem, ensureEffect, getItem, getItemStats } from "./items";
+import { BOSS_ITEMS, createItem, ensureItemExtras, getItem, getItemStats } from "./items";
 import { xpForNextLevel } from "./leveling";
 import { getPotion } from "./potions";
 import type { Character } from "./types";
@@ -12,7 +12,7 @@ import type { Character } from "./types";
 const hero = (): Character => {
   let totalXp = 0;
   for (let l = 1; l < 20; l++) totalXp += xpForNextLevel(l);
-  return { name: "Held", totalXp, gold: 0, essence: 0, stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 }, spentPoints: 0, skills: {}, abilities: ["sword"] };
+  return { name: "Held", totalXp, gold: 0, essence: 0, stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 }, spentPoints: 0, skills: {} };
 };
 const profile = (effects: ItemEffectId[] = []) => ({
   ...getHeroCombatProfile(hero(), { ...EMPTY_EQUIPMENT, weapon1: createItem("sword-0", "common", "w1") }),
@@ -53,9 +53,9 @@ describe("Item-Effekte: Vergabe", () => {
 
   it("ältere legendäre Items bekommen ihren Effekt beim Laden – gleich wie bei einem neuen Drop", () => {
     const old = { uid: "old-1", itemId: "head-20", rarity: "legendary" as const, bonuses: {} };
-    expect(ensureEffect(old).effect).toBe(rollItemEffect("old-1", "armor"));
-    expect(ensureEffect({ ...old, rarity: "rare" }).effect).toBeUndefined();
-    expect(getItemStats(ensureEffect(old)).effect).toBe(ensureEffect(old).effect);
+    expect(ensureItemExtras(old).effect).toBe(rollItemEffect("old-1", "armor"));
+    expect(ensureItemExtras({ ...old, rarity: "rare" }).effect).toBeUndefined();
+    expect(getItemStats(ensureItemExtras(old)).effect).toBe(ensureItemExtras(old).effect);
   });
 
   it("derselbe Effekt zählt nur einmal", () => {

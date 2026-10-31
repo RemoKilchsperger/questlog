@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { getAbility, type AbilityId } from "../domain/abilities";
 import { getActiveSets } from "../domain/bossSets";
 import { bossName, isCoopBoss } from "../domain/bosses";
 import { STAT_LABELS } from "../domain/stats";
@@ -58,6 +59,7 @@ function ItemCard({ stats, hint }: { stats: ItemStats; hint?: string }) {
         <p className="text-xs text-muted">skaliert mit {STAT_LABELS[weaponStat(def.type as WeaponType)]}</p>
       )}
       {bonuses && <p className="text-sm text-xp">{bonuses}</p>}
+      {stats.abilities.length > 0 && <WeaponAbilities ids={stats.abilities} />}
       {stats.effect && <ItemEffectLine id={stats.effect} />}
       {armorClassPerkText(def) && <p className="text-xs text-intellect">{armorClassPerkText(def)} (Rüstungsklasse)</p>}
       {def.bossId && (
@@ -71,6 +73,26 @@ function ItemCard({ stats, hint }: { stats: ItemStats; hint?: string }) {
       <p className="text-xs text-muted">benötigt Level {def.requiredLevel}</p>
       {hint && <p className="mt-1 text-xs text-gold">{hint}</p>}
     </>
+  );
+}
+
+/** Die Kampf-Fähigkeiten einer Waffe mit Kosten und Wirkung. */
+function WeaponAbilities({ ids }: { ids: AbilityId[] }) {
+  return (
+    <ul className="flex w-full flex-col gap-1 rounded-md border border-intellect/40 bg-intellect/10 px-2 py-1 text-left text-xs">
+      {ids.map(getAbility).map((a) => (
+        <li key={a.id}>
+          <span className="font-bold text-intellect">
+            {a.icon} {a.name}
+          </span>
+          <span className="num text-muted">
+            {" "}
+            · 💧{a.manaCost} · ⏳{a.cooldown}
+          </span>
+          <span className="block text-muted">{a.description}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

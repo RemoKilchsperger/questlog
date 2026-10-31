@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
+import { fullWeapon } from "../test/weapons";
 import { attackRound, getHeroCombatProfile, startBattle, type BattleEvent, type BattleState } from "./combat";
 import { COOP_BOSSES, startCoopBattle } from "./coopCombat";
 import { AREAS, DUNGEONS, getCreature, getCreatureStats } from "./creatures";
 import { coopElite, PACK_ADD } from "./elites";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { createItem } from "./items";
 import { xpForNextLevel } from "./leveling";
 import { CREATURE_MATCHUPS, mainWeapon, matchupFactor, matchupOf, RESIST_FACTOR, WEAK_FACTOR, WEAPON_KIND } from "./matchups";
 import type { Character } from "./types";
 
-const hero = (abilities: Character["abilities"] = []): Character => {
+const hero = (): Character => {
   let totalXp = 0;
   for (let l = 1; l < 10; l++) totalXp += xpForNextLevel(l);
-  return { name: "Held", totalXp, gold: 0, essence: 0, stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 }, spentPoints: 0, skills: {}, abilities };
+  return { name: "Held", totalXp, gold: 0, essence: 0, stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 }, spentPoints: 0, skills: {} };
 };
 const armed = (...weapons: string[]) =>
-  getHeroCombatProfile(hero(["scepter", "mace"]), {
+  getHeroCombatProfile(hero(), {
     ...EMPTY_EQUIPMENT,
-    weapon1: weapons[0] ? createItem(weapons[0], "common", "w1") : null,
-    weapon2: weapons[1] ? createItem(weapons[1], "common", "w2") : null,
+    weapon1: weapons[0] ? fullWeapon(weapons[0], "common", "w1") : null,
+    weapon2: weapons[1] ? fullWeapon(weapons[1], "common", "w2") : null,
   });
 const rng = (value: number) => () => value;
 /** Sehr zäher Held gegen eine sehr zähe Kreatur, ohne Rüstung – Schaden lässt sich vergleichen. */

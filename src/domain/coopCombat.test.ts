@@ -162,7 +162,7 @@ describe("Koop-Kampf: Runde", () => {
     expect(events).toContainEqual({ type: "stunned" });
   });
 
-  it("Eissplitter frieren den Gegner mit 40 % Chance ein", () => {
+  it("Eisstrahl friert den Gegner mit 40 % Chance ein", () => {
     const freezer = () => tough(start([player("a", { abilities: ["staff-3"] }), player("b")]));
     const frozen = resolveRound(freezer(), { a: { ability: "staff-3" } }, rng(0.3), 0);
     expect(frozen.events).toContainEqual({ type: "stunned", freeze: true });

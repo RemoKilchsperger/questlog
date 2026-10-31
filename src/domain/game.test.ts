@@ -84,7 +84,6 @@ describe("Leveling", () => {
       stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
       spentPoints: 0,
       skills: {},
-      abilities: [],
     };
     expect(POINTS_PER_LEVEL).toBe(2);
     expect(unspentPoints(hero)).toBe(4);
@@ -106,7 +105,6 @@ describe("Leveling", () => {
       stats: { strength: 4, intellect: 1, endurance: 1, charisma: 1 },
       spentPoints: 3,
       skills: {},
-      abilities: [],
     };
     expect(unspentPoints(hero)).toBe(0);
   });

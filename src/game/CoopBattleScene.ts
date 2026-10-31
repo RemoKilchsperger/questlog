@@ -4,6 +4,7 @@
 
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
+import { animationOf } from "./abilityAnimations";
 import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
 import { BOSS, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { getCreature } from "../domain/creatures";
@@ -641,7 +642,7 @@ export class CoopBattleScene extends Phaser.Scene {
   /** Vorbereitung einer Fähigkeit – bei den zweiten Fähigkeiten jeweils eigene. */
   private announceAbility(hero: Unit, id: AbilityId) {
     const at = this.center(hero);
-    switch (id) {
+    switch (animationOf(id)) {
       case "shield":
         fx.ring(this, at, 0xa9c6ff, 50);
         break;
@@ -723,7 +724,7 @@ export class CoopBattleScene extends Phaser.Scene {
         fx.ring(this, at, 0xffe66b, 40, 300);
         sfx.magic();
         break;
-      case "staff-3": // Eissplitter: schweben über dem Helden, bis sie losfliegen
+      case "staff-3": // Eisstrahl: schweben über dem Helden, bis sie losfliegen
         this.iceShards.set(hero, fx.iceShards(this, at, 4));
         sfx.magic();
         break;
@@ -759,7 +760,7 @@ export class CoopBattleScene extends Phaser.Scene {
         ],
       });
     };
-    switch (id) {
+    switch (animationOf(id)) {
       case "dagger": {
         // Hinter dem Boss auftauchen, zustechen, zurück in den Schatten
         const body = hero.body;

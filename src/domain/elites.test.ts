@@ -33,7 +33,6 @@ const hero = (): Character => {
     stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
     spentPoints: 0,
     skills: {},
-    abilities: [],
   };
 };
 const profile = getHeroCombatProfile(hero(), { ...EMPTY_EQUIPMENT, weapon1: createItem("sword-0", "common", "w1") });

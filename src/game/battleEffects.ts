@@ -416,7 +416,7 @@ export function dome(scene: Phaser.Scene, at: Point): Phaser.GameObjects.Graphic
   return g;
 }
 
-/** Schwebende Eissplitter (Eissplitter): erscheinen über dem Helden und warten auf `launch`. */
+/** Schwebende Eissplitter (Eisstrahl): erscheinen über dem Helden und warten auf `launch`. */
 export interface IceShards {
   /** Die Splitter schiessen nacheinander auf das Ziel – `onHit` beim ersten Einschlag. */
   launch: (to: Point, onHit: () => void) => void;

@@ -21,7 +21,6 @@ const character: Character = {
   stats: { strength: 4, intellect: 2, endurance: 3, charisma: 1 },
   spentPoints: 0,
   skills: { sword: 2 },
-  abilities: [],
 };
 
 const records = { ...EMPTY_RECORDS, questsCompleted: 2 };

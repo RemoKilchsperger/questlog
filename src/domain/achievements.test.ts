@@ -24,7 +24,7 @@ const character = (level = 1): Character => {
   return {
     name: "Held", totalXp, gold: 0, essence: 0,
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
-    spentPoints: 0, skills: {}, abilities: [],
+    spentPoints: 0, skills: {}, 
   };
 };
 const input = (overrides: Partial<AchievementInput> = {}): AchievementInput => ({

@@ -68,8 +68,7 @@ import {
   TargetPicker,
 } from "./BattleStatus";
 import { getBossPhase } from "../domain/bossMechanics";
-import { MATCHUP_LABELS, matchupOf, WEAPON_KIND } from "../domain/matchups";
-import type { SkillWeapon } from "../domain/skills";
+import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestProgressChips } from "./QuestScreen";
@@ -447,7 +446,7 @@ function HeroPanel() {
       <p className="text-xs text-muted">
         Jede Waffe macht mehr Schaden mit ihrem Attribut (siehe Charakter-Tab). Ausdauer gibt dazu Lebenspunkte,
         Intelligenz Mana, Charisma kritische Treffer und Gold nach einem Sieg (+{Math.round(hero.goldBonus * 100)} %).
-        Jede angelegte Waffe bringt eine Fähigkeit mit, die im Kampf Mana kostet.
+        Jede angelegte Waffe bringt ihre eigenen Fähigkeiten mit, die im Kampf Mana kosten.
       </p>
       <div className="w-full border-t border-night-700 pt-3 text-left">
         <h3 className="mb-1 text-xs uppercase tracking-wide text-muted">Tränke</h3>
@@ -600,7 +599,7 @@ function Battle({ battle }: { battle: BattleState }) {
                 onClick={() => act(() => attack())}
                 className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                ⚔️ Angreifen <MatchupBadge matchup={matchupAgainst(battle, battle.heroWeapon ?? null)} />
+                ⚔️ Angreifen <MatchupBadge matchup={matchupAgainst(battle, battle.heroWeapon ? WEAPON_KIND[battle.heroWeapon] : null)} />
               </motion.button>
               {battle.abilities.map((id) => (
                 <AbilityButton
@@ -609,14 +608,13 @@ function Battle({ battle }: { battle: BattleState }) {
                   blocker={abilityBlocker(battle, id)}
                   disabled={busy}
                   onClick={() => act(() => attack(id))}
-                  matchup={matchupAgainst(battle, getAbility(id).weapon)}
+                  matchup={matchupAgainst(battle, abilityKind(getAbility(id)))}
                 />
               ))}
             </div>
             {battle.abilities.length === 0 && (
               <p className="text-xs text-muted">
-                Fähigkeiten schaltest du im Skilltree frei, sobald eine Waffe Rang 3 hat – im Kampf brauchst du
-                dann die passende Waffe.
+                Fähigkeiten bringen deine Waffen mit – lege eine Waffe an, um ihre Fähigkeiten zu nutzen.
               </p>
             )}
           </ActionGroup>
@@ -686,11 +684,11 @@ function Battle({ battle }: { battle: BattleState }) {
   );
 }
 
-/** Wie wirkt eine Waffe gegen das aktuelle Ziel (Boss oder gewählter Begleiter)? */
-function matchupAgainst(battle: BattleState, weapon: SkillWeapon | null) {
-  if (!weapon) return null;
+/** Wie wirkt eine Schadensart gegen das aktuelle Ziel (Boss oder gewählter Begleiter)? */
+function matchupAgainst(battle: BattleState, kind: DamageKind | null) {
+  if (!kind) return null;
   const target = battle.adds?.find((a) => a.uid === battle.target)?.creatureId ?? battle.creatureId;
-  return matchupOf(target, WEAPON_KIND[weapon]);
+  return matchupOf(target, kind);
 }
 
 /** Boss und Begleiter: Ziel wählen (auch per Klick in der Szene). */
@@ -1173,6 +1171,8 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
     case "selfHeal":
       return `Du heilst dich um ${e.heal} LP.`;
+    case "cleansed":
+      return "Du bist geläutert – Gift, Feuer und Bluten sind weg.";
     case "guarded":
       return `Du wehrst ${e.prevented} Schaden ab.`;
     case "counter":
@@ -1196,6 +1196,6 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "manaBurn":
       return `${enemy} raubt dir ${e.amount} Mana.`;
     case "regen":
-      return `Deine Klasse heilt dich um ${e.heal} LP.`;
+      return `Du regenerierst ${e.heal} LP.`;
   }
 }

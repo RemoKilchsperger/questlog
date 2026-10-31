@@ -30,7 +30,8 @@ Sammlung aller Vorschläge, damit nichts verloren geht. Status: ✅ umgesetzt ·
 | 9 | **Bestiarium mit Entdecken:** Schwächen und Resistenzen sind anfangs verdeckt („???“). Man deckt sie auf, wenn man einen Gegner mit dieser Schadensart trifft oder ihn mehrmals besiegt. Dazu Sammelfortschritt und Erfolge pro Gebiet. | 💡 |
 | 10 | **Gegenstände mit Spezialeffekt:** Legendäre und Boss-Items bekommen einen Effekt („Kritische Treffer setzen in Brand“, „Bei Kampfbeginn Bollwerk“, „+50 % gegen Elite-Gegner“). Passt gut zu Idee 5. | ✅ `itemEffects.ts`, docs/item-effekte.md |
 | 11 | **Wochen-Mutatoren für Dungeons:** Ein Modifikator pro Woche für alle Dungeons („Alle Gegner Elite“, „Bosse mit dritter Phase“, „Tränke doppelt, Gegner +30 % Schaden“), dafür mehr Beute | 💡 |
-| 12 | **Endlos-Turm:** Stockwerke mit steigender Stärke, Elite-Modifikatoren, Segen alle paar Stockwerke, Rangliste nach höchstem Stockwerk | ✅ erste Version auf Branch `feature/endlos-turm`, docs/endlos-turm.md |
+| 12 | **Endlos-Turm:** Stockwerke mit steigender Stärke, Elite-Modifikatoren, Segen alle paar Stockwerke, Rangliste nach höchstem Stockwerk | ✅ `tower.ts`, docs/endlos-turm.md |
 | 13 | **Wandernde Weltbosse:** Ab und zu erscheint für ein paar Stunden ein seltener Boss in einem Gebiet, mit Ankündigung. Solo oder im Koop schaffbar, einzigartige Beute. | 💡 |
 | 14 | **Kopfgeld-Tafel:** Im Dorf täglich wechselnde Steckbriefe für bestimmte Elite-Gegner („Rasender, explosiver Schneewolf – 500 Gold“), die man gezielt sucht | 💡 |
 | 15 | **Heroische Bosse:** Besiegte Bosse auf einer höheren Stufe erneut fordern: mehr LP, eine Zusatzmechanik, höhere Chance auf Boss-Beute | 💡 |
+| 16 | **Fähigkeiten auf der Waffe:** Statt im Skilltree freizuschalten liegen die Fähigkeiten auf der Waffe – Einhand 2 aus 4, Zweihand 3 aus 6. Jeder Drop wird so spannend. | ✅ `abilities.ts`, docs/waffen-faehigkeiten.md |

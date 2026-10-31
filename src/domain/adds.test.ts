@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ABILITIES } from "./abilities";
+import { fullWeapon } from "../test/weapons";
 import {
   ADD_REWARD_SHARE,
   attackRound,
@@ -15,7 +15,6 @@ import {
 } from "./combat";
 import { getCreature, getCreatureStats, getCreatureXp } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { createItem } from "./items";
 import { xpForNextLevel } from "./leveling";
 import type { Character, Equipment } from "./types";
 
@@ -30,13 +29,12 @@ const hero = (): Character => {
     stats: { strength: 5, intellect: 5, endurance: 5, charisma: 1 },
     spentPoints: 0,
     skills: {},
-    abilities: ABILITIES.map((a) => a.id),
   };
 };
 const withWeapons = (...ids: string[]): Equipment => ({
   ...EMPTY_EQUIPMENT,
-  weapon1: ids[0] ? createItem(ids[0], "common", "w1") : null,
-  weapon2: ids[1] ? createItem(ids[1], "common", "w2") : null,
+  weapon1: ids[0] ? fullWeapon(ids[0], "common", "w1") : null,
+  weapon2: ids[1] ? fullWeapon(ids[1], "common", "w2") : null,
 });
 const profileWith = (...weapons: string[]): HeroCombatProfile => getHeroCombatProfile(hero(), withWeapons(...weapons));
 const chief = getCreature("goblin-chief").creature;

@@ -41,7 +41,7 @@ import {
 } from "../domain/tower";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
 import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
-import { createItem, ensureEffect, getItem, MAX_UPGRADE, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
+import { createItem, ensureItemExtras, getItem, MAX_UPGRADE, weaponAbilities, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
 import {
   ACHIEVEMENTS,
@@ -74,7 +74,7 @@ import {
   type QuestEvent,
   type QuestLog,
 } from "../domain/quests";
-import { clampSkills, learnSkill, resetSkills, unlockAbility, type SkillWeapon } from "../domain/skills";
+import { clampSkills, learnSkill, resetSkills, type SkillWeapon } from "../domain/skills";
 import type { AbilityId } from "../domain/abilities";
 import { dateKey, weekKey } from "../domain/calendar";
 import { allocatePoint, convertLinearCurveXp, getLevel, resetAttributes } from "../domain/leveling";
@@ -134,8 +134,6 @@ interface GameState {
   resetAttributes: () => void;
   /** Steigert einen Waffen-Skill um einen Rang (kostet einen Skillpunkt). */
   learnSkill: (weapon: SkillWeapon) => void;
-  /** Schaltet eine Fähigkeit frei – ab Rang 3 im Waffentyp (kostet Skillpunkte, siehe skills.ts). */
-  unlockAbility: (id: AbilityId) => void;
   /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`). */
   resetSkills: () => void;
   dismissReward: () => void;
@@ -294,7 +292,6 @@ const createCharacter = (): Character => ({
   stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1 },
   spentPoints: 0,
   skills: {},
-  abilities: [],
 });
 
 const newId = () => crypto.randomUUID();
@@ -317,9 +314,11 @@ const upgradeItem = (item: Partial<OwnedItem> & Pick<OwnedItem, "uid" | "itemId"
  */
 function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
   const fresh = createCharacter();
+  // Freigeschaltete Fähigkeiten gibt es nicht mehr – sie liegen auf den Waffen, die Skillpunkte sind wieder frei
+  const { abilities: _abilities, ...savedCharacter } = (saved.character ?? {}) as Character & { abilities?: unknown };
   const character = saved.character && {
     ...fresh,
-    ...saved.character,
+    ...savedCharacter,
     stats: { ...fresh.stats, ...saved.character.stats },
     // Ränge über dem aktuellen Maximum werden gekappt, die Punkte sind wieder frei.
     skills: clampSkills(saved.character.skills ?? {}),
@@ -336,10 +335,10 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     questLog: { ...EMPTY_QUEST_LOG, ...saved.questLog },
     dailyQuests: saved.dailyQuests ?? EMPTY_BOARD,
     weeklyQuests: saved.weeklyQuests ?? EMPTY_BOARD,
-    // Legendäre Items älterer Stände bekommen ihren Spezialeffekt (itemEffects.ts)
-    inventory: (saved.inventory ?? []).map(ensureEffect),
+    // Items älterer Stände bekommen ihren Spezialeffekt (itemEffects.ts) bzw. ihre Fähigkeiten (abilities.ts)
+    inventory: (saved.inventory ?? []).map(ensureItemExtras),
     equipment: Object.fromEntries(
-      Object.entries({ ...EMPTY_EQUIPMENT, ...saved.equipment }).map(([slot, item]) => [slot, item && ensureEffect(item)]),
+      Object.entries({ ...EMPTY_EQUIPMENT, ...saved.equipment }).map(([slot, item]) => [slot, item && ensureItemExtras(item)]),
     ) as Equipment,
     potions: saved.potions ?? STARTER_POTIONS,
     shop: saved.shop ?? EMPTY_SHOP,
@@ -423,10 +422,6 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
   // v11 → v12: Skilltree – Skillpunkte bisheriger Level-ups sind sofort verfügbar.
   if (version < 12) {
     state = { ...state, character: { ...state.character, skills: {} } };
-  }
-  // v12 → v13: Fähigkeiten müssen nach dem Meistern einer Waffe freigeschaltet werden.
-  if (version < 13) {
-    state = { ...state, character: { ...state.character, abilities: [] } };
   }
   // v13 → v14: To-dos, Bonusquests und Kampfpunkte entfallen – stattdessen Questbuch und Tagesaufträge.
   // Erledigte To-dos zählen weiter für „Questmeister“, erledigte Bonusquests für „Kopfgeldjäger“.
@@ -637,12 +632,14 @@ export const useGameStore = create<GameState>()(
         const heroClass = detectHeroClass(s.equipment);
         const legendary = owned.filter((o) => o.rarity === "legendary").map((o) => o.uid);
         const maxed = owned.filter((o) => (o.upgrade ?? 0) >= MAX_UPGRADE).map((o) => o.uid);
+        const abilities = owned.flatMap(weaponAbilities);
         const r = s.records;
         const records: Records = {
           ...r,
           classesWorn: heroClass && !r.classesWorn.includes(heroClass) ? [...r.classesWorn, heroClass] : r.classesWorn,
           legendarySeen: legendary.some((u) => !r.legendarySeen.includes(u)) ? [...new Set([...r.legendarySeen, ...legendary])] : r.legendarySeen,
           maxedSeen: maxed.some((u) => !r.maxedSeen.includes(u)) ? [...new Set([...r.maxedSeen, ...maxed])] : r.maxedSeen,
+          abilitiesSeen: abilities.some((a) => !r.abilitiesSeen.includes(a)) ? [...new Set([...r.abilitiesSeen, ...abilities])] : r.abilitiesSeen,
           maxGold: Math.max(r.maxGold, s.character.gold),
           maxGearScore: Math.max(r.maxGearScore, gearScore(s.equipment)),
         };
@@ -723,7 +720,6 @@ export const useGameStore = create<GameState>()(
 
       learnSkill: (weapon) => attempt(() => set((s) => ({ character: learnSkill(s.character, weapon) }))),
 
-      unlockAbility: (id) => attempt(() => set((s) => ({ character: unlockAbility(s.character, id) }))),
 
       resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character) }))),
 

@@ -33,8 +33,8 @@ src/
     quests.ts        Questbuch (Jagd-, Boss- und Dungeon-Quests), Tages- und Wochenaufträge, Belohnungen
     stats.ts         Namen der Attribute
     leveling.ts      Level-Kurve, Attributpunkte
-    skills.ts        Skilltree pro Waffentyp, Freischalten von Fähigkeiten
-    abilities.ts     Kampf-Fähigkeiten (zwei pro Waffentyp, drei bei Zweihandwaffen), Mana
+    skills.ts        Skilltree pro Waffentyp (Ränge)
+    abilities.ts     Kampf-Fähigkeiten (Pool von 4 pro Waffentyp, 6 bei Zweihand; jede Waffe trägt die Hälfte), Mana
     items.ts         Item-Katalog, Seltenheit, Boss-Items, Verbesserungsstufen
     armorClasses.ts  Leichte, mittlere und schwere Rüstung
     heroClasses.ts   Klassen aus Rüstungsklasse + Waffe
