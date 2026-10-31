@@ -198,11 +198,11 @@ describe("Endlos-Turm: Lauf im Store", () => {
 });
 
 describe("Endlos-Turm: Belohnung, Aufträge, Erfolge", () => {
-  const full = { xp: 1000, gold: 500, loot: createItem("sword-10", "rare", "l"), bossLoot: createItem("boss-ore-king-dagger", "legendary", "b"), potions: { potionId: "small", count: 2 }, buffPotion: "attack" };
+  const full = { xp: 1000, gold: 500, loot: createItem("sword-10", "rare", "l"), bossLoot: createItem("boss-ore-king-dagger", "legendary", "b"), potions: { potionId: "small", count: 2 }, buffPotion: "attack", materials: { darkwood: 1 } };
 
   it("stark gekürzt: Bruchteil der Erfahrung und des Golds, Items und Tränke nur von Bossen (Elite selten), nie Boss-Items", () => {
     const normal = towerReward(full, 1, [], false, rng(0));
-    expect(normal).toEqual({ xp: Math.round(1000 * TOWER_REWARD.xp), gold: Math.round(500 * TOWER_REWARD.gold), loot: null, potions: null, bossLoot: null, buffPotion: null });
+    expect(normal).toEqual({ xp: Math.round(1000 * TOWER_REWARD.xp), gold: Math.round(500 * TOWER_REWARD.gold), loot: null, potions: null, bossLoot: null, buffPotion: null, materials: {} });
     expect(towerReward(full, 4, [], true, rng(0)).loot).not.toBeNull();
     expect(towerReward(full, 4, [], true, rng(0.99)).loot).toBeNull();
     const boss = towerReward(full, 5, [], false, rng(0.99));

@@ -42,7 +42,7 @@ export function getMaterial(id: MaterialId): MaterialDef {
 
 /**
  * Material für einen Gegner dieses Levels: das des Gebiets, zu dem das Level gehört.
- * So geben Dungeons, Endlos-Turm und Koop-Bosse das Material ihres Level-Bereichs.
+ * So geben Dungeons und Koop-Bosse das Material ihres Level-Bereichs (der Endlos-Turm gibt keines).
  */
 export function materialForLevel(level: number): MaterialId {
   const index = AREAS.findIndex((a) => level <= a.maxLevel);

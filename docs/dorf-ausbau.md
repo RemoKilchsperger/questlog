@@ -32,7 +32,7 @@ Jedes Gebiet hat **ein** Material. Es fällt bei jedem Sieg in diesem Gebiet sic
 
 - **Menge:** 1 pro normalem Sieg, 3 bei Elite-Gegnern, 5 beim Gebietsboss.
 - **Dungeons** geben das Material des Gebiets, zu dem ihr Level passt (doppelte Menge in der Truhe).
-  Der **Endlos-Turm** gibt das Material, das zum Level des Gegners gehört.
+  Der **Endlos-Turm** gibt kein Material.
 - Material liegt in einem eigenen Vorrat (wie Essenz) und nimmt keine Inventarplätze weg. Verkaufen
   kann man es nicht, damit es nicht zur zweiten Goldquelle wird.
 - Die **Kopfgeld-Tafel** (Idee #14) und die **Weltbosse** (Idee #13) können später zusätzlich
@@ -201,7 +201,7 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
   Nach dem Bauen federt das neue Bild hoch und es staubt. Die Karten zeigen dasselbe Pixelbild.
 - **Tränke gibt es beim Alchemisten** (eigener Unter-Tab, gesperrte Sorten mit der nötigen Stufe). Bis
   er gebaut ist, verkauft der Händler unter seiner Ware kleine Heiltränke, danach nicht mehr.
-- Im Kampf-Ergebnis, in der Dungeon- und Turm-Truhe und in der Koop-Truhe steht das erhaltene Material,
+- Im Kampf-Ergebnis, in der Dungeon-Truhe und in der Koop-Truhe steht das erhaltene Material,
   zum Beispiel „+1 🪵 Düsterholz“.
 - Ohne Schmiede zeigt der Schmied-Tab einen Bauplatz mit Link zum Ausbau, ohne Anschlagtafel zeigt der
   Quest-Tab einen Hinweis statt der Aufträge, ohne Alchemist zeigt der Alchemist-Tab einen Bauplatz.
