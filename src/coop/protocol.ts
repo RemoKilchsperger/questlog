@@ -17,6 +17,8 @@ export interface CoopMember {
   equipment: Equipment;
   /** Kampfwerte – vom Server aus dem Cloud-Spielstand berechnet */
   profile: HeroCombatProfile;
+  /** Schon besiegte Bosse – schaltet heroische Koop-Dungeons frei (fehlt bei älteren Lobbys) */
+  bossesDefeated?: string[];
   ready: boolean;
   /** Hat den laufenden Kampf verlassen – sein Held greift automatisch an */
   left?: boolean;
@@ -46,7 +48,7 @@ export interface CoopRow {
 }
 
 export type CoopCommand =
-  /** `bossId`: Raid-Boss oder Dungeon */
+  /** `bossId`: Raid-Boss oder Dungeon, heroisch mit Anhang HEROIC_SUFFIX (coopCombat.ts) */
   | { type: "create"; bossId: string }
   /** Dungeon nach einem Sieg: nächster Kampf bzw. mit der Truhe aussteigen (entscheidet der Host) */
   | { type: "next" }

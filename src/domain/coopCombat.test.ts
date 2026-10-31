@@ -4,6 +4,10 @@ import type { HeroCombatProfile } from "./combat";
 import {
   BOSS,
   clearedStages,
+  coopContent,
+  HEROIC_SUFFIX,
+  isCoopDungeon,
+  parseCoopContent,
   coopAbilityDue,
   DUNGEON_REVIVE_HP,
   dungeonCompleted,
@@ -23,6 +27,7 @@ import {
   type CoopPlayer,
 } from "./coopCombat";
 import { getCreatureStats, getCreatureXp, getDungeon } from "./creatures";
+import { HEROIC_HP } from "./heroic";
 import { getCreatureSprite } from "../game/creatureSprites";
 import { hasBackground } from "../game/backgrounds";
 
@@ -333,10 +338,31 @@ describe("Koop-Dungeons", () => {
   /** Dungeon bis zum Endboss durchspielen. */
   const toBoss = (dungeonId: string, players: CoopPlayer[] = [player("a"), player("b")]) => {
     let state = startCoopBattle("s", dungeonId, players, 0);
-    const { creatures } = getDungeon(dungeonId);
+    const { creatures } = getDungeon(parseCoopContent(dungeonId).id);
     for (let i = 0; i < creatures.length - 1; i++) state = nextDungeonStage(win(state), `s${i}`, 0);
     return state;
   };
+  it("heroischer Koop-Dungeon: nur der Endboss ist heroisch – mehr LP, Zusatzmechanik, keine Elite-Beute", () => {
+    const heroicId = `abandoned-mine${HEROIC_SUFFIX}`;
+    expect(parseCoopContent(heroicId)).toEqual({ id: "abandoned-mine", heroic: true });
+    expect(isCoopDungeon(heroicId)).toBe(true);
+    expect(coopContent(heroicId).name).toBe("Verlassene Mine (heroisch)");
+    expect(() => coopContent(`${HYDRA}${HEROIC_SUFFIX}`)).toThrow();
+    const first = startCoopBattle("h", heroicId, [player("a"), player("b")], 0);
+    expect(first.dungeon).toMatchObject({ id: "abandoned-mine", heroic: true });
+    expect(first.heroic).toBeUndefined();
+    const normal = toBoss("abandoned-mine");
+    const heroic = toBoss(heroicId);
+    expect(heroic.bossId).toBe("ore-king");
+    expect(heroic.heroic).toBe(true);
+    expect(heroic.elite).toEqual(["explosive"]);
+    expect(heroic.boss.maxHp).toBe(Math.round(normal.boss.maxHp * HEROIC_HP));
+    // Die Truhe: der heroische Boss gibt mehr Erfahrung
+    const xpNormal = rollCoopDungeonChest(win(normal), profile(), "a").xp;
+    const xpHeroic = rollCoopDungeonChest(win(heroic), profile(), "a").xp;
+    expect(xpHeroic).toBeGreaterThan(xpNormal);
+  });
+
   const bossHits = (state: CoopBattleState, round: number) =>
     resolveRound(tough({ ...state, round }), {}, rng(0.5), 0).events.filter((e) => e.type === "hit" && e.attacker === BOSS);
 

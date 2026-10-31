@@ -83,7 +83,12 @@ function claimReward(row: CoopRow, state: CoopBattleState, myId: string): Claime
   if (!me) return null;
   const game = useGameStore.getState();
   if (state.dungeon) {
-    return game.grantCoopDungeon(rollCoopDungeonChest(state, me.profile, myId), state.dungeon.id, dungeonCompleted(state));
+    return game.grantCoopDungeon(
+      rollCoopDungeonChest(state, me.profile, myId),
+      state.dungeon.id,
+      dungeonCompleted(state),
+      !!state.dungeon.heroic,
+    );
   }
   return game.grantCoopReward(rollCoopReward(row.boss_id, me.profile, crypto.randomUUID()), row.boss_id);
 }

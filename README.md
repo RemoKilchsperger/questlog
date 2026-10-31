@@ -48,6 +48,7 @@ src/
     potions.ts       Heil- und Verstärkungstränke
     creatures.ts     Gebiete, Dungeons, Kreaturen, Beute
     bossAbilities.ts Fähigkeiten der Solo-Bosse
+    heroic.ts        Heroische Bosse: mehr LP, Zusatzmechanik, mehr Boss-Beute
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse
     achievements.ts  Erfolge, Titel, Avatar-Rahmen
@@ -183,6 +184,11 @@ Frostgipfel (31–40), Schattenruinen (41–50), Drachenhort (51–60). Je 4 Kre
 Abgrund der Leere (ab 60). Acht Kämpfe ohne Heilung dazwischen: drei Gegner, ein Zwischenboss (Elite
 mit zwei Modifikatoren), dieselben drei Gegner noch einmal, Endboss. Beute in einer Truhe, die bei einer
 Niederlage verloren geht.
+
+**Heroische Bosse** (`heroic.ts`): Besiegte Gebiets- und Dungeon-Bosse lassen sich heroisch erneut fordern –
++50 % LP, eine feste Zusatzmechanik pro Boss (ein Elite-Modifikator, zählt aber nicht als Elite), 15 % statt
+10 % Chance auf ein Boss-Item, +50 % XP und Gold. Im heroischen Dungeon ist nur der Endboss heroisch – solo und im Koop-Dungeon (der Host muss den
+Endboss schon besiegt haben). Raid-Bosse gibt es nicht heroisch.
 
 **Koop** (`coopCombat.ts`, Plan in `docs/koop-kampf.md`): 2–4 Spieler gegen Sumpfhydra (20),
 Frostriese (40) oder Weltenverschlinger (60). Der Boss greift nach Bedrohung an,

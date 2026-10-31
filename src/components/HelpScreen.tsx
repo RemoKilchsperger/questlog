@@ -2,12 +2,13 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { ADD_ROLES, type AddRole } from "../domain/bossMechanics";
-import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL } from "../domain/elites";
+import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL, getEliteAffix } from "../domain/elites";
 import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
 import { ITEM_EFFECTS } from "../domain/itemEffects";
 import { BLESSING_EVERY, BLESSINGS, BOSS_EVERY, TOWER_MIN_LEVEL } from "../domain/tower";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { FOODS, foodEffectText, foodPrice } from "../domain/food";
+import { HEROIC_AFFIX, HEROIC_BOSS_LOOT_CHANCE, HEROIC_HP, HEROIC_REWARD_FACTOR } from "../domain/heroic";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
   BULWARK_SHARE,
@@ -19,7 +20,7 @@ import {
   DUNGEON_REVIVE_HP,
   THREAT_DECAY,
 } from "../domain/coopCombat";
-import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
+import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, getCreature, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
 import { FRAMES } from "../domain/achievements";
 import { UPGRADE_REFUND } from "../domain/forge";
 import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
@@ -408,6 +409,22 @@ export function HelpScreen() {
           <H>Gebiete</H>
           <p>Jedes Gebiet öffnet sich ab seinem Mindestlevel und hat vier Kreaturen und einen Boss.</p>
           <Table head={["Gebiet", "Level"]} rows={AREAS.map((a) => [a.name, `${a.minLevel}–${a.maxLevel}`])} />
+          <H>☠️ Heroische Bosse</H>
+          <p>
+            Hast du einen Gebiets- oder Dungeon-Boss einmal besiegt, kannst du ihn heroisch fordern: mit{" "}
+            {pct(HEROIC_HP - 1)} mehr Lebenspunkten und einer Zusatzmechanik, die zu ihm passt. Dafür lässt er mit{" "}
+            {pct(HEROIC_BOSS_LOOT_CHANCE)} statt {pct(BOSS_ITEM_DROP_CHANCE)} ein Teil seines Sets fallen und gibt{" "}
+            {pct(HEROIC_REWARD_FACTOR - 1)} mehr Erfahrung und Gold. Im heroischen Dungeon ist der Endboss heroisch. Den
+            Knopf „☠️ Heroisch“ findest du neben „Kämpfen“ bzw. „Betreten“. Auch Koop-Dungeons gibt es heroisch, wenn der
+            Host den Endboss schon besiegt hat. Die Raid-Bosse gibt es nicht heroisch.
+          </p>
+          <Table
+            head={["Boss", "Zusatzmechanik"]}
+            rows={Object.entries(HEROIC_AFFIX).map(([bossId, affix]) => {
+              const def = getEliteAffix(affix);
+              return [getCreature(bossId).creature.name, `${def.icon} ${def.name}: ${def.description}`];
+            })}
+          />
           <H>🗼 Endlos-Turm</H>
           <p>
             Ab Level {TOWER_MIN_LEVEL}: Stockwerk für Stockwerk stärkere Gegner auf deinem Level, jedes {BOSS_EVERY}.

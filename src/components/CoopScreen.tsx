@@ -20,8 +20,10 @@ import {
   DUNGEON_REVIVE_HP,
   getCoopEnemy,
   hasNextStage,
+  HEROIC_SUFFIX,
   isCoopDungeon,
   nextStageEnemy,
+  parseCoopContent,
   rollCoopDungeonChest,
   type CoopAction,
   type CoopBattleState,
@@ -29,6 +31,7 @@ import {
 } from "../domain/coopCombat";
 import { dungeonDecider } from "../coop/server";
 import { DUNGEONS, getDungeon } from "../domain/creatures";
+import { heroicDescription, isHeroicUnlocked } from "../domain/heroic";
 import { getItemStats } from "../domain/items";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
@@ -208,6 +211,7 @@ export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
   const createLobby = useCoopStore((s) => s.createLobby);
   const error = useCoopStore((s) => s.error);
   const busy = useCoopStore((s) => s.busy);
+  const bossesDefeated = useGameStore((s) => s.records.bossesDefeated);
   const kind = availableBackend(loggedIn);
 
   return (
@@ -254,6 +258,18 @@ export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
                 >
                   Lobby erstellen
                 </motion.button>
+                {!tooLow && isHeroicUnlocked(boss.id, bossesDefeated) && (
+                  <Hint text={`Heroischer Dungeon – der Endboss: ${heroicDescription(boss.id)}`}>
+                    <motion.button
+                      whileTap={{ scale: 0.92 }}
+                      disabled={busy}
+                      onClick={() => createLobby(`${dungeon.id}${HEROIC_SUFFIX}`)}
+                      className="font-pixel rounded-md border-2 border-epic bg-epic/15 px-3 py-1.5 text-epic hover:bg-epic/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ☠️ Heroisch
+                    </motion.button>
+                  </Hint>
+                )}
               </li>
             );
           })}
@@ -314,7 +330,7 @@ function Lobby() {
             Koop-Lobby · <span className="text-legendary">{content.name}</span>
           </h2>
           <p className="text-sm text-muted">
-            {raid ? `${raid.icon} ${raid.name}: ${raid.description}` : `${content.description} ${getDungeon(row.boss_id).creatures.length} Kämpfe hintereinander.`}
+            {raid ? `${raid.icon} ${raid.name}: ${raid.description}` : `${content.description} ${getDungeon(parseCoopContent(row.boss_id).id).creatures.length} Kämpfe hintereinander.${content.heroic ? " Der Endboss ist heroisch." : ""}`}
           </p>
         </div>
         <div className="text-center">
@@ -445,10 +461,16 @@ function CoopBattle() {
           <h2 className="font-pixel text-2xl">
             Koop · {dungeon && <span className="text-muted">{dungeon.name} · </span>}
             <span className="text-legendary">{boss.name}</span>
-            {battle.elite && (
-              <Hint text="Elite-Gegner: stärker als sonst, dafür doppelte Erfahrung, doppeltes Gold und sichere Beute in der Truhe.">
-                <span className="ml-2 text-base text-legendary">★ Elite</span>
+            {battle.heroic ? (
+              <Hint text={heroicDescription(battle.bossId)}>
+                <span className="ml-2 text-base text-epic">☠️ Heroisch</span>
               </Hint>
+            ) : (
+              battle.elite && (
+                <Hint text="Elite-Gegner: stärker als sonst, dafür doppelte Erfahrung, doppeltes Gold und sichere Beute in der Truhe.">
+                  <span className="ml-2 text-base text-legendary">★ Elite</span>
+                </Hint>
+              )
             )}
             {dungeon && (
               <span className="num ml-2 text-sm text-muted">

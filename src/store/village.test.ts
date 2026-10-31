@@ -191,3 +191,43 @@ describe("Taverne: Buff-Food", () => {
     expect(repairSave({ character: store().character }).meal).toBeNull();
   });
 });
+
+describe("Heroische Bosse im Spielstand", () => {
+  beforeEach(() => {
+    store().resetGame();
+    useGameStore.setState((s) => ({ character: { ...s.character, totalXp: 1e9 } }));
+  });
+
+  it("erst nach dem ersten Sieg – dann mit mehr Lebenspunkten und Zusatzmechanik", () => {
+    store().startBattle("goblin-chief", true);
+    expect(store().battle).toBeNull();
+    store().startBattle("goblin-chief");
+    const normalHp = store().battle!.enemy.maxHp;
+    winCurrent();
+    useGameStore.setState({ bossRespawns: {}, battle: null });
+    store().startBattle("goblin-chief", true);
+    const battle = store().battle!;
+    expect(battle.heroic).toBe(true);
+    expect(battle.elite).toEqual(["swift"]);
+    expect(battle.enemy.maxHp).toBe(Math.round(normalHp * 1.5));
+    winCurrent();
+    expect(store().records.heroicDefeated).toEqual(["goblin-chief"]);
+  });
+
+  it("heroischer Dungeon: nur der Endboss ist heroisch", () => {
+    const dungeon = getDungeon("abandoned-mine");
+    store().startDungeon(dungeon.id, true);
+    expect(store().battle).toBeNull();
+    useGameStore.setState((s) => ({ records: { ...s.records, bossesDefeated: ["ore-king"] } }));
+    store().startDungeon(dungeon.id, true);
+    expect(store().battle!.heroic).toBeUndefined();
+    expect(store().dungeon!.heroic).toBe(true);
+    // Bis kurz vor den Endboss springen
+    useGameStore.setState((s) => ({ dungeon: { ...s.dungeon!, stage: dungeon.creatures.length - 2 } }));
+    winCurrent();
+    store().nextDungeonFight();
+    expect(store().battle!.creatureId).toBe("ore-king");
+    expect(store().battle!.heroic).toBe(true);
+    expect(store().battle!.elite).toEqual(["explosive"]);
+  });
+});
