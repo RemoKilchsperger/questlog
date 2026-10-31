@@ -4,6 +4,7 @@ import { createItem } from "../domain/items";
 import { dateKey } from "../domain/calendar";
 import { rollDailyQuests } from "../domain/quests";
 import { EMPTY_VILLAGE } from "../domain/village";
+import { heroStatusChips } from "../components/BattleStatus";
 import { migrateSave, repairSave, useGameStore } from "./gameStore";
 
 const store = useGameStore.getState;
@@ -170,6 +171,18 @@ describe("Taverne: Buff-Food", () => {
     store().nextTowerFloor();
     expect(store().battle!.hero.maxHp).toBeGreaterThanOrEqual(maxHp);
     expect(store().mealInUse).toBe("soup");
+  });
+
+  it("im Koop ist das Gericht beim Kampfbeginn aufgegessen und wird im Kampf angezeigt", () => {
+    store().eat("stew");
+    store().finishMealInCoop();
+    expect(store().meal).toBeNull();
+    expect(store().coopMeal).toBe("stew");
+    expect(heroStatusChips({}, {}, store().coopMeal).map((c) => c.key)).toEqual(["meal"]);
+    // Der nächste Koop-Kampf ohne Gericht zeigt nichts mehr
+    store().finishMealInCoop();
+    expect(store().coopMeal).toBeNull();
+    expect(heroStatusChips({}, {}, store().coopMeal)).toEqual([]);
   });
 
   it("das Gericht bleibt im Spielstand", () => {

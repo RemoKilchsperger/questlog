@@ -564,6 +564,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   const myAction = pendingAction ?? row?.actions[myId] ?? null;
   const choose = useCoopStore((s) => s.chooseAction);
   const stock = useGameStore((s) => s.potions);
+  const coopMeal = useGameStore((s) => s.coopMeal);
   const [potion, setPotion] = useState<CoopAction["potion"]>(undefined);
   // Neue Runde: Trank-Auswahl zurücksetzen
   useEffect(() => setPotion(undefined), [battle.round]);
@@ -610,7 +611,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
     <div className="flex flex-col gap-4">
       {/* Zustand: links du, rechts der Boss */}
       <div className="grid gap-2 sm:grid-cols-2">
-        <StatusSide title="Du" chips={heroStatusChips(me.buffs, me.effects)}>
+        <StatusSide title="Du" chips={heroStatusChips(me.buffs, me.effects, coopMeal)}>
           <div className="flex flex-wrap gap-x-3 text-sm">
             <span className="text-xp">
               ❤️ <span className="num">{me.combatant.hp}/{me.combatant.maxHp}</span>
