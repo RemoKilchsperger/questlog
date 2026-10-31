@@ -26,6 +26,8 @@ import { MAX_UPGRADE, RARITIES, UPGRADE_STEP } from "../domain/items";
 import { MAX_LEVEL, POINTS_PER_LEVEL, xpForNextLevel } from "../domain/leveling";
 import { POTIONS, potionEffectText } from "../domain/potions";
 import {
+  BOUNTY_AFFIXES,
+  DAILY_BOUNTY_COUNT,
   DAILY_DROP_CHANCE,
   DAILY_HUNT_COUNT,
   DAILY_TRADE_COUNTS,
@@ -38,6 +40,16 @@ import {
   WEEKLY_TRADE_COUNTS,
 } from "../domain/quests";
 import { STAT_LABELS } from "../domain/stats";
+import {
+  BUILDINGS,
+  getBuilding,
+  getMaterial,
+  MASTER_POTION_BONUS,
+  MATERIAL_DROP,
+  MATERIALS,
+  SMITH_RULES,
+  type MaterialId,
+} from "../domain/village";
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
 import { MAX_SKILL_RANK, SKILL_BONUS_PER_RANK, SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import { formatNumber, Gold } from "./Gold";
@@ -115,6 +127,11 @@ export function HelpScreen() {
             ]}
           />
           <p>XP und Gold hängen vom Level der Kreatur bzw. des Dungeons ab – je schwieriger, desto mehr.</p>
+          <p>
+            Tages- und Wochenaufträge hängen an der Anschlagtafel im Dorf – ohne sie gibt es nur das Questbuch. Die
+            Anschlagtafel bringt die Tages-Jagden, das Auftragsbrett (Stufe 2) alle übrigen Aufträge und die
+            Kopfgeld-Tafel (Stufe 3) zusätzlich Steckbriefe.
+          </p>
           <H>⭐ Tagesaufträge</H>
           <p>
             Jeden Tag gibt es {DAILY_HUNT_COUNT} neue Jagdaufträge passend zu deinem Level und einen Auftrag für Händler
@@ -122,6 +139,13 @@ export function HelpScreen() {
             {DAILY_TRADE_COUNTS.salvage} zerlegen oder {DAILY_TRADE_COUNTS.upgrade}-mal eines verbessern. Aufträge laufen sofort, ohne
             Annehmen, und geben XP, Gold und mit {pct(DAILY_DROP_CHANCE)} ein Item. Um Mitternacht kommen neue – was bis
             dahin nicht abgegeben ist, verfällt.
+          </p>
+          <H>🎯 Steckbriefe</H>
+          <p>
+            Mit der Kopfgeld-Tafel hängen jeden Tag {DAILY_BOUNTY_COUNT} Steckbriefe aus: gesuchte Elite-Gegner mit{" "}
+            {BOUNTY_AFFIXES} festen Modifikatoren, zum Beispiel ein rasender, explosiver Schneewolf. Kämpfst du gegen die
+            Kreatur, solange der Steckbrief offen ist, erscheint sie genau so. Ein Steckbrief gibt viel XP und Gold und
+            immer ein Item.
           </p>
           <H>📅 Wochenaufträge</H>
           <p>Jeden Montag gibt es grössere Ziele für die ganze Woche – mit mehr XP und Gold und immer einem Item:</p>
@@ -250,22 +274,69 @@ export function HelpScreen() {
         </Topic>
 
         <Topic id="village" title="🏘️ Dorf">
+          <p>
+            Das Dorf baust du selbst auf. Am Anfang gibt es nur einen Strassenhändler – Schmiede, Anschlagtafel und Alchemist
+            musst du erst bauen. Jedes Gebäude hat drei Stufen und ist sofort fertig. Bauen kostet Gold und Material.
+          </p>
+          <H>🧱 Material</H>
+          <p>
+            Jedes Gebiet hat ein Material, und jeder Sieg dort bringt sicher welches: {MATERIAL_DROP.normal} pro Sieg,{" "}
+            {MATERIAL_DROP.elite} bei Elite-Gegnern, {MATERIAL_DROP.boss} beim Boss. Dungeons geben das Material ihres
+            Level-Bereichs, und zwar doppelt so viel. Im Endlos-Turm und im Koop zählt das Level des Gegners. Material liegt
+            in einem eigenen Vorrat und lässt sich nicht verkaufen.
+          </p>
+          <Table
+            head={["Material", "Gebiet"]}
+            rows={MATERIALS.map((m) => {
+              const area = AREAS.find((a) => a.id === m.areaId);
+              return [`${m.icon} ${m.name}`, area ? `${area.name} (Lv. ${area.minLevel}–${area.maxLevel})` : m.areaId];
+            })}
+          />
+          <H>🏗️ Gebäude und Stufen</H>
+          <Table
+            head={["Gebäude", "Stufe", "Wirkung", "Kosten"]}
+            rows={BUILDINGS.flatMap((b) =>
+              b.tiers.map((t, tier) => [
+                tier === 0 ? `${b.icon} ${b.name}` : "",
+                `${tier} · ${t.name}`,
+                t.effect,
+                t.cost ? (
+                  <span className="whitespace-nowrap">
+                    <Gold amount={t.cost.gold} />{" "}
+                    {Object.entries(t.cost.materials)
+                      .map(([id, n]) => `${n} ${getMaterial(id as MaterialId).icon}`)
+                      .join(" ")}
+                  </span>
+                ) : (
+                  "–"
+                ),
+              ]),
+            )}
+          />
           <H>🏪 Händler</H>
           <ul className="list-disc space-y-1 pl-5">
             <li>
-              Alle {SHOP_ROTATION_HOURS} Stunden gibt es {SHOP_SIZE} neue Items passend zu deinem Level – mit etwas Glück
-              seltene, epische oder sogar legendäre.
+              Alle {SHOP_ROTATION_HOURS} Stunden gibt es neue Items passend zu deinem Level. Wie viele und wie selten, hängt
+              von der Stufe ab – das Handelshaus hat {SHOP_SIZE} Stück, mit etwas Glück auch legendäre.
             </li>
-            <li>Bis zu {SHOP_REROLLS_PER_DAY}-mal am Tag kannst du gegen Gold sofort neue Ware auswürfeln.</li>
+            <li>
+              Ab dem Krämerladen kannst du gegen Gold sofort neue Ware auswürfeln, im Handelshaus bis zu{" "}
+              {SHOP_REROLLS_PER_DAY}-mal am Tag.
+            </li>
             <li>Items, die du nicht brauchst, verkaufst du hier für einen Teil ihres Werts.</li>
-            <li>Kleine und normale Heiltränke kannst du kaufen, alle anderen Tränke gibt es nur als Kampfbeute.</li>
           </ul>
+          <H>⚗️ Alchemist und Tränke</H>
+          <p>
+            Kleine Heiltränke hat schon der Strassenhändler. Alle anderen verkauft der Alchemist, je nach Stufe. Der
+            Meisteralchemist macht alle Tränke {pct(MASTER_POTION_BONUS)} stärker (nur solo, nicht im Koop).
+          </p>
           <Table
-            head={["Trank", "Wirkung", "Preis"]}
+            head={["Trank", "Wirkung", "Preis", "Zu kaufen ab"]}
             rows={POTIONS.map((p) => [
               `${p.icon} ${p.name}`,
               potionEffectText(p),
-              p.price === null ? "nur Beute" : <Gold amount={p.price} />,
+              <Gold amount={p.price} />,
+              p.alchemist === 0 ? "Strassenhändler" : `${getBuilding("alchemist").tiers[p.alchemist].name} (Stufe ${p.alchemist})`,
             ])}
           />
           <H>⚒️ Schmied</H>
@@ -276,9 +347,13 @@ export function HelpScreen() {
             </li>
             <li>
               <b>Verbessern:</b> Mit Essenz steigerst du den Hauptwert (Angriff oder Rüstung) eines Items um{" "}
-              {pct(UPGRADE_STEP)} pro Stufe, bis +{MAX_UPGRADE}. Jede Stufe kostet mehr als die vorige.
+              {pct(UPGRADE_STEP)} pro Stufe – mit der Esse bis +{SMITH_RULES[1].maxUpgrade}, ab der Schmiede bis +
+              {MAX_UPGRADE}. Jede Stufe kostet mehr als die vorige.
             </li>
-            <li>Zerlegst du ein verbessertes Item, bekommst du {pct(UPGRADE_REFUND)} der hineingesteckten Essenz zurück.</li>
+            <li>
+              Zerlegst du ein verbessertes Item, bekommst du {pct(UPGRADE_REFUND)} der hineingesteckten Essenz zurück, bei der
+              Meisterschmiede {pct(SMITH_RULES[3].refund)}.
+            </li>
           </ul>
         </Topic>
 

@@ -4,12 +4,14 @@ import { getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { getPotion } from "../domain/potions";
 import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
+import { materialEntries } from "../domain/village";
 import { sfx } from "../game/sfx";
 import type { SpriteDef } from "../game/sprites";
 import type { ClaimedChest } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { itemName, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from "./itemUi";
+import { MaterialGain } from "./materialUi";
 import { PixelSprite } from "./PixelSprite";
 
 const CHEST_PALETTE = {
@@ -67,7 +69,8 @@ export function DungeonChest({ chest }: { chest: ClaimedChest }) {
   const [open, setOpen] = useState(false);
   const potions = Object.entries(chest.potions).map(([id, count]) => ({ def: getPotion(id), count }));
   const levelUps = chest.levelAfter - chest.levelBefore;
-  const empty = chest.xp === 0 && chest.gold === 0 && chest.items.length === 0 && potions.length === 0;
+  const empty =
+    chest.xp === 0 && chest.gold === 0 && chest.items.length === 0 && potions.length === 0 && materialEntries(chest.materials).length === 0;
 
   const openChest = () => {
     if (open) return;
@@ -163,6 +166,11 @@ export function DungeonChest({ chest }: { chest: ClaimedChest }) {
                   </span>
                 ))}
               </p>
+            </Reveal>
+          )}
+          {materialEntries(chest.materials).length > 0 && (
+            <Reveal delay={next()}>
+              <MaterialGain materials={chest.materials} className="text-sm font-bold" />
             </Reveal>
           )}
           {chest.items.map((owned) => {

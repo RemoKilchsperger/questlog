@@ -1,19 +1,12 @@
 import { motion } from "motion/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { formatCountdown, nextBoundary } from "../domain/calendar";
-import { getItemStats, sellPrice } from "../domain/items";
+import { getItemStats, sellPrice as baseSellPrice } from "../domain/items";
 import { getLevel } from "../domain/leveling";
-import { potionEffectText, SHOP_POTIONS } from "../domain/potions";
-import {
-  rerollCost,
-  rerollsLeft,
-  SHOP_REROLLS_PER_DAY,
-  SHOP_ROTATION_HOURS,
-  SHOP_SIZE,
-  shopPrice,
-  shopSlot,
-} from "../domain/shop";
-import type { OwnedItem } from "../domain/types";
+import { POTIONS, potionEffectText } from "../domain/potions";
+import { rerollCost, rerollsLeft, SHOP_ROTATION_HOURS, shopPrice, shopSlot } from "../domain/shop";
+import type { OwnedItem, Rarity } from "../domain/types";
+import { getBuilding, MERCHANT_RULES } from "../domain/village";
 import { useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Gold } from "./Gold";
@@ -24,8 +17,16 @@ import { POTION_COLORS } from "./potionUi";
 import { itemName, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { useNow } from "./useNow";
 
+/** Regeln des Händlers auf seiner aktuellen Ausbaustufe (village.ts). */
+function useMerchant() {
+  const tier = useGameStore((s) => s.village.merchant);
+  return { tier, rules: MERCHANT_RULES[tier], name: getBuilding("merchant").tiers[tier].name };
+}
+
 export function ShopScreen() {
   const sell = useGameStore((s) => s.sell);
+  const { rules } = useMerchant();
+  const sellPrice = (owned: OwnedItem) => baseSellPrice(owned, rules.sellBonus);
   const [pendingSale, setPendingSale] = useState<OwnedItem | null>(null);
   const cancelSale = useCallback(() => setPendingSale(null), []);
   const sale = pendingSale ? getItemStats(pendingSale) : null;
@@ -86,12 +87,13 @@ type View = "wares" | "potions";
 
 function Offers() {
   const gold = useGameStore((s) => s.character.gold);
+  const { name } = useMerchant();
   const [view, setView] = useState<View>("wares");
 
   return (
     <section className="panel p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-pixel text-2xl">Händler</h2>
+        <h2 className="font-pixel text-2xl">{name}</h2>
         <Gold amount={gold} className="text-lg font-bold text-gold" />
       </div>
       <div className="mb-3 flex gap-1">
@@ -120,10 +122,11 @@ function WareOffers() {
   const lastReroll = useGameStore((s) => s.lastShopReroll);
   const rerollCount = useGameStore((s) => s.shopRerolls);
   const rerollShop = useGameStore((s) => s.rerollShop);
+  const { rules } = useMerchant();
   const [confirmReroll, setConfirmReroll] = useState(false);
   const closeReroll = useCallback(() => setConfirmReroll(false), []);
   const cost = rerollCost(level);
-  const left = rerollsLeft(lastReroll, rerollCount, now);
+  const left = rerollsLeft(lastReroll, rerollCount, now, rules.rerollsPerDay);
   const rerollAvailable = left > 0;
 
   // Neuer Abschnitt → neue Ware (auch wenn die Seite offen bleibt).
@@ -135,11 +138,16 @@ function WareOffers() {
   return (
     <>
       <p className="mb-2 text-xs text-muted">
-        Alle {SHOP_ROTATION_HOURS} Stunden komplett neue Ware passend zu deinem Level – jedes Stück kann{" "}
-        <span className="text-rare">selten</span> (20 %), <span className="text-epic">episch</span> (5 %) oder mit
-        viel Glück <span className="text-legendary">legendär</span> (0,2 %) sein. Neue Ware in{" "}
+        Alle {SHOP_ROTATION_HOURS} Stunden {rules.size} neue Stücke passend zu deinem Level – jedes kann{" "}
+        <RarityChances chances={rules.rarityChances} /> sein. Neue Ware in{" "}
         <span className="text-parchment">{formatCountdown(now, nextBoundary(now, SHOP_ROTATION_HOURS))}</span>.
+        {rules.sellBonus > 0 && <> Beim Verkauf zahlt der Grosshandel {Math.round(rules.sellBonus * 100)} % mehr.</>}
       </p>
+      {rules.rerollsPerDay === 0 ? (
+        <p className="mb-3 text-xs text-muted">
+          Der Strassenhändler kann keine neue Ware holen – baue ihn im Dorf aus, dann geht das gegen Gold.
+        </p>
+      ) : (
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <motion.button
           whileTap={{ scale: 0.95 }}
@@ -151,9 +159,10 @@ function WareOffers() {
           🎲 Neue Ware <Gold amount={cost} className="font-bold" />
         </motion.button>
         <span className="text-xs text-muted">
-          {rerollAvailable ? `Heute noch ${left} von ${SHOP_REROLLS_PER_DAY}×` : "Heute aufgebraucht – morgen wieder"}
+          {rerollAvailable ? `Heute noch ${left} von ${rules.rerollsPerDay}×` : "Heute aufgebraucht – morgen wieder"}
         </span>
       </div>
+      )}
       <ConfirmDialog
         open={confirmReroll}
         title="Neue Ware auswürfeln?"
@@ -166,7 +175,7 @@ function WareOffers() {
       >
         <p>
           Für <Gold amount={cost} className="font-bold text-gold" /> ersetzt der Händler sein ganzes Angebot sofort
-          durch neue Ware. Das geht {SHOP_REROLLS_PER_DAY}-mal pro Tag – heute noch {left}-mal.
+          durch neue Ware. Das geht {rules.rerollsPerDay}-mal pro Tag – heute noch {left}-mal.
         </p>
       </ConfirmDialog>
       {offers.length === 0 ? (
@@ -195,8 +204,31 @@ function WareOffers() {
         </ul>
       )}
       <p className="mt-2 text-right text-xs text-muted">
-        {offers.length} von {SHOP_SIZE} Stücken übrig
+        {offers.length} von {rules.size} Stücken übrig
       </p>
+    </>
+  );
+}
+
+const RARITY_NAMES: Record<Rarity, { label: string; className: string }> = {
+  common: { label: "gewöhnlich", className: "text-parchment" },
+  rare: { label: "selten", className: "text-rare" },
+  epic: { label: "episch", className: "text-epic" },
+  legendary: { label: "legendär", className: "text-legendary" },
+};
+
+/** „selten (20 %), episch (5 %) oder legendär (0,2 %)“ */
+function RarityChances({ chances }: { chances: readonly { rarity: Rarity; chance: number }[] }) {
+  const sorted = [...chances].reverse();
+  return (
+    <>
+      {sorted.map(({ rarity, chance }, i) => (
+        <span key={rarity}>
+          {i > 0 && (i === sorted.length - 1 ? " oder " : ", ")}
+          <span className={RARITY_NAMES[rarity].className}>{RARITY_NAMES[rarity].label}</span> (
+          {(chance * 100).toLocaleString("de-CH")} %)
+        </span>
+      ))}
     </>
   );
 }
@@ -205,17 +237,25 @@ function PotionOffers() {
   const gold = useGameStore((s) => s.character.gold);
   const potions = useGameStore((s) => s.potions);
   const buyPotion = useGameStore((s) => s.buyPotion);
+  const alchemist = useGameStore((s) => s.village.alchemist);
+  const alchemistTiers = getBuilding("alchemist").tiers;
 
   return (
     <>
       <p className="mb-2 text-xs text-muted">
         Heiltränke stellen im Kampf Lebenspunkte wieder her. Pro Runde darfst du einen Trank trinken – und jede Sorte
-        nur einmal pro Kampf. Grosse Heiltränke sowie Angriffs- und Rüstungstränke gibt es nicht zu kaufen, nur als
-        Kampfbeute.
+        nur einmal pro Kampf. Kleine Heiltränke hat der Händler immer, alle anderen verkauft der Alchemist – je weiter
+        er ausgebaut ist, desto mehr. Sonst gibt es sie nur als Kampfbeute.
+        {alchemist >= 3 && <span className="text-xp"> Beim Meisteralchemisten wirken alle Tränke 25 % stärker.</span>}
       </p>
       <ul className="flex flex-col gap-2">
-        {SHOP_POTIONS.map((p) => (
-          <li key={p.id} className="flex items-center gap-3 rounded-md border-2 border-night-700 bg-night-800 p-2">
+        {POTIONS.map((p) => {
+          const locked = p.alchemist > alchemist;
+          return (
+          <li
+            key={p.id}
+            className={`flex items-center gap-3 rounded-md border-2 border-night-700 bg-night-800 p-2 ${locked ? "opacity-50" : ""}`}
+          >
             <span className="text-2xl" aria-hidden>
               {p.icon}
             </span>
@@ -226,17 +266,26 @@ function PotionOffers() {
                 <span className="ml-2 text-muted">im Besitz: {potions[p.id] ?? 0}</span>
               </p>
             </div>
+            {locked ? (
+              <span className="text-right text-xs text-muted">
+                🔒 {alchemistTiers[p.alchemist].name}
+                <br />
+                (Alchemist Stufe {p.alchemist})
+              </span>
+            ) : (
             <motion.button
               whileTap={{ scale: 0.9 }}
-              disabled={gold < (p.price ?? Infinity)}
+              disabled={locked || gold < p.price}
               onClick={() => buyPotion(p.id)}
-              title={gold < (p.price ?? Infinity) ? "Nicht genug Gold" : "Kaufen"}
+              title={locked ? undefined : gold < p.price ? "Nicht genug Gold" : "Kaufen"}
               className="rounded-md border-2 border-gold bg-gold/15 px-2 py-0.5 text-sm text-gold hover:bg-gold/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Gold amount={p.price ?? 0} className="font-bold" />
+              <Gold amount={p.price} className="font-bold" />
             </motion.button>
+            )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </>
   );

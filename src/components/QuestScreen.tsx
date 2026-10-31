@@ -10,11 +10,13 @@ import {
   questGoalText,
   questTarget,
   trackedQuests,
+  visibleBoard,
   type QuestBoard,
   type QuestDef,
   type TradeAction,
   type TrackedQuest,
 } from "../domain/quests";
+import { BOARD_TIERS } from "../domain/village";
 import { useGameStore } from "../store/gameStore";
 import { CreatureSprite } from "./CreatureSprite";
 import { Gold } from "./Gold";
@@ -42,8 +44,9 @@ export function QuestScreen() {
 /** Wie viele Quests erfüllt sind und auf die Abgabe warten – für das Abzeichen am Tab. */
 export function useReadyQuestCount(): number {
   return useGameStore((s) =>
-    trackedQuests(s.questLog, s.dailyQuests, s.weeklyQuests, dateKey(), weekKey()).filter((q) => isQuestComplete(q.def, q.progress))
-      .length,
+    trackedQuests(s.questLog, s.dailyQuests, s.weeklyQuests, dateKey(), weekKey(), s.village.board).filter((q) =>
+      isQuestComplete(q.def, q.progress),
+    ).length,
   );
 }
 
@@ -52,14 +55,19 @@ type BoardView = "daily" | "weekly";
 /** Gewählte Ansicht der Aufträge – nur eine Bequemlichkeit pro Browser. */
 const BOARD_VIEW_KEY = "questlog-board-view";
 
-const BOARD_VIEWS: Record<BoardView, { label: string; intro: string }> = {
+const BOARD_VIEWS: Record<BoardView, { label: string; intro: (boardTier: number) => string }> = {
   daily: {
     label: "⭐ Täglich",
-    intro: "Jeden Tag drei Jagdaufträge passend zu deinem Level und ein Auftrag für Händler oder Schmied – sie zählen sofort, ohne Annehmen.",
+    intro: (tier) =>
+      tier >= BOARD_TIERS.bounties
+        ? "Jeden Tag Jagdaufträge, ein Auftrag für Händler oder Schmied und zwei Steckbriefe: Gesuchte Elite-Gegner erscheinen genau so, wenn du gegen die Kreatur kämpfst. Alles zählt sofort, ohne Annehmen."
+        : tier >= BOARD_TIERS.all
+          ? "Jeden Tag drei Jagdaufträge passend zu deinem Level und ein Auftrag für Händler oder Schmied – sie zählen sofort, ohne Annehmen."
+          : "Jeden Tag drei Jagdaufträge passend zu deinem Level – sie zählen sofort, ohne Annehmen. Baust du die Anschlagtafel aus, kommen weitere dazu.",
   },
   weekly: {
     label: "📅 Wöchentlich",
-    intro: "Grössere Ziele für die ganze Woche, jeden Montag neu – mit garantiertem Item.",
+    intro: () => "Grössere Ziele für die ganze Woche, jeden Montag neu – mit garantiertem Item.",
   },
 };
 
@@ -82,9 +90,11 @@ function BoardPanel({ now }: { now: Date }) {
   };
   const daily = useGameStore((s) => s.dailyQuests);
   const weekly = useGameStore((s) => s.weeklyQuests);
+  const boardTier = useGameStore((s) => s.village.board);
+  // Nur was die Anschlagtafel auf ihrer Stufe zeigt
   const boards: Record<BoardView, QuestBoard> = {
-    daily: daily.date === dateKey(now) ? daily : EMPTY_BOARD,
-    weekly: weekly.date === weekKey(now) ? weekly : EMPTY_BOARD,
+    daily: daily.date === dateKey(now) ? visibleBoard(daily, boardTier) : EMPTY_BOARD,
+    weekly: weekly.date === weekKey(now) ? visibleBoard(weekly, boardTier) : EMPTY_BOARD,
   };
   const board = boards[view];
   const done = board.quests.filter((q) => q.turnedIn).length;
@@ -114,13 +124,25 @@ function BoardPanel({ now }: { now: Date }) {
           ))}
         </div>
       </div>
-      <p className="mb-3 text-xs text-muted">
-        {BOARD_VIEWS[view].intro}{" "}
-        <span className="num text-parchment">
-          {done}/{board.quests.length}
-        </span>{" "}
-        abgegeben · neue in {resetIn}.
-      </p>
+      {boardTier < BOARD_TIERS.hunts ? (
+        <p className="text-sm text-muted">
+          🪧 Im Dorf gibt es noch keine Anschlagtafel. Baue sie unter <span className="text-parchment">🏘️ Dorf → 🏗️ Ausbau</span>,
+          dann hängen hier jeden Tag Jagdaufträge – später auch Wochenaufträge und Steckbriefe. Das Questbuch rechts steht dir
+          jederzeit offen.
+        </p>
+      ) : view === "weekly" && boardTier < BOARD_TIERS.all ? (
+        <p className="text-sm text-muted">
+          📅 Wochenaufträge hängen erst am Auftragsbrett (Anschlagtafel Stufe {BOARD_TIERS.all}) – baue sie im Dorf aus.
+        </p>
+      ) : (
+        <p className="mb-3 text-xs text-muted">
+          {BOARD_VIEWS[view].intro(boardTier)}{" "}
+          <span className="num text-parchment">
+            {done}/{board.quests.length}
+          </span>{" "}
+          abgegeben · neue in {resetIn}.
+        </p>
+      )}
       <ul className="flex flex-col gap-2">
         {board.quests.map((q) => (
           <QuestRow key={q.def.id} def={q.def} progress={q.progress} state={q.turnedIn ? "done" : "active"} board />
@@ -317,6 +339,16 @@ const TRADE_ICONS: Record<TradeAction, string> = { sell: "🏪", salvage: "⚒�
 function QuestIcon({ def }: { def: QuestDef }) {
   const { goal } = def;
   if (goal.kind === "kill") return <CreatureSprite sprite={getCreature(goal.creatureId).creature.sprite} size={40} className="shrink-0" />;
+  if (goal.kind === "bounty") {
+    return (
+      <span className="relative shrink-0">
+        <CreatureSprite sprite={getCreature(goal.creatureId).creature.sprite} size={40} />
+        <span className="absolute -right-1 -top-1 text-sm" aria-hidden>
+          🎯
+        </span>
+      </span>
+    );
+  }
   if (goal.kind === "dungeon") return <CreatureSprite sprite={getDungeon(goal.dungeonId).creatures.at(-1)!.sprite} size={40} className="shrink-0" />;
   const symbol =
     goal.kind === "trade" ? TRADE_ICONS[goal.action] : goal.kind === "dungeons" ? "🏰" : goal.kind === "towerFloor" ? "🗼" : goal.boss ? "👑" : "⚔️";

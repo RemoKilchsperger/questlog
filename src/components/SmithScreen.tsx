@@ -12,6 +12,7 @@ import {
 import { getItemStats, MAX_UPGRADE, RARITIES, UPGRADE_STEP } from "../domain/items";
 import { getLevel } from "../domain/leveling";
 import type { ItemStats, OwnedItem } from "../domain/types";
+import { getBuilding, SMITH_RULES } from "../domain/village";
 import { useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Essence } from "./Gold";
@@ -23,13 +24,41 @@ import { Hint } from "./HoverCard";
 
 type View = "upgrade" | "salvage";
 
-export function SmithScreen() {
+/** Regeln der Schmiede auf ihrer aktuellen Ausbaustufe (village.ts). */
+function useSmithRules() {
+  const tier = useGameStore((s) => s.village.smith);
+  return { tier, rules: SMITH_RULES[tier] };
+}
+
+export function SmithScreen({ onOpenVillage }: { onOpenVillage: () => void }) {
   const essence = useGameStore((s) => s.character.essence);
+  const { tier, rules } = useSmithRules();
   const [view, setView] = useState<View>("upgrade");
   const [pendingUpgrade, setPendingUpgrade] = useState<OwnedItem | null>(null);
   const [pendingSalvage, setPendingSalvage] = useState<OwnedItem | null>(null);
   const closeUpgrade = useCallback(() => setPendingUpgrade(null), []);
   const closeSalvage = useCallback(() => setPendingSalvage(null), []);
+
+  if (!rules.open) {
+    return (
+      <section className="panel mx-auto flex max-w-lg flex-col items-center gap-3 p-6 text-center">
+        <span className="text-5xl grayscale" aria-hidden>
+          ⚒️
+        </span>
+        <h2 className="font-pixel text-2xl">Noch keine Schmiede</h2>
+        <p className="text-sm text-muted">
+          Im Dorf steht erst ein leerer Bauplatz. Baue die Schmiede, um Ausrüstung in Essenz zu zerlegen und Waffen und
+          Rüstungen zu verbessern.
+        </p>
+        <button
+          onClick={onOpenVillage}
+          className="font-pixel rounded-md border-2 border-gold bg-gold/15 px-4 py-1.5 text-gold hover:bg-gold/25"
+        >
+          🏗️ Zum Ausbau
+        </button>
+      </section>
+    );
+  }
 
   const upgradeButton = (owned: OwnedItem) => (
     <UpgradeButton owned={owned} essence={essence} onClick={() => setPendingUpgrade(owned)} />
@@ -39,7 +68,7 @@ export function SmithScreen() {
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <section className="panel p-5">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-pixel text-2xl">Schmied</h2>
+          <h2 className="font-pixel text-2xl">{getBuilding("smith").tiers[tier].name}</h2>
           <Essence amount={essence} className="text-lg font-bold text-essence" />
         </div>
         <div className="mb-3 flex gap-1">
@@ -70,7 +99,7 @@ export function SmithScreen() {
                 onClick={() => setPendingSalvage(owned)}
                 className="rounded-md border-2 border-essence/60 px-2 py-0.5 text-sm text-essence hover:bg-essence/15"
               >
-                Zerlegen <Essence amount={essenceYield(owned)} sign />
+                Zerlegen <Essence amount={essenceYield(owned, rules.refund)} sign />
               </motion.button>
             ) : (
               <Hint text="Zerlegen geht erst ab der Seltenheit „selten“.">
@@ -91,6 +120,7 @@ export function SmithScreen() {
 function UpgradeInfo({ onUpgrade }: { onUpgrade: (owned: OwnedItem) => ReactNode }) {
   const equipment = useGameStore((s) => s.equipment);
   const level = useGameStore((s) => getLevel(s.character.totalXp));
+  const { rules } = useSmithRules();
   const equipped = Object.values(equipment).filter((i): i is OwnedItem => i !== null);
 
   return (
@@ -99,8 +129,12 @@ function UpgradeInfo({ onUpgrade }: { onUpgrade: (owned: OwnedItem) => ReactNode
         Mit Essenz schmiedet der Schmied deine Ausrüstung nach: Waffen bekommen mehr{" "}
         <span className="text-strength">Angriff</span>, Rüstungen und Schilde mehr{" "}
         <span className="text-intellect">Rüstung</span> – je Stufe +{Math.round(UPGRADE_STEP * 100)} %, bis{" "}
-        <span className="text-parchment">+{MAX_UPGRADE}</span>. Jede Stufe kostet mehr als die vorige, also überleg
-        dir gut, welches Stück es wert ist.
+        <span className="text-parchment">+{rules.maxUpgrade}</span>
+        {rules.maxUpgrade < MAX_UPGRADE && <> (ausgebaut bis +{MAX_UPGRADE})</>}. Jede Stufe kostet mehr als die vorige,
+        also überleg dir gut, welches Stück es wert ist.
+        {rules.discount > 0 && (
+          <span className="text-essence"> Die Meisterschmiede verlangt {Math.round(rules.discount * 100)} % weniger Essenz.</span>
+        )}
       </p>
       <h3 className="font-pixel mb-2 mt-4 text-lg">Angelegt</h3>
       {equipped.length === 0 ? (
@@ -122,12 +156,13 @@ function UpgradeInfo({ onUpgrade }: { onUpgrade: (owned: OwnedItem) => ReactNode
 }
 
 function SalvageInfo() {
+  const { rules } = useSmithRules();
   return (
     <>
       <p className="text-sm text-muted">
         Der Schmied zerlegt Ausrüstung ab der Seltenheit <span className="text-rare">selten</span> in Essenz.
-        Seltenere und höherstufige Items geben mehr, verbesserte Items geben zusätzlich die Hälfte der investierten
-        Essenz zurück. Angelegte Items musst du zuerst ablegen.
+        Seltenere und höherstufige Items geben mehr, verbesserte Items geben zusätzlich{" "}
+        {Math.round(rules.refund * 100)} % der investierten Essenz zurück. Angelegte Items musst du zuerst ablegen.
       </p>
       <table className="mt-4 w-full text-sm">
         <thead>
@@ -156,8 +191,16 @@ function SalvageInfo() {
 }
 
 function UpgradeButton({ owned, essence, onClick }: { owned: OwnedItem; essence: number; onClick: () => void }) {
+  const { rules } = useSmithRules();
   if (!canUpgrade(owned)) return <span className="text-xs text-essence">max. +{MAX_UPGRADE}</span>;
-  const cost = upgradeCost(owned);
+  if (!canUpgrade(owned, rules.maxUpgrade)) {
+    return (
+      <Hint text="Für höhere Stufen musst du die Schmiede im Dorf ausbauen.">
+        <span className="text-xs text-muted">🔒 +{(owned.upgrade ?? 0) + 1}</span>
+      </Hint>
+    );
+  }
+  const cost = upgradeCost(owned, undefined, rules.discount);
   const tooPoor = essence < cost;
   return (
     <motion.button
@@ -174,9 +217,10 @@ function UpgradeButton({ owned, essence, onClick }: { owned: OwnedItem; essence:
 
 function UpgradeDialog({ owned, essence, onClose }: { owned: OwnedItem | null; essence: number; onClose: () => void }) {
   const upgrade = useGameStore((s) => s.upgrade);
+  const { rules } = useSmithRules();
   const before = owned ? getItemStats(owned) : null;
   const after = owned ? getItemStats({ ...owned, upgrade: (owned.upgrade ?? 0) + 1 }) : null;
-  const cost = owned ? upgradeCost(owned) : 0;
+  const cost = owned ? upgradeCost(owned, undefined, rules.discount) : 0;
 
   return (
     <ConfirmDialog
@@ -210,6 +254,7 @@ function UpgradeDialog({ owned, essence, onClose }: { owned: OwnedItem | null; e
 
 function SalvageDialog({ owned, onClose }: { owned: OwnedItem | null; onClose: () => void }) {
   const salvage = useGameStore((s) => s.salvage);
+  const { rules } = useSmithRules();
   const stats = owned ? getItemStats(owned) : null;
 
   return (
@@ -227,11 +272,11 @@ function SalvageDialog({ owned, onClose }: { owned: OwnedItem | null; onClose: (
         <>
           <ItemLine stats={stats} />
           <p className="mt-2">
-            Du erhältst <Essence amount={essenceYield(owned)} className="font-bold text-essence" />
+            Du erhältst <Essence amount={essenceYield(owned, rules.refund)} className="font-bold text-essence" />
             {stats.upgrade > 0 && (
               <span className="text-muted">
                 {" "}
-                (inkl. Hälfte der investierten <Essence amount={investedEssence(owned)} />)
+                (inkl. {Math.round(rules.refund * 100)} % der investierten <Essence amount={investedEssence(owned)} />)
               </span>
             )}
             . Das Item ist danach weg.

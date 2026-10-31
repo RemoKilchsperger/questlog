@@ -62,11 +62,13 @@ import {
   EMPTY_QUEST_LOG,
   getQuest,
   EMPTY_BOARD,
+  openBounty,
   rollDailyQuests,
   rollWeeklyQuests,
   rollQuestLoot,
   turnInBoardQuest,
   turnInQuest,
+  visibleBoard,
   type QuestBoard,
   type QuestSource,
   type TradeAction,
@@ -79,6 +81,19 @@ import type { AbilityId } from "../domain/abilities";
 import { dateKey, weekKey } from "../domain/calendar";
 import { allocatePoint, convertLinearCurveXp, getLevel, resetAttributes } from "../domain/leveling";
 import { buyOffer, EMPTY_SHOP, rerollShop, rollShopStock, shopSlot, type ShopStock } from "../domain/shop";
+import {
+  addMaterials,
+  build,
+  DUNGEON_MATERIAL_FACTOR,
+  EMPTY_VILLAGE,
+  MERCHANT_RULES,
+  potionPower,
+  scaleMaterials,
+  SMITH_RULES,
+  type BuildingId,
+  type MaterialStock,
+  type Village,
+} from "../domain/village";
 import type { Character, EquipSlot, Equipment, Loot, OwnedItem, StatKey } from "../domain/types";
 import { EventBus } from "../game/EventBus";
 
@@ -160,6 +175,13 @@ interface GameState {
 
   potions: PotionStock;
   buyPotion: (potionId: string) => void;
+
+  /** Ausbaustufen der Gebäude im Dorf (village.ts) */
+  village: Village;
+  /** Baumaterial aus Kämpfen */
+  materials: MaterialStock;
+  /** Baut die nächste Stufe eines Gebäudes – sofort, gegen Gold und Material. */
+  build: (id: BuildingId) => void;
 
   /** IDs aller Boss-Items, die der Held je erbeutet hat – auch wenn sie inzwischen verkauft sind. */
   bossCollection: string[];
@@ -282,6 +304,8 @@ type SaveState = Pick<
   | "achievements"
   | "cosmetics"
   | "towerRecord"
+  | "village"
+  | "materials"
 >;
 
 const createCharacter = (): Character => ({
@@ -312,7 +336,7 @@ const upgradeItem = (item: Partial<OwnedItem> & Pick<OwnedItem, "uid" | "itemId"
  * Ständen (z. B. wenn die App während eines Updates neu geladen wurde und
  * die Versionsnummer schon neu war, die Migration aber noch fehlte).
  */
-function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
+export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
   const fresh = createCharacter();
   // Freigeschaltete Fähigkeiten gibt es nicht mehr – sie liegen auf den Waffen, die Skillpunkte sind wieder frei
   const { abilities: _abilities, ...savedCharacter } = (saved.character ?? {}) as Character & { abilities?: unknown };
@@ -352,6 +376,9 @@ function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     achievements,
     cosmetics,
     towerRecord: saved.towerRecord ?? EMPTY_TOWER_RECORD,
+    // Dorf-Ausbau: auch bestehende Spielstände beginnen mit einem leeren Dorf
+    village: { ...EMPTY_VILLAGE, ...saved.village },
+    materials: saved.materials ?? {},
   };
 }
 
@@ -484,10 +511,11 @@ export const useGameStore = create<GameState>()(
       /** Ein Sieg oder ein abgeschlossener Dungeon bringt Questbuch und Tagesaufträge voran. */
       const questEvent = (event: QuestEvent) => {
         get().refreshQuestBoards(); // Aufträge von gestern bzw. letzter Woche zählen nicht mehr
-        const { questLog, dailyQuests, weeklyQuests } = get();
+        const { questLog, dailyQuests, weeklyQuests, village } = get();
         const nextLog = applyQuestEvent(questLog, event);
-        const nextDaily = applyBoardEvent(dailyQuests, event);
-        const nextWeekly = applyBoardEvent(weeklyQuests, event);
+        // Nur Aufträge, die die Anschlagtafel schon zeigt, kommen voran
+        const nextDaily = applyBoardEvent(dailyQuests, event, village.board);
+        const nextWeekly = applyBoardEvent(weeklyQuests, event, village.board);
         if (nextLog !== questLog || nextDaily !== dailyQuests || nextWeekly !== weeklyQuests) {
           set({ questLog: nextLog, dailyQuests: nextDaily, weeklyQuests: nextWeekly });
         }
@@ -534,11 +562,17 @@ export const useGameStore = create<GameState>()(
       };
 
       /**
-       * Schreibt Kampfbeute gut: XP, Gold, Items (inkl. Boss-Sammlung) und Tränke.
+       * Schreibt Kampfbeute gut: XP, Gold, Items (inkl. Boss-Sammlung), Tränke und Baumaterial.
        * Ein Level-up meldet der Aufrufer über den EventBus.
        */
-      const grantRewards = (xp: number, gold: number, items: OwnedItem[], potionDrops: Record<string, number>) => {
-        const { character, inventory, potions, bossCollection } = get();
+      const grantRewards = (
+        xp: number,
+        gold: number,
+        items: OwnedItem[],
+        potionDrops: Record<string, number>,
+        materialDrops?: MaterialStock,
+      ) => {
+        const { character, inventory, potions, bossCollection, materials } = get();
         const levelBefore = getLevel(character.totalXp);
         const levelAfter = getLevel(character.totalXp + xp);
         set({
@@ -546,8 +580,15 @@ export const useGameStore = create<GameState>()(
           inventory: [...inventory, ...items],
           bossCollection: addToCollection(bossCollection, ...items),
           potions: addPotions(potions, ...Object.entries(potionDrops)),
+          materials: addMaterials(materials, materialDrops),
         });
         return { levelBefore, levelAfter };
+      };
+
+      /** Kampfwerte für Solo-Kämpfe – mit der Trankwirkung des Alchemisten (im Koop gilt das Dorf nicht). */
+      const soloHero = () => {
+        const { character, equipment, village } = get();
+        return { ...getHeroCombatProfile(character, equipment), potionPower: potionPower(village.alchemist) };
       };
 
       /** Schreibt die Dungeon-Truhe gut und merkt sie sich für die Truhen-Animation. */
@@ -555,7 +596,7 @@ export const useGameStore = create<GameState>()(
         const { dungeon } = get();
         if (!dungeon || dungeon.claimed) return;
         const { chest } = dungeon;
-        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         const { records } = get();
         set({
           dungeon: { ...dungeon, claimed: { ...chest, ...levels, completed } },
@@ -575,7 +616,7 @@ export const useGameStore = create<GameState>()(
         const { tower } = get();
         if (!tower || tower.claimed) return;
         const { chest } = tower;
-        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         set({ tower: { ...tower, claimed: { ...chest, ...levels, completed: false } } });
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
@@ -584,8 +625,8 @@ export const useGameStore = create<GameState>()(
 
       /** Kampf auf dem aktuellen Stockwerk des Turms – mit den Segen des Laufs und den mitgenommenen LP. */
       const towerBattle = (run: TowerRun, heroHp: number | null) => {
-        const { character, equipment } = get();
-        const hero = blessedProfile(getHeroCombatProfile(character, equipment), run.blessings);
+        const { character } = get();
+        const hero = blessedProfile(soloHero(), run.blessings);
         const creature = floorCreature(run.seed, run.floor, hero.level);
         const battle = startBattle(newId(), character.name, hero, creature, heroHp ?? hero.maxHp, floorElite(run.seed, run.floor));
         return { ...battle, towerFloor: run.floor, blessings: run.blessings, secondWindUsed: run.secondWindUsed };
@@ -614,6 +655,8 @@ export const useGameStore = create<GameState>()(
       dungeon: null,
       tower: null,
       towerRecord: EMPTY_TOWER_RECORD,
+      village: EMPTY_VILLAGE,
+      materials: {},
       lastReward: null,
 
       setTitle: (achievementId) =>
@@ -645,7 +688,7 @@ export const useGameStore = create<GameState>()(
         };
         const changedRecords = Object.keys(records).some((k) => records[k as keyof Records] !== r[k as keyof Records]);
         const { tiers, unlocked } = evaluateAchievements(
-          { character: s.character, questLog: s.questLog, bossCollection: s.bossCollection, coopStats: s.coopStats, records },
+          { character: s.character, questLog: s.questLog, bossCollection: s.bossCollection, coopStats: s.coopStats, records, village: s.village },
           s.achievements,
         );
         if (!changedRecords && unlocked.length === 0) return;
@@ -670,12 +713,12 @@ export const useGameStore = create<GameState>()(
 
       turnInQuest: (id) =>
         attempt(() => {
-          const { questLog, dailyQuests, weeklyQuests, records } = get();
+          const { questLog, dailyQuests, weeklyQuests, records, village } = get();
           const weekly = weeklyQuests.quests.find((q) => q.def.id === id);
           if (weekly) {
             if (weeklyQuests.date !== weekKey()) throw new Error("Dieser Wochenauftrag ist abgelaufen.");
             grantQuestReward(weekly.def, "weekly", {
-              weeklyQuests: turnInBoardQuest(weeklyQuests, id),
+              weeklyQuests: turnInBoardQuest(weeklyQuests, id, village.board),
               records: { ...records, questsCompleted: records.questsCompleted + 1 },
             });
             return;
@@ -689,8 +732,9 @@ export const useGameStore = create<GameState>()(
             return;
           }
           if (dailyQuests.date !== dateKey()) throw new Error("Dieser Tagesauftrag ist abgelaufen.");
-          const next = turnInBoardQuest(dailyQuests, id);
-          const perfect = next.quests.every((q) => q.turnedIn);
+          const next = turnInBoardQuest(dailyQuests, id, village.board);
+          // Perfekter Tag: alle Aufträge, die die Anschlagtafel zeigt
+          const perfect = visibleBoard(next, village.board).quests.every((q) => q.turnedIn);
           grantQuestReward(daily.def, "daily", {
             dailyQuests: next,
             records: {
@@ -749,6 +793,8 @@ export const useGameStore = create<GameState>()(
           dungeon: null,
           tower: null,
           towerRecord: EMPTY_TOWER_RECORD,
+          village: EMPTY_VILLAGE,
+          materials: {},
           lastReward: null,
         }),
 
@@ -769,14 +815,25 @@ export const useGameStore = create<GameState>()(
 
       refreshShop: () => {
         const slot = shopSlot();
-        const { shop, character } = get();
-        if (shop.slot !== slot) set({ shop: rollShopStock(slot, getLevel(character.totalXp), newId) });
+        const { shop, character, village } = get();
+        if (shop.slot !== slot) {
+          set({ shop: rollShopStock(slot, getLevel(character.totalXp), newId, Math.random, MERCHANT_RULES[village.merchant]) });
+        }
       },
 
       rerollShop: () =>
         attempt(() => {
-          const { character, lastShopReroll, shopRerolls } = get();
-          const result = rerollShop(character.gold, getLevel(character.totalXp), lastShopReroll, shopRerolls, newId);
+          const { character, lastShopReroll, shopRerolls, village } = get();
+          const result = rerollShop(
+            character.gold,
+            getLevel(character.totalXp),
+            lastShopReroll,
+            shopRerolls,
+            newId,
+            new Date(),
+            Math.random,
+            MERCHANT_RULES[village.merchant],
+          );
           set({
             shop: result.stock,
             lastShopReroll: result.lastReroll,
@@ -799,26 +856,30 @@ export const useGameStore = create<GameState>()(
 
       sell: (uid) =>
         attempt(() => {
-          const { inventory, equipment, character } = get();
+          const { inventory, equipment, character, village } = get();
           const item = findItem(uid);
-          const result = sellItem({ inventory, equipment }, character.gold, uid);
+          const result = sellItem({ inventory, equipment }, character.gold, uid, MERCHANT_RULES[village.merchant].sellBonus);
           set({ inventory: result.gear.inventory, character: { ...character, gold: result.gold } });
           tradeEvent("sell", item);
         }),
 
       salvage: (uid) =>
         attempt(() => {
-          const { inventory, equipment, character } = get();
+          const { inventory, equipment, character, village } = get();
+          const smith = SMITH_RULES[village.smith];
+          if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
           const item = findItem(uid);
-          const result = salvageItem({ inventory, equipment }, character.essence, uid);
+          const result = salvageItem({ inventory, equipment }, character.essence, uid, smith.refund);
           set({ inventory: result.gear.inventory, character: { ...character, essence: result.essence } });
           tradeEvent("salvage", item);
         }),
 
       upgrade: (uid) =>
         attempt(() => {
-          const { inventory, equipment, character } = get();
-          const result = forgeUpgrade({ inventory, equipment }, character.essence, uid);
+          const { inventory, equipment, character, village } = get();
+          const smith = SMITH_RULES[village.smith];
+          if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
+          const result = forgeUpgrade({ inventory, equipment }, character.essence, uid, smith);
           set({
             inventory: result.gear.inventory,
             equipment: result.gear.equipment,
@@ -829,30 +890,44 @@ export const useGameStore = create<GameState>()(
 
       buyPotion: (potionId) =>
         attempt(() => {
-          const { potions, character } = get();
-          const result = buyPotion(potions, character.gold, potionId);
+          const { potions, character, village } = get();
+          const result = buyPotion(potions, character.gold, potionId, village.alchemist);
           set({ potions: result.stock, character: { ...character, gold: result.gold } });
+        }),
+
+      build: (id) =>
+        attempt(() => {
+          const { village, character, materials } = get();
+          const result = build(village, id, character.gold, materials);
+          set({ village: result.village, materials: result.materials, character: { ...character, gold: result.gold } });
+          // Ein ausgebauter Händler holt sofort neue Ware – passend zu seiner neuen Stufe
+          if (id === "merchant") {
+            set({ shop: rollShopStock(shopSlot(), getLevel(character.totalXp), newId, Math.random, MERCHANT_RULES[result.village.merchant]) });
+          }
         }),
 
       startBattle: (creatureId) =>
         attempt(() => {
-          const { character, equipment } = get();
+          get().refreshQuestBoards();
+          const { character, dailyQuests, village } = get();
           const { creature, area } = getCreature(creatureId);
-          const hero = getHeroCombatProfile(character, equipment);
+          const hero = soloHero();
           if (hero.level < area.minLevel) throw new Error(`${area.name} ist erst ab Level ${area.minLevel} zugänglich.`);
           if (area.dungeon) throw new Error("Dungeon-Gegner kämpfen nur im Dungeon.");
           const wait = respawnLeft(get().bossRespawns, creatureId);
           if (wait > 0) throw new Error(`${creature.name} erscheint erst in ${formatRespawn(wait)} wieder.`);
-          const battle = startBattle(newId(), character.name, hero, creature, hero.maxHp, rollElite(creature));
+          // Offener Steckbrief: die gesuchte Kreatur erscheint genau so als Elite
+          const elite = openBounty(dailyQuests, creatureId, village.board) ?? rollElite(creature);
+          const battle = startBattle(newId(), character.name, hero, creature, hero.maxHp, elite);
           set({ battle, battleReward: null, dungeon: null, tower: null });
           EventBus.emit("battle:started", { battle });
         }),
 
       startDungeon: (dungeonId) =>
         attempt(() => {
-          const { character, equipment } = get();
+          const { character } = get();
           const dungeon = getDungeon(dungeonId);
-          const hero = getHeroCombatProfile(character, equipment);
+          const hero = soloHero();
           if (hero.level < dungeon.minLevel) {
             throw new Error(`${dungeon.name} ist erst ab Level ${dungeon.minLevel} zugänglich.`);
           }
@@ -868,8 +943,7 @@ export const useGameStore = create<GameState>()(
 
       startTower: () =>
         attempt(() => {
-          const { character, equipment } = get();
-          const hero = getHeroCombatProfile(character, equipment);
+          const hero = soloHero();
           if (hero.level < TOWER_MIN_LEVEL) throw new Error(`Der Endlos-Turm ist erst ab Level ${TOWER_MIN_LEVEL} zugänglich.`);
           const tower: TowerRun = { seed: newId(), floor: 1, chest: EMPTY_CHEST, blessings: [], secondWindUsed: false, offer: null, claimed: null };
           const battle = towerBattle(tower, null);
@@ -918,13 +992,13 @@ export const useGameStore = create<GameState>()(
 
       nextDungeonFight: () =>
         attempt(() => {
-          const { character, equipment, battle, dungeon } = get();
+          const { character, battle, dungeon } = get();
           if (!dungeon || !battle || battle.status !== "won") throw new Error("Kein Dungeon-Kampf gewonnen.");
           const { creatures } = getDungeon(dungeon.dungeonId);
           const stage = dungeon.stage + 1;
           if (stage >= creatures.length) throw new Error("Der Dungeon ist schon abgeschlossen.");
           // Keine Heilung zwischen den Kämpfen: die Lebenspunkte werden mitgenommen.
-          const hero = getHeroCombatProfile(character, equipment);
+          const hero = soloHero();
           const next = startBattle(newId(), character.name, hero, creatures[stage], battle.hero.hp, rollElite(creatures[stage]));
           set({ battle: next, battleReward: null, dungeon: { ...dungeon, stage } });
           EventBus.emit("battle:started", { battle: next });
@@ -1008,14 +1082,15 @@ export const useGameStore = create<GameState>()(
             },
             bossRespawns: startRespawn(get().bossRespawns, creature.id),
           });
-          questEvent({ kind: "kill", creatureId: creature.id, boss: creature.boss });
+          const elite = (result.state.elite?.length ?? 0) > 0;
+          questEvent({ kind: "kill", creatureId: creature.id, boss: creature.boss, elite });
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
           for (const add of adds) questEvent({ kind: "kill", creatureId: add.id, boss: false });
-          const elite = (result.state.elite?.length ?? 0) > 0;
-          const reward = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds, elite);
+          const rolled = rollBattleReward(creature, getHeroCombatProfile(character, equipment), newId(), Math.random, adds, elite);
           if (dungeon) {
-            // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende.
+            // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende. Material gibt es doppelt.
+            const reward = { ...rolled, materials: scaleMaterials(rolled.materials, DUNGEON_MATERIAL_FACTOR) };
             const level = getLevel(character.totalXp);
             set({
               battleReward: { ...reward, levelBefore: level, levelAfter: level },
@@ -1024,11 +1099,12 @@ export const useGameStore = create<GameState>()(
             if (dungeon.stage === getDungeon(dungeon.dungeonId).creatures.length - 1) claimChest(true);
             return;
           }
+          const reward = rolled;
           const potionDrops: Record<string, number> = {};
           if (reward.potions) potionDrops[reward.potions.potionId] = reward.potions.count;
           if (reward.buffPotion) potionDrops[reward.buffPotion] = (potionDrops[reward.buffPotion] ?? 0) + 1;
           const items = [reward.loot, reward.bossLoot].filter((i) => i !== null);
-          const levels = grantRewards(reward.xp, reward.gold, items, potionDrops);
+          const levels = grantRewards(reward.xp, reward.gold, items, potionDrops, reward.materials);
           set({ battleReward: { ...reward, ...levels } });
           if (levels.levelAfter > levels.levelBefore) {
             EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
@@ -1063,7 +1139,7 @@ export const useGameStore = create<GameState>()(
 
       grantCoopReward: (reward, bossId) => {
         const chest = addToChest(EMPTY_CHEST, reward);
-        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         set((s) => ({ coopStats: recordCoopWin(s.coopStats, bossId) }));
         questEvent({ kind: "kill", creatureId: bossId, boss: true });
         if (levels.levelAfter > levels.levelBefore) {
@@ -1073,7 +1149,7 @@ export const useGameStore = create<GameState>()(
       },
 
       grantCoopDungeon: (chest, dungeonId, completed) => {
-        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions);
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         if (completed) {
           // Zählt wie ein Solo-Dungeon (Dungeonläufer, besiegter Boss) und als Koop-Sieg –
           // aber nicht für „Raidbezwinger“, der nur die Raid-Bosse zählt.
@@ -1119,6 +1195,8 @@ export const useGameStore = create<GameState>()(
         achievements: s.achievements,
         cosmetics: s.cosmetics,
         towerRecord: s.towerRecord,
+        village: s.village,
+        materials: s.materials,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),

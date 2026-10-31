@@ -100,6 +100,8 @@ export function towerReward(
     potions: boss ? reward.potions : null,
     bossLoot: null,
     buffPotion: null,
+    // Baumaterial wie bei jedem Sieg – passend zum Level des Gegners
+    materials: reward.materials,
   };
 }
 

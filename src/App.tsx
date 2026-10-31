@@ -12,6 +12,7 @@ import { AchievementToast } from "./components/Achievements";
 import { ShopScreen } from "./components/ShopScreen";
 import { SkillTree } from "./components/SkillTree";
 import { SmithScreen } from "./components/SmithScreen";
+import { VillageScreen } from "./components/VillageScreen";
 import { unspentSkillPoints } from "./domain/skills";
 import { useGameStore } from "./store/gameStore";
 import { useCoopStore } from "./coop/coopStore";
@@ -19,7 +20,7 @@ import { isLobbyCode } from "./coop/protocol";
 
 type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard" | "help";
 /** Untermenü des Dorfs */
-type VillageView = "merchant" | "smith";
+type VillageView = "build" | "merchant" | "smith";
 
 /** Einladungslink zu einer Koop-Lobby: #/koop/<code> – null, wenn die Adresse keiner ist. */
 function readCoopInvite(): string | null {
@@ -39,7 +40,8 @@ function readRoute(): { tab: "leaderboard"; username: string | null } | null {
 export default function App() {
   const [tab, setTabState] = useState<Tab>(() => (readCoopInvite() ? "battle" : (readRoute()?.tab ?? "quests")));
   const [profileName, setProfileName] = useState<string | null>(() => readRoute()?.username ?? null);
-  const [villageView, setVillageView] = useState<VillageView>("merchant");
+  const [villageView, setVillageView] = useState<VillageView>("build");
+  const smithBuilt = useGameStore((s) => s.village.smith > 0);
   const [characterView, setCharacterView] = useState<CharacterView>("details");
   const newAchievements = useGameStore((s) => s.achievementQueue.length);
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
@@ -134,11 +136,14 @@ export default function App() {
 
       {tab === "village" && (
         <nav className="mt-3 flex flex-wrap gap-2 border-l-4 border-gold/40 pl-3" aria-label="Dorf">
+          <SubTabButton active={villageView === "build"} onClick={() => setVillageView("build")}>
+            🏗️ Ausbau
+          </SubTabButton>
           <SubTabButton active={villageView === "merchant"} onClick={() => setVillageView("merchant")}>
             🏪 Händler
           </SubTabButton>
           <SubTabButton active={villageView === "smith"} onClick={() => setVillageView("smith")}>
-            ⚒️ Schmied
+            ⚒️ Schmied{!smithBuilt && " 🔒"}
           </SubTabButton>
         </nav>
       )}
@@ -148,7 +153,14 @@ export default function App() {
         {tab === "character" && <CharacterSheet view={characterView} />}
         {tab === "skills" && <SkillTree />}
         {tab === "equipment" && <EquipmentScreen />}
-        {tab === "village" && (villageView === "merchant" ? <ShopScreen /> : <SmithScreen />)}
+        {tab === "village" &&
+          (villageView === "build" ? (
+            <VillageScreen />
+          ) : villageView === "merchant" ? (
+            <ShopScreen />
+          ) : (
+            <SmithScreen onOpenVillage={() => setVillageView("build")} />
+          ))}
         {tab === "battle" && <BattleScreen />}
         {tab === "leaderboard" && <Leaderboard username={profileName} />}
         {tab === "help" && <HelpScreen />}

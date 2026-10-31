@@ -37,6 +37,8 @@ import { questsForCreature, trackedQuests } from "../domain/quests";
 import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
 import { getPotion, POTIONS, potionEffectText, potionHeal } from "../domain/potions";
+import { materialEntries } from "../domain/village";
+import { MaterialGain } from "./materialUi";
 import { EventBus } from "../game/EventBus";
 import { unlockAudio } from "../game/sfx";
 import { useGameStore } from "../store/gameStore";
@@ -413,7 +415,8 @@ function useCreatureQuests(creatureId: string) {
   const questLog = useGameStore((s) => s.questLog);
   const dailyQuests = useGameStore((s) => s.dailyQuests);
   const weeklyQuests = useGameStore((s) => s.weeklyQuests);
-  return questsForCreature(trackedQuests(questLog, dailyQuests, weeklyQuests, dateKey(), weekKey()), creatureId);
+  const boardTier = useGameStore((s) => s.village.board);
+  return questsForCreature(trackedQuests(questLog, dailyQuests, weeklyQuests, dateKey(), weekKey(), boardTier), creatureId);
 }
 
 function HeroPanel() {
@@ -835,6 +838,7 @@ function BattleResult({ battle }: { battle: BattleState }) {
             )}
             {!loot && !bossLoot && " – diesmal ohne Item."}
           </p>
+          <MaterialGain materials={reward.materials} className="font-semibold" />
           {buffPotion && (
             <motion.p
               initial={{ scale: 0.6 }}
@@ -921,6 +925,12 @@ function ChestDeposit({ reward }: { reward: BattleReward }) {
         </>
       )}
       {potions > 0 && <span className="text-xp"> · {potions}× Trank</span>}
+      {materialEntries(reward.materials).length > 0 && (
+        <>
+          {" · "}
+          <MaterialGain materials={reward.materials} />
+        </>
+      )}
       {things > 0 && (
         <span className={reward.bossLoot ? "text-legendary" : "text-epic"}>
           {" · "}

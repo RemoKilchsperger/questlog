@@ -16,6 +16,7 @@ import { getLevel } from "./leveling";
 import { QUESTS, type QuestLog } from "./quests";
 import type { HeroClassId } from "./heroClasses";
 import type { Character } from "./types";
+import { BUILDINGS, buildingsAtLeast, MAX_BUILDING_TIER, type Village } from "./village";
 
 /** Zähler, die das Spiel ab jetzt mitführt (im Spielstand). */
 export interface Records {
@@ -76,15 +77,18 @@ export interface AchievementInput {
   bossCollection: string[];
   coopStats: CoopStats;
   records: Records;
+  /** Ausbaustufen des Dorfs (village.ts) – fehlt: noch nichts gebaut */
+  village?: Village;
 }
 
-export type AchievementCategory = "quests" | "character" | "combat" | "tower" | "collection" | "sets" | "coop";
+export type AchievementCategory = "quests" | "character" | "combat" | "tower" | "village" | "collection" | "sets" | "coop";
 
 export const ACHIEVEMENT_CATEGORIES: readonly { key: AchievementCategory; label: string; icon: string }[] = [
   { key: "quests", label: "Quests", icon: "📜" },
   { key: "character", label: "Charakter", icon: "🧙" },
   { key: "combat", label: "Kampf", icon: "⚔️" },
   { key: "tower", label: "Turm", icon: "🗼" },
+  { key: "village", label: "Dorf", icon: "🏘️" },
   { key: "collection", label: "Sammeln", icon: "💎" },
   { key: "sets", label: "Boss-Sets", icon: "👑" },
   { key: "coop", label: "Koop", icon: "🤝" },
@@ -177,6 +181,10 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: "tower-bosses", name: "Turmbezwinger", icon: "🏯", category: "tower", description: "{n} Bosse im Endlos-Turm besiegt", tiers: [3, 20, 60], title: "Turmbezwinger", progress: (i) => i.records.towerBosses },
   { id: "tower-blessed", name: "Gesegnet", icon: "✨", category: "tower", description: "{n} Segen in einem Turm-Lauf gesammelt", tiers: [3, 6, 10], title: "Der Gesegnete", progress: (i) => i.records.towerBlessings },
   { id: "close-call", name: "Haaresbreite", icon: "😅", category: "combat", description: "Einen Kampf mit unter 5 % Lebenspunkten gewonnen", tiers: [1], title: "Überlebenskünstler", progress: (i) => (i.records.closeCall ? 1 : 0) },
+  // Dorf
+  { id: "foundation", name: "Grundstein", icon: "🧱", category: "village", description: "Das erste Gebäude im Dorf gebaut", tiers: [1], title: "Siedler", progress: (i) => Math.min(1, buildingsAtLeast(i.village, 1)) },
+  { id: "village-founder", name: "Dorfgründer", icon: "🏘️", category: "village", description: "Alle {n} Gebäude mindestens auf Stufe 1", tiers: [BUILDINGS.length], title: "Dorfgründer", progress: (i) => buildingsAtLeast(i.village, 1) },
+  { id: "master-builder", name: "Baumeister", icon: "🏛️", category: "village", description: "Alle {n} Gebäude auf Stufe 3", tiers: [BUILDINGS.length], title: "Baumeister", progress: (i) => buildingsAtLeast(i.village, MAX_BUILDING_TIER) },
   // Sammeln
   { id: "treasure-hunter", name: "Schatzjäger", icon: "💎", category: "collection", description: "{n} legendäre Items gefunden", tiers: [1, 10, 30], title: "Schatzjäger", progress: (i) => i.records.legendarySeen.length },
   { id: "boss-collector", name: "Boss-Sammler", icon: "👑", category: "collection", description: "{n} Boss-Items gesammelt", tiers: [5, 20, BOSS_ITEMS.length], title: "Sammler", progress: (i) => i.bossCollection.length },

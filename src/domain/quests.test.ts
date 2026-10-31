@@ -165,7 +165,7 @@ describe("Tagesaufträge", () => {
     const tracked = trackedQuests(EMPTY_QUEST_LOG, daily, EMPTY_BOARD, "2026-10-08", "");
     expect(tracked).toHaveLength(daily.quests.length - 1);
     expect(trackedQuests(EMPTY_QUEST_LOG, daily, EMPTY_BOARD, "2026-10-09", "")).toHaveLength(0);
-    expect(questsForCreature(tracked, creatureId)).toHaveLength(0);
+    expect(questsForCreature(tracked, creatureId).filter((q) => q.def.goal.kind === "kill")).toHaveLength(0);
   });
 });
 

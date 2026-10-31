@@ -33,6 +33,7 @@ import { createItem, getBossItems, getItem, weaponAbilities } from "./items";
 import { getLevel } from "./leveling";
 import { rollDrop } from "./loot";
 import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potions";
+import { addMaterials, creatureMaterials, type MaterialStock } from "./village";
 import { skillArmorBonus, skillDamageBonus, type SkillWeapon } from "./skills";
 import { bossAbilityDue } from "./bossAbilities";
 import { bossDamageDealtFactor, bossDamageTakenFactor, HEALER_HEAL, phaseDue, type AddRole } from "./bossMechanics";
@@ -101,6 +102,8 @@ export interface HeroCombatProfile {
   weapon?: SkillWeapon | null;
   /** Spezialeffekte der angelegten Items (itemEffects.ts) – jeder nur einmal */
   itemEffects?: ItemEffectId[];
+  /** Faktor auf die Wirkung aller Tränke (Meisteralchemist, village.ts) – fehlt: 1 */
+  potionPower?: number;
 }
 
 /** Fähigkeiten der angelegten Waffen (erst die der ersten Hand, dann die der zweiten), ohne Doppelte. */
@@ -312,6 +315,8 @@ export interface BattleState {
   itemEffects?: ItemEffectId[];
   /** „Unbeugsam“ hat in diesem Kampf schon gerettet */
   endured?: boolean;
+  /** Faktor auf die Wirkung aller Tränke (Meisteralchemist) – fehlt: 1 */
+  potionPower?: number;
   /** Wirkungen auf den Helden */
   heroEffects: {
     /** Gift, Feuer und Bluten durch Boss-Fähigkeiten */
@@ -374,6 +379,7 @@ export function startBattle(
     heroClass: hero.heroClass,
     heroWeapon: hero.weapon ?? null,
     ...(hero.itemEffects?.length && { itemEffects: hero.itemEffects }),
+    ...(hero.potionPower && hero.potionPower !== 1 && { potionPower: hero.potionPower }),
     enemyEffects: {},
     // „Wachsam“: Der erste gegnerische Angriff wird geblockt
     heroEffects: hasEffect(hero.itemEffects, "vigilant") ? { bulwark: true } : {},
@@ -468,11 +474,14 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
   const blocker = potionBlocker(state, potion);
   if (blocker) throw new Error(blocker);
   const { effect } = potion;
+  // Meisteralchemist: alle Tränke wirken stärker
+  const power = state.potionPower ?? 1;
   const factor =
     effect.kind === "heal"
       ? (state.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) *
         (1 + BLESSING.alchemy * stacks(state.blessings, "alchemy")) *
-        (hasEffect(state.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1)
+        (hasEffect(state.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1) *
+        power
       : 1;
   const heal = Math.min(Math.round(potionHeal(potion, state.hero.maxHp) * factor), state.hero.maxHp - state.hero.hp);
   const buff = effect.kind === "heal" ? undefined : effect.kind;
@@ -484,7 +493,7 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
       buffs:
         effect.kind === "heal"
           ? state.buffs
-          : { ...state.buffs, [effect.kind]: { percent: effect.percent, roundsLeft: effect.rounds } },
+          : { ...state.buffs, [effect.kind]: { percent: effect.percent * power, roundsLeft: effect.rounds } },
       potionUsedThisRound: true,
       potionsUsed: [...state.potionsUsed, potion.id],
       log: [...state.log, { ...event, round: state.round }],
@@ -1091,6 +1100,8 @@ export interface BattleReward {
   potions: { potionId: string; count: number } | null;
   /** Seltener Angriffs- oder Rüstungstrank (ID), zusätzlich zu den Heiltränken */
   buffPotion: string | null;
+  /** Sicheres Baumaterial fürs Dorf (village.ts) – fehlt bei älteren Belohnungen */
+  materials?: MaterialStock;
 }
 
 /**
@@ -1105,9 +1116,11 @@ export interface DungeonChest {
   items: OwnedItem[];
   /** Trank-ID → Anzahl */
   potions: Record<string, number>;
+  /** Baumaterial fürs Dorf – fehlt bei älteren Truhen */
+  materials?: MaterialStock;
 }
 
-export const EMPTY_CHEST: DungeonChest = { xp: 0, gold: 0, items: [], potions: {} };
+export const EMPTY_CHEST: DungeonChest = { xp: 0, gold: 0, items: [], potions: {}, materials: {} };
 
 /** Legt die Belohnung eines Kampfes in die Truhe. */
 export function addToChest(chest: DungeonChest, reward: BattleReward): DungeonChest {
@@ -1121,6 +1134,7 @@ export function addToChest(chest: DungeonChest, reward: BattleReward): DungeonCh
     gold: chest.gold + reward.gold,
     items: [...bossItems, ...otherItems].filter((i) => i !== null),
     potions,
+    materials: addMaterials(chest.materials ?? {}, reward.materials),
   };
 }
 
@@ -1174,6 +1188,7 @@ export function rollBattleReward(
       bossLoot: null,
       buffPotion: rollBuffPotion(rng),
       gold: Math.round((min + Math.floor(rng() * (max - min + 1))) * ELITE_REWARD_FACTOR * (1 + hero.goldBonus)),
+      materials: creatureMaterials(creature, true),
     };
   }
   const { dropChance, weights } = getCreatureLoot(creature);
@@ -1190,5 +1205,6 @@ export function rollBattleReward(
     bossLoot: rollBossLoot(creature, `${uid}-boss`, rng),
     buffPotion: rollBuffPotion(rng),
     gold: Math.round((rollCreatureGold(creature, rng) + addGold) * (1 + hero.goldBonus)),
+    materials: creatureMaterials(creature),
   };
 }

@@ -27,8 +27,8 @@ export function canSalvage(owned: OwnedItem): boolean {
  * Essenz aus einem zerlegten Item: Grundwert der Seltenheit, wächst mit dem
  * Item-Level (+10 % pro Level). Beispiel: seltenes Lv. 1 → 2, legendäres Lv. 60 → 140.
  */
-export function essenceYield(owned: OwnedItem): number {
-  const refund = Math.floor(investedEssence(owned) * UPGRADE_REFUND);
+export function essenceYield(owned: OwnedItem, refundShare = UPGRADE_REFUND): number {
+  const refund = Math.floor(investedEssence(owned) * refundShare);
   return essenceFor(owned.rarity, getItem(owned.itemId).requiredLevel) + refund;
 }
 
@@ -41,9 +41,18 @@ export function essenceFor(rarity: Rarity, requiredLevel: number): number {
  * Essenz für die Verbesserung auf Stufe `next`. Beispiel Lv.-30-Item:
  * +1 → 20, +2 → 40 … +5 → 100 (insgesamt 300).
  */
-export function upgradeCost(owned: OwnedItem, next = (owned.upgrade ?? 0) + 1): number {
-  return Math.round(UPGRADE_COST_BASE * (1 + getItem(owned.itemId).requiredLevel / 10) * next);
+export function upgradeCost(owned: OwnedItem, next = (owned.upgrade ?? 0) + 1, discount = 0): number {
+  return Math.round(UPGRADE_COST_BASE * (1 + getItem(owned.itemId).requiredLevel / 10) * next * (1 - discount));
 }
+
+/** Ausbaustufe der Schmiede: höchste Verbesserung, Rabatt und Rückerstattung (village.ts). */
+export interface ForgeRules {
+  maxUpgrade: number;
+  discount: number;
+  refund: number;
+}
+
+export const DEFAULT_FORGE_RULES: ForgeRules = { maxUpgrade: MAX_UPGRADE, discount: 0, refund: UPGRADE_REFUND };
 
 /** Bisher in dieses Item gesteckte Essenz. */
 export function investedEssence(owned: OwnedItem): number {
@@ -52,17 +61,28 @@ export function investedEssence(owned: OwnedItem): number {
   return total;
 }
 
-export function canUpgrade(owned: OwnedItem): boolean {
-  return (owned.upgrade ?? 0) < MAX_UPGRADE;
+export function canUpgrade(owned: OwnedItem, maxUpgrade = MAX_UPGRADE): boolean {
+  return (owned.upgrade ?? 0) < maxUpgrade;
 }
 
 /** Verbessert ein Item um eine Stufe – im Inventar oder angelegt. */
-export function upgradeItem(gear: Gear, essence: number, uid: string): { gear: Gear; essence: number } {
+export function upgradeItem(
+  gear: Gear,
+  essence: number,
+  uid: string,
+  rules: ForgeRules = DEFAULT_FORGE_RULES,
+): { gear: Gear; essence: number } {
   const slot = (Object.keys(gear.equipment) as EquipSlot[]).find((s) => gear.equipment[s]?.uid === uid);
   const owned = slot ? gear.equipment[slot] : gear.inventory.find((i) => i.uid === uid);
   if (!owned) throw new Error("Item nicht gefunden.");
-  if (!canUpgrade(owned)) throw new Error(`Höchste Stufe (+${MAX_UPGRADE}) bereits erreicht.`);
-  const cost = upgradeCost(owned);
+  if (!canUpgrade(owned, rules.maxUpgrade)) {
+    throw new Error(
+      rules.maxUpgrade < MAX_UPGRADE
+        ? `Diese Schmiede verbessert nur bis +${rules.maxUpgrade} – baue sie aus.`
+        : `Höchste Stufe (+${MAX_UPGRADE}) bereits erreicht.`,
+    );
+  }
+  const cost = upgradeCost(owned, undefined, rules.discount);
   if (essence < cost) throw new Error("Nicht genug Essenz.");
   const upgraded: OwnedItem = { ...owned, upgrade: (owned.upgrade ?? 0) + 1 };
   return {
@@ -74,12 +94,17 @@ export function upgradeItem(gear: Gear, essence: number, uid: string): { gear: G
 }
 
 /** Zerlegt ein Item aus dem Inventar (angelegte Items zuerst ablegen). */
-export function salvageItem(gear: Gear, essence: number, uid: string): { gear: Gear; essence: number } {
+export function salvageItem(
+  gear: Gear,
+  essence: number,
+  uid: string,
+  refund = UPGRADE_REFUND,
+): { gear: Gear; essence: number } {
   const owned = gear.inventory.find((i) => i.uid === uid);
   if (!owned) throw new Error("Item ist nicht im Inventar.");
   if (!canSalvage(owned)) throw new Error("Erst Items ab der Seltenheit „selten“ lassen sich zerlegen.");
   return {
     gear: { ...gear, inventory: gear.inventory.filter((i) => i.uid !== uid) },
-    essence: essence + essenceYield(owned),
+    essence: essence + essenceYield(owned, refund),
   };
 }

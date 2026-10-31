@@ -22,6 +22,8 @@
   --color-epic: #b57af0;
   --color-legendary: #f59e42;
   --color-essence: #6fe0e8;
+  /* Baumaterial fürs Dorf */
+  --color-material: #d9a066;
 }
 
 @layer base {

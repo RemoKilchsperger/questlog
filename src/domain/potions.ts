@@ -1,5 +1,5 @@
-// Tränke: kleine und normale Heiltränke beim Händler kaufen, grosse Heiltränke
-// sowie Angriffs- und Rüstungstränke gibt es nur als Kampfbeute.
+// Tränke: kleine Heiltränke gibt es immer beim Händler, alle anderen erst beim
+// Alchemisten – je nach seiner Ausbaustufe (village.ts). Dazu fallen sie als Kampfbeute.
 // Im Kampf einsetzen: pro Runde höchstens einer,
 // und jede Sorte nur einmal pro Kampf. Heiltränke heilen einen Anteil der
 // maximalen Lebenspunkte, Angriffs- und Rüstungstränke verstärken den Helden
@@ -18,20 +18,27 @@ export interface PotionDef {
   name: string;
   icon: string;
   effect: PotionEffect;
-  /** Kaufpreis beim Händler – null: nur als Kampfbeute erhältlich */
-  price: number | null;
+  /** Kaufpreis */
+  price: number;
+  /** Ab dieser Stufe des Alchemisten zu kaufen (0: beim Strassenhändler) */
+  alchemist: number;
 }
 
 export const POTIONS: readonly PotionDef[] = [
-  { id: "small", name: "Kleiner Heiltrank", icon: "🧪", effect: { kind: "heal", percent: 0.2 }, price: 15 },
-  { id: "medium", name: "Heiltrank", icon: "⚗️", effect: { kind: "heal", percent: 0.4 }, price: 45 },
-  { id: "large", name: "Grosser Heiltrank", icon: "🏺", effect: { kind: "heal", percent: 0.6 }, price: null },
-  { id: "attack", name: "Angriffstrank", icon: "🔥", effect: { kind: "attack", percent: 0.3, rounds: 3 }, price: null },
-  { id: "armor", name: "Rüstungstrank", icon: "🪨", effect: { kind: "armor", percent: 1, rounds: 3 }, price: null },
+  { id: "small", name: "Kleiner Heiltrank", icon: "🧪", effect: { kind: "heal", percent: 0.2 }, price: 15, alchemist: 0 },
+  { id: "medium", name: "Heiltrank", icon: "⚗️", effect: { kind: "heal", percent: 0.4 }, price: 45, alchemist: 1 },
+  { id: "large", name: "Grosser Heiltrank", icon: "🏺", effect: { kind: "heal", percent: 0.6 }, price: 150, alchemist: 3 },
+  { id: "attack", name: "Angriffstrank", icon: "🔥", effect: { kind: "attack", percent: 0.3, rounds: 3 }, price: 120, alchemist: 2 },
+  { id: "armor", name: "Rüstungstrank", icon: "🪨", effect: { kind: "armor", percent: 1, rounds: 3 }, price: 120, alchemist: 2 },
 ];
 
-/** Tränke, die der Händler verkauft. */
-export const SHOP_POTIONS: readonly PotionDef[] = POTIONS.filter((p) => p.price !== null);
+/** Tränke, die es auf dieser Stufe des Alchemisten zu kaufen gibt. */
+export function potionsForSale(alchemistTier: number): PotionDef[] {
+  return POTIONS.filter((p) => p.alchemist <= alchemistTier);
+}
+
+/** Tränke, die es mit der Kräuterhütte (Stufe 1) zu kaufen gibt – der frühere Händler. */
+export const SHOP_POTIONS: readonly PotionDef[] = potionsForSale(1);
 
 /** Verstärkungstränke – fallen selten bei jedem Gegner. */
 export const BUFF_POTIONS: readonly PotionDef[] = POTIONS.filter((p) => p.effect.kind !== "heal");
@@ -64,9 +71,12 @@ export function potionEffectText(potion: PotionDef): string {
     : `+${percent} % ${BUFF_LABELS[effect.kind]} für ${effect.rounds} Runden`;
 }
 
-export function buyPotion(stock: PotionStock, gold: number, id: string): { stock: PotionStock; gold: number } {
+/** Kauft einen Trank – `alchemistTier`: Ausbaustufe des Alchemisten (village.ts). */
+export function buyPotion(stock: PotionStock, gold: number, id: string, alchemistTier = 1): { stock: PotionStock; gold: number } {
   const potion = getPotion(id);
-  if (potion.price === null) throw new Error(`${potion.name} gibt es nur als Beute.`);
+  if (potion.alchemist > alchemistTier) {
+    throw new Error(`${potion.name} gibt es erst beim Alchemisten der Stufe ${potion.alchemist} – sonst nur als Beute.`);
+  }
   if (gold < potion.price) throw new Error("Nicht genug Gold.");
   return { stock: { ...stock, [id]: (stock[id] ?? 0) + 1 }, gold: gold - potion.price };
 }

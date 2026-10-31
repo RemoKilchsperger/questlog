@@ -8,8 +8,10 @@
 import { xpRewardBase } from "./leveling";
 import { rollDrop } from "./loot";
 import { AREAS, DUNGEONS, getCreature, isAreaUnlocked, type AreaDef, type CreatureDef } from "./creatures";
+import { ELITE_AFFIXES, getEliteAffix, type EliteAffix } from "./elites";
 import { TOWER_MIN_LEVEL } from "./tower";
 import type { Loot, Rarity } from "./types";
+import { BOARD_TIERS } from "./village";
 
 /** Händler und Schmied: Ausrüstung verkaufen, zerlegen oder verbessern. */
 export type TradeAction = "sell" | "salvage" | "upgrade";
@@ -24,7 +26,9 @@ export type QuestGoal =
   /** Ausrüstung (Waffen und Rüstung) verkaufen, zerlegen oder verbessern */
   | { kind: "trade"; action: TradeAction; count: number }
   /** Im Endlos-Turm in einem Lauf dieses Stockwerk schaffen */
-  | { kind: "towerFloor"; floor: number };
+  | { kind: "towerFloor"; floor: number }
+  /** Steckbrief der Kopfgeld-Tafel: diese Kreatur als Elite mit genau diesen Modifikatoren besiegen */
+  | { kind: "bounty"; creatureId: string; affixes: EliteAffix[]; count: number };
 
 export interface QuestReward {
   xp: number;
@@ -58,7 +62,8 @@ export const EMPTY_QUEST_LOG: QuestLog = { active: {}, completed: [] };
 
 /** Was im Spiel passiert und Quests voranbringt. */
 export type QuestEvent =
-  | { kind: "kill"; creatureId: string; boss: boolean }
+  /** `elite`: der Gegner war Elite (zählt für Steckbriefe) */
+  | { kind: "kill"; creatureId: string; boss: boolean; elite?: boolean }
   | { kind: "dungeon"; dungeonId: string }
   /** Ein Ausrüstungsteil wurde verkauft, zerlegt oder verbessert */
   | { kind: "trade"; action: TradeAction }
@@ -231,7 +236,14 @@ export function questGoalText(def: QuestDef): string {
       return TRADE_GOAL_TEXT[goal.action].replace("{n}", String(goal.count));
     case "towerFloor":
       return `Schaffe im Endlos-Turm Stockwerk ${goal.floor} in einem Lauf`;
+    case "bounty":
+      return `Besiege den gesuchten ${getCreature(goal.creatureId).creature.name} (${bountyAffixText(goal.affixes)})`;
   }
+}
+
+/** „Rasend, Explosiv“ */
+export function bountyAffixText(affixes: readonly EliteAffix[]): string {
+  return affixes.map((a) => getEliteAffix(a).name).join(", ");
 }
 
 /** Quests eines Gebiets sind ab dessen Mindest-Level verfügbar. */
@@ -258,6 +270,8 @@ function matchesGoal(goal: QuestGoal, event: QuestEvent): boolean {
       return event.kind === "trade" && event.action === goal.action;
     case "towerFloor":
       return event.kind === "towerFloor";
+    case "bounty":
+      return event.kind === "kill" && event.creatureId === goal.creatureId && !!event.elite;
   }
 }
 
@@ -417,7 +431,73 @@ export function rollDailyQuests(date: string, heroLevel: number, rng: () => numb
   if (heroLevel >= TOWER_MIN_LEVEL) {
     quests.push({ def: towerQuest(`daily-${date}-tower`, DAILY_TOWER_FLOOR, reward), progress: 0, turnedIn: false });
   }
+  quests.push(...rollBounties(date, heroLevel, rng));
   return { date, quests };
+}
+
+/* ───────────── Kopfgeld-Tafel ───────────── */
+
+/** Steckbriefe pro Tag (nur mit der Kopfgeld-Tafel, Stufe 3 der Anschlagtafel sichtbar). */
+export const DAILY_BOUNTY_COUNT = 2;
+/** Modifikatoren eines gesuchten Elite-Gegners */
+export const BOUNTY_AFFIXES = 2;
+/** Einheiten (siehe questReward): ein Steckbrief zählt so viel wie 15 Siege – mit sicherem, eher besserem Item. */
+const BOUNTY_UNITS = 15;
+
+/**
+ * Steckbriefe: gesuchte Elite-Gegner aus den offenen Gebieten, z. B. ein rasender,
+ * explosiver Schneewolf. Kämpft man gegen die Kreatur, solange der Steckbrief offen
+ * ist, erscheint sie genau so als Elite – man muss sie also nur aufsuchen.
+ */
+function rollBounties(date: string, heroLevel: number, rng: () => number): BoardQuest[] {
+  const pool = [...dailyCandidates(heroLevel)];
+  const quests: BoardQuest[] = [];
+  while (quests.length < DAILY_BOUNTY_COUNT && pool.length > 0) {
+    const [creature] = pool.splice(Math.floor(rng() * pool.length), 1);
+    const affixPool = ELITE_AFFIXES.map((a) => a.id);
+    const affixes: EliteAffix[] = [];
+    while (affixes.length < BOUNTY_AFFIXES) affixes.push(...affixPool.splice(Math.floor(rng() * affixPool.length), 1));
+    const { area } = getCreature(creature.id);
+    quests.push({
+      def: {
+        id: `daily-${date}-bounty-${quests.length}`,
+        title: `Steckbrief: ${creature.name}`,
+        description: `Gesucht, tot oder lebendig – zuletzt gesehen im ${area.name}.`,
+        areaId: area.id,
+        goal: { kind: "bounty", creatureId: creature.id, affixes, count: 1 },
+        reward: questReward(creature.level, BOUNTY_UNITS, 1, BOSS_WEIGHTS),
+      },
+      progress: 0,
+      turnedIn: false,
+    });
+  }
+  return quests;
+}
+
+/** Offener Steckbrief für diese Kreatur – dann erscheint sie im Kampf als dieser Elite-Gegner. */
+export function openBounty(board: QuestBoard, creatureId: string, boardTier: number): EliteAffix[] | null {
+  const quest = visibleBoard(board, boardTier).quests.find(
+    (q) => !q.turnedIn && q.def.goal.kind === "bounty" && q.def.goal.creatureId === creatureId && !isQuestComplete(q.def, q.progress),
+  );
+  return quest && quest.def.goal.kind === "bounty" ? quest.def.goal.affixes : null;
+}
+
+/* ───────────── Anschlagtafel: was auf welcher Stufe sichtbar ist ───────────── */
+
+/**
+ * Ab welcher Stufe der Anschlagtafel (village.ts) ein Auftrag erscheint:
+ * Tages-Jagden ab 1, Steckbriefe ab 3, alles andere (Händler, Turm, Wochenaufträge) ab 2.
+ */
+export function boardQuestTier(def: QuestDef): number {
+  if (def.goal.kind === "bounty") return BOARD_TIERS.bounties;
+  if (def.id.startsWith("daily-") && def.goal.kind === "kill") return BOARD_TIERS.hunts;
+  return BOARD_TIERS.all;
+}
+
+/** Nur die Aufträge, die die Anschlagtafel dieser Stufe zeigt – die übrigen zählen nicht und bleiben unsichtbar. */
+export function visibleBoard(board: QuestBoard, boardTier: number): QuestBoard {
+  const quests = board.quests.filter((q) => boardQuestTier(q.def) <= boardTier);
+  return quests.length === board.quests.length ? board : { ...board, quests };
 }
 
 /** Wochenaufträge: so viele Siege, Bosse und Dungeons. */
@@ -464,10 +544,10 @@ export function rollWeeklyQuests(week: string, heroLevel: number): QuestBoard {
 }
 
 /** Wendet ein Ereignis auf die offenen Aufträge an. Ohne Änderung kommt dasselbe Objekt zurück. */
-export function applyBoardEvent(board: QuestBoard, event: QuestEvent): QuestBoard {
+export function applyBoardEvent(board: QuestBoard, event: QuestEvent, boardTier: number = BOARD_TIERS.bounties): QuestBoard {
   let changed = false;
   const quests = board.quests.map((q) => {
-    if (q.turnedIn) return q;
+    if (q.turnedIn || boardQuestTier(q.def) > boardTier) return q;
     const progress = advanceQuest(q.def, q.progress, event);
     if (progress === q.progress) return q;
     changed = true;
@@ -477,9 +557,10 @@ export function applyBoardEvent(board: QuestBoard, event: QuestEvent): QuestBoar
 }
 
 /** Gibt einen erfüllten Auftrag ab. */
-export function turnInBoardQuest(board: QuestBoard, id: string): QuestBoard {
+export function turnInBoardQuest(board: QuestBoard, id: string, boardTier: number = BOARD_TIERS.bounties): QuestBoard {
   const quest = board.quests.find((q) => q.def.id === id);
   if (!quest || quest.turnedIn) throw new Error("Diesen Auftrag gibt es nicht (mehr).");
+  if (boardQuestTier(quest.def) > boardTier) throw new Error("Für diesen Auftrag fehlt die passende Anschlagtafel.");
   if (!isQuestComplete(quest.def, quest.progress)) throw new Error("Der Auftrag ist noch nicht erfüllt.");
   return { ...board, quests: board.quests.map((q) => (q.def.id === id ? { ...q, turnedIn: true } : q)) };
 }
@@ -504,14 +585,19 @@ export function trackedQuests(
   weekly: QuestBoard,
   today: string,
   week: string,
+  boardTier: number = BOARD_TIERS.bounties,
 ): TrackedQuest[] {
   const open = (board: QuestBoard, date: string, source: QuestSource): TrackedQuest[] =>
-    board.date === date ? board.quests.filter((q) => !q.turnedIn).map((q) => ({ def: q.def, progress: q.progress, source })) : [];
+    board.date === date
+      ? visibleBoard(board, boardTier)
+          .quests.filter((q) => !q.turnedIn)
+          .map((q) => ({ def: q.def, progress: q.progress, source }))
+      : [];
   const story = Object.entries(log.active).map(([id, progress]) => ({ def: getQuest(id), progress, source: "story" as const }));
   return [...open(daily, today, "daily"), ...open(weekly, week, "weekly"), ...story];
 }
 
 /** Laufende Quests, die ein Sieg gegen genau diese Kreatur voranbringt (ohne allgemeine Wochenaufträge). */
 export function questsForCreature(tracked: readonly TrackedQuest[], creatureId: string): TrackedQuest[] {
-  return tracked.filter((q) => q.def.goal.kind === "kill" && q.def.goal.creatureId === creatureId);
+  return tracked.filter((q) => (q.def.goal.kind === "kill" || q.def.goal.kind === "bounty") && q.def.goal.creatureId === creatureId);
 }

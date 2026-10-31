@@ -76,6 +76,7 @@ import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef }
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
 import type { SkillWeapon } from "./skills";
+import { DUNGEON_MATERIAL_FACTOR, scaleMaterials } from "./village";
 
 export const COOP_MIN_PLAYERS = 2;
 export const COOP_MAX_PLAYERS = 4;
@@ -662,7 +663,9 @@ export function rollCoopDungeonChest(state: CoopBattleState, hero: HeroCombatPro
   for (let i = 0; i < clearedStages(state); i++) {
     const rng = seededRng(hash(`${runId}|${i}|${playerId}`));
     const elite = coopElite(runId, i, creatures[i]).length > 0;
-    chest = addToChest(chest, rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng, [], elite));
+    const reward = rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng, [], elite);
+    // Dungeons geben doppelt so viel Baumaterial – wie solo
+    chest = addToChest(chest, { ...reward, materials: scaleMaterials(reward.materials, DUNGEON_MATERIAL_FACTOR) });
   }
   return chest;
 }

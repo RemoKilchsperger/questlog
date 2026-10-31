@@ -2,6 +2,9 @@
 // zufällige Ware passend zum Level des Helden – jedes Stück kann selten, episch
 // oder (sehr selten) legendär sein. Gekaufte Stücke sind bis zum nächsten Wechsel
 // weg. Bis zu 5-mal am Tag kann man gegen Gold sofort neue Ware auswürfeln lassen.
+// Wie viel Ware, welche Seltenheiten und wie oft neu gewürfelt werden darf, hängt
+// von der Ausbaustufe des Händlers ab (`ShopRules`, siehe village.ts) – die
+// Standardwerte hier entsprechen dem Handelshaus (Stufe 2).
 
 import { dateKey } from "./calendar";
 import { createItem, getItem, getRarity } from "./items";
@@ -19,6 +22,19 @@ export const SHOP_RARITY_CHANCES: readonly { rarity: Rarity; chance: number }[] 
 /** So oft am Tag darf gegen Gold neu ausgewürfelt werden. */
 export const SHOP_REROLLS_PER_DAY = 5;
 
+/** Was der Händler auf seiner Ausbaustufe bietet. */
+export interface ShopRules {
+  size: number;
+  rarityChances: readonly { rarity: Rarity; chance: number }[];
+  rerollsPerDay: number;
+}
+
+export const DEFAULT_SHOP_RULES: ShopRules = {
+  size: SHOP_SIZE,
+  rarityChances: SHOP_RARITY_CHANCES,
+  rerollsPerDay: SHOP_REROLLS_PER_DAY,
+};
+
 export interface ShopStock {
   /** Zeitabschnitt, zu dem die Ware gehört (siehe `shopSlot`); "" = noch nie ausgewürfelt */
   slot: string;
@@ -34,9 +50,12 @@ export function shopSlot(now: Date = new Date()): string {
 }
 
 /** Seltenheit eines Stücks: 0,2 % legendär, 5 % episch, 20 % selten, sonst gewöhnlich. */
-export function rollShopRarity(rng: () => number = Math.random): Rarity {
+export function rollShopRarity(
+  rng: () => number = Math.random,
+  chances: ShopRules["rarityChances"] = SHOP_RARITY_CHANCES,
+): Rarity {
   let roll = rng();
-  for (const { rarity, chance } of SHOP_RARITY_CHANCES) {
+  for (const { rarity, chance } of chances) {
     if (roll < chance) return rarity;
     roll -= chance;
   }
@@ -49,16 +68,17 @@ export function rollShopStock(
   level: number,
   newUid: () => string,
   rng: () => number = Math.random,
+  rules: ShopRules = DEFAULT_SHOP_RULES,
 ): ShopStock {
   // Verschiedene Stücke, ausgewogen nach Typ (wie bei der Beute)
   let pool = [...lootPool(level)];
   const picked: typeof pool = [];
-  while (picked.length < SHOP_SIZE && pool.length > 0) {
+  while (picked.length < rules.size && pool.length > 0) {
     const def = pickFromPool(pool, rng);
     picked.push(def);
     pool = pool.filter((i) => i.id !== def.id);
   }
-  const offers = picked.map((def) => createItem(def.id, rollShopRarity(rng), newUid(), rng));
+  const offers = picked.map((def) => createItem(def.id, rollShopRarity(rng, rules.rarityChances), newUid(), rng));
   return { slot, offers };
 }
 
@@ -68,8 +88,13 @@ export function rerollCost(level: number): number {
 }
 
 /** Wie oft heute noch neu ausgewürfelt werden darf. `count` zählt die Würfe am Tag `lastReroll`. */
-export function rerollsLeft(lastReroll: string, count: number, now: Date = new Date()): number {
-  return lastReroll === dateKey(now) ? Math.max(0, SHOP_REROLLS_PER_DAY - count) : SHOP_REROLLS_PER_DAY;
+export function rerollsLeft(
+  lastReroll: string,
+  count: number,
+  now: Date = new Date(),
+  perDay: number = SHOP_REROLLS_PER_DAY,
+): number {
+  return lastReroll === dateKey(now) ? Math.max(0, perDay - count) : perDay;
 }
 
 /** Gegen Gold sofort komplett neue Ware – bis zu 5-mal pro Tag. Der nächste Wechsel bleibt gleich. */
@@ -81,16 +106,18 @@ export function rerollShop(
   newUid: () => string,
   now: Date = new Date(),
   rng: () => number = Math.random,
+  rules: ShopRules = DEFAULT_SHOP_RULES,
 ): { stock: ShopStock; gold: number; lastReroll: string; count: number } {
-  const left = rerollsLeft(lastReroll, count, now);
+  if (rules.rerollsPerDay === 0) throw new Error("Der Strassenhändler kann keine neue Ware holen.");
+  const left = rerollsLeft(lastReroll, count, now, rules.rerollsPerDay);
   if (left === 0) throw new Error("Heute wurde schon so oft neu ausgewürfelt.");
   const cost = rerollCost(level);
   if (gold < cost) throw new Error("Nicht genug Gold.");
   return {
-    stock: rollShopStock(shopSlot(now), level, newUid, rng),
+    stock: rollShopStock(shopSlot(now), level, newUid, rng, rules),
     gold: gold - cost,
     lastReroll: dateKey(now),
-    count: SHOP_REROLLS_PER_DAY - left + 1,
+    count: rules.rerollsPerDay - left + 1,
   };
 }
 

@@ -39,6 +39,7 @@ import { useGameStore } from "../store/gameStore";
 import { BossDrops } from "./BattleScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DungeonChest } from "./DungeonChest";
+import { MaterialGain } from "./materialUi";
 import { PixelAvatar } from "./PixelAvatar";
 import { CreatureSprite } from "./CreatureSprite";
 import { POTION_BUTTONS } from "./potionUi";
@@ -829,6 +830,7 @@ function ChestPreview({ chest }: { chest: ReturnType<typeof rollCoopDungeonChest
             </span>
           </Hint>
         ))}
+        <MaterialGain materials={chest.materials} />
         {chest.items.map((item) => (
           <ItemTooltip key={item.uid} stats={getItemStats(item)}>
             <ItemIcon def={getItemStats(item).def} rarity={item.rarity} size={32} />

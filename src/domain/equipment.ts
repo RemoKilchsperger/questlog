@@ -91,12 +91,12 @@ export function unequipItem(gear: Gear, slot: EquipSlot): Gear {
 }
 
 /** Verkauft ein Item aus dem Inventar (angelegte Items zuerst ablegen). */
-export function sellItem(gear: Gear, gold: number, uid: string): { gear: Gear; gold: number } {
+export function sellItem(gear: Gear, gold: number, uid: string, bonus = 0): { gear: Gear; gold: number } {
   const owned = gear.inventory.find((i) => i.uid === uid);
   if (!owned) throw new Error("Item ist nicht im Inventar.");
   return {
     gear: { ...gear, inventory: gear.inventory.filter((i) => i.uid !== uid) },
-    gold: gold + sellPrice(owned),
+    gold: gold + sellPrice(owned, bonus),
   };
 }
 

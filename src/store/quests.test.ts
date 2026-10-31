@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { CLASSIC_VILLAGE } from "../test/village";
 import { addToChest, EMPTY_CHEST, startBattle, type BattleState, type HeroCombatProfile } from "../domain/combat";
 import { AREA_BOSS_RESPAWN_MS, formatRespawn, getCreature, getDungeon, hasRespawn, respawnLeft, startRespawn } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
@@ -46,7 +47,10 @@ const win = (creatureId: string) => {
 };
 
 describe("Quests im Spielstand", () => {
-  beforeEach(() => useGameStore.getState().resetGame());
+  beforeEach(() => {
+    useGameStore.getState().resetGame();
+    useGameStore.setState({ village: CLASSIC_VILLAGE });
+  });
 
   it("Kämpfe kosten nichts", () => {
     const before = useGameStore.getState().character;
@@ -101,7 +105,8 @@ describe("Quests im Spielstand", () => {
   it("Händler und Schmied zählen jedes Ausrüstungsteil – Waffen und Rüstung", () => {
     const store = useGameStore.getState;
     const daily = rollDailyQuests(dateKey(), 1);
-    const goal = daily.quests.at(-1)!.def.goal;
+    const index = daily.quests.findIndex((q) => q.def.goal.kind === "trade");
+    const goal = daily.quests[index].def.goal;
     if (goal.kind !== "trade") throw new Error("Kein Händler-Auftrag");
     useGameStore.setState({ dailyQuests: daily, weeklyQuests: rollWeeklyQuests(weekKey(), 1) });
     // Rüstung zählt …
@@ -110,10 +115,10 @@ describe("Quests im Spielstand", () => {
     if (goal.action === "sell") store().sell("helm");
     if (goal.action === "salvage") store().salvage("helm");
     if (goal.action === "upgrade") store().upgrade("helm");
-    expect(store().dailyQuests.quests.at(-1)!.progress).toBe(1);
+    expect(store().dailyQuests.quests[index].progress).toBe(1);
     // … eine Waffe auch – und beides zählt für den Wochenauftrag
     trade(goal.action);
-    expect(store().dailyQuests.quests.at(-1)!.progress).toBe(2);
+    expect(store().dailyQuests.quests[index].progress).toBe(2);
     const weeklyTrade = store().weeklyQuests.quests.at(-1)!;
     expect(weeklyTrade.progress).toBe(weeklyTrade.def.goal.kind === "trade" && weeklyTrade.def.goal.action === goal.action ? 2 : 0);
   });
@@ -193,7 +198,10 @@ describe("Migration auf v16", () => {
 });
 
 describe("Respawn der Gebietsbosse", () => {
-  beforeEach(() => useGameStore.getState().resetGame());
+  beforeEach(() => {
+    useGameStore.getState().resetGame();
+    useGameStore.setState({ village: CLASSIC_VILLAGE });
+  });
 
   it("nach einem Sieg 5 Minuten gesperrt, danach wieder bereit", () => {
     const store = useGameStore.getState;

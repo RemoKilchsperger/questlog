@@ -32,6 +32,7 @@ Sammlung aller Vorschläge, damit nichts verloren geht. Status: ✅ umgesetzt ·
 | 11 | **Wochen-Mutatoren für Dungeons:** Ein Modifikator pro Woche für alle Dungeons („Alle Gegner Elite“, „Bosse mit dritter Phase“, „Tränke doppelt, Gegner +30 % Schaden“), dafür mehr Beute | 💡 |
 | 12 | **Endlos-Turm:** Stockwerke mit steigender Stärke, Elite-Modifikatoren, Segen alle paar Stockwerke, Rangliste nach höchstem Stockwerk | ✅ `tower.ts`, docs/endlos-turm.md |
 | 13 | **Wandernde Weltbosse:** Ab und zu erscheint für ein paar Stunden ein seltener Boss in einem Gebiet, mit Ankündigung. Solo oder im Koop schaffbar, einzigartige Beute. | 💡 |
-| 14 | **Kopfgeld-Tafel:** Im Dorf täglich wechselnde Steckbriefe für bestimmte Elite-Gegner („Rasender, explosiver Schneewolf – 500 Gold“), die man gezielt sucht | 💡 |
+| 14 | **Kopfgeld-Tafel:** Im Dorf täglich wechselnde Steckbriefe für bestimmte Elite-Gegner („Rasender, explosiver Schneewolf – 500 Gold“), die man gezielt sucht | ✅ Stufe 3 der Anschlagtafel (Dorf-Ausbau), docs/dorf-ausbau.md |
 | 15 | **Heroische Bosse:** Besiegte Bosse auf einer höheren Stufe erneut fordern: mehr LP, eine Zusatzmechanik, höhere Chance auf Boss-Beute | 💡 |
 | 16 | **Fähigkeiten auf der Waffe:** Statt im Skilltree freizuschalten liegen die Fähigkeiten auf der Waffe – Einhand 2 aus 4, Zweihand 3 aus 6. Jeder Drop wird so spannend. | ✅ `abilities.ts`, docs/waffen-faehigkeiten.md |
+| 17 | **Dorf-Ausbau:** Das Dorf wird vom Spieler aufgebaut. Am Anfang nur ein Strassenhändler mit wenig Ware, Schmiede, Anschlagtafel (zusätzliche Aufträge) und Alchemist (Tränke) muss man bauen und in Stufen ausbauen. Kostet Gold und Material, das Monster im jeweiligen Gebiet fallen lassen. | ✅ `village.ts`, docs/dorf-ausbau.md |

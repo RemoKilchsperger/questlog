@@ -516,9 +516,12 @@ export function getItemStats(owned: OwnedItem): ItemStats {
 /** Anteil des Kaufpreises, den der Händler beim Verkauf zahlt. */
 export const SELL_RATE = 0.25;
 
-/** Verkaufspreis beim Händler: ein Viertel des Kaufpreises (mind. 1 Gold), seltene Stücke sind mehr wert. */
-export function sellPrice(owned: OwnedItem): number {
-  return Math.max(1, Math.floor(getItem(owned.itemId).price * getRarity(owned.rarity).priceMultiplier * SELL_RATE));
+/**
+ * Verkaufspreis beim Händler: ein Viertel des Kaufpreises (mind. 1 Gold), seltene Stücke sind mehr wert.
+ * `bonus`: Aufschlag des ausgebauten Händlers (0.1 = +10 %).
+ */
+export function sellPrice(owned: OwnedItem, bonus = 0): number {
+  return Math.max(1, Math.floor(getItem(owned.itemId).price * getRarity(owned.rarity).priceMultiplier * SELL_RATE * (1 + bonus)));
 }
 
 /**

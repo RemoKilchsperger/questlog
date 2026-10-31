@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { CLASSIC_VILLAGE } from "../test/village";
 import { useGameStore } from "../store/gameStore";
 import { attackRound, drinkPotion, getHeroCombatProfile, startBattle, type BattleState } from "./combat";
 import { getCreature, getCreatureStats } from "./creatures";
@@ -135,7 +136,10 @@ describe("Endlos-Turm: Rekorde", () => {
 });
 
 describe("Endlos-Turm: Lauf im Store", () => {
-  beforeEach(() => useGameStore.getState().resetGame());
+  beforeEach(() => {
+    useGameStore.getState().resetGame();
+    useGameStore.setState({ village: CLASSIC_VILLAGE });
+  });
   const setLevel = (level: number) => useGameStore.setState((s) => ({ character: { ...s.character, totalXp: xpFor(level) } }));
   /** Der Gegner des aktuellen Stockwerks fällt beim nächsten Schlag. */
   const winFloor = () => {
@@ -226,7 +230,7 @@ describe("Endlos-Turm: Belohnung, Aufträge, Erfolge", () => {
 
   it("im Store: Rekord, Turm-Bosse und Turm-Auftrag zählen mit", () => {
     useGameStore.getState().resetGame();
-    useGameStore.setState((s) => ({ character: { ...s.character, totalXp: xpFor(15) } }));
+    useGameStore.setState((s) => ({ village: CLASSIC_VILLAGE, character: { ...s.character, totalXp: xpFor(15) } }));
     useGameStore.getState().refreshQuestBoards();
     useGameStore.getState().startTower();
     for (let floor = 1; floor <= 5; floor++) {

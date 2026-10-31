@@ -44,6 +44,7 @@ src/
     loot.ts          Item-Drops bei Quests und Kämpfen (Seltenheit nach Gewichten)
     shop.ts          Händler mit wechselndem Angebot
     forge.ts         Schmied: Zerlegen und Verbessern
+    village.ts       Dorf-Ausbau: Material, Gebäude, Stufen und ihre Wirkung
     potions.ts       Heil- und Verstärkungstränke
     creatures.ts     Gebiete, Dungeons, Kreaturen, Beute
     bossAbilities.ts Fähigkeiten der Solo-Bosse
@@ -132,12 +133,20 @@ Höhe eines Bonus: `Faktor · (1 + Item-Level / 4)` mit Faktor 1 / 1.5 / 2.5 (se
 
 ### Dorf
 
+Das Dorf baut der Spieler selbst auf (`village.ts`, docs/dorf-ausbau.md). Händler, Schmiede,
+Anschlagtafel und Alchemist haben die Stufen 0–3. Bauen kostet Gold und Material: ein Material pro
+Gebiet, sicher bei jedem Sieg (1, Elite 3, Boss 5, im Dungeon doppelt). Die Werte unten gelten für
+Stufe 2.
+
 - **Händler** (`shop.ts`): 8 Items passend zum Level, alle 4 Stunden neu, bis zu 5-mal täglich gegen
   Gold neu auswürfeln. Seltenheit pro Stück: 20 % selten, 5 % episch, 0,2 % legendär.
-  Verkauf für 25 % des Preises.
+  Verkauf für 25 % des Preises. Der Strassenhändler (Stufe 0) hat nur 4 Stück.
 - **Schmied** (`forge.ts`): Items ab „selten“ zu Essenz zerlegen. Mit Essenz den Hauptwert verbessern
   (Waffen Angriff, Rüstungen und Schilde Rüstung), +6 % pro Stufe bis +5.
-  Beim Zerlegen gibt es 50 % der investierten Essenz zurück.
+  Beim Zerlegen gibt es 50 % der investierten Essenz zurück. Ohne Schmiede (Stufe 0) geht beides nicht.
+- **Anschlagtafel:** Stufe 1 bringt die Tages-Jagden, Stufe 2 die übrigen Aufträge, Stufe 3 die
+  Steckbriefe der Kopfgeld-Tafel.
+- **Alchemist:** verkauft Tränke je nach Stufe, ohne ihn gibt es nur kleine Heiltränke.
 
 ### Kampf
 
