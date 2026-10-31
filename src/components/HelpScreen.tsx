@@ -286,7 +286,7 @@ export function HelpScreen() {
           <p>
             Jedes Gebiet hat ein Material, und jeder Sieg dort bringt sicher welches: {MATERIAL_DROP.normal} pro Sieg,{" "}
             {MATERIAL_DROP.elite} bei Elite-Gegnern, {MATERIAL_DROP.boss} beim Boss. Dungeons geben das Material ihres
-            Level-Bereichs, und zwar doppelt so viel. Im Endlos-Turm und im Koop zählt das Level des Gegners. Material liegt
+            Level-Bereichs, und zwar doppelt so viel. Im Koop zählt das Level des Gegners, der Endlos-Turm gibt kein Material. Material liegt
             in einem eigenen Vorrat und lässt sich nicht verkaufen.
           </p>
           <Table

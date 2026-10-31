@@ -20,11 +20,14 @@ export function InventoryPanel({
   title = "Inventar",
   emptyText,
   actions,
+  toolbar,
   className = "",
 }: {
   title?: string;
   emptyText: string;
   actions: (owned: OwnedItem, stats: ItemStats, tooLow: boolean) => ReactNode;
+  /** Zusätzliche Knöpfe unter dem Titel, z. B. „Alle gewöhnlichen verkaufen“ */
+  toolbar?: ReactNode;
   className?: string;
 }) {
   const inventory = useGameStore((s) => s.inventory);
@@ -58,6 +61,8 @@ export function InventoryPanel({
             : `${visible.length} von ${inventory.length} Items`}
         </span>
       </div>
+
+      {toolbar}
 
       {inventory.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2">

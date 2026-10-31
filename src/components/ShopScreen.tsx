@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { formatCountdown, nextBoundary } from "../domain/calendar";
+import { bulkSellableItems } from "../domain/equipment";
 import { getItemStats, sellPrice as baseSellPrice } from "../domain/items";
 import { getLevel } from "../domain/leveling";
 import { POTIONS } from "../domain/potions";
@@ -30,6 +31,12 @@ export function ShopScreen() {
   const [pendingSale, setPendingSale] = useState<OwnedItem | null>(null);
   const cancelSale = useCallback(() => setPendingSale(null), []);
   const sale = pendingSale ? getItemStats(pendingSale) : null;
+  const sellCommon = useGameStore((s) => s.sellCommon);
+  const inventory = useGameStore((s) => s.inventory);
+  const commons = bulkSellableItems(inventory);
+  const commonTotal = commons.reduce((sum, owned) => sum + sellPrice(owned), 0);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const cancelBulk = useCallback(() => setConfirmBulk(false), []);
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -38,6 +45,18 @@ export function ShopScreen() {
       <InventoryPanel
         title="Verkaufen"
         emptyText="Du hast nichts zu verkaufen. Erledige Quests für Beute."
+        toolbar={
+          commons.length > 0 && (
+            <div className="mb-3">
+              <button
+                onClick={() => setConfirmBulk(true)}
+                className="rounded-md border-2 border-gold/60 px-3 py-1 text-sm text-gold hover:bg-gold/15"
+              >
+                Alle gewöhnlichen verkaufen ({commons.length}) <Gold amount={commonTotal} sign />
+              </button>
+            </div>
+          )
+        }
         actions={(owned) => (
           <button
             onClick={() => setPendingSale(owned)}
@@ -78,6 +97,25 @@ export function ShopScreen() {
             )}
           </>
         )}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmBulk}
+        title="Alle gewöhnlichen Items verkaufen?"
+        confirmLabel="Alle verkaufen"
+        onCancel={cancelBulk}
+        onConfirm={() => {
+          sellCommon();
+          setConfirmBulk(false);
+        }}
+      >
+        <p>
+          Du verkaufst {commons.length} gewöhnliche {commons.length === 1 ? "Item" : "Items"} und erhältst{" "}
+          <Gold amount={commonTotal} className="font-bold text-gold" />. Die Items sind danach weg.
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Angelegte und verbesserte Items behältst du.
+        </p>
       </ConfirmDialog>
     </div>
   );

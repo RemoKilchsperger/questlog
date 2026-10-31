@@ -100,6 +100,21 @@ export function sellItem(gear: Gear, gold: number, uid: string, bonus = 0): { ge
   };
 }
 
+/** Gewöhnliche Items im Inventar, die „Alle gewöhnlichen verkaufen“ mitnimmt – verbesserte bleiben liegen. */
+export function bulkSellableItems(inventory: readonly OwnedItem[]): OwnedItem[] {
+  return inventory.filter((i) => i.rarity === "common" && !i.upgrade);
+}
+
+/** Verkauft alle gewöhnlichen, nicht verbesserten Items aus dem Inventar auf einmal. */
+export function sellCommonItems(gear: Gear, gold: number, bonus = 0): { gear: Gear; gold: number; sold: OwnedItem[] } {
+  const sold = bulkSellableItems(gear.inventory);
+  return {
+    gear: { ...gear, inventory: gear.inventory.filter((i) => !sold.includes(i)) },
+    gold: gold + sold.reduce((sum, i) => sum + sellPrice(i, bonus), 0),
+    sold,
+  };
+}
+
 /**
  * Rüstung = Summe aller Rüstungsteile, Angriff = Summe beider Waffen –
  * jeweils erhöht um den Set-Bonus (ab 3 Boss-Teilen desselben Bosses).
