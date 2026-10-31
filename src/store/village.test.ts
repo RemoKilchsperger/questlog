@@ -105,3 +105,16 @@ describe("Spielstand v16 → v17", () => {
     expect(state.materials).toEqual({ darkwood: 12, crystalShard: 4, dragonOre: 2 });
   });
 });
+
+describe("Händler: alle gewöhnlichen verkaufen", () => {
+  it("verkauft gewöhnliche Items und schreibt das Gold gut", () => {
+    const rare = createItem("dagger-0", "rare", "r");
+    useGameStore.setState((s) => ({
+      character: { ...s.character, gold: 0 },
+      inventory: [createItem("dagger-0", "common", "a"), rare, createItem("dagger-0", "common", "b")],
+    }));
+    store().sellCommon();
+    expect(store().inventory).toEqual([rare]);
+    expect(store().character.gold).toBeGreaterThan(0);
+  });
+});

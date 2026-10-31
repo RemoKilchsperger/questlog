@@ -4,6 +4,7 @@ import {
   EMPTY_EQUIPMENT,
   equipItem,
   getCombatStats,
+  sellCommonItems,
   sellItem,
   unequipItem,
 } from "../domain/equipment";
@@ -170,6 +171,8 @@ interface GameState {
   rerollShop: () => void;
   buyOffer: (uid: string) => void;
   sell: (uid: string) => void;
+  /** Verkauft alle gewöhnlichen, nicht verbesserten Items im Inventar auf einmal. */
+  sellCommon: () => void;
   /** Zerlegt ein Item (ab selten) beim Schmied in Essenz. */
   salvage: (uid: string) => void;
   /** Verbessert ein Item (Inventar oder angelegt) beim Schmied um eine Stufe. */
@@ -878,6 +881,15 @@ export const useGameStore = create<GameState>()(
           const result = sellItem({ inventory, equipment }, character.gold, uid, MERCHANT_RULES[village.merchant].sellBonus);
           set({ inventory: result.gear.inventory, character: { ...character, gold: result.gold } });
           tradeEvent("sell", item);
+        }),
+
+      sellCommon: () =>
+        attempt(() => {
+          const { inventory, equipment, character, village } = get();
+          const result = sellCommonItems({ inventory, equipment }, character.gold, MERCHANT_RULES[village.merchant].sellBonus);
+          set({ inventory: result.gear.inventory, character: { ...character, gold: result.gold } });
+          // Jedes Item zählt einzeln für Verkaufs-Aufträge
+          for (const item of result.sold) tradeEvent("sell", item);
         }),
 
       salvage: (uid) =>

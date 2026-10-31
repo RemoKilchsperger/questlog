@@ -5,6 +5,7 @@ import {
   getCombatStats,
   getEffectiveStats,
   isOffHandBlocked,
+  sellCommonItems,
   sellItem,
   unequipItem,
 } from "./equipment";
@@ -237,6 +238,18 @@ describe("Händler", () => {
     const sold = sellItem(bought.gear, bought.gold, "offer");
     expect(sold.gold).toBe(100 - price + Math.max(1, Math.floor(price / 4)));
     expect(sold.gear.inventory).toHaveLength(0);
+  });
+
+  it("verkauft alle gewöhnlichen Items auf einmal, seltene und verbesserte bleiben", () => {
+    const a = createItem("dagger-0", "common", "a");
+    const b = createItem("sword-10", "common", "b");
+    const rare = createItem("dagger-0", "rare", "r");
+    const upgraded = { ...createItem("dagger-0", "common", "up"), upgrade: 1 };
+    const gear = { inventory: [a, rare, b, upgraded], equipment: EMPTY_EQUIPMENT };
+    const result = sellCommonItems(gear, 10);
+    expect(result.sold).toEqual([a, b]);
+    expect(result.gear.inventory).toEqual([rare, upgraded]);
+    expect(result.gold).toBe(10 + sellItem(gear, 0, "a").gold + sellItem(gear, 0, "b").gold);
   });
 
   it("seltene Stücke kosten mehr", () => {
