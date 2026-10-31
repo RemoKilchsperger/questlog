@@ -4,7 +4,7 @@ import { createItem } from "../domain/items";
 import { dateKey } from "../domain/calendar";
 import { rollDailyQuests } from "../domain/quests";
 import { EMPTY_VILLAGE } from "../domain/village";
-import { repairSave, useGameStore } from "./gameStore";
+import { migrateSave, repairSave, useGameStore } from "./gameStore";
 
 const store = useGameStore.getState;
 
@@ -34,7 +34,7 @@ describe("Dorf im Spielstand", () => {
     store().startBattle("grey-wolf");
     winCurrent();
     const elite = (store().battle?.elite?.length ?? 0) > 0;
-    expect(store().materials.wolfPelt).toBe(elite ? 3 : 1);
+    expect(store().materials.darkwood).toBe(elite ? 3 : 1);
     expect(store().battleReward?.materials).toEqual(store().materials);
   });
 
@@ -60,13 +60,13 @@ describe("Dorf im Spielstand", () => {
   });
 
   it("Bauen zieht Gold und Material ab – der ausgebaute Händler hat sofort mehr Ware", () => {
-    useGameStore.setState((s) => ({ character: { ...s.character, gold: 1000 }, materials: { wolfPelt: 20 } }));
+    useGameStore.setState((s) => ({ character: { ...s.character, gold: 1000 }, materials: { darkwood: 20 } }));
     store().refreshShop();
     expect(store().shop.offers).toHaveLength(4);
     store().build("merchant");
     expect(store().village.merchant).toBe(1);
     expect(store().character.gold).toBe(700);
-    expect(store().materials.wolfPelt).toBe(5);
+    expect(store().materials.darkwood).toBe(5);
     expect(store().shop.offers).toHaveLength(6);
     // Zu wenig für die nächste Stufe: nichts passiert
     store().build("merchant");
@@ -95,5 +95,13 @@ describe("Dorf im Spielstand", () => {
     // Erledigt: die Kreatur kommt wieder wie gewohnt
     store().turnInQuest(bounty.def.id);
     expect(store().dailyQuests.quests.find((q) => q.def.id === bounty.def.id)!.turnedIn).toBe(true);
+  });
+});
+
+describe("Spielstand v16 → v17", () => {
+  it("bucht die alten Baumaterialien auf die neuen um", () => {
+    const old = { ...store(), materials: { wolfPelt: 12, crystalShard: 4, dragonScale: 2 } };
+    const state = migrateSave(old, 16);
+    expect(state.materials).toEqual({ darkwood: 12, crystalShard: 4, dragonOre: 2 });
   });
 });

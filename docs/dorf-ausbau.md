@@ -23,12 +23,12 @@ Jedes Gebiet hat **ein** Material. Es fällt bei jedem Sieg in diesem Gebiet sic
 
 | Gebiet | Level | Material |
 |---|---|---|
-| Düsterwald | 1–10 | 🐺 Wolfsfell |
-| Nebelsümpfe | 11–20 | 🦎 Echsenschuppe |
+| Düsterwald | 1–10 | 🪵 Düsterholz |
+| Nebelsümpfe | 11–20 | 🧱 Lehm |
 | Kristallhöhlen | 21–30 | 💎 Kristallsplitter |
-| Frostgipfel | 31–40 | ❄️ Frostpelz |
-| Schattenruinen | 41–50 | 💀 Knochenstaub |
-| Drachenhort | 51–60 | 🐉 Drachenschuppe |
+| Frostgipfel | 31–40 | 🌲 Hartholz |
+| Schattenruinen | 41–50 | 🌑 Obsidian |
+| Drachenhort | 51–60 | 🔶 Drachenerz |
 
 - **Menge:** 1 pro normalem Sieg, 3 bei Elite-Gegnern, 5 beim Gebietsboss.
 - **Dungeons** geben das Material des Gebiets, zu dem ihr Level passt (doppelte Menge in der Truhe).
@@ -146,9 +146,9 @@ Quest-Belohnungen und Verkäufe. Die Kosten richten sich danach:
 
 | Stufe | Gold | Material | Erreichbar ab etwa |
 |---|---|---|---|
-| 1 | 150–400 | 10–20 Wolfsfell (Alchemist: Echsenschuppe) | Level 5–12 |
-| 2 | 1'500–2'500 | 25 Kristallsplitter oder Frostpelz, 10 Material aus Stufe 1 | Level 25–35 |
-| 3 | 6'000–10'000 | 30 Knochenstaub oder Drachenschuppe, 15 Material aus Stufe 2 | Level 45–60 |
+| 1 | 150–400 | 10–20 Düsterholz (Alchemist: Lehm) | Level 5–12 |
+| 2 | 1'500–2'500 | 25 Kristallsplitter oder Hartholz, 10 Material aus Stufe 1 | Level 25–35 |
+| 3 | 6'000–10'000 | 30 Obsidian oder Drachenerz, 15 Material aus Stufe 2 | Level 45–60 |
 
 Vorschlag pro Gebäude:
 
@@ -202,7 +202,7 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
 - **Tränke gibt es beim Alchemisten** (eigener Unter-Tab, gesperrte Sorten mit der nötigen Stufe). Bis
   er gebaut ist, verkauft der Händler unter seiner Ware kleine Heiltränke, danach nicht mehr.
 - Im Kampf-Ergebnis, in der Dungeon- und Turm-Truhe und in der Koop-Truhe steht das erhaltene Material,
-  zum Beispiel „+1 🐺 Wolfsfell“.
+  zum Beispiel „+1 🪵 Düsterholz“.
 - Ohne Schmiede zeigt der Schmied-Tab einen Bauplatz mit Link zum Ausbau, ohne Anschlagtafel zeigt der
   Quest-Tab einen Hinweis statt der Aufträge, ohne Alchemist zeigt der Alchemist-Tab einen Bauplatz.
 

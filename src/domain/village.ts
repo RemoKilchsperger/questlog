@@ -11,7 +11,7 @@ import type { ShopRules } from "./shop";
 
 /* ───────────── Material ───────────── */
 
-export type MaterialId = "wolfPelt" | "lizardScale" | "crystalShard" | "frostFur" | "boneDust" | "dragonScale";
+export type MaterialId = "darkwood" | "clay" | "crystalShard" | "hardwood" | "obsidian" | "dragonOre";
 
 export interface MaterialDef {
   id: MaterialId;
@@ -23,12 +23,12 @@ export interface MaterialDef {
 
 /** Ein Material pro Gebiet – in der Reihenfolge der Gebiete. */
 export const MATERIALS: readonly MaterialDef[] = [
-  { id: "wolfPelt", name: "Wolfsfell", icon: "🐺", areaId: "darkwood" },
-  { id: "lizardScale", name: "Echsenschuppe", icon: "🦎", areaId: "mistmarsh" },
+  { id: "darkwood", name: "Düsterholz", icon: "🪵", areaId: "darkwood" },
+  { id: "clay", name: "Lehm", icon: "🧱", areaId: "mistmarsh" },
   { id: "crystalShard", name: "Kristallsplitter", icon: "💎", areaId: "crystal-caves" },
-  { id: "frostFur", name: "Frostpelz", icon: "❄️", areaId: "frost-peaks" },
-  { id: "boneDust", name: "Knochenstaub", icon: "💀", areaId: "shadow-ruins" },
-  { id: "dragonScale", name: "Drachenschuppe", icon: "🐉", areaId: "dragon-hoard" },
+  { id: "hardwood", name: "Hartholz", icon: "🌲", areaId: "frost-peaks" },
+  { id: "obsidian", name: "Obsidian", icon: "🌑", areaId: "shadow-ruins" },
+  { id: "dragonOre", name: "Drachenerz", icon: "🔶", areaId: "dragon-hoard" },
 ];
 
 /** Material im Vorrat: Id → Anzahl. Liegt nicht im Inventar und lässt sich nicht verkaufen. */
@@ -124,18 +124,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Verkauft wechselnde Ausrüstung und kauft deine Beute.",
     tiers: [
       { name: "Strassenhändler", icon: "🧺", effect: "4 Stück, nur gewöhnlich und selten (10 %), kein Neuwürfeln" },
-      { name: "Krämerladen", icon: "⛺", effect: "6 Stück, 20 % selten, 5 % episch, 2× Neuwürfeln am Tag", cost: cost(300, { wolfPelt: 15 }) },
+      { name: "Krämerladen", icon: "⛺", effect: "6 Stück, 20 % selten, 5 % episch, 2× Neuwürfeln am Tag", cost: cost(300, { darkwood: 15 }) },
       {
         name: "Handelshaus",
         icon: "🏠",
         effect: "8 Stück, mit Glück legendär (0,2 %), 5× Neuwürfeln am Tag",
-        cost: cost(2000, { crystalShard: 25, wolfPelt: 10 }),
+        cost: cost(2000, { crystalShard: 25, darkwood: 10 }),
       },
       {
         name: "Grosshandel",
         icon: "🏛️",
         effect: "10 Stück, 8 % episch, 0,5 % legendär, Verkaufspreise +10 %",
-        cost: cost(8000, { boneDust: 30, crystalShard: 15 }),
+        cost: cost(8000, { obsidian: 30, crystalShard: 15 }),
       },
     ],
   },
@@ -146,13 +146,13 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Zerlegt Ausrüstung in Essenz und verbessert Waffen und Rüstungen.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Noch keine Schmiede: kein Zerlegen, kein Verbessern" },
-      { name: "Esse", icon: "🔥", effect: "Zerlegen, Verbessern bis +2", cost: cost(400, { wolfPelt: 20 }) },
-      { name: "Schmiede", icon: "🏠", effect: "Verbessern bis +5", cost: cost(2500, { frostFur: 25, lizardScale: 10 }) },
+      { name: "Esse", icon: "🔥", effect: "Zerlegen, Verbessern bis +2", cost: cost(400, { darkwood: 20 }) },
+      { name: "Schmiede", icon: "🏠", effect: "Verbessern bis +5", cost: cost(2500, { hardwood: 25, clay: 10 }) },
       {
         name: "Meisterschmiede",
         icon: "🏛️",
         effect: "Verbessern kostet 20 % weniger Essenz, beim Zerlegen 75 % statt 50 % zurück",
-        cost: cost(10000, { dragonScale: 30, frostFur: 15 }),
+        cost: cost(10000, { dragonOre: 30, hardwood: 15 }),
       },
     ],
   },
@@ -163,18 +163,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Bringt zusätzliche Aufträge – das Questbuch gibt es immer.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Nur das Questbuch" },
-      { name: "Anschlagtafel", icon: "🪵", effect: "3 tägliche Jagdaufträge", cost: cost(150, { wolfPelt: 10 }) },
+      { name: "Anschlagtafel", icon: "🪵", effect: "3 tägliche Jagdaufträge", cost: cost(150, { darkwood: 10 }) },
       {
         name: "Auftragsbrett",
         icon: "🏠",
         effect: "Dazu Händler- und Turm-Aufträge sowie die Wochenaufträge",
-        cost: cost(1500, { crystalShard: 25, wolfPelt: 10 }),
+        cost: cost(1500, { crystalShard: 25, darkwood: 10 }),
       },
       {
         name: "Kopfgeld-Tafel",
         icon: "🏛️",
         effect: "Täglich 2 Steckbriefe für gesuchte Elite-Gegner",
-        cost: cost(6000, { boneDust: 30, crystalShard: 15 }),
+        cost: cost(6000, { obsidian: 30, crystalShard: 15 }),
       },
     ],
   },
@@ -185,18 +185,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Verkauft Tränke – ohne ihn gibt es beim Händler nur kleine Heiltränke.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Nur kleine Heiltränke beim Händler" },
-      { name: "Kräuterhütte", icon: "🛖", effect: "Dazu Heiltränke", cost: cost(300, { lizardScale: 15 }) },
+      { name: "Kräuterhütte", icon: "🛖", effect: "Dazu Heiltränke", cost: cost(300, { clay: 15 }) },
       {
         name: "Alchemistenlabor",
         icon: "🏠",
         effect: "Angriffs- und Rüstungstränke kaufbar",
-        cost: cost(2000, { frostFur: 25, lizardScale: 10 }),
+        cost: cost(2000, { hardwood: 25, clay: 10 }),
       },
       {
         name: "Meisteralchemist",
         icon: "🏛️",
         effect: "Grosse Heiltränke kaufbar, alle Tränke wirken 25 % stärker",
-        cost: cost(8000, { dragonScale: 30, frostFur: 15 }),
+        cost: cost(8000, { dragonOre: 30, hardwood: 15 }),
       },
     ],
   },
@@ -207,18 +207,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Kocht Buff-Food, das dich für eine Weile stärkt. Die Küche öffnet bald.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Noch keine Taverne" },
-      { name: "Schankstube", icon: "🍲", effect: "Einfache Gerichte (folgt bald)", cost: cost(250, { wolfPelt: 15 }) },
+      { name: "Schankstube", icon: "🍲", effect: "Einfache Gerichte (folgt bald)", cost: cost(250, { darkwood: 15 }) },
       {
         name: "Gasthaus",
         icon: "🏠",
         effect: "Kräftigere Gerichte (folgt bald)",
-        cost: cost(1800, { crystalShard: 25, lizardScale: 10 }),
+        cost: cost(1800, { crystalShard: 25, clay: 10 }),
       },
       {
         name: "Festhalle",
         icon: "🏛️",
         effect: "Festmahle mit mehreren Buffs (folgt bald)",
-        cost: cost(7000, { boneDust: 30, crystalShard: 15 }),
+        cost: cost(7000, { obsidian: 30, crystalShard: 15 }),
       },
     ],
   },
@@ -229,18 +229,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Hier lernst du um: Ohne Trainingsplatz lassen sich die Skillpunkte nicht zurücksetzen.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Skillpunkte zurücksetzen nicht möglich" },
-      { name: "Übungsplatz", icon: "🪵", effect: "Skillpunkte zurücksetzen gegen Gold", cost: cost(300, { wolfPelt: 20 }) },
+      { name: "Übungsplatz", icon: "🪵", effect: "Skillpunkte zurücksetzen gegen Gold", cost: cost(300, { darkwood: 20 }) },
       {
         name: "Trainingsplatz",
         icon: "🏠",
         effect: "Zurücksetzen kostet 50 % weniger",
-        cost: cost(2000, { frostFur: 25, wolfPelt: 10 }),
+        cost: cost(2000, { hardwood: 25, darkwood: 10 }),
       },
       {
         name: "Kampfschule",
         icon: "🏛️",
         effect: "Zurücksetzen ist kostenlos",
-        cost: cost(8000, { boneDust: 30, frostFur: 15 }),
+        cost: cost(8000, { obsidian: 30, hardwood: 15 }),
       },
     ],
   },
@@ -251,18 +251,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Ein Denkmal deiner Taten – es spornt dich an: Du bekommst mehr XP.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Kein XP-Bonus" },
-      { name: "Gedenkstein", icon: "🪨", effect: "+5 % XP aus Kämpfen und Quests", cost: cost(500, { lizardScale: 20 }) },
+      { name: "Gedenkstein", icon: "🪨", effect: "+5 % XP aus Kämpfen und Quests", cost: cost(500, { clay: 20 }) },
       {
         name: "Heldenstatue",
         icon: "🗿",
         effect: "+10 % XP aus Kämpfen und Quests",
-        cost: cost(3000, { crystalShard: 25, lizardScale: 10 }),
+        cost: cost(3000, { crystalShard: 25, clay: 10 }),
       },
       {
         name: "Goldenes Denkmal",
         icon: "🏆",
         effect: "+15 % XP aus Kämpfen und Quests",
-        cost: cost(12000, { dragonScale: 30, boneDust: 15 }),
+        cost: cost(12000, { dragonOre: 30, obsidian: 15 }),
       },
     ],
   },
