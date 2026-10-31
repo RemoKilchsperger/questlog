@@ -104,10 +104,12 @@ export function getEliteAffix(id: EliteAffix): EliteAffixDef {
 /**
  * Ist diese Kreatur in diesem Kampf Elite – und mit welchen Modifikatoren? Leer:
  * ein gewöhnlicher Gegner. Bosse sind nie Elite, sie haben eigene Mechaniken.
+ * Zwischenbosse im Dungeon sind immer Elite mit zwei Modifikatoren.
  */
 export function rollElite(creature: CreatureDef, rng: () => number = Math.random): EliteAffix[] {
-  if (creature.boss || rng() >= ELITE_CHANCE) return [];
-  const count = creature.level >= ELITE_DOUBLE_LEVEL && rng() < ELITE_DOUBLE_CHANCE ? 2 : 1;
+  if (creature.boss) return [];
+  if (!creature.midBoss && rng() >= ELITE_CHANCE) return [];
+  const count = creature.midBoss || (creature.level >= ELITE_DOUBLE_LEVEL && rng() < ELITE_DOUBLE_CHANCE) ? 2 : 1;
   const pool = ELITE_AFFIXES.map((a) => a.id);
   const picked: EliteAffix[] = [];
   while (picked.length < count) {

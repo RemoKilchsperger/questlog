@@ -100,21 +100,25 @@ export const CREATURE_MATCHUPS: Record<string, CreatureMatchups> = {
   "mine-rat": { weak: ["blunt"] },
   "kobold-blaster": { weak: ["pierce"], resist: ["burn"] },
   "pit-spider": { weak: ["blade"], immune: ["poison"] },
+  "mine-foreman": { weak: ["magic"], resist: ["blunt"] },
   "ore-king": { weak: ["magic"], resist: ["blade"] },
   // Versunkener Tempel
   "temple-guardian": { weak: ["blunt"], resist: ["blade"] },
   "cobra-priest": { weak: ["blade"], resist: ["magic"], immune: ["poison"] },
   mummy: { weak: ["burn"], resist: ["pierce"], immune: ["poison", "bleed"] },
+  "tomb-warden": { weak: ["burn"], resist: ["blade"], immune: ["poison"] },
   "high-priestess": { weak: ["blade"], resist: ["magic"] },
   // Gewitterturm
   "thunder-elemental": { weak: ["blunt"], resist: ["magic"], immune: ["poison", "bleed"] },
   "stone-gargoyle": { weak: ["blunt"], resist: ["blade", "pierce"], immune: ["poison", "bleed"] },
   "lightning-caller": { weak: ["pierce"], resist: ["magic"] },
+  "thunder-colossus": { weak: ["pierce"], resist: ["blunt", "magic"], immune: ["bleed"] },
   "storm-lord": { weak: ["blade"], resist: ["magic"] },
   // Abgrund der Leere
   "void-crawler": { weak: ["magic"], resist: ["pierce"] },
   "shadow-demon": { weak: ["magic"], resist: ["blade"] },
   "soul-eater": { weak: ["blunt"], resist: ["magic"], immune: ["poison"] },
+  "abyss-tyrant": { weak: ["burn"], resist: ["magic"] },
   "void-lord": { weak: ["pierce"], resist: ["magic"] },
   // Raid-Bosse
   "swamp-hydra": { weak: ["burn", "blade"], immune: ["poison"] },

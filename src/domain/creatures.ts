@@ -13,6 +13,8 @@ export interface CreatureDef {
   sprite: string;
   level: number;
   boss: boolean;
+  /** Zwischenboss im Dungeon: immer Elite mit zwei Modifikatoren (elites.ts) */
+  midBoss?: boolean;
   /** Faktor auf Lebenspunkte und Schaden – Dungeon-Gegner sind stärker (Standard 1) */
   power?: number;
   /** Nur Bosse: eigene Faktoren auf Lebenspunkte und Schaden statt BOSS_HP_FACTOR / BOSS_DAMAGE_FACTOR */
@@ -119,6 +121,23 @@ const d = (id: string, name: string, sprite: string, level: number, power: numbe
   id, name, sprite, level, boss, power, ...(boss && { bossFactors: DUNGEON_BOSS_FACTORS }),
 });
 
+/** Zwischenboss in der Mitte eines Dungeons – ein Elite-Gegner mit zwei Modifikatoren. */
+const mid = (id: string, name: string, sprite: string, level: number, power: number): CreatureDef => ({
+  ...d(id, name, sprite, level, power),
+  midBoss: true,
+});
+
+/**
+ * Ablauf eines Dungeons: drei Gegner, der Zwischenboss, dieselben drei Gegner
+ * noch einmal und am Ende der Boss – acht Kämpfe ohne Heilung dazwischen.
+ */
+const dungeonRun = (mobs: readonly CreatureDef[], midBoss: CreatureDef, boss: CreatureDef): CreatureDef[] => [
+  ...mobs,
+  midBoss,
+  ...mobs,
+  boss,
+];
+
 export const AREAS: readonly AreaDef[] = [
   {
     id: "darkwood",
@@ -222,8 +241,9 @@ const DUNGEON_POWER = 1.1;
 const ABYSS_POWER = 1.1;
 
 /**
- * Dungeons: mehrere Gegner hintereinander, zwischen den Kämpfen keine Heilung,
- * am Ende ein Boss mit eigener Fähigkeit und einzigartiger Beute.
+ * Dungeons: acht Gegner hintereinander, zwischen den Kämpfen keine Heilung, in der
+ * Mitte ein Zwischenboss (Elite mit zwei Modifikatoren), am Ende ein Boss mit eigener
+ * Fähigkeit und einzigartiger Beute.
  */
 export const DUNGEONS: readonly AreaDef[] = [
   {
@@ -234,12 +254,15 @@ export const DUNGEONS: readonly AreaDef[] = [
     maxLevel: 12,
     dungeon: true,
     colors: { sky: 0x1a1612, ground: 0x3a2e22 },
-    creatures: [
-      d("mine-rat", "Minenratte", "mine-rat", 10, DUNGEON_POWER),
-      d("kobold-blaster", "Kobold-Sprengmeister", "kobold", 11, DUNGEON_POWER),
-      d("pit-spider", "Grubenspinne", "pit-spider", 11, DUNGEON_POWER),
+    creatures: dungeonRun(
+      [
+        d("mine-rat", "Minenratte", "mine-rat", 10, DUNGEON_POWER),
+        d("kobold-blaster", "Kobold-Sprengmeister", "kobold", 11, DUNGEON_POWER),
+        d("pit-spider", "Grubenspinne", "pit-spider", 11, DUNGEON_POWER),
+      ],
+      mid("mine-foreman", "Vorarbeiter Knorz", "kobold", 11, DUNGEON_POWER),
       withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 0.9, { creatureId: "kobold-blaster", role: "drummer", name: "Kobold-Trommler" }, 1.05),
-    ],
+    ),
   },
   {
     id: "sunken-temple",
@@ -249,12 +272,15 @@ export const DUNGEONS: readonly AreaDef[] = [
     maxLevel: 27,
     dungeon: true,
     colors: { sky: 0x3a2a14, ground: 0x8a6a3a },
-    creatures: [
-      d("temple-guardian", "Tempelwächter", "temple-guardian", 25, DUNGEON_POWER),
-      d("cobra-priest", "Kobra-Priester", "cobra-priest", 26, DUNGEON_POWER),
-      d("mummy", "Mumie", "mummy", 26, DUNGEON_POWER),
+    creatures: dungeonRun(
+      [
+        d("temple-guardian", "Tempelwächter", "temple-guardian", 25, DUNGEON_POWER),
+        d("cobra-priest", "Kobra-Priester", "cobra-priest", 26, DUNGEON_POWER),
+        d("mummy", "Mumie", "mummy", 26, DUNGEON_POWER),
+      ],
+      mid("tomb-warden", "Grabhüter Anubek", "temple-guardian", 26, DUNGEON_POWER),
       withAdds(d("high-priestess", "Hohepriesterin Neferet", "high-priestess", 27, 1, true), "cobra-priest", 1.2, { creatureId: "cobra-priest", role: "healer" }, 1.45),
-    ],
+    ),
   },
   {
     id: "storm-tower",
@@ -264,12 +290,15 @@ export const DUNGEONS: readonly AreaDef[] = [
     maxLevel: 42,
     dungeon: true,
     colors: { sky: 0x141e36, ground: 0x3a4258 },
-    creatures: [
-      d("thunder-elemental", "Gewitterelementar", "thunder-elemental", 40, DUNGEON_POWER),
-      d("stone-gargoyle", "Steingargoyle", "gargoyle", 41, DUNGEON_POWER),
-      d("lightning-caller", "Blitzbeschwörer", "lightning-caller", 41, DUNGEON_POWER),
+    creatures: dungeonRun(
+      [
+        d("thunder-elemental", "Gewitterelementar", "thunder-elemental", 40, DUNGEON_POWER),
+        d("stone-gargoyle", "Steingargoyle", "gargoyle", 41, DUNGEON_POWER),
+        d("lightning-caller", "Blitzbeschwörer", "lightning-caller", 41, DUNGEON_POWER),
+      ],
+      mid("thunder-colossus", "Donnerkoloss", "thunder-elemental", 41, DUNGEON_POWER),
       withAdds(d("storm-lord", "Sturmfürst Kaelthar", "storm-lord", 42, 1, true), "lightning-caller", 1.2, { creatureId: "stone-gargoyle", role: "shield" }, 1.45),
-    ],
+    ),
   },
   {
     id: "void-abyss",
@@ -279,12 +308,15 @@ export const DUNGEONS: readonly AreaDef[] = [
     maxLevel: 60,
     dungeon: true,
     colors: { sky: 0x0e0816, ground: 0x2a1a40 },
-    creatures: [
-      d("void-crawler", "Leerenkriecher", "void-crawler", 60, ABYSS_POWER),
-      d("shadow-demon", "Schattendämon", "shadow-demon", 60, ABYSS_POWER),
-      d("soul-eater", "Seelenfresser", "soul-eater", 60, ABYSS_POWER),
+    creatures: dungeonRun(
+      [
+        d("void-crawler", "Leerenkriecher", "void-crawler", 60, ABYSS_POWER),
+        d("shadow-demon", "Schattendämon", "shadow-demon", 60, ABYSS_POWER),
+        d("soul-eater", "Seelenfresser", "soul-eater", 60, ABYSS_POWER),
+      ],
+      mid("abyss-tyrant", "Abgrundtyrann", "shadow-demon", 60, ABYSS_POWER),
       withAdds(d("void-lord", "Leerenfürst Xal'Zar", "void-lord", 60, 1, true), "void-crawler", 1.15, { creatureId: "soul-eater", role: "healer" }, 1.35),
-    ],
+    ),
   },
 ];
 

@@ -513,7 +513,8 @@ export function HelpScreen() {
 
         <Topic id="dungeons" title="🗝️ Dungeons">
           <p>
-            Mehrere stärkere Gegner nacheinander, ohne Heilung dazwischen – am Ende wartet ein Boss mit eigenem Set. Kämpfe
+            Acht stärkere Gegner nacheinander, ohne Heilung dazwischen: drei Gegner, ein Zwischenboss (immer Elite mit zwei
+            Modifikatoren), dieselben drei Gegner noch einmal und am Ende ein Boss mit eigenem Set. Kämpfe
             kosten nichts – du kannst so oft antreten, wie du willst.
           </p>
           <p>
