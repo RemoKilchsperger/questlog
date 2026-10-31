@@ -282,7 +282,7 @@ export function HelpScreen() {
             Taverne, Trainingsplatz und Statue musst du erst bauen. Jedes Gebäude hat drei Stufen und ist sofort fertig. Bauen
             kostet Gold und Material. Ein Klick auf ein Gebäude im Dorfbild öffnet sein Menü.
           </p>
-          <H>🧱 Material</H>
+          <H>⛏️ Material</H>
           <p>
             Jedes Gebiet hat ein Material, und jeder Sieg dort bringt sicher welches: {MATERIAL_DROP.normal} pro Sieg,{" "}
             {MATERIAL_DROP.elite} bei Elite-Gegnern, {MATERIAL_DROP.boss} beim Boss. Dungeons geben das Material ihres

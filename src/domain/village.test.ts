@@ -52,23 +52,23 @@ const newUid = () => `u${uidCounter++}`;
 describe("Material", () => {
   it("ein Material pro Gebiet – Gegner geben das Material ihres Level-Bereichs", () => {
     expect(MATERIALS.map((m) => m.areaId)).toEqual(AREAS.map((a) => a.id));
-    expect(materialForLevel(1)).toBe("wolfPelt");
-    expect(materialForLevel(10)).toBe("wolfPelt");
-    expect(materialForLevel(11)).toBe("lizardScale");
-    expect(materialForLevel(45)).toBe("boneDust");
-    expect(materialForLevel(60)).toBe("dragonScale");
+    expect(materialForLevel(1)).toBe("darkwood");
+    expect(materialForLevel(10)).toBe("darkwood");
+    expect(materialForLevel(11)).toBe("clay");
+    expect(materialForLevel(45)).toBe("obsidian");
+    expect(materialForLevel(60)).toBe("dragonOre");
     // Koop-Bosse über Level 60 geben das letzte Material
-    expect(materialForLevel(70)).toBe("dragonScale");
+    expect(materialForLevel(70)).toBe("dragonOre");
   });
 
   it("fällt sicher: 1 pro Sieg, 3 bei Elite, 5 beim Boss", () => {
     const wolf = getCreature("grey-wolf").creature;
     const chief = getCreature("goblin-chief").creature;
-    expect(creatureMaterials(wolf)).toEqual({ wolfPelt: 1 });
-    expect(creatureMaterials(wolf, true)).toEqual({ wolfPelt: 3 });
-    expect(creatureMaterials(chief)).toEqual({ wolfPelt: 5 });
-    expect(rollBattleReward(wolf, hero, "x", () => 0.99).materials).toEqual({ wolfPelt: 1 });
-    expect(rollBattleReward(wolf, hero, "x", () => 0.99, [], true).materials).toEqual({ wolfPelt: 3 });
+    expect(creatureMaterials(wolf)).toEqual({ darkwood: 1 });
+    expect(creatureMaterials(wolf, true)).toEqual({ darkwood: 3 });
+    expect(creatureMaterials(chief)).toEqual({ darkwood: 5 });
+    expect(rollBattleReward(wolf, hero, "x", () => 0.99).materials).toEqual({ darkwood: 1 });
+    expect(rollBattleReward(wolf, hero, "x", () => 0.99, [], true).materials).toEqual({ darkwood: 3 });
   });
 
   it("sammelt sich in der Truhe", () => {
@@ -77,7 +77,7 @@ describe("Material", () => {
     let chest = addToChest(EMPTY_CHEST, rollBattleReward(wolf, hero, "a", () => 0.99));
     chest = addToChest(chest, rollBattleReward(wolf, hero, "b", () => 0.99));
     chest = addToChest(chest, rollBattleReward(toad, hero, "c", () => 0.99));
-    expect(chest.materials).toEqual({ wolfPelt: 2, lizardScale: 1 });
+    expect(chest.materials).toEqual({ darkwood: 2, clay: 1 });
   });
 });
 
@@ -95,27 +95,27 @@ describe("Bauen", () => {
 
   it("kostet Gold und Material, wird sofort fertig", () => {
     const cost = nextBuildCost(EMPTY_VILLAGE, "merchant")!;
-    expect(cost).toEqual({ gold: 300, materials: { wolfPelt: 15 } });
-    const result = build(EMPTY_VILLAGE, "merchant", 500, { wolfPelt: 20, lizardScale: 3 });
+    expect(cost).toEqual({ gold: 300, materials: { darkwood: 15 } });
+    const result = build(EMPTY_VILLAGE, "merchant", 500, { darkwood: 20, clay: 3 });
     expect(result.village.merchant).toBe(1);
     expect(result.gold).toBe(200);
-    expect(result.materials).toEqual({ wolfPelt: 5, lizardScale: 3 });
+    expect(result.materials).toEqual({ darkwood: 5, clay: 3 });
   });
 
   it("ohne genug Gold oder Material geht es nicht – und zeigt, was fehlt", () => {
-    expect(() => build(EMPTY_VILLAGE, "merchant", 299, { wolfPelt: 15 })).toThrow(/Gold/);
-    expect(() => build(EMPTY_VILLAGE, "merchant", 300, { wolfPelt: 14 })).toThrow(/Material/);
-    expect(canBuild(EMPTY_VILLAGE, "merchant", 300, { wolfPelt: 15 })).toBe(true);
-    expect(missingForBuild(nextBuildCost(EMPTY_VILLAGE, "merchant")!, 100, { wolfPelt: 12 })).toEqual({
+    expect(() => build(EMPTY_VILLAGE, "merchant", 299, { darkwood: 15 })).toThrow(/Gold/);
+    expect(() => build(EMPTY_VILLAGE, "merchant", 300, { darkwood: 14 })).toThrow(/Material/);
+    expect(canBuild(EMPTY_VILLAGE, "merchant", 300, { darkwood: 15 })).toBe(true);
+    expect(missingForBuild(nextBuildCost(EMPTY_VILLAGE, "merchant")!, 100, { darkwood: 12 })).toEqual({
       gold: 200,
-      materials: { wolfPelt: 3 },
+      materials: { darkwood: 3 },
     });
   });
 
   it("höher als Stufe 3 geht nicht", () => {
     const full: Village = { merchant: 3, smith: 3, board: 3, alchemist: 3, tavern: 3, training: 3, statue: 3 };
     expect(nextBuildCost(full, "smith")).toBeNull();
-    expect(canBuild(full, "smith", 1e9, { dragonScale: 999 })).toBe(false);
+    expect(canBuild(full, "smith", 1e9, { dragonOre: 999 })).toBe(false);
     expect(() => build(full, "smith", 1e9, {})).toThrow(/ausgebaut/);
   });
 

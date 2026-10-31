@@ -92,6 +92,7 @@ import {
   scaleMaterials,
   SMITH_RULES,
   type BuildingId,
+  type MaterialId,
   type MaterialStock,
   type Village,
 } from "../domain/village";
@@ -486,6 +487,20 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
         Object.entries(state.equipment).map(([slot, item]) => [slot, item && rescaleBonuses(item)]),
       ) as Equipment,
       ...(state.shop && { shop: { ...state.shop, offers: state.shop.offers.map(rescaleBonuses) } }),
+    };
+  }
+  // v16 → v17: neue Baumaterialien – der Vorrat wird 1:1 auf das Material desselben Gebiets umgebucht.
+  if (version < 17 && state.materials) {
+    const renamed: Record<string, MaterialId> = {
+      wolfPelt: "darkwood",
+      lizardScale: "clay",
+      frostFur: "hardwood",
+      boneDust: "obsidian",
+      dragonScale: "dragonOre",
+    };
+    state = {
+      ...state,
+      materials: Object.fromEntries(Object.entries(state.materials).map(([id, n]) => [renamed[id] ?? id, n])),
     };
   }
   return state;
@@ -1181,7 +1196,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 16,
+      version: 17,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,

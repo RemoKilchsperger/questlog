@@ -1,6 +1,6 @@
 import { materialEntries, type MaterialStock } from "../domain/village";
 
-/** Erhaltenes Baumaterial, z. B. „+1 🐺 Wolfsfell“ – nichts, wenn die Belohnung keines enthält. */
+/** Erhaltenes Baumaterial, z. B. „+1 🪵 Düsterholz“ – nichts, wenn die Belohnung keines enthält. */
 export function MaterialGain({ materials, className = "" }: { materials: MaterialStock | undefined; className?: string }) {
   const entries = materialEntries(materials);
   if (entries.length === 0) return null;
