@@ -5,9 +5,9 @@ import { abilityBlocker, attackRound, bossTurnOf, getHeroCombatProfile, startBat
 import { getBossAbility, roundsUntilBossAbility } from "./bossAbilities";
 import { AREAS, getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { createItem, getItemStats, ITEM_TYPES } from "./items";
+import { createItem, ITEM_TYPES } from "./items";
 import { xpForNextLevel } from "./leveling";
-import { clampSkills, MAX_SKILL_RANK, SKILL_BONUS_PER_RANK, unspentSkillPoints, type SkillWeapon } from "./skills";
+import type { SkillWeapon } from "./skills";
 import type { Character, Equipment } from "./types";
 
 const hero: Character = {
@@ -250,26 +250,3 @@ describe("Boss-Fähigkeiten", () => {
   });
 });
 
-describe("Schild-Skill", () => {
-  it("erhöht die Rüstung angelegter Schilde, nicht den Schaden", () => {
-    const equipment = withWeapons("sword-30", "shield-30");
-    const shieldArmor = getItemStats(equipment.weapon2!).armor;
-    const plain = getHeroCombatProfile({ ...hero, totalXp: xpForNextLevel(1) * 40 }, equipment);
-    const trained = getHeroCombatProfile(
-      { ...hero, totalXp: xpForNextLevel(1) * 40, skills: { shield: MAX_SKILL_RANK } },
-      equipment,
-    );
-    expect(trained.armor).toBe(plain.armor + Math.round(shieldArmor * MAX_SKILL_RANK * SKILL_BONUS_PER_RANK));
-    expect(trained.damage).toBeCloseTo(plain.damage);
-  });
-});
-
-describe("Skilltree-Grenze", () => {
-  it("höchstens 5 Ränge à 2 % – zu hohe alte Ränge werden gekappt und die Punkte frei", () => {
-    expect(MAX_SKILL_RANK * SKILL_BONUS_PER_RANK).toBeCloseTo(0.1);
-    const old = { ...hero, totalXp: xpForNextLevel(1) * 20, skills: { sword: 8 }, abilities: [] };
-    const clamped = { ...old, skills: clampSkills(old.skills) };
-    expect(clamped.skills.sword).toBe(MAX_SKILL_RANK);
-    expect(unspentSkillPoints(clamped)).toBe(unspentSkillPoints({ ...old, skills: {} }) - MAX_SKILL_RANK);
-  });
-});

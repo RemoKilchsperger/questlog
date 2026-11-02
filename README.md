@@ -33,7 +33,7 @@ src/
     quests.ts        Questbuch (Jagd-, Boss- und Dungeon-Quests), Tages- und Wochenaufträge, Belohnungen
     stats.ts         Namen der Attribute
     leveling.ts      Level-Kurve, Attributpunkte
-    skills.ts        Skilltree pro Waffentyp (Ränge)
+    skills.ts        Skilltree: vier Pfade mit Stufen, Gabelung und Meisterschaft
     abilities.ts     Kampf-Fähigkeiten (Pool von 4 pro Waffentyp, 6 bei Zweihand; jede Waffe trägt die Hälfte), Mana
     items.ts         Item-Katalog, Seltenheit, Boss-Items, Verbesserungsstufen
     armorClasses.ts  Leichte, mittlere und schwere Rüstung
@@ -94,11 +94,10 @@ Bei Händler-Aufträgen zählt jedes Ausrüstungsteil (Waffen und Rüstung).
 - Belohnungen rechnen mit dem linearen Grundwert `100 + 25 · m` (`xpRewardBase`) – so brauchen hohe Level mehr Siege:
   gegen gleichstarke Gegner anfangs ~13 pro Level, auf Level 30 ~32, gegen Ende ~53.
 - Gegner mehr als 3 Level unter dem Helden geben 15 % weniger XP pro Level, mindestens 10 %.
-- Pro Level-up: 2 Attributpunkte und 1 Skillpunkt.
-- **Skills:** pro Waffentyp (inkl. Schild) 5 Ränge à +2 % Waffenschaden (Schild: +2 % Schild-Rüstung).
-  Ab Rang 3 schaltet 1 Skillpunkt die erste Fähigkeit frei, ab Level 25 schalten 2 Punkte die zweite frei
-  (Zweihandwaffen: auch die dritte, ebenfalls 2 Punkte) –
-  unabhängig voneinander.
+- Pro Level-up: 2 Attributpunkte, alle 2 Level 1 Skillpunkt (Level 60: 30).
+- **Skills:** vier Pfade (Klinge, Wehr, Arkan, Plage), die verändern, wie die Kampf-Mechaniken wirken.
+  Stufen öffnen sich mit 3 / 6 / 9 Punkten im Pfad, die Meisterschaft mit 15 – nur eine im ganzen Baum.
+  Auf Stufe 3 gabelt sich jeder Pfad. Details: [docs/skilltree.md](docs/skilltree.md).
   Zurücksetzen kostet `12.5 · Level · (1 + Level / 10)` Gold.
 
 ### Items
@@ -157,7 +156,7 @@ Fähigkeit**, danach Gift/Feuer/Bluten und der Gegenangriff. Jeder Kampf beginnt
 | Wert | Formel (in `combat.ts`) |
 |---|---|
 | Lebenspunkte | `80 + 12 · (Level − 1) + 1.5 · Ausdauer` |
-| Schaden | `5 + Angriff + Skill-Bonus + Attributbonus der Waffen`, ±15 % Streuung |
+| Schaden | `5 + Angriff + Attributbonus der Waffen`, ±15 % Streuung |
 | Attributbonus | `0.25 · Attribut der Waffe` (Ausdauer 0.15), bei zwei Waffen nach Anteil am Angriff |
 | Kritisch | `5 % + 0.2 % · Charisma` (max. 30 %), ×1.5 Schaden |
 | Mana | `40 + 2 · (Level − 1) + Intelligenz`, +6 pro Runde |

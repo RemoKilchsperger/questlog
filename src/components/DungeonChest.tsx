@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { getPotion } from "../domain/potions";
-import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
+import { skillPointsNote } from "../domain/skills";
 import { materialEntries } from "../domain/village";
 import { sfx } from "../game/sfx";
 import type { SpriteDef } from "../game/sprites";
@@ -150,8 +150,7 @@ export function DungeonChest({ chest }: { chest: ClaimedChest }) {
               <p className="font-pixel text-2xl text-gold">
                 LEVEL UP! → <span className="num">{chest.levelAfter}</span>
                 <span className="block font-sans text-sm text-xp">
-                  +{levelUps * POINTS_PER_LEVEL} Attributpunkte und +{levelUps * SKILL_POINTS_PER_LEVEL} Skillpunkt
-                  {levelUps > 1 ? "e" : ""}
+                  +{levelUps * POINTS_PER_LEVEL} Attributpunkte{skillPointsNote(chest.levelBefore, chest.levelAfter)}
                 </span>
               </p>
             </Reveal>

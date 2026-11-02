@@ -15,7 +15,7 @@ Kampf-Fähigkeiten werden nicht mehr im Skilltree freigeschaltet, sondern liegen
   ältere Waffen dasselbe (`weaponAbilities`), Client und Server sind sich also immer einig.
 - **Im Kampf:** Verfügbar sind die Fähigkeiten beider angelegten Waffen, erst die der ersten Hand, ohne
   Doppelte. Mit zwei Einhandwaffen (oder Waffe und Schild) sind es bis zu vier.
-- **Skilltree:** Nur noch Ränge (+2 % Schaden pro Rang, höchstens 5, beim Schild Rüstung). Unter jedem
+- **Skilltree:** Seit 2026-11-02 ein eigener Baum mit vier Pfaden (docs/skilltree.md). Damals: nur noch Ränge (+2 % Schaden pro Rang, höchstens 5, beim Schild Rüstung). Unter jedem
   Waffentyp zeigt er alle möglichen Fähigkeiten, die der angelegten Waffen leuchten. Früher für
   Fähigkeiten ausgegebene Skillpunkte sind beim Laden wieder frei (`character.abilities` entfällt).
   11 Waffentypen × 5 Ränge = 55 Punkte, bei Level 60 hat man 59.

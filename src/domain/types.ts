@@ -1,4 +1,5 @@
 import type { ItemEffectId } from "./itemEffects";
+import type { SkillRanks } from "./skills";
 import type { AbilityId } from "./abilities";
 // Zentrale Datentypen. Bewusst frei von React/Zustand, damit dieselben
 // Typen später im Backend (Supabase Edge Function) und im Kampfsystem
@@ -27,8 +28,8 @@ export interface Character {
   spentPoints: number;
   /** Wie oft die Attributpunkte schon zurückgesetzt wurden – das erste Mal ist kostenlos. */
   attributeResets?: number;
-  /** Ränge im Skilltree pro Waffentyp (src/domain/skills.ts). */
-  skills: Partial<Record<WeaponType, number>>;
+  /** Ränge im Skilltree pro Knoten (src/domain/skills.ts). */
+  skills: SkillRanks;
 }
 
 /** Rüstungsplätze am Körper. */
