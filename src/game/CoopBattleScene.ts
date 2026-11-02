@@ -4,7 +4,6 @@
 
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
-import { animationOf } from "./abilityAnimations";
 import { ADD_SKILLS, getBossPhase, RITUAL_ROUNDS, SHIELD_EVERY } from "../domain/bossMechanics";
 import { STATIC_MAX } from "../domain/bossIntents";
 import { BOSS, coopBossTurn, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
@@ -885,7 +884,8 @@ export class CoopBattleScene extends Phaser.Scene {
   /** Vorbereitung einer Fähigkeit – bei den zweiten Fähigkeiten jeweils eigene. */
   private announceAbility(hero: Unit, id: AbilityId) {
     const at = this.center(hero);
-    switch (animationOf(id)) {
+    const boss = this.center(this.boss);
+    switch (id) {
       case "shield":
         fx.ring(this, at, 0xa9c6ff, 50);
         break;
@@ -974,6 +974,133 @@ export class CoopBattleScene extends Phaser.Scene {
       case "bow-3":
         sfx.whoosh(0.2);
         break;
+
+      /* ── weitere Fähigkeiten ── */
+      case "dagger-3": // Giftklinge: Gift tropft von der Klinge
+        fx.rise(this, { x: at.x + 30, y: at.y }, 0x7dd3a8, 8, 20);
+        sfx.poison();
+        break;
+      case "dagger-4": // Schattenschritt: Schatten kriechen am Helden hoch
+        fx.rise(this, { x: at.x, y: at.y + 25 }, 0x2a1a3a, 10, 45);
+        this.tweens.add({ targets: hero.body, alpha: 0.45, duration: 200, yoyo: true, hold: 150 });
+        break;
+      case "sword-3": // Finte: Klinge zuckt zweimal vor
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: 35, duration: 90, yoyo: true, repeat: 1 });
+        this.tweens.add({ targets: hero.body, x: hero.homeX + 10, duration: 90, yoyo: true, repeat: 1 });
+        break;
+      case "sword-4": // Entwaffnen: auf die Waffenhand zielen
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: 50, duration: 200, yoyo: true, hold: 200 });
+        fx.crosshair(this, { x: boss.x - 20, y: boss.y + 15 }, 0xdde6ff, 16, 250);
+        break;
+      case "axe-3": // Hackwirbel: Axt kreisen lassen
+        fx.whirl(this, at, 0xc8d0d8);
+        sfx.whoosh(0.35);
+        break;
+      case "axe-4": // Ausbluten: Blutstropfen glühen am Gegner
+        fx.rise(this, boss, 0xc23a3a, 8, 50);
+        fx.ring(this, boss, 0xc23a3a, 45, 400);
+        break;
+      case "mace-3": // Läuterung: weisse Flammen umspielen den Helden
+        fx.rise(this, at, 0xffffff, 10, 50);
+        fx.ring(this, at, 0xbfe9ff, 40, 400);
+        sfx.magic();
+        break;
+      case "mace-4": // Heiliger Hammer: Licht sammelt sich am Kolben
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -100, duration: 220 });
+        fx.siphon(this, { x: at.x, y: at.y - 50 }, { x: at.x + 15, y: at.y - 30 }, 0xffe9a0, 10);
+        sfx.magic();
+        break;
+      case "scepter-3": // Seelenfeuer: violette Flammen
+        fx.rise(this, { x: at.x + 30, y: at.y }, 0xb07cff, 10, 24);
+        sfx.fire(0.3);
+        break;
+      case "scepter-4": // Lebensentzug: dunkler Sog
+        fx.vortex(this, { x: at.x + 30, y: at.y }, [0x8a2a4a, 0x2a1a3a], 450);
+        sfx.curse();
+        break;
+      case "shield-3": // Schildstoss: Anlauf nehmen
+        this.tweens.add({ targets: hero.body, x: hero.homeX - 16, duration: 180, yoyo: true });
+        fx.ring(this, at, 0xa9c6ff, 30, 280);
+        break;
+      case "shield-4": // Schildwall: Steinblöcke wachsen vor dem Helden
+        fx.wall(this, { x: hero.homeX + 45, y: 0 }, GROUND_Y + 10, 900);
+        sfx.quake(0.3);
+        break;
+      case "greatsword-4": // Kreuzhieb: Klinge über die Schulter
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -120, duration: 220 });
+        fx.slashes(this, at, 0xdde6ff, 1);
+        fx.slashes(this, at, 0xdde6ff, 1, true);
+        break;
+      case "greatsword-5": // Konterstellung: zurückweichen, Klinge nach vorn
+        this.tweens.add({ targets: hero.body, x: hero.homeX - 16, duration: 200, yoyo: true, hold: 150 });
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: 70, duration: 200, yoyo: true, hold: 150 });
+        fx.ring(this, { x: at.x, y: GROUND_Y }, 0xa9c6ff, 55, 450, true);
+        sfx.block();
+        break;
+      case "greatsword-6": // Mordschlag: die Klinge packen, Knauf nach vorn
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: 180, duration: 240 });
+        fx.rise(this, at, 0xc8b090, 6, 40);
+        break;
+      case "greataxe-4": // Wirbelwind: Staub wirbelt um den Helden
+        this.tweens.add({ targets: hero.body, angle: 360, duration: 340, onComplete: () => hero.body.setAngle(0) });
+        fx.whirl(this, at, 0xff8a5a);
+        fx.rise(this, { x: at.x, y: GROUND_Y - 5 }, 0xc8b090, 10, 70);
+        sfx.whoosh(0.4);
+        break;
+      case "greataxe-5": // Wutschrei: rote Schallwellen
+        for (let i = 0; i < 3; i++) this.time.delayedCall(i * 100, () => fx.ring(this, at, 0xff3a3a, 45 + i * 25, 400));
+        this.tint(hero, 0xff3a3a, 600);
+        this.cameras.main.shake(240, 0.006);
+        sfx.roar();
+        break;
+      case "greataxe-6": // Raserei: vor Wut zittern
+        this.tweens.add({ targets: hero.body, x: hero.homeX + 4, duration: 40, yoyo: true, repeat: 5 });
+        this.tint(hero, 0xff6a3a, 500);
+        fx.rise(this, at, 0xff6a3a, 10, 45);
+        break;
+      case "greathammer-4": // Zertrümmern: Hammer hoch
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -110, duration: 240 });
+        fx.rise(this, at, 0xa0a8b0, 8, 45);
+        break;
+      case "greathammer-5": // Unerschütterlich: fest in den Boden stemmen
+        this.tweens.add({ targets: hero.body, y: hero.body.y + 6, duration: 150, yoyo: true, hold: 300 });
+        fx.ring(this, { x: at.x, y: GROUND_Y }, 0x8a7a60, 80, 500, true);
+        fx.rise(this, at, 0x9dffc8, 8, 45);
+        this.tint(hero, 0xc8b090, 700);
+        sfx.quake(0.3);
+        break;
+      case "greathammer-6": // Titanenschlag: weit ausholen, Kraft staut sich
+        if (hero.weapon) this.tweens.add({ targets: hero.weapon, angle: -140, duration: 280, yoyo: true, hold: 500 });
+        fx.siphon(this, at, { x: at.x - 8, y: at.y - 55 }, 0xffb060, 12);
+        this.time.delayedCall(330, () => fx.ring(this, { x: at.x - 8, y: at.y - 55 }, 0xffb060, 30, 300));
+        this.tint(hero, 0xffb060, 800);
+        sfx.magic();
+        break;
+      case "staff-4": // Kettenblitz: Funken knistern am Stab
+        fx.burst(this, { x: at.x + 30, y: at.y }, 0xffe66b, 8, 24, 4);
+        sfx.thunder();
+        break;
+      case "staff-5": // Arkane Heilung: arkane Ringe und blaue Funken
+        fx.ring(this, at, 0x7aa7f0, 55, 450);
+        this.time.delayedCall(120, () => fx.ring(this, at, 0xb07cff, 40, 400));
+        fx.rise(this, at, 0x9fd8ff, 10, 50);
+        sfx.heal();
+        break;
+      case "staff-6": // Arkaner Schild: Runen kreisen, Mana fliesst zurück
+        fx.curseRing(this, at, 0x7aa7f0, () => fx.ring(this, at, 0xa9c6ff, 60, 450));
+        fx.siphon(this, { x: at.x, y: at.y - 60 }, at, 0x4a7af0, 8);
+        sfx.magic();
+        break;
+      case "bow-4": // Jägermal: Beute ins Visier nehmen
+        fx.crosshair(this, boss, 0xff5a5a);
+        break;
+      case "bow-5": // Brandpfeil: Pfeilspitze entzünden
+        fx.rise(this, { x: at.x + 30, y: at.y }, 0xf08a2c, 8, 16);
+        sfx.fire(0.3);
+        break;
+      case "bow-6": // Kopfschuss: ganz ruhig zielen
+        fx.crosshair(this, { x: boss.x, y: boss.y - 40 }, 0xffffff, 14, 450);
+        break;
     }
   }
 
@@ -1003,7 +1130,13 @@ export class CoopBattleScene extends Phaser.Scene {
         ],
       });
     };
-    switch (animationOf(id)) {
+    const shoot = (to: fx.Point, onArrive: () => void, trail?: number, fast = false) => {
+      this.texture("arrow", ARROW);
+      sfx.bowShot();
+      const arrow = this.add.image(0, 0, "arrow").setScale(4);
+      fx.projectile(this, from, to, arrow, { duration: fast ? 140 : 260, arc: fast ? 0 : 10, face: true, trail, onArrive });
+    };
+    switch (id) {
       case "dagger": {
         // Hinter dem Boss auftauchen, zustechen, zurück in den Schatten
         const body = hero.body;
@@ -1077,8 +1210,8 @@ export class CoopBattleScene extends Phaser.Scene {
       case "greataxe":
         leap(() => {
           hit();
-          fx.cracks(this, target);
-          this.float(foe, "RÜSTUNG ↓", "#f0776a", 16, 40);
+          fx.slashes(this, target, 0xc23a3a, 1);
+          fx.burst(this, target, 0xc23a3a, 12, 80, 5);
           this.cameras.main.shake(180, 0.008);
         });
         return true;
@@ -1223,6 +1356,224 @@ export class CoopBattleScene extends Phaser.Scene {
         const arrow = this.add.image(0, 0, "arrow").setScale(4);
         fx.projectile(this, from, target, arrow, { duration: 260, arc: 10, face: true, onArrive: hit });
         this.tweens.add({ targets: hero.body, x: hero.homeX - 40, duration: 180, yoyo: true, hold: 220, ease: "Quad.easeOut" });
+        return true;
+      }
+
+      /* ── weitere Fähigkeiten ── */
+      case "dagger-3":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0x7dd3a8, 1);
+          fx.burst(this, target, 0x7dd3a8, 10, 45, 5);
+          sfx.slash();
+        });
+        return true;
+      case "dagger-4": {
+        // Zustechen, in Rauch verschwinden, halb durchsichtig zurück
+        const body = hero.body;
+        const resume = holdIdle();
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xb07cff, 1, true);
+          fx.burst(this, { x: body.x, y: target.y }, 0x2a1a3a, 14, 50, 7);
+          body.setAlpha(0.4);
+          this.time.delayedCall(700, () => {
+            this.tweens.add({ targets: body, alpha: 1, duration: 300 });
+            resume();
+          });
+        });
+        return true;
+      }
+      case "sword-3":
+        // Angedeuteter Stich, dann der echte
+        this.tweens.add({ targets: hero.body, x: hero.homeX + 25, duration: 90, yoyo: true });
+        this.time.delayedCall(200, () =>
+          dash(() => {
+            hit();
+            fx.slashes(this, target, 0xffffff, 1);
+            fx.ring(this, target, 0xa9c6ff, 45, 350);
+            this.float(foe, "DECKUNG OFFEN", "#a9c6ff", 16, 30);
+          }),
+        );
+        return true;
+      case "sword-4": {
+        const low = { x: target.x - 20, y: target.y + 15 };
+        dash(() => {
+          hit();
+          fx.slashes(this, low, 0xdde6ff, 1, true);
+          const blade = this.add.rectangle(low.x, low.y, 28, 6, 0xa0a8b0).setStrokeStyle(2, 0x1b1424).setDepth(21);
+          this.tweens.add({ targets: blade, x: low.x + 90, y: low.y - 80, angle: 540, alpha: 0, duration: 600, ease: "Quad.easeOut", onComplete: () => blade.destroy() });
+          this.float(foe, "ENTWAFFNET", "#dde6ff", 16, 30);
+        });
+        return true;
+      }
+      case "axe-3":
+        this.tweens.add({ targets: hero.body, angle: 360, duration: 260, onComplete: () => hero.body.setAngle(0) });
+        dash(() => {
+          hit();
+          fx.whirl(this, target, 0xc8d0d8);
+          fx.slashes(this, target, 0xc8d0d8, 2);
+        });
+        return true;
+      case "axe-4":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0x8a1a1a, 1);
+          fx.burst(this, target, 0xc23a3a, 18, 70, 6);
+          sfx.bleed();
+        });
+        return true;
+      case "mace-3":
+        dash(() => {
+          hit();
+          this.time.delayedCall(200, () => {
+            const at = this.center(hero);
+            fx.burst(this, at, 0x3a2a3a, 12, 55, 6);
+            fx.rise(this, at, 0xffffff, 10, 45);
+            sfx.heal();
+          });
+        });
+        return true;
+      case "mace-4":
+        dash(() => {
+          hit();
+          fx.beam(this, { x: target.x, y: target.y - 70 }, { x: target.x, y: target.y + 50 }, 0xffe9a0, 12, 500);
+          fx.beam(this, { x: target.x - 45, y: target.y - 15 }, { x: target.x + 45, y: target.y - 15 }, 0xffe9a0, 12, 500);
+          fx.burst(this, target, 0xffe9a0, 12, 50);
+          sfx.magic();
+        });
+        return true;
+      case "scepter-3": {
+        const ball = this.add.circle(0, 0, 11, 0x5a2a8a).setStrokeStyle(4, 0xb07cff);
+        sfx.fire(0.35);
+        fx.projectile(this, from, target, ball, {
+          duration: 360,
+          arc: 25,
+          trail: 0x8a4ad0,
+          onArrive: () => {
+            hit();
+            fx.burst(this, target, 0xb07cff, 14, 60, 6);
+            fx.rise(this, target, 0x8a4ad0, 10, 50);
+          },
+        });
+        return true;
+      }
+      case "scepter-4":
+        fx.beam(this, from, target, 0x8a2a4a, 10, 560);
+        sfx.drain();
+        this.time.delayedCall(180, () => {
+          hit();
+          fx.siphon(this, target, this.center(hero), 0xc23a3a, 12);
+        });
+        return true;
+      case "shield-3":
+        dash(() => {
+          hit();
+          fx.ring(this, target, 0xa9c6ff, 50, 300);
+          fx.burst(this, target, 0xdde6ff, 10, 40, 5);
+          sfx.block();
+        });
+        return true;
+      case "shield-4":
+        dash(() => {
+          hit();
+          this.time.delayedCall(200, () => {
+            fx.ring(this, this.center(hero), 0x8a8a9a, 55, 450);
+            this.tint(hero, 0xa0a8b0, 700);
+            sfx.block();
+          });
+        });
+        return true;
+      case "greatsword-4":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xdde6ff, 1);
+          fx.slashes(this, target, 0xdde6ff, 1, true);
+          sfx.slash();
+        });
+        return true;
+      case "greatsword-5":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xffffff, 1);
+          this.time.delayedCall(240, () => {
+            fx.ring(this, { x: hero.homeX, y: GROUND_Y }, 0xa9c6ff, 60, 500, true);
+            this.tint(hero, 0xa9c6ff, 600);
+          });
+        });
+        return true;
+      case "greatsword-6":
+        dash(() => {
+          hit();
+          fx.ring(this, { x: target.x, y: target.y - 25 }, 0xc8b090, 40, 280);
+          fx.burst(this, { x: target.x, y: target.y - 25 }, 0xffe66b, 8, 35, 4);
+          sfx.block();
+        });
+        return true;
+      case "greataxe-4":
+        this.tweens.add({ targets: hero.body, angle: 720, duration: 320, onComplete: () => hero.body.setAngle(0) });
+        dash(() => {
+          hit();
+          fx.whirl(this, target, 0xff8a5a);
+          fx.rise(this, { x: target.x, y: GROUND_Y - 5 }, 0xc8b090, 8, 70);
+        });
+        return true;
+      case "greataxe-5":
+        leap(() => {
+          hit();
+          fx.slashes(this, target, 0xff3a3a, 1);
+          fx.ring(this, target, 0xff3a3a, 60, 350);
+        });
+        return true;
+      case "greataxe-6":
+        dash(() => {
+          hit();
+          fx.slashes(this, target, 0xff6a3a, 2, Math.random() < 0.5);
+          fx.burst(this, target, 0xc23a3a, 6, 35, 4);
+        });
+        return true;
+      case "greathammer-4":
+        leap(() => {
+          hit();
+          fx.cracks(this, target);
+          fx.burst(this, target, 0xa0a8b0, 16, 80, 7);
+          this.float(foe, "RÜSTUNG ↓", "#f0776a", 16, 40);
+          this.cameras.main.shake(200, 0.01);
+          sfx.block();
+        });
+        return true;
+      case "staff-4":
+        fx.beam(this, from, target, 0xffe66b, 5, 300);
+        sfx.thunder();
+        this.time.delayedCall(120, () => {
+          hit();
+          fx.lightning(this, target);
+          fx.burst(this, target, 0xffe66b, 10, 50, 4);
+        });
+        return true;
+      case "bow-4":
+        shoot(target, () => {
+          hit();
+          fx.crosshair(this, target, 0xff5a5a, 30, 700);
+          this.float(foe, "MARKIERT", "#ff8a7a", 16, 30);
+        });
+        return true;
+      case "bow-5":
+        sfx.fire(0.3);
+        shoot(target, () => {
+          hit();
+          fx.burst(this, target, 0xf08a2c, 12, 50, 6);
+          fx.rise(this, target, 0xf08a2c, 10, 40);
+          sfx.burn();
+        }, 0xf08a2c);
+        return true;
+      case "bow-6": {
+        const head = { x: target.x, y: target.y - 35 };
+        shoot(head, () => {
+          hit();
+          fx.flash(this, 0xffffff, 0.25, 150);
+          fx.burst(this, head, 0xc23a3a, 12, 45, 5);
+        }, 0xffffff, true);
         return true;
       }
       default:

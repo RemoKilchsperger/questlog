@@ -397,6 +397,50 @@ export function cracks(scene: Phaser.Scene, at: Point) {
   scene.tweens.add({ targets: g, alpha: 0, duration: 500, delay: 300, onComplete: () => g.destroy() });
 }
 
+/** Fadenkreuz zieht sich über einem Ziel zusammen und bleibt kurz stehen (Jägermal, Kopfschuss). */
+export function crosshair(scene: Phaser.Scene, at: Point, color: number, size = 40, hold = 600) {
+  const g = scene.add.graphics().setDepth(23);
+  const state = { s: 2.2, alpha: 0 };
+  const draw = () => {
+    const r = size * state.s;
+    g.clear().lineStyle(4, color, state.alpha);
+    g.strokeCircle(at.x, at.y, r);
+    g.lineBetween(at.x - r * 1.4, at.y, at.x - r * 0.5, at.y);
+    g.lineBetween(at.x + r * 0.5, at.y, at.x + r * 1.4, at.y);
+    g.lineBetween(at.x, at.y - r * 1.4, at.x, at.y - r * 0.5);
+    g.lineBetween(at.x, at.y + r * 0.5, at.x, at.y + r * 1.4);
+  };
+  scene.tweens.chain({
+    targets: state,
+    tweens: [
+      { s: 1, alpha: 1, duration: 260, ease: "Quad.easeOut", onUpdate: draw },
+      { alpha: 0, duration: 250, delay: hold, onUpdate: draw },
+    ],
+    onComplete: () => g.destroy(),
+  });
+}
+
+/** Steinblöcke wachsen vor einem Punkt aus dem Boden und sinken wieder ein (Schildwall). */
+export function wall(scene: Phaser.Scene, at: Point, groundY: number, hold = 700) {
+  for (let i = 0; i < 6; i++) {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const block = scene.add
+      .rectangle(at.x + col * 20 - 10, groundY + 20, 20, 22, i % 3 ? 0x8a8a9a : 0x6e6e80)
+      .setStrokeStyle(3, 0x1b1424)
+      .setDepth(19);
+    scene.tweens.chain({
+      targets: block,
+      tweens: [
+        { y: groundY - 12 - row * 22, duration: 160, delay: i * 40, ease: "Back.easeOut" },
+        { alpha: 0, y: groundY + 10, duration: 260, delay: hold },
+      ],
+      onComplete: () => block.destroy(),
+    });
+  }
+  burst(scene, { x: at.x, y: groundY }, 0x8a7a60, 10, 40, 5);
+}
+
 /** Schützende Kuppel um den Helden (Bollwerk) – bleibt bis zum Block bestehen. */
 export function dome(scene: Phaser.Scene, at: Point): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics().setDepth(15);
