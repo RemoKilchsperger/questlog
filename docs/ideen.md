@@ -77,7 +77,7 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 
 | # | Idee | Status |
 |---|---|---|
-| 37 | **Dungeons mit Weggabelungen:** Zwischen den Kämpfen den Weg wählen – Kampf, Elite-Raum, Schrein (Segen), Händler, Falle, Rätsel. Manche Türen verschlossen | ✅ Solo, `dungeonPaths.ts`, docs/dungeon-wege.md – Koop offen |
+| 37 | **Dungeons mit Weggabelungen:** Zwischen den Kämpfen den Weg wählen – Kampf, Elite-Raum, Schrein (Segen), Händler, Falle, Rätsel. Manche Türen verschlossen | ✅ Solo und Koop (Abstimmung), `dungeonPaths.ts`, `coopDungeonPaths.ts`, docs/dungeon-wege.md |
 | 38 | **Begleiter im Kampf:** Einen Begleiter in Bosskämpfe mitnehmen, Traits werden zu kleinen Fähigkeiten (spotten, unterbrechen) | 💡 |
 | 39 | **Wetter und Gelände im Kampf:** Regen schwächt Feuer, Frost erleichtert Schmelzen, Nebel senkt die Trefferchance von Bögen | 💡 |
 | 40 | **Sockel und Edelsteine** beim Schmied, um Schadensarten und Resistenzen anzupassen | 💡 |

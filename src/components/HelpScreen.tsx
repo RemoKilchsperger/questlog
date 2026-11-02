@@ -23,6 +23,7 @@ import {
 } from "../domain/coopCombat";
 import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, getCreature, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
 import { ROOMS } from "../domain/dungeonPaths";
+import { COOP_DECIDE_SECONDS } from "../domain/coopDungeonPaths";
 import { FRAMES } from "../domain/achievements";
 import { FORGE_COST_FACTOR, forgeCost, UPGRADE_REFUND } from "../domain/forge";
 import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
@@ -651,7 +652,13 @@ export function HelpScreen() {
               Zwischen den Kämpfen keine Heilung. Gefallene stehen mit {pct(DUNGEON_REVIVE_HP)} ihrer Lebenspunkte wieder
               auf, Mana ist wieder voll.
             </li>
-            <li>Nach jedem Sieg entscheidet der Host: weiter zum nächsten Gegner oder mit der Truhe aussteigen.</li>
+            <li>
+              An den Gabelungen stimmt die Gruppe über die Tür ab, bei Gleichstand zählt der Host. Im Schrein wählt jeder
+              seinen eigenen Segen, bei der Falle reagiert jeder selbst, beim Händler kauft jeder mit seinem Gold, beim
+              Rätsel entscheidet die Mehrheit. Wer nach {COOP_DECIDE_SECONDS} Sekunden noch nicht gewählt hat, bekommt eine
+              Vorgabe.
+            </li>
+            <li>Vor Zwischen- und Endboss entscheidet der Host: weiter oder mit der Truhe aussteigen – aussteigen kann er jederzeit.</li>
             <li>Jeder hat seine eigene Truhe mit der Beute wie solo. Fällt die ganze Gruppe, sind alle Truhen weg.</li>
           </ul>
         </Topic>

@@ -184,7 +184,7 @@ Frostgipfel (31–40), Schattenruinen (41–50), Drachenhort (51–60). Je 4 Kre
 Abgrund der Leere (ab 60). Acht Schritte ohne Heilung dazwischen: Eingangskampf, Gabelungen, ein
 Zwischenboss (Elite mit zwei Modifikatoren), wieder Gabelungen, Endboss. An den Gabelungen wählt man
 zwischen Kampf, Elite-Raum, Schrein, Händler, Falle und Rätsel (`dungeonPaths.ts`, `docs/dungeon-wege.md`,
-Koop-Dungeons noch linear). Beute in einer Truhe, die bei einer Niederlage verloren geht.
+auch im Koop mit Abstimmung). Beute in einer Truhe, die bei einer Niederlage verloren geht.
 
 **Heroische Bosse** (`heroic.ts`): Besiegte Gebiets- und Dungeon-Bosse lassen sich heroisch erneut fordern –
 +50 % LP, eine feste Zusatzmechanik pro Boss (ein Elite-Modifikator, zählt aber nicht als Elite), 15 % statt

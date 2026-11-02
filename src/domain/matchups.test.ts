@@ -1,3 +1,4 @@
+import { stepCreature } from "./dungeonPaths";
 import { describe, expect, it } from "vitest";
 import { fullWeapon } from "../test/weapons";
 import { attackRound, getHeroCombatProfile, startBattle, type BattleEvent, type BattleState } from "./combat";
@@ -96,9 +97,9 @@ describe("Elite: Rudelführer", () => {
     const players = ["a", "b"].map((id) => ({ id, name: id, profile: armed("sword-0") }));
     const mine = DUNGEONS[0];
     let id = 0;
-    while (!coopElite(`r${id}`, 0, mine.creatures[0]).includes("packLeader")) id++;
+    while (!coopElite(`r${id}`, 0, stepCreature(mine, `r${id}`, 0)).includes("packLeader")) id++;
     const coop = startCoopBattle(`r${id}`, mine.id, players, 0);
     expect(coop.elite).toContain("packLeader");
-    expect(coop.adds!.map((a) => a.creatureId)).toEqual([mine.creatures[0].id]);
+    expect(coop.adds!.map((a) => a.creatureId)).toEqual([stepCreature(mine, `r${id}`, 0).id]);
   });
 });

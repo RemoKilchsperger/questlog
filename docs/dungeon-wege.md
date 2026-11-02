@@ -1,17 +1,19 @@
 # Dungeon-Wege
 
-Solo-Dungeons sind kein fester Ablauf von acht Kämpfen mehr. An Gabelungen wählt man seinen Weg:
+Dungeons sind kein fester Ablauf von acht Kämpfen mehr – solo und im Koop. An Gabelungen wählt man seinen Weg:
 Kampf, Elite-Raum, Schrein, Händler, Falle oder Rätsel. So fühlt sich jeder Durchgang anders an, und
 die Segen aus dem Endlos-Turm gibt es auch im Dungeon (Idee #8 und #37 in `ideen.md`).
 Code: `src/domain/dungeonPaths.ts`, Store `gameStore.ts` (`dungeon`), Oberfläche `src/components/DungeonPath.tsx`.
+Koop: `src/domain/coopDungeonPaths.ts` (Türen, Räume, Abstimmung), Server `src/coop/server.ts`, Oberfläche
+`src/components/CoopDungeonPath.tsx`.
 
-Status: **Solo umgesetzt** auf Branch `feature/dungeon-wege`. Koop-Dungeons laufen noch linear.
+Status: **Solo und Koop umgesetzt.** Nach Änderungen am Koop: Edge Function neu deployen (`npm run functions:deploy`).
 
 ## Entschiedene Regeln
 
 | Thema | Entscheidung |
 |---|---|
-| Umfang | Erst solo, Koop später (Server muss die Wege kennen, der Host wählt) |
+| Umfang | Erst solo, danach Koop (siehe unten) |
 | Sichtbarkeit | Gemischt: Die Raumart steht auf der Tür, 20 % der Türen sind verschlossen (❓) |
 | Rätsel | Kleine Entscheidung: Rätseltext und drei Antworten |
 | Händler | Bezahlt wird mit dem eigenen Gold |
@@ -81,8 +83,32 @@ Ablauf mit drei Arten, die Türen zu wählen. Angegeben ist der Anteil der Läuf
 - Elite-Räume sind deutlich riskanter, bringen dafür sichere Beute. Das ist die gewünschte Abwägung.
 - Die Simulation liegt im Scratchpad (`sim/zzpaths.sim.test.ts`). Zum Ausführen nach `src/domain` kopieren.
 
+## Koop
+
+Der Server kennt den Weg (`CoopDungeonRun`: `path`, `calm`, `seen`, `votes`, `room`, `riddles`, `treasure`). Türen,
+Gegner und Räume würfelt er aus der `runId` – wie die Beute. So bleibt die Truhe jedes Spielers wiederholbar.
+
+| Entscheidung | Wer |
+|---|---|
+| Tür an der Gabelung | Abstimmung aller Anwesenden, bei Gleichstand zählt der Host |
+| Schrein | Jeder wählt aus seinen eigenen drei Segen |
+| Falle | Jeder weicht aus oder steckt ein – mit seiner eigenen Rüstung |
+| Händler | Jeder kauft mit seinem Gold. Gold und Tränke bucht sein Browser, Wundversorgung und Segen der Server |
+| Rätsel | Mehrheit, bei Gleichstand zählt der Host |
+| Weiter vor Zwischen- und Endboss, Aussteigen | Der Host |
+
+- **Frist:** 60 Sekunden (`COOP_DECIDE_SECONDS`). Danach gilt eine Vorgabe: die abgegebenen Stimmen, beim
+  Schrein der erste Segen, bei der Falle Einstecken. So blockiert niemand die Gruppe.
+- Wer den Kampf verlassen hat, stimmt nicht mit.
+- Beim Betreten eines Raums stehen Gefallene mit 25 % LP wieder auf, wie vor einem Kampf.
+- Beim Händler ist der Raum sofort erledigt: Man kauft, während die Gruppe über die nächste Tür abstimmt.
+- **Segen im Koop-Kampf:** Alle 12 Segen wirken auch im Koop (`CoopHero.blessings`). Kraft, Ahnen, Vitalität und
+  Präzision ändern die Werte direkt, die übrigen wirken in `resolveRound` (Fokus, Blutdurst, Henker, Dornen,
+  Alchemie, Zweiter Atem). Schatzsucher zählt für die Beute der Schritte danach.
+- **Truhe:** Kämpfe und Elite-Räume wie bisher, Fallen und gelöste Rätsel ohne XP, ein Wächter-Kampf wie ein Kampf.
+- Ältere Läufe ohne `path` zählen jeden bisherigen Schritt als Kampf.
+
 ## Offen / später
 
-- Koop-Dungeons mit Wegen (Host wählt, Server würfelt Türen aus `runId`)
 - Mehr Rätsel und Fallen, Räume je Dungeon (z. B. Erzader in der Mine)
 - Erfolge: alle Raumarten in einem Lauf, Dungeon nur mit Elite-Räumen

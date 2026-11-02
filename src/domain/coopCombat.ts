@@ -96,6 +96,8 @@ import { HEROIC_HP, heroicAffixes } from "./heroic";
 import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
+import { eliteRoomAffixes, stepCreature, stepKind, type MerchantOffer, type RoomKind, type TrapChoice } from "./dungeonPaths";
+import { BLESSING, stacks, type BlessingId } from "./tower";
 import {
   bandageHeal,
   bloodburstDamage,
@@ -485,6 +487,10 @@ export interface CoopHero {
   skills?: SkillRanks;
   /** „Unbeugsam“ hat in diesem Kampf schon gerettet */
   endured?: boolean;
+  /** Segen aus Schrein und Händler im Dungeon (dungeonPaths.ts) – gelten bis zum Ende des Dungeons */
+  blessings?: BlessingId[];
+  /** Segen „Zweiter Atem“ hat in diesem Dungeon schon gerettet */
+  secondWindUsed?: boolean;
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
   /** Sorten, die in diesem Kampf schon getrunken wurden – jede nur einmal pro Kampf. */
   potionsUsed: string[];
@@ -607,6 +613,8 @@ export type CoopEvent =
   | { type: "thorns"; heroId: string; target: string; damage: number }
   /** Item-Effekt „Unbeugsam“: Der Held überlebt einen tödlichen Treffer mit 1 LP */
   | { type: "endured"; heroId: string }
+  /** Segen „Zweiter Atem“: Der Held steht nach einem tödlichen Treffer einmal wieder auf */
+  | { type: "secondWind"; heroId: string; heal: number }
   /** Ein Held wurde eingefroren bzw. setzt eingefroren aus */
   | { type: "frozen"; heroId: string }
   | { type: "skipped"; heroId: string }
@@ -647,18 +655,60 @@ export interface CoopBattleState {
 
 export interface CoopDungeonRun {
   id: string;
-  /** Index des aktuellen Gegners in `creatures` */
+  /** Aktueller Schritt des Wegs (dungeonPaths.ts) – Zwischen- und Endboss stehen an ihrem Platz in `creatures` */
   stage: number;
-  /** Id des ersten Kampfs – bleibt für den ganzen Dungeon gleich (Startwert der Beute) */
+  /** Id des ersten Kampfs – bleibt für den ganzen Dungeon gleich (Startwert für Weg und Beute) */
   runId: string;
   /** Heroischer Dungeon: der Endboss kämpft auf heroischer Stufe */
   heroic?: boolean;
+  /** Gewählte Räume, einer pro Schritt – fehlt bei Läufen von vor den Wegen (alles Kämpfe) */
+  path?: RoomKind[];
+  /** Pro Abschnitt (bis und nach dem Zwischenboss): schon ein Raum ohne Kampf? */
+  calm?: [boolean, boolean];
+  /** Fallen und Rätsel, die schon vorkamen – keines doppelt */
+  seen?: string[];
+  /** Stimmen für die Türen der nächsten Gabelung: Index der Tür nach Spieler-Id */
+  votes?: Record<string, number>;
+  /** Raum ohne Kampf, in dem die Gruppe gerade steht */
+  room?: CoopRoom;
+  /** Ausgang der Rätsel nach Schritt: gelöst, falsch beantwortet (Schaden) oder Wächter geweckt (Kampf) */
+  riddles?: Record<number, "solved" | "wrong" | "guardian">;
+  /** Segen „Schatzsucher“: an welchen Schritten ihn ein Spieler genommen hat (zählt für die Beute danach) */
+  treasure?: Record<string, number[]>;
 }
 
-/** Kampf `stage` im Dungeon: der heroische Endboss oder ein Gegner, der vielleicht Elite ist. */
-function stageFoe(dungeon: CoopDungeonRun, stage: number, creature: CreatureDef): { elite: EliteAffix[]; heroic: boolean } {
-  if (dungeon.heroic && creature.boss) return { elite: heroicAffixes(creature.id), heroic: true };
-  return { elite: coopElite(dungeon.runId, stage, creature), heroic: false };
+/**
+ * Raum ohne Kampf im Koop-Dungeon (coopDungeonPaths.ts). Schrein und Falle: jeder für sich,
+ * Händler: jeder kauft selbst, Rätsel: die Mehrheit antwortet. `done`: erledigt, es geht weiter.
+ */
+export type CoopRoom =
+  | { kind: "shrine"; done: boolean; offers: Record<string, BlessingId[]>; chosen: Record<string, BlessingId> }
+  | { kind: "merchant"; done: boolean; offers: Record<string, MerchantOffer[]>; bought: Record<string, number[]> }
+  | { kind: "trap"; done: boolean; trapId: string; outcomes: Record<string, { choice: TrapChoice; dodged: boolean; damage: number }> }
+  | {
+      kind: "riddle";
+      done: boolean;
+      riddleId: string;
+      options: string[];
+      votes: Record<string, string>;
+      outcome?: { answer: string; correct: boolean; damage: number };
+    };
+
+/** Gewählte Räume – ältere Läufe ohne Weg zählen jeden Schritt als Kampf. */
+export function dungeonPath(run: CoopDungeonRun): RoomKind[] {
+  return run.path ?? Array.from({ length: run.stage + 1 }, () => "fight" as const);
+}
+
+/** Gegner an Schritt `step`: Elite-Raum, Wächter eines Rätsels, heroischer Endboss oder ein Gegner, der vielleicht Elite ist. */
+function stepFoe(run: CoopDungeonRun, step: number): { creature: CreatureDef; elite: EliteAffix[]; heroic: boolean } {
+  const area = getDungeon(run.id);
+  const creature = stepCreature(area, run.runId, step);
+  if (run.heroic && creature.boss) return { creature, elite: heroicAffixes(creature.id), heroic: true };
+  const kind = dungeonPath(run)[step];
+  if (kind === "elite") return { creature, elite: eliteRoomAffixes(area, run.runId, step), heroic: false };
+  // Der Wächter eines falsch beantworteten Rätsels ist ein gewöhnlicher Gegner
+  if (kind === "riddle") return { creature, elite: [], heroic: false };
+  return { creature, elite: coopElite(run.runId, step, creature), heroic: false };
 }
 
 /** Grundwerte des Gegners – Elite-Modifikatoren und, beim heroischen Boss, mehr Lebenspunkte. */
@@ -702,10 +752,12 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
   }
   const content = parseCoopContent(contentId);
   const dungeon: CoopDungeonRun | undefined = isCoopDungeon(content.id)
-    ? { id: content.id, stage: 0, runId: id, ...(content.heroic && { heroic: true }) }
+    ? { id: content.id, stage: 0, runId: id, path: ["fight"], ...(content.heroic && { heroic: true }) }
     : undefined;
-  const enemy = getCoopEnemy(dungeon ? getDungeon(content.id).creatures[0].id : getCoopBoss(content.id).id);
-  const { elite, heroic } = dungeon ? stageFoe(dungeon, 0, enemy.creature) : { elite: [], heroic: false };
+  // Im Dungeon: der Eingangskampf des Wegs (dungeonPaths.ts)
+  const foe = dungeon ? stepFoe(dungeon, 0) : null;
+  const enemy = getCoopEnemy(foe ? foe.creature.id : getCoopBoss(content.id).id);
+  const { elite, heroic } = foe ?? { elite: [], heroic: false };
   return {
     id,
     bossId: enemy.id,
@@ -752,30 +804,43 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
   };
 }
 
-/* ───────────── Dungeons: von Kampf zu Kampf ───────────── */
+/* ───────────── Dungeons: von Schritt zu Schritt ───────────── */
 
-/** Gefallene stehen zwischen zwei Dungeon-Kämpfen mit diesem Anteil ihrer Lebenspunkte wieder auf. */
+/** Gefallene stehen zwischen zwei Dungeon-Kämpfen (und beim Betreten eines Raums) mit diesem Anteil ihrer Lebenspunkte wieder auf. */
 export const DUNGEON_REVIVE_HP = 0.25;
 
-/** Gegner eines Koop-Dungeons, in Kampfreihenfolge. */
+/** Gefallene stehen wieder auf – zu Beginn eines neuen Kampfs oder Raums. */
+export function reviveHeroes(heroes: readonly CoopHero[]): CoopHero[] {
+  return heroes.map((h) =>
+    h.down
+      ? { ...h, down: false, combatant: { ...h.combatant, hp: Math.max(1, Math.round(h.combatant.maxHp * DUNGEON_REVIVE_HP)) } }
+      : h,
+  );
+}
+
+/** Schritte eines Koop-Dungeons (Eingang, Gabelungen, Zwischen- und Endboss). */
 function dungeonCreatures(state: CoopBattleState): readonly CreatureDef[] {
   return state.dungeon ? getDungeon(state.dungeon.id).creatures : [];
 }
 
-/** Gewonnen, und im Dungeon wartet noch ein Gegner? Dann entscheidet der Host: weiter oder aussteigen. */
+/** Gewonnen, und im Dungeon wartet noch ein Schritt? Dann geht es per Tür oder auf Wunsch des Hosts weiter. */
 export function hasNextStage(state: CoopBattleState): boolean {
   return state.dungeon !== undefined && state.status === "won" && state.dungeon.stage < dungeonCreatures(state).length - 1;
 }
 
-/** Der nächste Gegner im Dungeon – oder null. */
+/** Der nächste Gegner, wenn er feststeht (Zwischen- oder Endboss) – an einer Gabelung null. */
 export function nextStageEnemy(state: CoopBattleState): CoopEnemy | null {
-  return hasNextStage(state) ? getCoopEnemy(dungeonCreatures(state)[state.dungeon!.stage + 1].id) : null;
+  if (!hasNextStage(state)) return null;
+  const area = getDungeon(state.dungeon!.id);
+  const step = state.dungeon!.stage + 1;
+  return stepKind(area, step) === "fork" ? null : getCoopEnemy(area.creatures[step].id);
 }
 
-/** Bisher gewonnene Kämpfe in diesem Dungeon. */
+/** Bisher geschaffte Schritte in diesem Dungeon – ein Raum zählt, sobald er erledigt ist. */
 export function clearedStages(state: CoopBattleState): number {
   if (!state.dungeon) return 0;
-  return state.dungeon.stage + (state.status === "won" ? 1 : 0);
+  const room = state.dungeon.room;
+  return state.dungeon.stage + (state.status === "won" && (!room || room.done) ? 1 : 0);
 }
 
 /** Endboss des Dungeons besiegt? */
@@ -784,27 +849,24 @@ export function dungeonCompleted(state: CoopBattleState): boolean {
 }
 
 /**
- * Nächster Kampf im Dungeon – als neuer Kampf mit eigener Id. Die Lebenspunkte
+ * Kampf am aktuellen Schritt von `run` – als neuer Kampf mit eigener Id. Die Lebenspunkte
  * werden mitgenommen, Gefallene stehen mit DUNGEON_REVIVE_HP wieder auf. Mana,
- * Abklingzeiten, Tränke, Zustände und Bedrohung beginnen frisch – wie solo.
+ * Abklingzeiten, Tränke, Zustände und Bedrohung beginnen frisch – wie solo. Segen bleiben.
  */
-export function nextDungeonStage(state: CoopBattleState, id: string, now: number): CoopBattleState {
-  if (!hasNextStage(state)) throw new Error("Es gibt keinen nächsten Kampf.");
-  const enemy = nextStageEnemy(state)!;
-  const stage = state.dungeon!.stage + 1;
-  const { elite, heroic } = stageFoe(state.dungeon!, stage, enemy.creature);
+export function startDungeonFight(state: CoopBattleState, run: CoopDungeonRun, id: string, now: number): CoopBattleState {
+  const { creature, elite, heroic } = stepFoe(run, run.stage);
+  const enemy = getCoopEnemy(creature.id);
+  const dungeon: CoopDungeonRun = { ...run };
+  delete dungeon.votes;
+  delete dungeon.room;
   return {
     id,
     bossId: enemy.id,
-    dungeon: { ...state.dungeon!, stage },
+    dungeon,
     round: 1,
     deadline: now + COOP_TURN_SECONDS * 1000,
-    heroes: state.heroes.map((h) => ({
+    heroes: reviveHeroes(state.heroes).map((h) => ({
       ...h,
-      combatant: {
-        ...h.combatant,
-        hp: h.down ? Math.max(1, Math.round(h.combatant.maxHp * DUNGEON_REVIVE_HP)) : h.combatant.hp,
-      },
       mana: h.maxMana,
       cooldowns: {},
       buffs: {},
@@ -812,7 +874,6 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
       effects: hasEffect(h.itemEffects, "vigilant") ? { bulwark: true } : {},
       endured: false,
       threat: 0,
-      down: false,
       revived: false,
     })),
     boss: foeStats(enemy, state.heroes.length, elite, heroic),
@@ -826,24 +887,51 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
   };
 }
 
+/** Nächster Kampf, wenn er feststeht (Zwischen- oder Endboss) – an Gabelungen wird abgestimmt (coopDungeonPaths.ts). */
+export function nextDungeonStage(state: CoopBattleState, id: string, now: number): CoopBattleState {
+  if (!hasNextStage(state)) throw new Error("Es gibt keinen nächsten Kampf.");
+  const run = state.dungeon!;
+  const stage = run.stage + 1;
+  if (stepKind(getDungeon(run.id), stage) === "fork") throw new Error("An einer Gabelung wählt die Gruppe eine Tür.");
+  return startDungeonFight(state, { ...run, stage, path: [...dungeonPath(run), "fight"] }, id, now);
+}
+
 /**
- * Truhe eines Spielers: die Beute aller gewonnenen Kämpfe, wie solo. Gewürfelt
- * mit einem Startwert aus Dungeon-Durchgang, Kampf und Spieler – so zeigt der
- * Zwischenbildschirm schon den echten Inhalt, und nach dem Neuladen ist er gleich.
+ * Truhe eines Spielers: die Beute aller geschafften Schritte, wie solo – Kämpfe, Fallen und
+ * gelöste Rätsel. Gewürfelt mit einem Startwert aus Dungeon-Durchgang, Schritt und Spieler –
+ * so zeigt der Zwischenbildschirm schon den echten Inhalt, und nach dem Neuladen ist er gleich.
  */
 export function rollCoopDungeonChest(state: CoopBattleState, hero: HeroCombatProfile, playerId: string): DungeonChest {
   if (!state.dungeon) return EMPTY_CHEST;
-  const { runId } = state.dungeon;
-  const creatures = dungeonCreatures(state);
+  const run = state.dungeon;
+  const path = dungeonPath(run);
   let chest = EMPTY_CHEST;
   for (let i = 0; i < clearedStages(state); i++) {
-    const rng = seededRng(hash(`${runId}|${i}|${playerId}`));
-    // Der heroische Endboss zählt nicht als Elite, gibt aber mehr (heroic.ts)
-    const foe = stageFoe(state.dungeon, i, creatures[i]);
-    const elite = !foe.heroic && foe.elite.length > 0;
-    const reward = rollBattleReward(creatures[i], hero, `${runId}-${i}-${playerId}`, rng, [], elite, foe.heroic);
+    const rng = seededRng(hash(`${run.runId}|${i}|${playerId}`));
+    const uid = `${run.runId}-${i}-${playerId}`;
+    const foe = stepFoe(run, i);
+    const kind = path[i] ?? "fight";
+    const riddle = run.riddles?.[i];
+    let reward: BattleReward | null = null;
+    if (kind === "fight" || kind === "elite" || (kind === "riddle" && riddle === "guardian")) {
+      // Der heroische Endboss zählt nicht als Elite, gibt aber mehr (heroic.ts)
+      reward = rollBattleReward(foe.creature, hero, uid, rng, [], !foe.heroic && foe.elite.length > 0, foe.heroic);
+    } else if (kind === "trap") {
+      // Hinter der Falle: Beute wie von einem Gegner, ohne Erfahrung
+      reward = { ...rollBattleReward(foe.creature, hero, uid, rng), xp: 0 };
+    } else if (kind === "riddle" && riddle === "solved") {
+      reward = { ...rollBattleReward(foe.creature, hero, uid, rng, [], true), xp: 0 };
+    }
+    if (!reward) continue;
+    // Segen „Schatzsucher“: mehr Erfahrung und Gold für alles danach
+    const factor = 1 + BLESSING.treasure * (run.treasure?.[playerId] ?? []).filter((step) => step < i).length;
     // Dungeons geben doppelt so viel Baumaterial – wie solo
-    chest = addToChest(chest, { ...reward, materials: scaleMaterials(reward.materials, DUNGEON_MATERIAL_FACTOR) });
+    chest = addToChest(chest, {
+      ...reward,
+      xp: Math.round(reward.xp * factor),
+      gold: Math.round(reward.gold * factor),
+      materials: scaleMaterials(reward.materials, DUNGEON_MATERIAL_FACTOR),
+    });
   }
   return chest;
 }
@@ -884,7 +972,9 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
 
 /** Manakosten einer Fähigkeit im Koop – mit Klasse und Skilltree (Eröffnung in Runde 1, Echo). */
 export function coopAbilityCost(hero: CoopHero, id: AbilityId, round = 0): number {
-  return Math.round(classAbility(id, hero.heroClass).manaCost * skillCostFactor(hero.skills, round, hero.effects.casts));
+  // Segen „Fokus“: billigere Fähigkeiten
+  const focus = Math.max(0, 1 - BLESSING.focus * stacks(hero.blessings, "focus"));
+  return Math.round(classAbility(id, hero.heroClass).manaCost * skillCostFactor(hero.skills, round, hero.effects.casts) * focus);
 }
 
 /** Warum diese Fähigkeit nicht geht – oder null. `turn`: Absicht des Bosses (verschlungene Fähigkeit). */
@@ -1049,6 +1139,13 @@ export function resolveRound(
       events.push({ type: "endured", heroId: hero.id });
       return;
     }
+    // Segen „Zweiter Atem“: einmal pro Dungeon wieder aufstehen
+    if (stacks(hero.blessings, "secondWind") > 0 && !hero.secondWindUsed) {
+      hero.combatant.hp = Math.round(hero.combatant.maxHp * BLESSING.secondWind);
+      hero.secondWindUsed = true;
+      events.push({ type: "secondWind", heroId: hero.id, heal: hero.combatant.hp });
+      return;
+    }
     hero.down = true;
     hero.threat = 0;
     hero.effects = {};
@@ -1066,7 +1163,10 @@ export function resolveRound(
   }
   /** Item-Effekt „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst – Stachelwehr beim Abwehren. */
   const thorns = (hero: CoopHero, foe: Foe, damage: number) => {
-    const share = (hasEffect(hero.itemEffects, "thorns") ? EFFECT.thorns : 0) + (defending.has(hero.id) ? defendThorns(hero.skills) : 0);
+    const share =
+      (hasEffect(hero.itemEffects, "thorns") ? EFFECT.thorns : 0) +
+      (defending.has(hero.id) ? defendThorns(hero.skills) : 0) +
+      BLESSING.thorns * stacks(hero.blessings, "thorns");
     if (share <= 0 || damage <= 0 || foe.c.hp <= 0) return;
     const back = Math.max(1, Math.round(damage * share));
     foe.c.hp = Math.max(0, foe.c.hp - back);
@@ -1141,6 +1241,7 @@ export function resolveRound(
         const factor =
           (hero.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) *
           (hasEffect(hero.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1) *
+          (1 + BLESSING.alchemy * stacks(hero.blessings, "alchemy")) *
           potionSkillFactor(hero.skills);
         const heal = Math.min(Math.round(potionHeal(potion, hero.combatant.maxHp) * factor), hero.combatant.maxHp - hero.combatant.hp);
         hero.combatant.hp += heal;
@@ -1253,7 +1354,9 @@ export function resolveRound(
       // Finisher (Meucheln), Ausbluten und Verwundbarkeit des Gegners
       const execute =
         (ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1) *
-        (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1);
+        (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1) *
+        // Segen „Henker“: mehr Schaden gegen angeschlagene Gegner
+        (foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(hero.blessings, "executioner") : 1);
       const vulnerable = 1 + (foe.fx.vulnerable?.percent ?? 0);
       const taken = takenBy(foe);
       const effects = hero.itemEffects;
@@ -1383,9 +1486,12 @@ export function resolveRound(
       const others = living().filter((f) => f !== target);
       if (others.length > 0) strike(others[Math.floor(rng() * others.length)], EFFECT.chainLightning.share);
     }
-    // Lebensraub: Blutrausch, Plünderer und Item-Effekt „Seelenraub“
+    // Lebensraub: Blutrausch, Plünderer, Item-Effekt „Seelenraub“ und Segen „Blutdurst“
     const lifesteal =
-      lifestealShare(hero.heroClass, ability) + (hasEffect(hero.itemEffects, "soulDrain") ? EFFECT.soulDrain : 0) + skillLifesteal(skills);
+      lifestealShare(hero.heroClass, ability) +
+      (hasEffect(hero.itemEffects, "soulDrain") ? EFFECT.soulDrain : 0) +
+      skillLifesteal(skills) +
+      BLESSING.bloodthirst * stacks(hero.blessings, "bloodthirst");
     if (lifesteal > 0 && dealt > 0) {
       const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(dealt * lifesteal));
       hero.combatant.hp += heal;

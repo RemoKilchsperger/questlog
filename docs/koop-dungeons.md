@@ -5,7 +5,7 @@ Gegner wie solo, nacheinander und ohne Heilung dazwischen. Gebaut auf dem besteh
 (`docs/koop-kampf.md`): Lobby, Einladungslink, Server, Rundenablauf, Bedrohung und Wiederbeleben
 bleiben unverändert.
 
-Status: **umgesetzt.** Edge Function muss neu deployt werden (siehe 4.).
+Status: **umgesetzt.** Edge Function muss neu deployt werden (siehe 4.). Seit 2026-11-02 mit Weggabelungen und Abstimmung (docs/dungeon-wege.md).
 
 ---
 

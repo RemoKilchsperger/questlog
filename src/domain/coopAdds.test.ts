@@ -1,8 +1,8 @@
+import { advanceCoopDungeon } from "../test/coopDungeon";
 import { describe, expect, it } from "vitest";
 import type { HeroCombatProfile } from "./combat";
 import {
   BOSS,
-  nextDungeonStage,
   resolveRound,
   startCoopBattle,
   type CoopAction,
@@ -34,7 +34,7 @@ function atBoss(players: CoopPlayer[] = [player("a"), player("b")]): CoopBattleS
   let state = startCoopBattle("k0", MINE, players, 0);
   for (let i = 1; i < getDungeon(MINE).creatures.length; i++) {
     const won = resolveRound({ ...state, boss: { ...state.boss, hp: 1 } }, {}, rng(0.5), 0).state;
-    state = nextDungeonStage(won, `k${i}`, 0);
+    state = advanceCoopDungeon(won, `k${i}`);
   }
   return state;
 }

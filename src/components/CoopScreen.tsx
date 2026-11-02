@@ -42,6 +42,10 @@ import { DRINK_POTIONS, getPotion, isThrowable, potionEffectText, potionHeal, TH
 import { EventBus } from "../game/EventBus";
 import { useGameStore } from "../store/gameStore";
 import { BossDrops, IntentLine } from "./BattleScreen";
+import { CoopDoorVote, CoopRoomPanel, useCountdown } from "./CoopDungeonPath";
+import { BlessingChip } from "./TowerScreen";
+import { coopDoors, openRoom } from "../domain/coopDungeonPaths";
+import { ROOMS } from "../domain/dungeonPaths";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DungeonChest } from "./DungeonChest";
 import { MaterialGain } from "./materialUi";
@@ -249,7 +253,7 @@ export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
                     <span className="font-sans text-xs text-muted">ab Lv. {dungeon.minLevel}</span>
                   </p>
                   <p className="text-xs text-muted">
-                    {dungeon.description} {dungeon.creatures.length} Kämpfe, Endboss: {boss.name}.
+                    {dungeon.description} {dungeon.creatures.length} Schritte mit Gabelungen – ihr stimmt über die Türen ab. Endboss: {boss.name}.
                   </p>
                   <BossDrops creature={boss} />
                 </div>
@@ -334,7 +338,7 @@ function Lobby() {
             Koop-Lobby · <span className="text-legendary">{content.name}</span>
           </h2>
           <p className="text-sm text-muted">
-            {raid ? `${raid.icon} ${raid.name}: ${raid.description}` : `${content.description} ${getDungeon(parseCoopContent(row.boss_id).id).creatures.length} Kämpfe hintereinander.${content.heroic ? " Der Endboss ist heroisch." : ""}`}
+            {raid ? `${raid.icon} ${raid.name}: ${raid.description}` : `${content.description} ${getDungeon(parseCoopContent(row.boss_id).id).creatures.length} Schritte mit Gabelungen – ihr stimmt über die Türen ab.${content.heroic ? " Der Endboss ist heroisch." : ""}`}
           </p>
         </div>
         <div className="text-center">
@@ -363,7 +367,7 @@ function Lobby() {
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">
                   {m.id === hostId && (
-                    <Hint text="Host – startet den Kampf und entscheidet im Dungeon über Weiter oder Aussteigen.">
+                    <Hint text="Host – startet den Kampf und entscheidet im Dungeon über Weiter oder Aussteigen, bei Gleichstand an der Gabelung zählt seine Stimme.">
                       <span>👑&nbsp;</span>
                     </Hint>
                   )}
@@ -423,15 +427,6 @@ function Lobby() {
 }
 
 /** Sekunden bis `deadline`, jede Sekunde neu berechnet. */
-function useCountdown(deadline: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(t);
-  }, []);
-  return Math.max(0, Math.ceil((deadline - now) / 1000));
-}
-
 function CoopBattle() {
   const { row, myId } = useCoopStore();
   const leave = useCoopStore((s) => s.leave);
@@ -480,7 +475,7 @@ function CoopBattle() {
             )}
             {dungeon && (
               <span className="num ml-2 text-sm text-muted">
-                Kampf {battle.dungeon!.stage + 1}/{dungeon.creatures.length}
+                Schritt {battle.dungeon!.stage + 1}/{dungeon.creatures.length}
               </span>
             )}
           </h2>
@@ -794,28 +789,42 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   );
 }
 
-/** Zwischen zwei Dungeon-Kämpfen: Zustand der Gruppe, eigene Truhe, nächster Gegner – der Host entscheidet. */
+/** Zwischen zwei Schritten im Dungeon: Gruppe, Raum oder Gabelung, eigene Truhe – Weiter und Aussteigen entscheidet der Host. */
 function DungeonIntermission({ battle }: { battle: CoopBattleState }) {
   const { row, myId, busy, error } = useCoopStore();
   const continueDungeon = useCoopStore((s) => s.continueDungeon);
   const exitDungeon = useCoopStore((s) => s.exitDungeon);
   if (!row) return null;
-  const next = nextStageEnemy(battle)!;
+  // Steht der nächste Gegner fest (Zwischen- oder Endboss), entscheidet der Host – an Gabelungen stimmen alle ab
+  const next = openRoom(battle) || coopDoors(battle) ? null : nextStageEnemy(battle);
   const total = getDungeon(battle.dungeon!.id).creatures.length;
   const decider = dungeonDecider(row);
   const deciderName = row.members.find((m) => m.id === decider)?.name ?? "Host";
   const me = row.members.find((m) => m.id === myId);
   const chest = me ? rollCoopDungeonChest(battle, me.profile, myId) : null;
+  const room = battle.dungeon?.room;
+  const blessings = battle.heroes.find((h) => h.id === myId)?.blessings ?? [];
 
   return (
     <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel flex flex-col gap-4 border-gold p-5">
       <div className="text-center">
-        <h2 className="font-pixel text-3xl text-gold">Sieg über {getCoopEnemy(battle.bossId).name}!</h2>
+        <h2 className="font-pixel text-3xl text-gold">
+          {room ? `${ROOMS[room.kind].icon} ${ROOMS[room.kind].name}` : `Sieg über ${getCoopEnemy(battle.bossId).name}!`}
+        </h2>
         <p className="text-sm text-muted">
-          Kampf {clearedStages(battle)} von {total} geschafft. Keine Heilung bis zum nächsten Kampf – Gefallene stehen mit{" "}
+          Schritt {clearedStages(battle)} von {total} geschafft. Keine Heilung im Dungeon – Gefallene stehen mit{" "}
           {Math.round(DUNGEON_REVIVE_HP * 100)} % LP wieder auf.
         </p>
+        {blessings.length > 0 && (
+          <div className="mt-1 flex flex-wrap justify-center gap-1">
+            {[...new Set(blessings)].map((id) => (
+              <BlessingChip key={id} id={id} count={blessings.filter((b) => b === id).length} />
+            ))}
+          </div>
+        )}
       </div>
+
+      <CoopRoomPanel battle={battle} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-md bg-night-800 p-3">
@@ -833,28 +842,46 @@ function DungeonIntermission({ battle }: { battle: CoopBattleState }) {
             ))}
           </ul>
         </div>
-        <div className="flex items-center gap-3 rounded-md bg-night-800 p-3">
-          <CreatureSprite sprite={next.sprite} size={56} />
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-muted">Nächster Gegner</p>
-            <p className={`font-semibold ${next.boss ? "text-legendary" : ""}`}>
-              {next.boss && "👑 "}
-              {next.name} <span className="text-xs text-muted">Lv. {next.level}</span>
-            </p>
-            {next.abilities.map((a) => (
-              <p key={a.id ?? a.name} className="text-xs text-danger">
-                {a.icon} {a.name}
-                {a.aoe && " (trifft alle)"}: {a.description}
+        {next && (
+          <div className="flex items-center gap-3 rounded-md bg-night-800 p-3">
+            <CreatureSprite sprite={next.sprite} size={56} />
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wider text-muted">Nächster Gegner</p>
+              <p className={`font-semibold ${next.boss ? "text-legendary" : ""}`}>
+                {next.boss && "👑 "}
+                {next.name} <span className="text-xs text-muted">Lv. {next.level}</span>
               </p>
-            ))}
+              {next.abilities.map((a) => (
+                <p key={a.id ?? a.name} className="text-xs text-danger">
+                  {a.icon} {a.name}
+                  {a.aoe && " (trifft alle)"}: {a.description}
+                </p>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      <CoopDoorVote battle={battle} />
 
       {chest && <ChestPreview chest={chest} />}
 
       {error && <p className="text-sm text-danger">{error}</p>}
-      {decider === myId ? (
+      {!next ? (
+        // An der Gabelung und im Raum: Aussteigen kann der Host trotzdem jederzeit
+        decider === myId && (
+          <div className="flex justify-center">
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              disabled={busy}
+              onClick={exitDungeon}
+              className="font-pixel rounded-md border-2 border-gold/70 px-4 py-1.5 text-gold hover:bg-gold/15 disabled:opacity-40"
+            >
+              🎁 Mit Truhe aussteigen
+            </motion.button>
+          </div>
+        )
+      ) : decider === myId ? (
         <div className="flex flex-wrap justify-center gap-2">
           <motion.button
             whileTap={{ scale: 0.92 }}
@@ -975,6 +1002,8 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `Die Dornen von ${name(e.heroId)} treffen ${name(e.target)} für ${e.damage} Schaden.`;
     case "endured":
       return `🕊️ ${name(e.heroId)} ist unbeugsam und überlebt mit 1 LP.`;
+    case "secondWind":
+      return `🕊️ Zweiter Atem! ${name(e.heroId)} steht mit ${e.heal} LP wieder auf.`;
     case "addHeal":
       return `${name(e.add)} heilt ${bossName} um ${e.heal} LP.`;
     case "enemyRegen":

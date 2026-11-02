@@ -1,3 +1,4 @@
+import { advanceCoopDungeon } from "../test/coopDungeon";
 import { describe, expect, it } from "vitest";
 import { fullWeapon } from "../test/weapons";
 import {
@@ -24,7 +25,6 @@ import {
   coopAbilityBlocker,
   coopEnemyStats,
   getCoopEnemy,
-  nextDungeonStage,
   resolveRound,
   startCoopBattle,
   type CoopBattleState,
@@ -201,7 +201,7 @@ describe("Koop-Dungeons", () => {
     let state = startCoopBattle("k0", dungeonId, players, 0);
     for (let i = 1; i < getDungeon(dungeonId).creatures.length; i++) {
       const won = resolveRound({ ...state, boss: { ...state.boss, hp: 1 } }, {}, rng(0.5), 0).state;
-      state = nextDungeonStage(won, `k${i}`, 0);
+      state = advanceCoopDungeon(won, `k${i}`);
     }
     return { ...state, heroes: state.heroes.map((h) => ({ ...h, combatant: { ...h.combatant, hp: 99_999, maxHp: 99_999 } })) };
   };
@@ -251,7 +251,7 @@ describe("Koop: Abwehren und die Abläufe der Dungeon-Bosse", () => {
   const bossOf = (dungeonId: string, ids = ["a", "b"]): CoopBattleState => {
     let state = startCoopBattle("k0", dungeonId, group(ids), 0);
     for (let i = 1; i < getDungeon(dungeonId).creatures.length; i++) {
-      state = nextDungeonStage(resolveRound({ ...state, boss: { ...state.boss, hp: 1 } }, {}, rng(0.5), 0).state, `k${i}`, 0);
+      state = advanceCoopDungeon(resolveRound({ ...state, boss: { ...state.boss, hp: 1 } }, {}, rng(0.5), 0).state, `k${i}`);
     }
     return {
       ...state,

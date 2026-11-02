@@ -560,6 +560,14 @@ export class CoopBattleScene extends Phaser.Scene {
         sfx.block();
         break;
       }
+      case "secondWind": {
+        const hero = this.unit(event.heroId);
+        this.setHp(hero, event.heal);
+        this.float(hero, "ZWEITER ATEM!", "#f4c95d", 18, 30);
+        fx.pillar(this, this.center(hero), 0xf4c95d, 50);
+        sfx.heal();
+        break;
+      }
       case "addHeal": {
         // Lebenskraft fliesst vom Heiler zum Boss
         fx.siphon(this, this.center(this.unit(event.add)), this.center(this.boss), 0x7dd3a8, 10);

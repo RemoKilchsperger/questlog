@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { COOP_TURN_SECONDS, getCoopBoss } from "../domain/coopCombat";
+import { clearedStages, COOP_TURN_SECONDS, getCoopBoss, rollCoopDungeonChest } from "../domain/coopCombat";
+import { COOP_DECIDE_SECONDS, coopDoors } from "../domain/coopDungeonPaths";
 import { getDungeon } from "../domain/creatures";
+import { forkDoors, getRiddle, type RoomKind } from "../domain/dungeonPaths";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import { createItem } from "../domain/items";
 import { xpForNextLevel } from "../domain/leveling";
@@ -161,11 +163,29 @@ describe("Koop-Server: Eingefrorene", () => {
 
 describe("Koop-Server: Dungeons", () => {
   /** Laufender Dungeon von a mit b (Level 25 → Verlassene Mine ab 10). */
-  const dungeonRow = () => {
+  const dungeonRow = (runId = "id-a") => {
     let row = run(null, { type: "create", bossId: "abandoned-mine" }, "a")!;
     row = run(row, { type: "join", code: row.code }, "b")!;
     row = run(row, { type: "ready", ready: true }, "b")!;
-    return run(row, { type: "start" }, "a", { members: { a: member("a"), b: member("b") } })!;
+    return run(row, { type: "start" }, "a", { members: { a: member("a"), b: member("b") }, newId: () => runId })!;
+  };
+  /** Weiter zum nächsten Schritt: an einer Gabelung stimmen beide für eine Kampf-Tür, sonst geht der Host weiter. */
+  const onward = (row: CoopRow, id: string) => {
+    const doors = coopDoors(row.state!);
+    if (!doors) return run(row, { type: "next" }, "a", { newId: () => id })!;
+    const index = doors.findIndex((d) => d.kind === "fight" || d.kind === "elite");
+    const voted = run(row, { type: "door", index }, "a", { newId: () => id })!;
+    return run(voted, { type: "door", index }, "b", { newId: () => id })!;
+  };
+  /** Startwert eines Laufs, dessen erste Gabelung diese Tür hat. */
+  const runWithDoor = (kind: RoomKind) => {
+    for (let i = 0; ; i++) if (forkDoors(`r${i}`, 1, true).some((d) => d.kind === kind)) return `r${i}`;
+  };
+  /** Nach dem Eingangskampf gemeinsam durch die Tür dieser Art. */
+  const enterRoom = (kind: RoomKind) => {
+    const row = winFight(dungeonRow(runWithDoor(kind)));
+    const index = coopDoors(row.state!)!.findIndex((d) => d.kind === kind);
+    return run(run(row, { type: "door", index }, "a")!, { type: "door", index }, "b")!;
   };
   /** Beide greifen an, der Gegner hat nur noch 1 LP. */
   const winFight = (row: CoopRow) => {
@@ -190,17 +210,91 @@ describe("Koop-Server: Dungeons", () => {
     expect(() => run(null, { type: "create", bossId: "swamp-hydra:heroic" }, "a", { member: veteran })).toThrow(CoopError);
   });
 
-  it("nach einem Sieg bleibt der Kampf offen – nur der Host geht weiter", () => {
+  it("nach einem Sieg bleibt der Kampf offen – an der Gabelung stimmen alle über die Tür ab", () => {
     const row = winFight(dungeonRow());
     expect(row.phase).toBe("battle");
     expect(row.state!.status).toBe("won");
-    expect(() => run(row, { type: "next" }, "b")).toThrow(/Host/);
-    const next = run(row, { type: "next" }, "a", { newId: () => "stage-2" })!;
+    expect(() => run(row, { type: "next" }, "a")).toThrow(/Gabelung/);
+    const doors = coopDoors(row.state!)!;
+    const index = doors.findIndex((d) => d.kind === "fight" || d.kind === "elite");
+    // Erst eine Stimme: es wird gewartet
+    const one = run(row, { type: "door", index }, "a", { newId: () => "stage-2" })!;
+    expect(one.state!.status).toBe("won");
+    expect(one.state!.dungeon!.votes).toEqual({ a: index });
+    const next = run(one, { type: "door", index }, "b", { newId: () => "stage-2" })!;
     expect(next.state!.id).toBe("stage-2");
     expect(next.state!.dungeon!.stage).toBe(1);
+    expect(next.state!.dungeon!.path).toEqual(["fight", doors[index].kind]);
     expect(next.state!.status).toBe("active");
-    // Doppelter Klick: nichts passiert
-    expect(run(next, { type: "next" }, "a")).toBe(next);
+    // Veralteter Klick: nichts passiert
+    expect(run(next, { type: "door", index }, "a")).toBe(next);
+  });
+
+  it("bei Gleichstand zählt die Stimme des Hosts, nach Ablauf der Zeit die abgegebenen", () => {
+    const row = winFight(dungeonRow(runWithDoor("shrine")));
+    const doors = coopDoors(row.state!)!;
+    const shrine = doors.findIndex((d) => d.kind === "shrine");
+    const fight = doors.findIndex((d) => d.kind === "fight" || d.kind === "elite");
+    const tie = run(run(row, { type: "door", index: fight }, "b")!, { type: "door", index: shrine }, "a")!;
+    expect(tie.state!.dungeon!.path![1]).toBe("shrine");
+    // Nur b stimmt, die Zeit läuft ab: seine Tür gilt
+    const late = run(row, { type: "door", index: shrine }, "b")!;
+    expect(run(late, { type: "tick" }, "a")).toBe(late);
+    const forced = run(late, { type: "tick" }, "a", { now: clock + COOP_DECIDE_SECONDS * 1000 + 1 })!;
+    expect(forced.state!.dungeon!.room?.kind).toBe("shrine");
+  });
+
+  it("Schrein: jeder wählt seinen Segen, danach geht es weiter", () => {
+    const row = enterRoom("shrine");
+    const room = row.state!.dungeon!.room!;
+    if (room.kind !== "shrine") throw new Error("kein Schrein");
+    expect(Object.keys(room.offers).sort()).toEqual(["a", "b"]);
+    const a = run(row, { type: "blessing", blessing: room.offers.a[0] }, "a")!;
+    expect(a.state!.dungeon!.room!.done).toBe(false);
+    expect(a.state!.heroes.find((h) => h.id === "a")!.blessings).toEqual([room.offers.a[0]]);
+    const both = run(a, { type: "blessing", blessing: room.offers.b[1] }, "b")!;
+    expect(both.state!.dungeon!.room!.done).toBe(true);
+    expect(both.state!.heroes.find((h) => h.id === "b")!.blessings).toEqual([room.offers.b[1]]);
+    // Höchstens ein Raum ohne Kampf im Abschnitt: an der nächsten Gabelung nur Kämpfe
+    expect(coopDoors(both.state!)!.every((d) => d.kind === "fight" || d.kind === "elite")).toBe(true);
+  });
+
+  it("Falle: jeder reagiert selbst, keiner fällt – dahinter Beute ohne Erfahrung", () => {
+    const row = enterRoom("trap");
+    const a = run(row, { type: "trap", choice: "endure" }, "a")!;
+    const both = run(a, { type: "trap", choice: "dodge" }, "b")!;
+    const room = both.state!.dungeon!.room!;
+    if (room.kind !== "trap") throw new Error("keine Falle");
+    expect(room.done).toBe(true);
+    expect(room.outcomes.a.damage).toBeGreaterThan(0);
+    expect(both.state!.heroes.every((h) => h.combatant.hp >= 1)).toBe(true);
+    expect(clearedStages(both.state!)).toBe(2);
+    const chest = rollCoopDungeonChest(both.state!, member("a").profile, "a");
+    const before = rollCoopDungeonChest(row.state!, member("a").profile, "a");
+    expect(chest.xp).toBe(before.xp);
+  });
+
+  it("Rätsel: die Mehrheit antwortet", () => {
+    const row = enterRoom("riddle");
+    const room = row.state!.dungeon!.room!;
+    if (room.kind !== "riddle") throw new Error("kein Rätsel");
+    const answer = getRiddle(room.riddleId).answer;
+    const done = run(run(row, { type: "riddle", answer }, "a")!, { type: "riddle", answer }, "b")!;
+    expect(done.state!.dungeon!.riddles).toEqual({ 1: "solved" });
+    expect(done.state!.dungeon!.room!.done).toBe(true);
+  });
+
+  it("Händler: jeder kauft für sich, Wundversorgung heilt", () => {
+    let row = enterRoom("merchant");
+    const room = row.state!.dungeon!.room!;
+    if (room.kind !== "merchant") throw new Error("kein Händler");
+    row = { ...row, state: { ...row.state!, heroes: row.state!.heroes.map((h) => ({ ...h, combatant: { ...h.combatant, hp: 1 } })) } };
+    const care = room.offers.a.findIndex((o) => o.kind === "care");
+    const bought = run(row, { type: "buy", index: care }, "a")!;
+    expect(bought.state!.heroes.find((h) => h.id === "a")!.combatant.hp).toBeGreaterThan(1);
+    expect(() => run(bought, { type: "buy", index: care }, "a")).toThrow(/schon gekauft/);
+    // Der Händler hält niemanden auf: die Türen stehen schon zur Wahl
+    expect(coopDoors(bought.state!)).not.toBeNull();
   });
 
   it("aussteigen beendet den Dungeon mit Sieg – mitten im Kampf geht es nicht", () => {
@@ -214,13 +308,15 @@ describe("Koop-Server: Dungeons", () => {
   it("hat der Host den Kampf verlassen, entscheidet der nächste Anwesende", () => {
     const row = run(winFight(dungeonRow()), { type: "leave" }, "a")!;
     expect(dungeonDecider(row)).toBe("b");
-    expect(run(row, { type: "next" }, "b")!.state!.dungeon!.stage).toBe(1);
+    // Nur noch b stimmt ab
+    const index = coopDoors(row.state!)!.findIndex((d) => d.kind === "fight" || d.kind === "elite");
+    expect(run(row, { type: "door", index }, "b")!.state!.dungeon!.stage).toBe(1);
   });
 
   it("nach dem Endboss ist der Dungeon vorbei", () => {
     let row = dungeonRow();
     const total = getDungeon("abandoned-mine").creatures.length;
-    for (let i = 0; i < total - 1; i++) row = run(winFight(row), { type: "next" }, "a", { newId: () => `s${i}` })!;
+    for (let i = 0; i < total - 1; i++) row = onward(winFight(row), `s${i}`);
     row = winFight(row);
     expect(row.state!.bossId).toBe("ore-king");
     expect(row.phase).toBe("finished");

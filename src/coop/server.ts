@@ -17,10 +17,26 @@ import {
   parseCoopContent,
   resolveRound,
   startCoopBattle,
+  type CoopBattleState,
 } from "../domain/coopCombat";
+import {
+  awaitsDecision,
+  COOP_DECIDE_SECONDS,
+  coopBuy,
+  coopDoors,
+  coopRiddle,
+  coopShrine,
+  coopTrap,
+  openRoom,
+  settleDoors,
+  settleRoom,
+  voteDoor,
+  type Deciders,
+} from "../domain/coopDungeonPaths";
 import { getDungeon } from "../domain/creatures";
+import { mainArmorClass } from "../domain/dungeonPaths";
 import { isHeroicUnlocked } from "../domain/heroic";
-import { EMPTY_EQUIPMENT } from "../domain/equipment";
+import { EMPTY_EQUIPMENT, getArmorClassSummary } from "../domain/equipment";
 import { convertLinearCurveXp, getLevel } from "../domain/leveling";
 import type { Character, Equipment } from "../domain/types";
 import type { CoopCommand, CoopMember, CoopRow } from "./protocol";
@@ -113,6 +129,16 @@ export function applyCommand(row: CoopRow | null, command: CoopCommand, ctx: Ser
       return nextStage(row, ctx);
     case "exit":
       return exitDungeon(row, ctx);
+    case "door":
+      return decide(row, ctx, (state, d) => voteDoor(state, ctx.userId, command.index, d, ctx.newId, ctx.now));
+    case "blessing":
+      return decide(row, ctx, (state, d) => coopShrine(state, ctx.userId, command.blessing, d, ctx.now));
+    case "buy":
+      return decide(row, ctx, (state) => coopBuy(state, ctx.userId, command.index));
+    case "trap":
+      return decide(row, ctx, (state, d) => coopTrap(state, ctx.userId, command.choice, armorOf(row, ctx.userId), d, ctx.rng, ctx.now));
+    case "riddle":
+      return decide(row, ctx, (state, d) => coopRiddle(state, ctx.userId, command.answer, d, ctx.rng, ctx.newId, ctx.now));
   }
 }
 
@@ -199,6 +225,13 @@ function leave(row: CoopRow, ctx: ServerContext): CoopRow | null {
   if (row.phase === "finished") return row;
   // Im Kampf bleibt der Held stehen und greift automatisch an.
   const next = markLeft(row, ctx.userId, true, ctx);
+  // Zwischen zwei Schritten: Vielleicht haben jetzt alle Übrigen gewählt
+  if (betweenFights(next)) {
+    const d = deciders(next);
+    let state = settleRoom(next.state!, d, ctx.now, false, ctx.rng, ctx.newId);
+    if (state === next.state) state = settleDoors(state, d, ctx.newId, ctx.now, false);
+    return state === next.state ? next : touch(next, { state, actions: {}, last_events: [] }, ctx);
+  }
   return maybeResolve(next, ctx);
 }
 
@@ -229,8 +262,14 @@ function act(row: CoopRow, round: number, action: CoopRow["actions"][string], ct
 }
 
 function tick(row: CoopRow, ctx: ServerContext): CoopRow {
-  if (row.phase !== "battle" || !row.state || row.state.status !== "active") return row;
-  return ctx.now >= row.state.deadline ? resolve(row, ctx) : row;
+  if (row.phase !== "battle" || !row.state) return row;
+  if (row.state.status === "active") return ctx.now >= row.state.deadline ? resolve(row, ctx) : row;
+  // Im Dungeon: Wer bis zur Deadline nicht entschieden hat, bekommt die Vorgabe – erst der Raum, dann die Tür
+  if (!betweenFights(row) || !awaitsDecision(row.state) || ctx.now < row.state.deadline) return row;
+  const d = deciders(row);
+  let state = settleRoom(row.state, d, ctx.now, true, ctx.rng, ctx.newId, (id) => armorOf(row, id));
+  if (state === row.state) state = settleDoors(state, d, ctx.newId, ctx.now, true);
+  return state === row.state ? row : touch(row, { state, actions: {}, last_events: [] }, ctx);
 }
 
 /** Sobald alle lebenden, anwesenden Helden gewählt haben, wird sofort aufgelöst. */
@@ -245,12 +284,13 @@ function maybeResolve(row: CoopRow, ctx: ServerContext): CoopRow {
 
 function resolve(row: CoopRow, ctx: ServerContext): CoopRow {
   const result = resolveRound(row.state!, row.actions, ctx.rng, ctx.now);
-  // Im Dungeon geht es nach einem Sieg weiter, solange noch Gegner warten – der Host entscheidet.
+  // Im Dungeon geht es nach einem Sieg weiter, solange noch ein Schritt wartet: Tür per Abstimmung, sonst entscheidet der Host.
   const goesOn = result.state.status === "active" || hasNextStage(result.state);
+  const state = result.state.status === "won" && goesOn ? { ...result.state, deadline: ctx.now + COOP_DECIDE_SECONDS * 1000 } : result.state;
   return touch(
     row,
     {
-      state: result.state,
+      state,
       last_events: result.events,
       actions: {},
       phase: goesOn ? "battle" : "finished",
@@ -279,6 +319,8 @@ function assertDecider(row: CoopRow, ctx: ServerContext) {
 function nextStage(row: CoopRow, ctx: ServerContext): CoopRow {
   if (!betweenFights(row)) return row; // schon weiter – doppelter Klick
   assertDecider(row, ctx);
+  if (openRoom(row.state!)) throw new CoopError("Erst muss die Gruppe den Raum abschliessen.");
+  if (coopDoors(row.state!)) throw new CoopError("An der Gabelung stimmt die Gruppe über die Tür ab.");
   return touch(row, { state: nextDungeonStage(row.state!, ctx.newId(), ctx.now), actions: {}, last_events: [] }, ctx);
 }
 
@@ -286,4 +328,29 @@ function exitDungeon(row: CoopRow, ctx: ServerContext): CoopRow {
   if (!betweenFights(row)) return row;
   assertDecider(row, ctx);
   return touch(row, { phase: "finished", actions: {}, last_events: [] }, ctx);
+}
+
+/* ───────────── Dungeon-Wege: Türen und Räume ───────────── */
+
+/** Wer zwischen zwei Schritten mitentscheidet: alle Anwesenden, bei Gleichstand der Host (bzw. wer für ihn entscheidet). */
+function deciders(row: CoopRow): Deciders {
+  return { present: row.members.filter((m) => !m.left).map((m) => m.id), hostId: dungeonDecider(row) ?? row.host_id };
+}
+
+/** Rüstungsklasse eines Spielers für die Falle – aus seiner Ausrüstung in der Lobby. */
+function armorOf(row: CoopRow, userId: string) {
+  const member = row.members.find((m) => m.id === userId);
+  return mainArmorClass(getArmorClassSummary(member?.equipment ?? EMPTY_EQUIPMENT).pieces);
+}
+
+/** Eine Entscheidung zwischen zwei Schritten anwenden – Fehler der Spiellogik sieht der Spieler. */
+function decide(row: CoopRow, ctx: ServerContext, change: (state: CoopBattleState, d: Deciders) => CoopBattleState): CoopRow {
+  if (!betweenFights(row)) return row; // schon weiter – veralteter Klick
+  let state: CoopBattleState;
+  try {
+    state = change(row.state!, deciders(row));
+  } catch (error) {
+    throw new CoopError(error instanceof Error ? error.message : String(error));
+  }
+  return touch(row, { state, actions: {}, last_events: [] }, ctx);
 }

@@ -27,6 +27,8 @@ import {
   type CoopPlayer,
 } from "./coopCombat";
 import { getCreatureStats, getCreatureXp, getDungeon } from "./creatures";
+import { blessCoopHero, coopDoors, voteDoor } from "./coopDungeonPaths";
+import { stepCreature } from "./dungeonPaths";
 import { HEROIC_HP } from "./heroic";
 import { getCreatureSprite } from "../game/creatureSprites";
 import { hasBackground } from "../game/backgrounds";
@@ -266,13 +268,22 @@ describe("Koop-Dungeons", () => {
   const startMine = (players: CoopPlayer[] = [player("a"), player("b")]) => startCoopBattle("k1", MINE, players, 0);
   /** Den aktuellen Gegner sofort besiegen (eine Runde mit 1 LP). */
   const win = (state: CoopBattleState) => resolveRound({ ...state, boss: { ...state.boss, hp: 1 } }, {}, rng(0.5), 0).state;
+  /** Zum nächsten Schritt: an einer Gabelung durch eine Kampf-Tür (Spieler „a“ entscheidet allein), sonst weiter. */
+  const advance = (state: CoopBattleState, id: string) => {
+    const doors = coopDoors(state);
+    if (!doors) return nextDungeonStage(state, id, 0);
+    const fight = doors.findIndex((d) => d.kind === "fight");
+    const index = fight >= 0 ? fight : doors.findIndex((d) => d.kind === "elite");
+    return voteDoor(state, "a", index, { present: ["a"], hostId: "a" }, () => id, 0);
+  };
+  const mine = getDungeon(MINE);
 
   it("beginnt beim ersten Gegner des Dungeons – Lebenspunkte × n (+10 %), Schaden +40 % pro Spieler über einem", () => {
     const duo = startMine();
-    const { creatures } = getDungeon(MINE);
-    expect(duo.bossId).toBe(creatures[0].id);
-    expect(duo.dungeon).toEqual({ id: MINE, stage: 0, runId: "k1" });
-    const base = getCreatureStats(creatures[0]);
+    const first = stepCreature(mine, "k1", 0);
+    expect(duo.bossId).toBe(first.id);
+    expect(duo.dungeon).toEqual({ id: MINE, stage: 0, runId: "k1", path: ["fight"] });
+    const base = getCreatureStats(first);
     expect(duo.boss.maxHp).toBe(Math.round(base.maxHp * 2 * 1.1));
     expect(duo.boss.damage).toBeCloseTo(base.damage * 1.4);
     const four = startMine([player("a"), player("b"), player("c"), player("d")]);
@@ -294,10 +305,11 @@ describe("Koop-Dungeons", () => {
     expect(hasNextStage(won)).toBe(true);
     expect(clearedStages(won)).toBe(1);
 
-    const next = nextDungeonStage(won, "k2", 5000);
+    const next = advance(won, "k2");
     expect(next.id).toBe("k2");
-    expect(next.bossId).toBe(getDungeon(MINE).creatures[1].id);
-    expect(next.dungeon).toEqual({ id: MINE, stage: 1, runId: "k1" });
+    expect(next.bossId).toBe(stepCreature(mine, "k1", 1).id);
+    expect(next.dungeon).toMatchObject({ id: MINE, stage: 1, runId: "k1" });
+    expect(next.dungeon!.path).toHaveLength(2);
     expect(next.status).toBe("active");
     expect(next.round).toBe(1);
     expect(next.log).toEqual([]);
@@ -314,7 +326,7 @@ describe("Koop-Dungeons", () => {
   it("nach dem Endboss ist der Dungeon geschafft – kein weiterer Kampf", () => {
     let state = startMine();
     const total = getDungeon(MINE).creatures.length;
-    for (let i = 0; i < total - 1; i++) state = nextDungeonStage(win(state), `k${i + 2}`, 0);
+    for (let i = 0; i < total - 1; i++) state = advance(win(state), `k${i + 2}`);
     const done = win(state);
     expect(done.bossId).toBe("ore-king");
     expect(hasNextStage(done)).toBe(false);
@@ -325,12 +337,15 @@ describe("Koop-Dungeons", () => {
   it("die Truhe enthält die Beute aller gewonnenen Kämpfe – und ist beim Neuwürfeln gleich", () => {
     const won = win(startMine());
     const chest = rollCoopDungeonChest(won, profile(), "a");
-    expect(chest.xp).toBe(getCreatureXp(getDungeon(MINE).creatures[0], profile().level));
+    const [c1, c2] = [stepCreature(mine, "k1", 0), stepCreature(mine, "k1", 1)];
+    expect(chest.xp).toBe(getCreatureXp(c1, profile().level));
     expect(rollCoopDungeonChest(won, profile(), "a")).toEqual(chest);
-    // Zwei Kämpfe: XP beider Gegner
-    const second = win(nextDungeonStage(won, "k2", 0));
-    const [c1, c2] = getDungeon(MINE).creatures;
-    expect(rollCoopDungeonChest(second, profile(), "a").xp).toBe(getCreatureXp(c1, profile().level) + getCreatureXp(c2, profile().level));
+    // Zwei Kämpfe: XP beider Gegner (durch eine gewöhnliche Kampf-Tür)
+    const fightDoor = { present: ["a"], hostId: "a" };
+    const doors = coopDoors(won)!;
+    const second = win(voteDoor(won, "a", doors.findIndex((d) => d.kind === "fight"), fightDoor, () => "k2", 0));
+    const elite = (second.elite?.length ?? 0) > 0 ? 2 : 1;
+    expect(rollCoopDungeonChest(second, profile(), "a").xp).toBe(getCreatureXp(c1, profile().level) + getCreatureXp(c2, profile().level) * elite);
     // Verloren: der laufende Kampf zählt nicht
     expect(clearedStages({ ...second, status: "lost" })).toBe(1);
   });
@@ -339,7 +354,7 @@ describe("Koop-Dungeons", () => {
   const toBoss = (dungeonId: string, players: CoopPlayer[] = [player("a"), player("b")]) => {
     let state = startCoopBattle("s", dungeonId, players, 0);
     const { creatures } = getDungeon(parseCoopContent(dungeonId).id);
-    for (let i = 0; i < creatures.length - 1; i++) state = nextDungeonStage(win(state), `s${i}`, 0);
+    for (let i = 0; i < creatures.length - 1; i++) state = advance(win(state), `s${i}`);
     return state;
   };
   it("heroischer Koop-Dungeon: nur der Endboss ist heroisch – mehr LP, Zusatzmechanik, keine Elite-Beute", () => {
@@ -412,5 +427,42 @@ describe("Koop-Dungeons", () => {
     const healed = events.reduce((sum, e) => sum + (e.type === "drain" ? e.heal : 0), 0);
     expect(dealt).toBeGreaterThan(0);
     expect(healed).toBe(dealt);
+  });
+});
+
+describe("Segen im Koop-Dungeon", () => {
+  const start = () => startCoopBattle("seg", "abandoned-mine", [player("a"), player("b")], 0);
+
+  it("Kraft, Vitalität und Präzision wirken auf die Werte, Vitalität heilt sofort", () => {
+    const hero = start().heroes[0];
+    const hurt = { ...hero, combatant: { ...hero.combatant, hp: 10 } };
+    const blessed = blessCoopHero(blessCoopHero(blessCoopHero(hurt, "might"), "vitality"), "precision");
+    expect(blessed.blessings).toEqual(["might", "vitality", "precision"]);
+    expect(blessed.combatant.damage).toBeCloseTo(hero.combatant.damage * 1.15);
+    expect(blessed.combatant.maxHp).toBe(Math.round(hero.combatant.maxHp * 1.15));
+    expect(blessed.combatant.hp).toBe(10 + blessed.combatant.maxHp - hero.combatant.maxHp);
+    expect(blessed.combatant.critChance).toBeCloseTo(hero.combatant.critChance + 0.08);
+    // Gestapelt wie im Turm: zweimal Kraft = +30 %
+    expect(blessCoopHero(blessCoopHero(hero, "might"), "might").combatant.damage).toBeCloseTo(hero.combatant.damage * 1.3);
+  });
+
+  it("Zweiter Atem: einmal pro Dungeon wieder aufstehen", () => {
+    const state = start();
+    const winged = state.heroes.map((h) => ({ ...blessCoopHero(h, "secondWind"), combatant: { ...h.combatant, hp: 1, armor: 0 } }));
+    const deadly = { ...tough(state), heroes: winged, boss: { ...tough(state).boss, damage: 9_999 } };
+    const { state: after, events } = resolveRound(deadly, {}, rng(0.5), 0);
+    const saved = events.filter((e) => e.type === "secondWind");
+    expect(saved.length).toBeGreaterThan(0);
+    const hero = after.heroes.find((h) => h.id === (saved[0].type === "secondWind" ? saved[0].heroId : ""))!;
+    expect(hero.secondWindUsed).toBe(true);
+    expect(hero.down).toBe(false);
+  });
+
+  it("Schatzsucher: mehr Erfahrung für die Beute danach", () => {
+    const won = resolveRound({ ...start(), boss: { ...start().boss, hp: 1 } }, {}, rng(0.5), 0).state;
+    const plain = rollCoopDungeonChest(won, profile(), "a").xp;
+    const lucky = { ...won, dungeon: { ...won.dungeon!, treasure: { a: [-1] } } };
+    expect(rollCoopDungeonChest(lucky, profile(), "a").xp).toBe(Math.round(plain * 1.25));
+    expect(rollCoopDungeonChest(lucky, profile(), "b").xp).toBe(rollCoopDungeonChest(won, profile(), "b").xp);
   });
 });
