@@ -166,7 +166,7 @@ export const AREAS: readonly AreaDef[] = [
       c("bog-serpent", "Moorschlange", "snake", 13),
       c("bog-corpse", "Moorleiche", "zombie", 15),
       c("blood-swarm", "Blutmückenschwarm", "mosquitoes", 17),
-      withAdds(c("ancient-lizard", "Uralte Sumpfechse", "swamp-lizard", 20, true), "bog-serpent", 1.7, { creatureId: "marsh-toad", role: "healer" }),
+      withAdds(c("ancient-lizard", "Uralte Sumpfechse", "swamp-lizard", 20, true), "bog-serpent", 1.55, { creatureId: "marsh-toad", role: "healer" }),
     ],
   },
   {
@@ -226,7 +226,7 @@ export const AREAS: readonly AreaDef[] = [
       c("flame-elemental", "Flammenelementar", "flame-elemental", 53),
       c("young-dragon", "Jungdrache", "dragon", 56),
       c("demon-guard", "Dämonenwächter", "demon", 58),
-      withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 1.6, { creatureId: "demon-guard", role: "shield" }),
+      withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 1.45, { creatureId: "demon-guard", role: "shield" }),
     ],
   },
 ];
@@ -261,7 +261,7 @@ export const DUNGEONS: readonly AreaDef[] = [
         d("pit-spider", "Grubenspinne", "pit-spider", 11, DUNGEON_POWER),
       ],
       mid("mine-foreman", "Vorarbeiter Knorz", "kobold", 11, DUNGEON_POWER),
-      withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 0.9, { creatureId: "kobold-blaster", role: "drummer", name: "Kobold-Trommler" }, 1.05),
+      withAdds(d("ore-king", "Erzkönig Grimmbart", "ore-king", 12, 1, true), "kobold-blaster", 0.8, { creatureId: "kobold-blaster", role: "drummer", name: "Kobold-Trommler" }, 1.05),
     ),
   },
   {

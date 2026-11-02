@@ -14,6 +14,7 @@ import {
   coopBossCreature,
   coopAbilityBlocker,
   coopAbilityDue,
+  coopBossTurn,
   coopContent,
   coopPotionBlocker,
   dungeonCompleted,
@@ -39,7 +40,7 @@ import { ItemTooltip } from "./ItemTooltip";
 import { getPotion, POTIONS, potionHeal } from "../domain/potions";
 import { EventBus } from "../game/EventBus";
 import { useGameStore } from "../store/gameStore";
-import { BossDrops } from "./BattleScreen";
+import { BossDrops, IntentLine } from "./BattleScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DungeonChest } from "./DungeonChest";
 import { MaterialGain } from "./materialUi";
@@ -49,17 +50,19 @@ import { POTION_BUTTONS } from "./potionUi";
 import {
   AbilityButton,
   ActionGroup,
-  bossMechanicChips,
   eliteChips,
   enemyStatusChips,
   heroStatusChips,
   MatchupBadge,
   matchupChips,
   PhaseWarning,
+  soloBossChips,
   StatusSide,
   TargetPicker,
 } from "./BattleStatus";
-import { getBossPhase } from "../domain/bossMechanics";
+import { ADD_SKILLS, addIntentText, getBossPhase } from "../domain/bossMechanics";
+import { describeIntent, type IntentView } from "../domain/bossIntents";
+import { DEFEND_DAMAGE_TAKEN, DEFEND_MANA } from "../domain/combat";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
@@ -453,6 +456,8 @@ function CoopBattle() {
   const finished = battle.status !== "active";
   const dungeon = battle.dungeon ? getDungeon(battle.dungeon.id) : null;
   const due = coopAbilityDue(battle);
+  const names = Object.fromEntries(members.map((m) => [m.id, m.name]));
+  const intent = coopIntent(battle, myId, names);
 
   return (
     <div className="flex flex-col gap-4">
@@ -502,7 +507,8 @@ function CoopBattle() {
       ) : (
         <section className="panel flex flex-col gap-3 p-4">
           <TeamStatus battle={battle} chosen={chosen} away={away} myId={myId} names={Object.fromEntries(members.map((m) => [m.id, m.name]))} />
-          {due && !finished && (
+          {intent && !finished && <IntentLine view={intent} round={battle.round} />}
+          {!intent && due && !finished && (
             <p className="rounded-md bg-danger/15 px-3 py-1.5 text-sm text-danger">
               ⚠️ {due.icon} {boss.name} setzt diese Runde <b>{due.name}</b> ein{due.aoe && <b> – trifft alle</b>}: {due.description}
             </p>
@@ -538,6 +544,17 @@ function CoopBattle() {
       <CoopLog battle={battle} names={Object.fromEntries(members.map((m) => [m.id, m.name]))} />
     </div>
   );
+}
+
+/**
+ * Was der Dungeon-Boss diese Runde vorhat – wie solo (bossIntents.ts), aber mit den Namen der
+ * Mitspieler, auf denen sein Fluch liegt bzw. deren Fähigkeit er hält. Null bei Raid-Bossen.
+ */
+function coopIntent(battle: CoopBattleState, myId: string, names: Record<string, string>): IntentView | null {
+  const turn = coopBossTurn(battle);
+  if (!turn) return null;
+  const other = (id: string | undefined) => (id && id !== myId ? (names[id] ?? battle.heroes.find((h) => h.id === id)?.name) : undefined);
+  return describeIntent(battle.bossId, turn, { curse: other(turn.curse?.heroId), devoured: other(turn.devoured?.heroId) });
 }
 
 function TeamStatus({
@@ -612,7 +629,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
     );
   }
   if (myAction) {
-    const what = myAction.ability ? getAbility(myAction.ability).name : "Angriff";
+    const what = myAction.defend ? "Abwehren" : myAction.ability ? getAbility(myAction.ability).name : "Angriff";
     const on = battle.adds?.find((a) => a.uid === myAction.target)?.combatant.name;
     return (
       <p className="rounded-md bg-night-800 p-3 text-sm">
@@ -627,7 +644,10 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   const against = (kind: DamageKind | null) => (kind ? matchupOf(targetCreature, kind) : null);
   const send = (ability?: CoopAction["ability"]) =>
     choose({ ...(potion && { potion }), ...(ability && { ability }), ...(target && { target }) });
+  const defend = () => choose({ ...(potion && { potion }), defend: true });
+  const turn = coopBossTurn(battle);
   const fallen = battle.heroes.filter((h) => h.down && !h.revived);
+  const bossIntent = coopIntent(battle, myId, Object.fromEntries((row?.members ?? []).map((m) => [m.id, m.name])));
 
   return (
     <div className="flex flex-col gap-4">
@@ -648,7 +668,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
           chips={[
             ...eliteChips(battle.elite),
             ...matchupChips(battle.bossId),
-            ...bossMechanicChips(battle.bossId, battle.phase, battle.adds ?? []),
+            ...soloBossChips(battle.bossId, battle.phase, battle.bossShield, battle.adds ?? []),
             ...enemyStatusChips(battle.bossEffects),
           ]}
         />
@@ -656,7 +676,13 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
       {(battle.adds?.length ?? 0) > 0 && (
         <TargetPicker
           foes={[
-            { combatant: battle.boss, effects: battle.bossEffects, boss: getCoopEnemy(battle.bossId).boss, creatureId: battle.bossId },
+            {
+              combatant: battle.boss,
+              effects: battle.bossEffects,
+              boss: getCoopEnemy(battle.bossId).boss,
+              creatureId: battle.bossId,
+              ...(bossIntent && { intent: { text: `${bossIntent.icon} ${bossIntent.title}`, urgent: bossIntent.tone === "danger" } }),
+            },
             ...(battle.adds ?? []).map((a) => ({
               uid: a.uid,
               combatant: a.combatant,
@@ -664,11 +690,13 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               boss: false,
               role: a.role,
               creatureId: a.creatureId,
+              ...(a.role && { intent: addIntentText(a.role, a.cast) }),
             })),
           ]}
           selected={target}
           disabled={locked}
           onChoose={setTarget}
+          roles={ADD_SKILLS}
         />
       )}
 
@@ -682,11 +710,20 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
           >
             ⚔️ Angreifen <MatchupBadge matchup={against(me.weapon ? WEAPON_KIND[me.weapon] : null)} />
           </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            disabled={locked}
+            onClick={defend}
+            title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(DEFEND_DAMAGE_TAKEN * 100)} % Schaden und bekommst ${DEFEND_MANA} Mana zusätzlich.`}
+            className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            🛡️ Abwehren <span className="font-sans text-xs">½ Schaden · +{DEFEND_MANA} Mana</span>
+          </motion.button>
           {me.abilities.map((id) => (
             <AbilityButton
               key={id}
               ability={classAbility(id, me.heroClass)}
-              blocker={coopAbilityBlocker(me, id)}
+              blocker={coopAbilityBlocker(me, id, turn)}
               disabled={locked}
               onClick={() => send(id)}
               matchup={against(abilityKind(getAbility(id)))}
@@ -911,7 +948,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "counter":
       return `${name(e.heroId)} schlägt zurück: ${bossName} −${e.damage}.`;
     case "hit":
-      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}.`;
+      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}.`;
     case "immune":
       return `${name(e.target)} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "thorns":
@@ -962,6 +999,34 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${bossName} heilt sich um ${e.heal} LP.`;
     case "regen":
       return `${name(e.heroId)} regeneriert ${e.heal} LP.`;
+    case "defend":
+      return `${name(e.heroId)} wehrt ab${e.mana > 0 ? ` und sammelt ${e.mana} Mana` : ""}.`;
+    case "interrupted":
+      return `${name(e.add)} ist unterbrochen.`;
+    case "ritual":
+      return `${name(e.add)} setzt sein Heilritual fort – Heilung in ${e.roundsLeft} ${e.roundsLeft === 1 ? "Runde" : "Runden"}.`;
+    case "drumming":
+      return `${name(e.add)} trommelt lauter (×${e.stacks}).`;
+    case "bossShield":
+      return `${name(e.add)} hebt einen Schild über ${bossName} (${e.shield} LP).`;
+    case "platesBroken":
+      return `Die letzte Panzerplatte von ${bossName} fällt!`;
+    case "platesRegrown":
+      return `Die Panzerplatten von ${bossName} sind nachgewachsen.`;
+    case "cursed":
+      return `Ein Fluch legt sich auf ${name(e.heroId)} – er zählt herunter …`;
+    case "curseBroken":
+      return e.cleansed ? `${name(e.heroId)} läutert sich – der Fluch ist gebrochen.` : `${bossName} ist geschwächt – der Fluch ist gebrochen.`;
+    case "curseBurst":
+      return `Der Fluch bricht über ${name(e.heroId)} los: ${e.damage} Schaden!`;
+    case "static":
+      return `${bossName} saugt die Kraft der Fähigkeit von ${name(e.heroId)} auf (${e.charges}).`;
+    case "devoured":
+      return `${bossName} verschlingt ${getAbility(e.ability).name} von ${name(e.heroId)}!`;
+    case "stolen":
+      return `${bossName} schlägt mit ${getAbility(e.ability).name} von ${name(e.heroId)} zu!`;
+    case "freed":
+      return `Die Gruppe entreisst ${bossName} ${getAbility(e.ability).name} von ${name(e.heroId)}!`;
   }
 }
 

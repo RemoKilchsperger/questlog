@@ -116,6 +116,9 @@ Dungeon mit seltener Ausrüstung, ohne → mit Begleitern):
 
 Die Raid-Bosse kämpfen (noch) ohne Begleiter.
 
+Seit November 2026 zeigen die Endbosse ihre Absicht, folgen ihrem eigenen Ablauf, und die Begleiter mit
+Aufgabe setzen Fähigkeiten ein. Jeder Held kann abwehren (docs/boss-absichten.md, Abschnitt 6).
+
 Seit den Boss-Mechaniken (docs/boss-mechaniken.md) hat einer der beiden Begleiter eine Aufgabe (Heiler,
 Schildträger, Trommler), und der Boss wechselt unter 50 % LP in eine zweite Phase. Die Tabelle oben ist der
 Stand davor. Weil die Gruppe den Begleiter mit Aufgabe in einer Runde ausschaltet, haben die Endbosse im Koop

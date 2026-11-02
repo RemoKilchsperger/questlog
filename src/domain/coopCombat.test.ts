@@ -363,8 +363,9 @@ describe("Koop-Dungeons", () => {
     expect(xpHeroic).toBeGreaterThan(xpNormal);
   });
 
-  const bossHits = (state: CoopBattleState, round: number) =>
-    resolveRound(tough({ ...state, round }), {}, rng(0.5), 0).events.filter((e) => e.type === "hit" && e.attacker === BOSS);
+  /** Treffer des Bosses in einer Runde, in der er diese Fähigkeit einsetzt (seine Absicht) */
+  const bossHits = (state: CoopBattleState, ability: string) =>
+    resolveRound(tough({ ...state, bossTurn: { intent: "ability", ability } }), {}, rng(0.5), 0).events.filter((e) => e.type === "hit" && e.attacker === BOSS);
 
   it("normale Dungeon-Gegner haben keine Fähigkeit; Endbosse zwei im Wechsel: erst ein Ziel, dann die ganze Gruppe", () => {
     expect(getCoopEnemy("mine-rat").abilities).toEqual([]);
@@ -373,13 +374,18 @@ describe("Koop-Dungeons", () => {
     const [single, group] = getCoopEnemy("storm-lord").abilities;
     expect(single.aoe).toBeFalsy();
     expect(group.aoe).toBe(true);
-    expect(coopAbilityDue({ ...state, round: 3 })?.name).toBe(single.name);
-    expect(coopAbilityDue({ ...state, round: 6 })?.name).toBe(group.name);
-    expect(coopAbilityDue({ ...state, round: 9 })?.name).toBe(single.name);
-    // Runde 3: Donnerschlag trifft ein Ziel einmal
-    expect(bossHits(state, 3)).toHaveLength(1);
-    // Runde 6: Kettenblitz trifft jeden der beiden Helden dreimal
-    const chain = bossHits(state, 6);
+    // Der Endboss zeigt seine Absicht – seine Fähigkeiten kommen weiter im Wechsel alle 3 Runden
+    expect(state.bossTurn).toMatchObject({ intent: "attack" });
+    let s = { ...tough(state), heroes: state.heroes.map((h) => ({ ...h, combatant: { ...h.combatant, hp: 99_999, maxHp: 99_999 } })) };
+    for (let i = 0; i < 2; i++) s = resolveRound(s, {}, rng(0.5), 0).state;
+    expect(s.bossTurn).toMatchObject({ intent: "ability", ability: "storm-lord-thunder" });
+    expect(coopAbilityDue(s)?.name).toBe(single.name);
+    for (let i = 0; i < 3; i++) s = resolveRound(s, {}, rng(0.5), 0).state;
+    expect(coopAbilityDue(s)?.name).toBe(group.name);
+    // Donnerschlag trifft ein Ziel einmal
+    expect(bossHits(state, "storm-lord-thunder")).toHaveLength(1);
+    // Kettenblitz trifft jeden der beiden Helden dreimal
+    const chain = bossHits(state, "storm-lord");
     expect(chain.filter((e) => e.type === "hit" && e.target === "a")).toHaveLength(3);
     expect(chain.filter((e) => e.type === "hit" && e.target === "b")).toHaveLength(3);
   });
@@ -387,9 +393,9 @@ describe("Koop-Dungeons", () => {
   it("die Gruppen-Fähigkeit trifft jeden mit dem Solo-Schaden (× Faktor) – ohne den Gruppenzuschlag", () => {
     const duo = toBoss(MINE);
     const four = toBoss(MINE, [player("a"), player("b"), player("c"), player("d")]);
-    // Erzlawine (Runde 6) ignoriert Rüstung, rng 0.5 = mittlere Streuung, kein Krit – vergleichbar
+    // Erzlawine ignoriert Rüstung, rng 0.5 = mittlere Streuung, kein Krit – vergleichbar
     const damage = (state: CoopBattleState) => {
-      const hit = bossHits(state, 6)[0];
+      const hit = bossHits(state, "ore-king")[0];
       return hit?.type === "hit" ? hit.damage : 0;
     };
     expect(damage(duo)).toBeGreaterThan(0);
@@ -398,7 +404,7 @@ describe("Koop-Dungeons", () => {
 
   it("Leerenschlund trifft ein Ziel und heilt den Leerenfürsten um den vollen Schaden", () => {
     const state = toBoss("void-abyss");
-    const hurt = tough({ ...state, round: 3 });
+    const hurt = tough({ ...state, bossTurn: { intent: "ability", ability: "void-lord" } });
     const { events } = resolveRound({ ...hurt, boss: { ...hurt.boss, hp: 1000 } }, {}, rng(0.5), 0);
     const hits = events.filter((e) => e.type === "hit" && e.attacker === BOSS);
     expect(hits).toHaveLength(1);

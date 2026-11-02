@@ -37,3 +37,23 @@ Sammlung aller Vorschläge, damit nichts verloren geht. Status: ✅ umgesetzt ·
 | 16 | **Fähigkeiten auf der Waffe:** Statt im Skilltree freizuschalten liegen die Fähigkeiten auf der Waffe – Einhand 2 aus 4, Zweihand 3 aus 6. Jeder Drop wird so spannend. | ✅ `abilities.ts`, docs/waffen-faehigkeiten.md |
 | 17 | **Dorf-Ausbau:** Das Dorf wird vom Spieler aufgebaut. Am Anfang nur ein Strassenhändler mit wenig Ware, Schmiede, Anschlagtafel (zusätzliche Aufträge) und Alchemist (Tränke) muss man bauen und in Stufen ausbauen. Kostet Gold und Material, das Monster im jeweiligen Gebiet fallen lassen. | ✅ `village.ts`, docs/dorf-ausbau.md |
 | 18 | **Begleiter und Missionen:** In der Taverne Begleiter mit zufälligen Namen und Traits anwerben, aufleveln, ausrüsten und auf Missionen in Echtzeit schicken. Die Erfolgschance hängt vom Gearscore ab, bessere Taverne = bessere Traits. | ✅ `companions.ts`, docs/begleiter.md |
+
+## Bosskämpfe mit Absichten (dritte Runde, 2026-11-02)
+
+Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fähigkeit. Jetzt zeigt der Boss jede Runde, was er vorhat, und man antwortet darauf (docs/boss-absichten.md).
+
+| # | Idee | Status |
+|---|---|---|
+| 19 | **Absichten und Abwehren:** Boss zeigt jede Runde seine Absicht, neue Grundaktion Abwehren (halber Schaden, +10 Mana) | ✅ `bossIntents.ts`, solo und Koop-Dungeon |
+| 20 | **Begleiter mit Fähigkeiten:** Heilritual (unterbrechbar), Schild über dem Boss (Gift geht durch), Trommelwirbel (Betäubung setzt zurück) | ✅ `bossMechanics.ts`, solo und Koop |
+| 21 | **Krummzahn:** Wut durch Treffer, volle Wut = Wutanfall | ✅ Prototyp |
+| 22 | **Höhlenauge:** offen wirft es Fähigkeiten zurück, geschlossen verwundbar | ✅ Prototyp |
+| 23 | **Urmammut:** Ansturm laden – genug Schaden oder Betäubung bricht ihn, dann taumelt er (Idee 3) | ✅ Prototyp |
+| 24 | **Sumpfechse:** taucht ab – eine Runde nicht angreifbar, dann Hinterhalt mit Gift | ✅ Solo |
+| 25 | **Lichkönig:** Seelengefäss – fallende Skelette laden es auf, mit Ladung steht der Lich einmal wieder auf | ✅ Solo |
+| 26 | **Ignaroth:** hebt ab – 2 Runden treffen nur Bogen, Stab und Zepter voll, danach Feueratem mit Ansage | ✅ Solo |
+| 27 | **Erzkönig:** Panzerplatten – jeder Treffer bricht eine ab (Hammer zwei), ohne Platten verwundbar, sie wachsen nach | ✅ Solo und Koop |
+| 28 | **Neferet:** Fluch zählt herunter – reinigen oder ihr bis dahin genug Schaden machen; im Koop springt er beim Ausbruch über | ✅ Solo und Koop |
+| 29 | **Kaelthar:** lädt sich mit jeder Fähigkeit des Helden auf, entlädt sich bei 3 Ladungen (Koop: 4 pro Held) | ✅ Solo und Koop |
+| 30 | **Xal'Zar:** verschlingt die stärkste Fähigkeit und setzt sie gegen dich ein, bis du ihm genug Schaden machst | ✅ Solo und Koop |
+| 31 | **Neue Begleiter:** Dieb (stiehlt Tränke), Bombenleger (Countdown), Kettenwächter (zwingt das Ziel), Fluchwirker (versiegelt eine Fähigkeit) | 💡 |

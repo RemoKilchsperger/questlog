@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fullWeapon } from "../test/weapons";
 import { ABILITIES, abilitiesOf, getAbility, MANA_REGEN, maxManaFor, type AbilityId } from "./abilities";
-import { abilityBlocker, attackRound, getHeroCombatProfile, startBattle, type BattleState } from "./combat";
+import { abilityBlocker, attackRound, bossTurnOf, getHeroCombatProfile, startBattle, type BattleState } from "./combat";
 import { getBossAbility, roundsUntilBossAbility } from "./bossAbilities";
 import { AREAS, getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
@@ -190,10 +190,13 @@ describe("Boss-Fähigkeiten", () => {
       enemy: { ...battle.enemy, hp: 999_999, maxHp: 999_999 },
     };
   };
-  /** Spielt bis zur ersten Runde, in der der Boss seine Fähigkeit einsetzt. */
+  /** Spielt bis zur ersten Runde, in der der Boss seine Fähigkeit einsetzen will (seine Absicht). */
   const toAbilityRound = (battle: BattleState) => {
     let state = battle;
-    while (roundsUntilBossAbility(state.creatureId, state.round) !== 0) state = attackRound(state, rng(0.5)).state;
+    while (bossTurnOf(state)?.intent !== "ability") {
+      state = attackRound(state, rng(0.5)).state;
+      if (state.round > 30) throw new Error("Keine Fähigkeit in 30 Runden");
+    }
     return state;
   };
 
@@ -202,16 +205,15 @@ describe("Boss-Fähigkeiten", () => {
     expect(getBossAbility("grey-wolf")).toBeNull();
   });
 
-  it("wird angekündigt und in der fälligen Runde eingesetzt", () => {
-    const battle = bossBattle("goblin-chief");
-    expect(roundsUntilBossAbility("goblin-chief", 1)).toBe(2);
-    expect(roundsUntilBossAbility("goblin-chief", 2)).toBe(1);
+  it("Bosse im festen Takt: wird angekündigt und in der fälligen Runde eingesetzt", () => {
+    const battle = bossBattle("lich-king");
+    expect(roundsUntilBossAbility("lich-king", 1)).toBe(2);
+    expect(roundsUntilBossAbility("lich-king", 2)).toBe(1);
+    expect(bossTurnOf(battle)?.intent).toBe("attack");
     const due = toAbilityRound(battle);
     expect(due.round).toBe(3);
     const { events } = attackRound(due, rng(0.5));
     expect(events.some((e) => e.type === "bossAbility")).toBe(true);
-    // Rasender Hieb – die Begleiter greifen danach je einmal normal an
-    expect(events.filter((e) => e.type === "hit" && e.attacker === "enemy" && !e.add)).toHaveLength(3);
   });
 
   it("Bollwerk blockt die Boss-Fähigkeit samt Gift, Betäubung verhindert sie", () => {

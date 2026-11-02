@@ -2,12 +2,17 @@ import { motion } from "motion/react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { getAbility, MANA_REGEN } from "../domain/abilities";
 import { getBossAbilities, getBossAbilityById, roundsUntilBossAbility, upcomingBossAbility } from "../domain/bossAbilities";
+import { describeIntent, hasBossScript, turnAbility, type IntentView } from "../domain/bossIntents";
 import {
   abilityBlocker,
   abilityCost,
   BOSS_ITEM_DROP_CHANCE,
+  bossTurnOf,
   BUFF_POTION_DROP_CHANCE,
   chestCount,
+  DEFEND,
+  DEFEND_DAMAGE_TAKEN,
+  DEFEND_MANA,
   fleeCost,
   getHeroCombatProfile,
   potionBlocker,
@@ -61,17 +66,17 @@ import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
 import {
   AbilityButton,
   ActionGroup,
-  bossMechanicChips,
   eliteChips,
   enemyStatusChips,
   heroStatusChips,
   MatchupBadge,
   matchupChips,
   PhaseWarning,
+  soloBossChips,
   StatusSide,
   TargetPicker,
 } from "./BattleStatus";
-import { getBossPhase } from "../domain/bossMechanics";
+import { ADD_SKILLS, addIntentText, getBossPhase } from "../domain/bossMechanics";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
@@ -401,12 +406,16 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           </Hint>
           {dangerText && <span className={danger > 0 ? "text-danger" : "text-xp"}>{dangerText}</span>}
         </div>
-        {bossAbilities.map((a) => (
-          <p key={a.id} className="mt-1 text-xs text-danger">
-            Fähigkeit: {a.icon} {a.name} – {bossAbilities.length > 1 ? "im Wechsel " : ""}alle {a.every} Runden.{" "}
-            {a.description}
-          </p>
-        ))}
+        {hasBossScript(creature.id) ? (
+          <p className="mt-1 text-xs text-danger">❓ Kämpft mit eigener Taktik – im Kampf siehst du jede Runde, was er vorhat.</p>
+        ) : (
+          bossAbilities.map((a) => (
+            <p key={a.id} className="mt-1 text-xs text-danger">
+              Fähigkeit: {a.icon} {a.name} – {bossAbilities.length > 1 ? "im Wechsel " : ""}alle {a.every} Runden.{" "}
+              {a.description}
+            </p>
+          ))
+        )}
         <BossDrops creature={creature} />
       </div>
       <div className="flex shrink-0 flex-col items-stretch gap-1.5">
@@ -629,18 +638,9 @@ function Battle({ battle }: { battle: BattleState }) {
                 </div>
               </Hint>
             </StatusSide>
-            <StatusSide
-              title={battle.enemy.name}
-              chips={[
-                ...eliteChips(battle.elite),
-                ...matchupChips(battle.creatureId),
-                ...bossMechanicChips(battle.creatureId, battle.phase, battle.adds ?? []),
-                ...enemyStatusChips(battle.enemyEffects),
-              ]}
-            />
+            <FocusSide battle={battle} />
           </div>
           {(battle.adds?.length ?? 0) > 0 && <BattleTargets battle={battle} disabled={!active} />}
-          <BossWarning battle={battle} />
           <PhaseWarning bossId={battle.creatureId} phase={battle.phase} boss={battle.enemy} />
 
           <ActionGroup label="Angriff" hint="Danach schlägt der Gegner zurück.">
@@ -652,6 +652,15 @@ function Battle({ battle }: { battle: BattleState }) {
                 className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ⚔️ Angreifen <MatchupBadge matchup={matchupAgainst(battle, battle.heroWeapon ? WEAPON_KIND[battle.heroWeapon] : null)} />
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                disabled={busy || !active}
+                onClick={() => act(() => attack(DEFEND))}
+                title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(DEFEND_DAMAGE_TAKEN * 100)} % Schaden und bekommst ${DEFEND_MANA} Mana zusätzlich.`}
+                className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                🛡️ Abwehren <span className="font-sans text-xs">½ Schaden · +{DEFEND_MANA} Mana</span>
               </motion.button>
               {battle.abilities.map((id) => (
                 <AbilityButton
@@ -746,10 +755,17 @@ function matchupAgainst(battle: BattleState, kind: DamageKind | null) {
 /** Boss und Begleiter: Ziel wählen (auch per Klick in der Szene). */
 function BattleTargets({ battle, disabled }: { battle: BattleState; disabled: boolean }) {
   const choose = useGameStore((s) => s.battleTarget);
+  const intent = bossIntent(battle);
   return (
     <TargetPicker
       foes={[
-        { combatant: battle.enemy, effects: battle.enemyEffects, boss: getCreature(battle.creatureId).creature.boss, creatureId: battle.creatureId },
+        {
+          combatant: battle.enemy,
+          effects: battle.enemyEffects,
+          boss: getCreature(battle.creatureId).creature.boss,
+          creatureId: battle.creatureId,
+          ...(intent && { intent: { text: `${intent.icon} ${intent.title}`, urgent: intent.tone === "danger" } }),
+        },
         ...(battle.adds ?? []).map((a) => ({
           uid: a.uid,
           combatant: a.combatant,
@@ -757,11 +773,13 @@ function BattleTargets({ battle, disabled }: { battle: BattleState; disabled: bo
           boss: false,
           role: a.role,
           creatureId: a.creatureId,
+          ...(a.role && { intent: addIntentText(a.role, a.cast) }),
         })),
       ]}
       selected={battle.target}
       disabled={disabled}
       onChoose={choose}
+      roles={ADD_SKILLS}
     />
   );
 }
@@ -1102,25 +1120,81 @@ function DungeonProgress({ area }: { area: AreaDef }) {
   );
 }
 
-/** Kündigt die Boss-Fähigkeit an – diese Runde (rot) oder nächste Runde (gelb). */
-function BossWarning({ battle }: { battle: BattleState }) {
-  const ability = upcomingBossAbility(battle.creatureId, battle.round);
-  const inRounds = roundsUntilBossAbility(battle.creatureId, battle.round);
-  if (!ability || inRounds === null || inRounds > 1) return null;
-  const now = inRounds === 0;
+const INTENT_STYLE: Record<IntentView["tone"], string> = {
+  danger: "border-danger bg-danger/15 text-danger",
+  warn: "border-gold/70 bg-gold/10 text-gold",
+  chance: "border-xp/70 bg-xp/10 text-xp",
+  calm: "border-night-600 bg-night-800 text-muted",
+};
+
+/** Die Absicht des Bosses in dieser Runde – null bei Gegnern ohne Absichten. */
+function bossIntent(battle: BattleState): IntentView | null {
+  const turn = bossTurnOf(battle);
+  return turn ? describeIntent(battle.creatureId, turn) : null;
+}
+
+/** Bosse im festen Takt: die Fähigkeit der nächsten Runde (Vorwarnung) – sonst null. */
+function nextCadenceAbility(battle: BattleState) {
+  const turn = bossTurnOf(battle);
+  if (!turn || hasBossScript(battle.creatureId) || turnAbility(turn)) return null;
+  return roundsUntilBossAbility(battle.creatureId, battle.round) === 1 ? upcomingBossAbility(battle.creatureId, battle.round) : null;
+}
+
+/** Was der Gegner diese Runde vorhat – vor deiner Aktion (auch im Koop). */
+export function IntentLine({ view, round }: { view: IntentView; round: number }) {
   return (
     <motion.p
-      key={`${battle.round}-${inRounds}`}
-      initial={{ scale: 0.95, opacity: 0 }}
+      key={`${round}-${view.title}`}
+      initial={{ scale: 0.97, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      className={`rounded-md border-2 px-3 py-1.5 text-sm ${
-        now ? "border-danger bg-danger/15 text-danger" : "border-gold/70 bg-gold/10 text-gold"
-      }`}
+      className={`rounded border px-2 py-1 text-sm ${INTENT_STYLE[view.tone]}`}
     >
-      ⚠️ {now ? "Diese Runde" : "Nächste Runde"} setzt der Boss <strong>{ability.icon} {ability.name}</strong> ein:{" "}
-      {ability.description}
-      {now && " Bollwerk blockt sie, ein Betäubender Schlag verhindert sie."}
+      {view.icon} <strong>{view.title}</strong>
+      {view.text && <span className="opacity-90"> – {view.text}</span>}
     </motion.p>
+  );
+}
+
+/**
+ * Rechts neben dir steht der gewählte Gegner – der Boss oder ein Begleiter – mit
+ * Schwächen, Wirkungen und dem, was er diese Runde vorhat.
+ */
+function FocusSide({ battle }: { battle: BattleState }) {
+  const add = battle.adds?.find((a) => a.uid === battle.target && a.combatant.hp > 0);
+  if (add) {
+    const role = add.role && ADD_SKILLS[add.role];
+    const intent = add.role ? addIntentText(add.role, add.cast) : null;
+    const view: IntentView = intent
+      ? { icon: role!.icon, title: intent.text, text: "", tone: intent.urgent ? "danger" : "warn" }
+      : { icon: "🗡️", title: "Greift an", text: "", tone: "calm" };
+    return (
+      <StatusSide
+        title={`${role ? `${role.icon} ` : ""}${add.combatant.name}`}
+        chips={[...matchupChips(add.creatureId), ...enemyStatusChips(add.effects)]}
+      >
+        <IntentLine view={view} round={battle.round} />
+      </StatusSide>
+    );
+  }
+  const view = bossIntent(battle);
+  const next = nextCadenceAbility(battle);
+  return (
+    <StatusSide
+      title={battle.enemy.name}
+      chips={[
+        ...eliteChips(battle.elite),
+        ...matchupChips(battle.creatureId),
+        ...soloBossChips(battle.creatureId, battle.phase, battle.bossShield, battle.adds ?? []),
+        ...enemyStatusChips(battle.enemyEffects),
+      ]}
+    >
+      {view && <IntentLine view={view} round={battle.round} />}
+      {next && (
+        <p className="text-xs text-gold">
+          ⚠️ Nächste Runde: <strong>{next.icon} {next.name}</strong> – {next.description}
+        </p>
+      )}
+    </StatusSide>
   );
 }
 
@@ -1208,7 +1282,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
         : `Du trinkst ${getPotion(e.potionId).name} und heilst ${e.heal} LP.`;
     case "hit":
       return e.attacker === "hero"
-        ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}.`
+        ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.grazed ? " – in der Luft streifst du ihn nur" : ""}.`
         : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden.`;
     case "addHeal":
       return `${enemy} heilt ${battle.enemy.name} um ${e.heal} LP.`;
@@ -1253,7 +1327,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "stunned":
       return `${enemy} ist ${e.freeze ? "eingefroren" : "betäubt"} und kann nicht zurückschlagen.`;
     case "stunResisted":
-      return `${enemy} ist noch immun gegen Betäubung und schlägt zurück.`;
+      return `${enemy} ist noch immun gegen Betäubung.`;
     case "bossAbility":
       return `${enemy} setzt ${getBossAbilityById(e.abilityId)?.name ?? "einen Spezialangriff"} ein!`;
     case "blocked":
@@ -1264,5 +1338,45 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `${enemy} raubt dir ${e.amount} Mana.`;
     case "regen":
       return `Du regenerierst ${e.heal} LP.`;
+    case "defend":
+      return `Du wehrst ab${e.mana > 0 ? ` und sammelst ${e.mana} Mana` : ""}.`;
+    case "reflected":
+      return `Das offene Auge wirft deine Fähigkeit zurück – du erleidest ${e.damage} Schaden!`;
+    case "charging":
+      return `${enemy} lädt auf – Ansturm ${e.roundsLeft > 1 ? `in ${e.roundsLeft} Runden` : "nächste Runde"}!`;
+    case "interrupted":
+      return e.add ? `Du unterbrichst ${enemy}!` : `Du brichst den Ansturm von ${enemy} ab!`;
+    case "staggered":
+      return `${enemy} taumelt und kann nicht angreifen.`;
+    case "bossShield":
+      return `${enemy} hebt einen Schild über ${battle.enemy.name} (${e.shield} LP).`;
+    case "drumming":
+      return `${enemy} trommelt lauter (×${e.stacks}).`;
+    case "ritual":
+      return `${enemy} setzt sein Heilritual fort – Heilung in ${e.roundsLeft} ${e.roundsLeft === 1 ? "Runde" : "Runden"}.`;
+    case "evaded":
+      return `${enemy} ist abgetaucht – dein Angriff geht ins Leere.`;
+    case "submerged":
+      return `${enemy} taucht ab${e.extinguished ? " – das Wasser löscht das Feuer" : ""}.`;
+    case "platesBroken":
+      return `Die letzte Panzerplatte von ${enemy} fällt!`;
+    case "platesRegrown":
+      return `Die Panzerplatten von ${enemy} sind nachgewachsen.`;
+    case "risen":
+      return `Das Seelengefäss zerspringt – ${enemy} erhebt sich wieder (${e.heal} LP)!`;
+    case "cursed":
+      return `Ein Fluch legt sich auf dich – er zählt herunter …`;
+    case "curseBroken":
+      return e.cleansed ? "Du läuterst dich – der Fluch ist gebrochen." : `Du schwächst ${enemy} – der Fluch ist gebrochen.`;
+    case "curseBurst":
+      return `Der Fluch bricht los: ${e.damage} Schaden!`;
+    case "static":
+      return `${enemy} saugt die Kraft deiner Fähigkeit auf (${e.charges}).`;
+    case "devoured":
+      return `${enemy} verschlingt ${getAbility(e.ability).name}!`;
+    case "stolen":
+      return `${enemy} schlägt mit ${getAbility(e.ability).name} zu!`;
+    case "freed":
+      return `Du entreisst ${enemy} ${getAbility(e.ability).name}!`;
   }
 }

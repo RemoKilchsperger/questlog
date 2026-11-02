@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { BOSS_PHASES, DRUMMER_BONUS, getBossPhase, HEALER_HEAL, SHIELD_DAMAGE_TAKEN } from "./bossMechanics";
+import { fullWeapon } from "../test/weapons";
+import {
+  BOSS_PHASES,
+  DRUM_BONUS,
+  DRUM_MAX,
+  getBossPhase,
+  RITUAL_HEAL,
+  RITUAL_ROUNDS,
+
+  SHIELD_EVERY,
+  SHIELD_SHARE,
+} from "./bossMechanics";
 import { attackRound, getHeroCombatProfile, setTarget, startBattle, type BattleEvent, type BattleState } from "./combat";
 import {
+  CURSE_DAMAGE,
+  COOP_STATIC_PER_HERO,
+  CURSE_ROUNDS,
+  DEVOUR_FREE,
+  PLATES_MAX,
+} from "./bossIntents";
+import {
   BOSS,
+  coopAbilityBlocker,
   coopEnemyStats,
   getCoopEnemy,
   nextDungeonStage,
@@ -60,31 +79,75 @@ describe("Begleiter mit Aufgabe", () => {
     expect(chief.adds![1]).toMatchObject({ creatureId: "goblin-raider", role: "drummer", combatant: { name: "Goblin-Trommler" } });
   });
 
-  it("der Heiler heilt den Boss jede Runde, statt anzugreifen", () => {
+  /** Spielt n Runden mit normalen Angriffen auf den Boss. */
+  const play = (state: BattleState, n: number) => {
+    const events: BattleEvent[][] = [];
+    for (let i = 0; i < n; i++) {
+      const result = attackRound(state, rng(0.5));
+      events.push(result.events);
+      state = result.state;
+    }
+    return { state, events };
+  };
+
+  it("der Heiler heilt erst nach seinem Ritual – und greift nie an", () => {
     const battle = bossFight("ancient-lizard");
     const hurt = { ...battle, enemy: { ...battle.enemy, hp: 50_000 } };
-    const { events } = attackRound(hurt, rng(0.5));
-    const heal = events.find((e) => e.type === "addHeal");
-    expect(heal).toEqual({ type: "addHeal", add: "add-2", heal: Math.round(99_999 * HEALER_HEAL) });
-    expect(events.filter((e) => e.type === "hit" && e.attacker === "enemy" && e.add === "add-2")).toHaveLength(0);
-    // Ohne Heiler keine Heilung
-    expect(attackRound(withoutRoleAdd(hurt), rng(0.5)).events.some((e) => e.type === "addHeal")).toBe(false);
+    const { events } = play(hurt, RITUAL_ROUNDS);
+    for (const round of events.slice(0, -1)) expect(round.some((e) => e.type === "addHeal"), "vor dem Ende des Rituals").toBe(false);
+    expect(events.at(-1)!.find((e) => e.type === "addHeal")).toEqual({ type: "addHeal", add: "add-2", heal: Math.round(99_999 * RITUAL_HEAL) });
+    expect(events.flat().filter((e) => e.type === "hit" && e.attacker === "enemy" && e.add === "add-2")).toHaveLength(0);
   });
 
-  it("solange der Schildträger steht, erleidet der Boss weniger Schaden", () => {
+  it("ein Treffer auf den Heiler unterbricht das Ritual", () => {
+    const battle = bossFight("ancient-lizard");
+    const hurt = { ...battle, enemy: { ...battle.enemy, hp: 50_000 } };
+    // Kurz vor der Heilung: einmal den Heiler treffen …
+    const almost = play(hurt, RITUAL_ROUNDS - 1).state;
+    const healer = almost.adds!.find((a) => a.role === "healer")!;
+    const tough = { ...almost, adds: almost.adds!.map((a) => (a.role ? { ...a, combatant: { ...a.combatant, hp: 99_999, maxHp: 99_999 } } : a)) };
+    const hit = attackRound(setTarget(tough, healer.uid), rng(0.5));
+    expect(hit.events).toContainEqual({ type: "interrupted", add: healer.uid });
+    expect(hit.events.some((e) => e.type === "addHeal")).toBe(false);
+    // … dann beginnt das Ritual von vorn
+    expect(hit.state.adds!.find((a) => a.uid === healer.uid)!.cast).toBe(0);
+  });
+
+  it("der Schildträger hebt regelmässig einen Schild, der Treffer schluckt – Gift geht durch", () => {
     const battle = bossFight("cave-eye");
-    const shielded = bossHit(attackRound(battle, rng(0.5)).events, "hero");
-    const open = bossHit(attackRound(withoutRoleAdd(battle), rng(0.5)).events, "hero");
-    expect(shielded.shielded).toBe(true);
-    expect(open.shielded).toBeUndefined();
-    expect(Math.abs(shielded.damage - open.damage * SHIELD_DAMAGE_TAKEN)).toBeLessThanOrEqual(1);
+    const { state, events } = play(battle, SHIELD_EVERY);
+    const raised = events.at(-1)!.find((e) => e.type === "bossShield");
+    expect(raised).toEqual({ type: "bossShield", add: "add-2", shield: Math.round(99_999 * SHIELD_SHARE) });
+    expect(state.bossShield).toBe(Math.round(99_999 * SHIELD_SHARE));
+    // In der Runde, in der er den Schild hebt, greift er nicht an
+    expect(events.at(-1)!.some((e) => e.type === "hit" && e.attacker === "enemy" && e.add === "add-2")).toBe(false);
+    const next = attackRound(state, rng(0.5));
+    const hit = bossHit(next.events, "hero");
+    expect(hit.absorbed).toBeGreaterThan(0);
+    expect(hit.damage).toBe(0);
+    expect(next.state.bossShield).toBe(state.bossShield! - hit.absorbed!);
+    // Gift trifft den Boss trotz Schild
+    const poisoned = { ...state, enemyEffects: { poison: { damage: 50, roundsLeft: 2 } } };
+    const poison = attackRound(poisoned, rng(0.5)).events.find((e) => e.type === "poison" && e.target === "enemy" && !e.add);
+    expect(poison).toBeDefined();
   });
 
-  it("solange der Trommler steht, macht der Boss mehr Schaden", () => {
+  it("der Trommler trommelt jede Runde lauter – eine Betäubung bringt ihn aus dem Takt", () => {
     const battle = bossFight("goblin-chief");
-    const drummed = bossHit(attackRound(battle, rng(0.5)).events, "enemy");
     const quiet = bossHit(attackRound(withoutRoleAdd(battle), rng(0.5)).events, "enemy");
-    expect(Math.abs(drummed.damage - quiet.damage * (1 + DRUMMER_BONUS))).toBeLessThanOrEqual(1);
+    const drummed = play(battle, DRUM_MAX + 2).state;
+    const drummer = drummed.adds!.find((a) => a.role === "drummer")!;
+    expect(drummer.cast).toBe(DRUM_MAX);
+    // Krummzahn: ohne Wutanfall in dieser Runde vergleichen
+    const calm = { ...drummed, bossTurn: { intent: "attack" as const, rage: 0 } };
+    const loud = bossHit(attackRound(calm, rng(0.5)).events, "enemy");
+    expect(Math.abs(loud.damage - quiet.damage * (1 + DRUM_BONUS * DRUM_MAX))).toBeLessThanOrEqual(1);
+    // Ein Betäubender Schlag auf den Trommler: Er setzt aus und beginnt von vorn
+    const mace = getHeroCombatProfile(hero(), { ...EMPTY_EQUIPMENT, weapon1: fullWeapon("mace-0", "common", "w1") });
+    const withMace = { ...calm, abilities: mace.abilities, mana: 999, maxMana: 999 };
+    const stunned = attackRound(setTarget(withMace, drummer.uid), rng(0.01), "mace");
+    expect(stunned.events).toContainEqual({ type: "interrupted", add: drummer.uid });
+    expect(stunned.state.adds!.find((a) => a.uid === drummer.uid)!.cast).toBe(0);
   });
 });
 
@@ -152,26 +215,119 @@ describe("Koop-Dungeons", () => {
     expect(coopEnemyStats(getCoopEnemy("high-priestess"), 2).maxHp).toBe(Math.round(solo.maxHp * 2 * 1.1));
   });
 
-  it("der Heiler heilt, die zweite Phase kommt einmal – mit Sammelruf nur für den gewöhnlichen Begleiter", () => {
+  it("der Heiler heilt nach seinem Ritual – ein Treffer unterbricht es; die zweite Phase kommt einmal", () => {
     const state = atBoss("sunken-temple");
     expect(state.adds!.map((a) => a.role)).toEqual([undefined, "healer"]);
     const half = { ...state, boss: { ...state.boss, hp: Math.round(state.boss.maxHp * 0.45) } };
-    const { state: next, events } = resolveRound(half, { a: { target: "add-1" } }, rng(0.5), 0);
+    // Kurz vor dem Ende des Rituals – ungestört heilt er
+    const ready = { ...half, adds: half.adds!.map((a) => (a.role ? { ...a, cast: RITUAL_ROUNDS - 1 } : a)) };
+    const { state: next, events } = resolveRound(ready, { a: { target: "add-1" }, b: { target: "add-1" } }, rng(0.5), 0);
     expect(events.some((e) => e.type === "addHeal" && e.add === "add-2")).toBe(true);
     expect(events).toContainEqual({ type: "bossPhase", bossId: "high-priestess", rally: ["add-1"] });
     expect(next.phase).toBe(true);
     expect(resolveRound(next, {}, rng(0.5), 0).events.some((e) => e.type === "bossPhase")).toBe(false);
+    // Wer ihn trifft, unterbricht das Ritual
+    const hit = resolveRound(ready, { a: { target: "add-2" } }, rng(0.5), 0);
+    expect(hit.events).toContainEqual({ type: "interrupted", add: "add-2" });
+    expect(hit.events.some((e) => e.type === "addHeal")).toBe(false);
   });
 
-  it("der Schildträger schützt den Boss auch im Koop", () => {
+  it("der Schildträger hebt im Koop einen Schild über den Boss, der Treffer schluckt", () => {
     const state = atBoss("storm-tower");
     const tough = { ...state, boss: { ...state.boss, hp: 999_999, maxHp: 999_999 } };
-    const hit = (s: CoopBattleState) =>
-      resolveRound(s, {}, rng(0.5), 0).events.find((e) => e.type === "hit" && e.attacker === "a" && e.target === BOSS)!;
-    const shielded = hit(tough);
-    const open = hit({ ...tough, adds: tough.adds!.map((a) => (a.role ? { ...a, combatant: { ...a.combatant, hp: 0 } } : a)) });
-    if (shielded.type !== "hit" || open.type !== "hit") throw new Error("Treffer fehlt");
-    expect(shielded.shielded).toBe(true);
-    expect(Math.abs(shielded.damage - open.damage * SHIELD_DAMAGE_TAKEN)).toBeLessThanOrEqual(1);
+    const raising = { ...tough, adds: tough.adds!.map((a) => (a.role ? { ...a, cast: SHIELD_EVERY - 1 } : a)) };
+    const raised = resolveRound(raising, {}, rng(0.5), 0);
+    expect(raised.events.some((e) => e.type === "bossShield")).toBe(true);
+    expect(raised.state.bossShield).toBe(Math.round(999_999 * SHIELD_SHARE));
+    const hit = resolveRound(raised.state, {}, rng(0.5), 0).events.find((e) => e.type === "hit" && e.attacker === "a" && e.target === BOSS);
+    expect(hit?.type === "hit" && hit.absorbed).toBeGreaterThan(0);
+  });
+});
+
+describe("Koop: Abwehren und die Abläufe der Dungeon-Bosse", () => {
+  const strong = getHeroCombatProfile(hero(), { ...EMPTY_EQUIPMENT, weapon1: fullWeapon("greatsword-0", "common", "w1") });
+  const group = (ids: string[]): CoopPlayer[] => ids.map((id) => ({ id, name: id, profile: { ...strong, maxHp: 99_999, maxMana: 999 } }));
+  /** Endboss eines Dungeons, Gegner davor sofort besiegt, ohne Begleiter – zähe Helden, zäher Boss */
+  const bossOf = (dungeonId: string, ids = ["a", "b"]): CoopBattleState => {
+    let state = startCoopBattle("k0", dungeonId, group(ids), 0);
+    for (let i = 1; i < getDungeon(dungeonId).creatures.length; i++) {
+      state = nextDungeonStage(resolveRound({ ...state, boss: { ...state.boss, hp: 1 } }, {}, rng(0.5), 0).state, `k${i}`, 0);
+    }
+    return {
+      ...state,
+      adds: [],
+      boss: { ...state.boss, hp: 999_999, maxHp: 999_999 },
+      heroes: state.heroes.map((h) => ({ ...h, combatant: { ...h.combatant, hp: 99_999, maxHp: 99_999 }, mana: 999 })),
+    };
+  };
+  const hpOf = (s: CoopBattleState, id: string) => s.heroes.find((h) => h.id === id)!.combatant.hp;
+
+  it("Abwehren: kein Angriff, halber Schaden, etwas Mana", () => {
+    const state = { ...bossOf("abandoned-mine"), heroes: bossOf("abandoned-mine").heroes.map((h) => ({ ...h, mana: 0, threat: h.id === "a" ? 1e9 : 0 })) };
+    const plain = resolveRound(state, {}, rng(0.5), 0);
+    const defended = resolveRound(state, { a: { defend: true } }, rng(0.5), 0);
+    expect(defended.events).toContainEqual({ type: "defend", heroId: "a", mana: 10 });
+    expect(defended.events.some((e) => e.type === "hit" && e.attacker === "a")).toBe(false);
+    const taken = (r: typeof plain) => 99_999 - hpOf(r.state, "a");
+    expect(Math.abs(taken(defended) - taken(plain) / 2)).toBeLessThanOrEqual(1);
+  });
+
+  it("Erzkönig: so viele Panzerplatten pro Held wie solo – die Gruppe bricht sie gemeinsam", () => {
+    const state = bossOf("abandoned-mine", ["a", "b", "c"]);
+    expect(state.bossTurn).toMatchObject({ plates: PLATES_MAX * 3, platesMax: PLATES_MAX * 3 });
+    const round = resolveRound(state, {}, rng(0.5), 0);
+    expect(round.state.bossTurn?.plates).toBe(PLATES_MAX * 3 - 3);
+    let s: CoopBattleState = { ...state, bossTurn: { ...state.bossTurn!, plates: 2 } };
+    const broken = resolveRound(s, {}, rng(0.5), 0);
+    expect(broken.events).toContainEqual({ type: "platesBroken" });
+    s = broken.state;
+    while (s.bossTurn!.plates === 0) s = resolveRound(s, {}, rng(0.5), 0).state;
+    expect(s.bossTurn?.plates).toBe(PLATES_MAX * 3);
+  });
+
+  it("Neferet: Der Fluch liegt auf einem Helden, bricht los und springt auf einen anderen über", () => {
+    const state = bossOf("sunken-temple");
+    const cursed = resolveRound({ ...state, bossTurn: { intent: "ability", ability: "high-priestess" } }, { a: { defend: true }, b: { defend: true } }, rng(0.5), 0);
+    const curse = cursed.state.bossTurn?.curse;
+    expect(curse?.roundsLeft).toBe(CURSE_ROUNDS);
+    expect(cursed.events).toContainEqual({ type: "cursed", heroId: curse!.heroId });
+    let s = cursed.state;
+    for (let i = 0; i < CURSE_ROUNDS - 1; i++) s = resolveRound(s, { a: { defend: true }, b: { defend: true } }, rng(0.5), 0).state;
+    const burst = resolveRound(s, {}, rng(0.5), 0);
+    expect(burst.events).toContainEqual({ type: "curseBurst", heroId: curse!.heroId!, damage: Math.round(99_999 * CURSE_DAMAGE) });
+    const jumped = burst.state.bossTurn?.curse;
+    expect(jumped?.heroId).toBeDefined();
+    expect(jumped?.heroId).not.toBe(curse!.heroId);
+    expect(burst.events).toContainEqual({ type: "cursed", heroId: jumped!.heroId });
+  });
+
+  it("Kaelthar: Im Koop braucht er Ladungen je Held – jede Fähigkeit der Gruppe zählt", () => {
+    const state = bossOf("storm-tower");
+    const both = { a: { ability: "greatsword" as const }, b: { ability: "greatsword" as const } };
+    let s = state;
+    for (let i = 0; i < COOP_STATIC_PER_HERO - 1; i++) s = resolveRound({ ...s, heroes: s.heroes.map((h) => ({ ...h, cooldowns: {} })) }, both, rng(0.5), 0).state;
+    // Zwei Helden: (COOP_STATIC_PER_HERO - 1) × 2 Ladungen, er braucht COOP_STATIC_PER_HERO × 2
+    expect(s.bossTurn).toMatchObject({ static: (COOP_STATIC_PER_HERO - 1) * 2, staticMax: COOP_STATIC_PER_HERO * 2 });
+    s = resolveRound({ ...s, heroes: s.heroes.map((h) => ({ ...h, cooldowns: {} })) }, both, rng(0.5), 0).state;
+    expect(s.bossTurn).toMatchObject({ intent: "ability", ability: "storm-lord-discharge" });
+    // Die Entladung trifft alle
+    const discharge = resolveRound(s, {}, rng(0.5), 0).events.filter((e) => e.type === "hit" && e.attacker === BOSS);
+    expect(new Set(discharge.map((e) => e.type === "hit" && e.target))).toEqual(new Set(["a", "b"]));
+  });
+
+  it("Xal'Zar: verschlingt die Fähigkeit des Helden mit der meisten Bedrohung – die Gruppe befreit sie", () => {
+    const state = bossOf("void-abyss");
+    const devour = { ...state, bossTurn: { intent: "devour" as const }, heroes: state.heroes.map((h) => ({ ...h, threat: h.id === "b" ? 500 : 10 })) };
+    const swallowed = resolveRound(devour, { a: { defend: true }, b: { defend: true } }, rng(0.5), 0);
+    expect(swallowed.events).toContainEqual({ type: "devoured", heroId: "b", ability: "greatsword" });
+    const turn = swallowed.state.bossTurn!;
+    expect(turn.devoured).toMatchObject({ ability: "greatsword", heroId: "b" });
+    const [a, b] = swallowed.state.heroes;
+    expect(coopAbilityBlocker(b, "greatsword", turn)).toMatch(/gefangen/);
+    expect(coopAbilityBlocker(a, "greatsword", turn)).toBeNull();
+    // Genug Schaden der Gruppe befreit sie
+    const freed = resolveRound({ ...swallowed.state, bossTurn: { ...turn, devoured: { ...turn.devoured!, taken: 999_999 * DEVOUR_FREE } } }, {}, rng(0.5), 0);
+    expect(freed.events).toContainEqual({ type: "freed", heroId: "b", ability: "greatsword" });
+    expect(freed.state.bossTurn?.devoured).toBeUndefined();
   });
 });

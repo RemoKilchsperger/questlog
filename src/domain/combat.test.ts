@@ -3,6 +3,8 @@ import { STUN_IMMUNITY_ROUNDS, type AbilityId } from "./abilities";
 import {
   abilityBlocker,
   attackRound,
+  bossTurnOf,
+  DEFEND,
   drinkPotion,
   flee,
   fleeCost,
@@ -36,6 +38,7 @@ import { lootPool } from "./loot";
 import { MAX_LEVEL, xpForNextLevel } from "./leveling";
 import { buyPotion, getPotion } from "./potions";
 import { matchupOf, WEAPON_KIND } from "./matchups";
+import { untouchable } from "./bossIntents";
 import type { SkillWeapon } from "./skills";
 import type { Character, Equipment, Rarity } from "./types";
 
@@ -453,9 +456,14 @@ describe("Gebiete und Balance", () => {
         if (potion) state = drinkPotion(state, potion).state;
       }
       state = setTarget(state, livingAdds(state).find((a) => a.role)?.uid);
+      // Ist der Boss abgetaucht, geht es gegen einen Begleiter – oder er wehrt ab
+      const hidden = untouchable(bossTurnOf(state));
+      if (hidden && !state.target) state = setTarget(state, livingAdds(state)[0]?.uid);
       const ability = state.target
         ? undefined
-        : ([`${weapon}-2`, weapon] as const).find((id) => abilityBlocker(state, id) === null);
+        : hidden
+          ? DEFEND
+          : ([`${weapon}-2`, weapon] as const).find((id) => abilityBlocker(state, id) === null);
       state = attackRound(state, rng, ability).state;
     }
     return state;
