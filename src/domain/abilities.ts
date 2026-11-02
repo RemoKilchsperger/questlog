@@ -104,6 +104,22 @@ export interface AbilityDef {
   groupHeal?: number;
   /** Gibt so viel Mana zurück */
   manaGain?: number;
+  /** Schattenschritt: Die nächste Aktion des Helden trifft sicher kritisch */
+  ambush?: boolean;
+  /** Finte: Der nächste normale Angriff trifft doppelt */
+  feint?: boolean;
+  /** Mehr Schaden gegen erschütterte Gegner – in den letzten 2 Runden betäubt (Heiliger Hammer) */
+  shakenBonus?: number;
+  /** Gift und Feuer auf dem Ziel halten so viele Runden länger (Fluch der Schwäche) */
+  extendDots?: number;
+  /** Mehr Schaden, wenn der Gegner gerade auflädt (Richterstoss: 0.3 = +30 %) */
+  chargingBonus?: number;
+  /** So viele Treffer unter 50 % LP des Helden statt `hits` (Raserei) */
+  frenzyHits?: number;
+  /** Bricht das Aufladen eines Gegners immer ab, wenn sie ihn trifft (Wuchtiger Schlag) */
+  interrupt?: boolean;
+  /** Einfrier-Chance gegen brennende Gegner statt `stunChance` (Eisstrahl) */
+  freezeVsBurning?: number;
 }
 
 export type AbilityAoe = "all" | "spread" | { splash: number };
@@ -144,10 +160,10 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Hinterhältiger Stoss",
     icon: "🗡️",
     manaCost: 20,
-    cooldown: 1,
-    multiplier: 1.2,
+    cooldown: 2,
+    multiplier: 1.4,
     guaranteedCrit: true,
-    description: "Ein gezielter Stich – trifft immer kritisch.",
+    description: "Ein gezielter Stich mit 1,4-fachem Schaden – trifft immer kritisch.",
   },
   {
     id: "sword",
@@ -156,8 +172,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Schwertwirbel",
     icon: "🌀",
     manaCost: 25,
-    cooldown: 1,
-    multiplier: 0.6,
+    cooldown: 2,
+    multiplier: 0.75,
     hits: 3,
     aoe: "spread",
     description: "Drei schnelle Hiebe – jeder kann kritisch treffen. Bei mehreren Gegnern trifft jeder Hieb einen zufälligen.",
@@ -171,7 +187,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     manaCost: 35,
     cooldown: 2,
     multiplier: 2.3,
-    description: "Ein gewaltiger Stoss mit 2,3-fachem Schaden.",
+    chargingBonus: 0.3,
+    description: "Ein gewaltiger Stoss mit 2,3-fachem Schaden – gegen einen Gegner, der gerade auflädt, 30 % stärker.",
   },
   {
     id: "axe",
@@ -180,10 +197,11 @@ export const ABILITIES: readonly AbilityDef[] = [
     name: "Axtwurf",
     icon: "🪓",
     manaCost: 25,
-    cooldown: 1,
-    multiplier: 1.25,
+    cooldown: 2,
+    multiplier: 1.4,
     ignoreArmor: true,
-    description: "Die geworfene Axt durchschlägt jede Rüstung.",
+    bleed: { percent: 0.25, rounds: 2 },
+    description: "Die geworfene Axt durchschlägt jede Rüstung – 1,4-facher Schaden, der Gegner blutet 2 Runden lang.",
   },
   {
     id: "greataxe",
@@ -193,12 +211,10 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "💥",
     manaCost: 30,
     cooldown: 3,
-    multiplier: 1.2,
-    armorBreak: 0.2,
+    multiplier: 1.4,
     bleed: { percent: 0.25, rounds: 3 },
     aoe: { splash: 0.5 },
-    description:
-      "Ein Hieb mit 1,2-fachem Schaden, der die Panzerung spaltet: −20 % Rüstung des Gegners für den Rest des Kampfes, dazu blutet er 3 Runden lang. Umstehende Gegner erleiden halben Schaden.",
+    description: "Ein Hieb mit 1,4-fachem Schaden – der Gegner blutet 3 Runden lang, umstehende Gegner erleiden halben Schaden.",
   },
   {
     id: "mace",
@@ -221,7 +237,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     manaCost: 40,
     cooldown: 2,
     multiplier: 2.2,
-    description: "Ein vernichtender Hieb mit 2,2-fachem Schaden.",
+    interrupt: true,
+    description: "Ein vernichtender Hieb mit 2,2-fachem Schaden – er bricht das Aufladen eines Gegners immer ab.",
   },
   {
     id: "scepter",
@@ -376,7 +393,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     ignoreArmor: true,
     weaken: { percent: 0.3, rounds: 3 },
     vulnerable: { percent: 0.2, rounds: 3 },
-    description: "Verflucht den Gegner für 3 Runden: Er macht 30 % weniger Schaden und erleidet 20 % mehr.",
+    extendDots: 1,
+    description: "Verflucht den Gegner für 3 Runden: Er macht 30 % weniger Schaden und erleidet 20 % mehr. Gift und Feuer auf ihm halten 1 Runde länger.",
   },
   {
     id: "staff-2",
@@ -400,10 +418,9 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "🎯",
     manaCost: 35,
     cooldown: 2,
-    multiplier: 1.8,
+    multiplier: 2,
     ignoreArmor: true,
-    bleed: { percent: 0.25, rounds: 2 },
-    description: "Ein gezielter Schuss mit 1,8-fachem Schaden, der Rüstung durchschlägt – der Gegner blutet 2 Runden lang.",
+    description: "Ein gezielter Schuss mit 2-fachem Schaden, der Rüstung durchschlägt.",
   },
   {
     id: "shield-2",
@@ -473,8 +490,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     stun: true,
     stunChance: 0.4,
     freeze: true,
-    description:
-      "Ein eisiger Strahl mit 1,5-fachem Schaden, der Rüstung ignoriert – mit 40 % Chance friert der Gegner ein und setzt eine Runde aus.",
+    freezeVsBurning: 0.6,
+    description: "Ein eisiger Strahl mit 1,5-fachem Schaden, der Rüstung ignoriert – mit 40 % Chance friert der Gegner ein und setzt eine Runde aus, wenn er brennt sogar mit 60 %.",
   },
   {
     id: "bow-3",
@@ -511,19 +528,20 @@ export const ABILITIES: readonly AbilityDef[] = [
     cooldown: 3,
     multiplier: 0.8,
     bulwark: true,
-    description: "Ein Stich, dann verschwindest du in den Schatten: Der nächste gegnerische Angriff geht komplett ins Leere.",
+    ambush: true,
+    description: "Ein Stich, dann verschwindest du in den Schatten: Der nächste gegnerische Angriff geht komplett ins Leere – und dein nächster Angriff trifft sicher kritisch.",
   },
   {
     id: "sword-3",
     weapon: "sword",
     tier: 3,
-    name: "Tiefe Wunde",
-    icon: "🩸",
-    manaCost: 30,
+    name: "Finte",
+    icon: "🎭",
+    manaCost: 20,
     cooldown: 2,
-    multiplier: 1.3,
-    bleed: { percent: 0.3, rounds: 3 },
-    description: "Ein tiefer Schnitt mit 1,3-fachem Schaden – der Gegner blutet 3 Runden lang.",
+    multiplier: 0.8,
+    feint: true,
+    description: "Ein angedeuteter Stich lockt die Deckung des Gegners: Dein nächster normaler Angriff trifft doppelt.",
   },
   {
     id: "sword-4",
@@ -553,14 +571,13 @@ export const ABILITIES: readonly AbilityDef[] = [
     id: "axe-4",
     weapon: "axe",
     tier: 4,
-    name: "Spaltschlag",
-    icon: "🪵",
-    manaCost: 25,
-    cooldown: 3,
-    multiplier: 1.3,
-    armorBreak: 0.25,
-    description:
-      "Ein Hieb mit 1,3-fachem Schaden, der die Rüstung spaltet: −25 % Rüstung des Gegners für den Rest des Kampfes.",
+    name: "Ausbluten",
+    icon: "🔪",
+    manaCost: 30,
+    cooldown: 2,
+    multiplier: 1.4,
+    bleedBonus: 0.6,
+    description: "Ein Hieb mit 1,4-fachem Schaden in die offene Wunde – gegen blutende Gegner 60 % stärker.",
   },
   {
     id: "mace-3",
@@ -570,12 +587,10 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "🕊️",
     manaCost: 25,
     cooldown: 3,
-    multiplier: 0,
-    hits: 0,
-    heal: 0.2,
+    multiplier: 0.8,
+    heal: 0.15,
     cleanse: true,
-    description:
-      "Statt anzugreifen: Du heilst dich um 20 % deiner Lebenspunkte und befreist dich von Gift, Feuer und Bluten.",
+    description: "Ein Schlag mit 0,8-fachem Schaden, dann heilst du dich um 15 % deiner Lebenspunkte und befreist dich von Gift, Feuer und Bluten.",
   },
   {
     id: "mace-4",
@@ -587,7 +602,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     cooldown: 2,
     multiplier: 1.4,
     kind: "magic",
-    description: "Ein Schlag voll heiliger Kraft mit 1,4-fachem Schaden – er zählt als Magie statt als Wucht.",
+    shakenBonus: 0.3,
+    description: "Ein Schlag voll heiliger Kraft mit 1,4-fachem Schaden – er zählt als Magie statt als Wucht. Gegen erschütterte Gegner (in den letzten 2 Runden betäubt) 30 % stärker.",
   },
   {
     id: "scepter-3",
@@ -652,10 +668,9 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "✖️",
     manaCost: 35,
     cooldown: 2,
-    multiplier: 0.9,
+    multiplier: 1,
     hits: 2,
-    bleed: { percent: 0.25, rounds: 2 },
-    description: "Zwei gekreuzte Hiebe mit je 0,9-fachem Schaden – jeder kann kritisch treffen, der Gegner blutet 2 Runden lang.",
+    description: "Zwei gekreuzte Hiebe mit je vollem Schaden – jeder kann kritisch treffen.",
   },
   {
     id: "greatsword-5",
@@ -673,15 +688,16 @@ export const ABILITIES: readonly AbilityDef[] = [
     id: "greatsword-6",
     weapon: "greatsword",
     tier: 6,
-    name: "Heldenmut",
-    icon: "🦁",
-    manaCost: 35,
-    cooldown: 4,
-    multiplier: 1,
-    heal: 0.15,
-    empower: { percent: 0.15, rounds: 2 },
+    name: "Mordschlag",
+    icon: "🔃",
+    manaCost: 30,
+    cooldown: 3,
+    multiplier: 1.2,
+    kind: "blunt",
+    stun: true,
+    stunChance: 0.3,
     description:
-      "Ein Hieb voller Heldenmut: Du heilst dich um 15 % deiner Lebenspunkte und machst in den nächsten 2 Runden 15 % mehr Schaden.",
+      "Du packst die Klinge und schlägst mit dem Knauf zu: 1,2-facher Schaden, der als Wucht statt als Klinge zählt – mit 30 % Chance ist der Gegner betäubt.",
   },
   {
     id: "greataxe-4",
@@ -714,14 +730,15 @@ export const ABILITIES: readonly AbilityDef[] = [
     id: "greataxe-6",
     weapon: "greataxe",
     tier: 6,
-    name: "Ausbluten",
-    icon: "🔪",
-    manaCost: 30,
-    cooldown: 2,
-    multiplier: 1.4,
-    bleedBonus: 0.6,
+    name: "Raserei",
+    icon: "🔥",
+    manaCost: 35,
+    cooldown: 3,
+    multiplier: 0.6,
+    hits: 3,
+    frenzyHits: 4,
     description:
-      "Ein Hieb mit 1,4-fachem Schaden in die offene Wunde – gegen blutende Gegner 60 % stärker.",
+      "Drei wilde Hiebe mit je 0,6-fachem Schaden – jeder kann kritisch treffen. Unter 50 % deiner Lebenspunkte sind es vier.",
   },
   {
     id: "greathammer-4",
@@ -746,8 +763,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     multiplier: 0,
     hits: 0,
     heal: 0.15,
-    guard: { reduce: 0.5 },
-    description: "Statt anzugreifen: Du heilst dich um 15 % deiner Lebenspunkte, der nächste gegnerische Angriff macht nur halben Schaden.",
+    guard: { reduce: 0.5, counter: 0.5 },
+    description: "Statt anzugreifen: Du heilst dich um 15 % deiner Lebenspunkte, der nächste gegnerische Angriff macht nur halben Schaden – und du stösst mit halbem Schaden zurück.",
   },
   {
     id: "greathammer-6",
@@ -759,8 +776,8 @@ export const ABILITIES: readonly AbilityDef[] = [
     cooldown: 4,
     multiplier: 0,
     hits: 0,
-    charge: 3,
-    description: "Statt anzugreifen holst du weit aus: Dein nächster Angriff oder deine nächste Fähigkeit macht dreifachen Schaden.",
+    charge: 3.5,
+    description: "Statt anzugreifen holst du weit aus: Dein nächster normaler Angriff macht 3,5-fachen Schaden.",
   },
   {
     id: "staff-4",
@@ -809,13 +826,14 @@ export const ABILITIES: readonly AbilityDef[] = [
     id: "bow-4",
     weapon: "bow",
     tier: 4,
-    name: "Giftpfeil",
-    icon: "🟢",
+    name: "Jägermal",
+    icon: "🎯",
     manaCost: 25,
-    cooldown: 2,
-    multiplier: 1,
-    poison: { percent: 0.35, rounds: 3 },
-    description: "Ein vergifteter Pfeil – der Gegner erleidet 3 Runden lang Giftschaden.",
+    cooldown: 3,
+    multiplier: 0.8,
+    vulnerable: { percent: 0.2, rounds: 3 },
+    description:
+      "Ein Schuss mit 0,8-fachem Schaden markiert die Beute: 3 Runden lang erleidet sie 20 % mehr Schaden. Im Koop trifft die ganze Gruppe härter.",
   },
   {
     id: "bow-5",
