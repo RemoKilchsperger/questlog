@@ -395,6 +395,8 @@ export interface EnemyEffects {
   /** Vom Helden betäubt bzw. eingefroren – zählt in der Runde danach (Erschütterung, Kryomant, Schmelzen) */
   dazed?: number;
   chilled?: number;
+  /** Erschüttert: in den letzten 2 Runden betäubt – für den Heiligen Hammer */
+  shaken?: number;
 }
 
 /** Ein Begleiter des Bosses – eine normale Kreatur, die mitkämpft. */
@@ -477,8 +479,12 @@ export interface BattleState {
     empower?: ActiveBuff;
     /** Schildwall/Wutschrei: erlittener Schaden × (1 + percent) – negativ: weniger */
     damageTaken?: ActiveBuff;
-    /** Titanenschlag: Faktor auf den Schaden der nächsten Aktion */
+    /** Titanenschlag: Faktor auf den Schaden des nächsten normalen Angriffs */
     charged?: number;
+    /** Schattenschritt: Die nächste Aktion trifft sicher kritisch */
+    ambush?: boolean;
+    /** Finte: Der nächste normale Angriff trifft doppelt */
+    feint?: boolean;
     /** Arkane Heilung: heilt `percent` der max. LP am Rundenende */
     renew?: ActiveBuff;
     /** Gegenschlag: Faktor auf die Aktion nach dem Abwehren */
@@ -759,10 +765,20 @@ export function abilityCost(
   return Math.round(manaCost * Math.max(0, 1 - BLESSING.focus * stacks(state.blessings, "focus")) * skill);
 }
 
-/** Betäubt die Fähigkeit den Gegner? Manche nur mit einer Chance (Eisstrahl, Schockwelle) – Wuchtschlag und Kryomant erhöhen sie. */
-export function stunLands(ability: AbilityDef | null, rng: () => number, skills?: SkillRanks): boolean {
+/**
+ * Betäubt die Fähigkeit den Gegner? Manche nur mit einer Chance (Eisstrahl, Schockwelle) – Wuchtschlag und
+ * Kryomant erhöhen sie. Der Eisstrahl friert brennende Gegner öfter ein (`burning`).
+ */
+export function stunLands(ability: AbilityDef | null, rng: () => number, skills?: SkillRanks, burning = false): boolean {
   if (!ability?.stun) return false;
-  return ability.stunChance === undefined || rng() < skillStunChance(skills, ability.stunChance, !!ability.freeze);
+  const chance = burning && ability.freezeVsBurning ? ability.freezeVsBurning : ability.stunChance;
+  return chance === undefined || rng() < skillStunChance(skills, chance, !!ability.freeze);
+}
+
+/** Raserei: unter halben LP mehr Treffer. */
+export function abilityHits(ability: AbilityDef | null, hp: number, maxHp: number): number {
+  if (!ability) return 1;
+  return ability.frenzyHits && hp < maxHp * 0.5 ? ability.frenzyHits : (ability.hits ?? 1);
 }
 
 /**
@@ -806,6 +822,7 @@ const tickEnemyEffects = (fx: EnemyEffects): EnemyEffects => ({
   stunImmunity: tickStunImmunity(fx.stunImmunity),
   ...(fx.dazed !== undefined && { dazed: tickMark(fx.dazed) }),
   ...(fx.chilled !== undefined && { chilled: tickMark(fx.chilled) }),
+  ...(fx.shaken !== undefined && { shaken: tickMark(fx.shaken) }),
 });
 
 /**
@@ -895,9 +912,17 @@ export function attackRound(
     const weapon = ability?.weapon ?? state.heroWeapon;
     return weapon ? WEAPON_KIND[weapon] : null;
   })();
-  // Titanenschlag: Die Aktion nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
-  const charge = heroEffects.charged ?? 1;
-  if (heroEffects.charged) heroEffects = { ...heroEffects, charged: undefined };
+  // Titanenschlag: Der nächste normale Angriff nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
+  const plainAttack = !ability && !defending;
+  const charge = plainAttack ? (heroEffects.charged ?? 1) : 1;
+  if (plainAttack && heroEffects.charged) heroEffects = { ...heroEffects, charged: undefined };
+  // Schattenschritt: Die nächste Aktion trifft sicher kritisch – Finte: der nächste normale Angriff doppelt
+  const ambush = !defending && !!heroEffects.ambush;
+  if (ambush) heroEffects = { ...heroEffects, ambush: undefined };
+  const feint = plainAttack && !!heroEffects.feint;
+  if (feint) heroEffects = { ...heroEffects, feint: undefined };
+  /** Wuchtiger Schlag hat den Boss getroffen – das bricht sein Aufladen ab */
+  let interruptHit = false;
   // Gegenschlag: Die Aktion nach dem Abwehren macht mehr Schaden – wer wieder abwehrt, lädt ihn neu
   const riposte = heroEffects.riposte ?? 1;
   if (heroEffects.riposte) heroEffects = { ...heroEffects, riposte: undefined };
@@ -996,6 +1021,8 @@ export function attackRound(
     }
     if (ability.damageTaken) heroEffects = { ...heroEffects, damageTaken: { percent: ability.damageTaken.percent, roundsLeft: ability.damageTaken.rounds } };
     if (ability.charge) heroEffects = { ...heroEffects, charged: ability.charge };
+    if (ability.ambush) heroEffects = { ...heroEffects, ambush: true };
+    if (ability.feint) heroEffects = { ...heroEffects, feint: true };
     if (ability.renew) heroEffects = { ...heroEffects, renew: { percent: ability.renew.percent, roundsLeft: ability.renew.rounds } };
     if (ability.manaGain) mana = Math.min(state.maxMana, mana + ability.manaGain);
     // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner (nicht auf einen abgetauchten Boss)
@@ -1005,6 +1032,13 @@ export function attackRound(
         foe.fx = { ...foe.fx, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
       }
       if (ability.armorBreak) foe.fx = { ...foe.fx, armorBreak: ability.armorBreak };
+      // Fluch der Schwäche: Gift und Feuer auf dem Ziel halten länger
+      if (ability.extendDots) {
+        for (const kind of ["poison", "burn"] as const) {
+          const dot = foe.fx[kind];
+          if (dot) foe.fx = { ...foe.fx, [kind]: { ...dot, roundsLeft: dot.roundsLeft + ability.extendDots } };
+        }
+      }
       for (const kind of OVER_TIME) {
         const effect = ability[kind];
         if (effect) applyDot(foe, kind, strong.damage * effect.percent, effect.rounds);
@@ -1040,8 +1074,15 @@ export function attackRound(
     const finisher = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
     // Turm-Segen „Henker“: mehr Schaden gegen angeschlagene Gegner
     const headsman = foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(state.blessings, "executioner") : 1;
-    // Ausbluten: mehr Schaden gegen blutende Gegner
-    const execute = finisher * headsman * (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1);
+    // Ausbluten: mehr Schaden gegen blutende Gegner, Heiliger Hammer gegen erschütterte
+    const execute =
+      finisher *
+      headsman *
+      (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1) *
+      (ability?.shakenBonus && foe.fx.shaken ? 1 + ability.shakenBonus : 1);
+    // Schattenschritt: sicher kritisch – Richterstoss: stärker gegen einen aufladenden Boss
+    const sureCrit = ambush;
+    const charging = ability?.chargingBonus && foe === boss && turn?.intent === "charging" ? 1 + ability.chargingBonus : 1;
     const taken = takenBy(foe);
     // Schwäche oder Resistenz gegen die Schadensart der Waffe – „Runenklinge“ zählt auch als Magie, wenn das wirksamer ist
     const kind =
@@ -1079,13 +1120,13 @@ export function attackRound(
       ? {
           ...strong,
           damage:
-            strong.damage * ability.multiplier * execute * charge * vulnerableOf(foe) * share * direct * kindFactor * itemFactor * skillFactor,
-          critChance: ability.guaranteedCrit ? 1 : critChance,
+            strong.damage * ability.multiplier * execute * charge * charging * vulnerableOf(foe) * share * direct * kindFactor * itemFactor * skillFactor,
+          critChance: ability.guaranteedCrit || sureCrit ? 1 : critChance,
         }
       : {
           ...strong,
           damage: strong.damage * headsman * charge * share * vulnerableOf(foe) * direct * kindFactor * itemFactor * skillFactor,
-          critChance,
+          critChance: sureCrit ? 1 : critChance,
         };
     const heroHit = rollHit(attacker, { ...foe.c, armor: armorOf(foe) }, rng, rankIn(skills, "piercing") > 0);
     // Das offene Höhlenauge wirft Fähigkeiten zurück – der Held erleidet einen Teil, das Auge nichts
@@ -1101,6 +1142,7 @@ export function attackRound(
     const damage = heroHit.damage - absorbed;
     if (foe === boss) heroHitsOnBoss++;
     else if (foe.add) hitAdds.add(foe.add);
+    if (foe === boss && ability?.interrupt) interruptHit = true;
     dealtByHero += Math.min(foe.c.hp, damage);
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - damage) };
     events.push({
@@ -1151,7 +1193,7 @@ export function attackRound(
   };
   // Wer abwehrt, greift nicht an
   const volley = () => {
-    for (let i = 0; i < (defending ? 0 : (ability?.hits ?? 1)) && boss.c.hp > 0 && hero.hp > 0; i++) {
+    for (let i = 0; i < (defending ? 0 : abilityHits(ability, hero.hp, hero.maxHp)) && boss.c.hp > 0 && hero.hp > 0; i++) {
       if (aoe === "all") {
         for (const foe of living()) strike(foe);
       } else if (aoe === "spread") {
@@ -1171,8 +1213,9 @@ export function attackRound(
     volley();
     echoShare = 1;
   }
+  // Finte: Der normale Angriff trifft ein zweites Mal
+  if (feint && target.c.hp > 0 && boss.c.hp > 0) strike(target);
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
-  const plainAttack = !ability && !defending;
   if (plainAttack && state.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
   // Item-Effekt „Kettenblitz“: Ein normaler Angriff springt auf einen zweiten Gegner über
   if (plainAttack && hasEffect(effects, "chainLightning") && boss.c.hp > 0 && rng() < EFFECT.chainLightning.chance) {
@@ -1252,11 +1295,15 @@ export function attackRound(
   const stunned = new Set<Foe>();
   if (boss.c.hp > 0 && hero.hp > 0) {
     // Ein abgetauchter Boss ist auch nicht zu betäuben
-    for (const foe of aoe === "all" ? living() : [target]) if (foe.c.hp > 0 && !(foe === boss && hidden) && stunLands(ability, rng, skills)) stunned.add(foe);
+    for (const foe of aoe === "all" ? living() : [target]) {
+      if (foe.c.hp > 0 && !(foe === boss && hidden) && stunLands(ability, rng, skills, !!foe.fx.burn)) stunned.add(foe);
+    }
     for (const foe of frozenByItem) if (foe.c.hp > 0) stunned.add(foe);
   }
   /** Skills: Betäubte (Erschütterung) und Eingefrorene (Kryomant, Schmelzen) sind in der Runde danach markiert */
   const markStunned = (foe: Foe) => {
+    // Erschüttert: zählt in den 2 Runden danach (Heiliger Hammer)
+    foe.fx = { ...foe.fx, shaken: 3 };
     if (rankIn(skills, "concussion") > 0) foe.fx = { ...foe.fx, dazed: 2 };
     const frozen = frozenByItem.has(foe) || !!ability?.freeze;
     if (frozen && (rankIn(skills, "cryomancer") > 0 || rankIn(skills, "melt") > 0)) foe.fx = { ...foe.fx, chilled: 2 };
@@ -1586,7 +1633,8 @@ export function attackRound(
           heroHits: heroHitsOnBoss,
           damageTaken: bossDamageTaken,
           bossMaxHp: boss.c.maxHp,
-          stunned: bossStunned,
+          // Wuchtiger Schlag bricht das Aufladen ab wie eine Betäubung
+          stunned: bossStunned || interruptHit,
           bossHp: boss.c.hp,
           heroAbility: !!ability,
           addsDown,

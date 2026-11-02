@@ -42,6 +42,7 @@ import {
   DEFEND_DAMAGE_TAKEN,
   DEFEND_MANA,
   EMPTY_CHEST,
+  abilityHits,
   freezeFlag,
   rollBattleReward,
   rollHit,
@@ -452,6 +453,8 @@ export type CoopEnemyEffects = Partial<Record<OverTimeKind, SourcedDot>> & {
   /** Betäubt bzw. eingefroren – zählt in der Runde danach (Erschütterung, Kryomant, Schmelzen) */
   dazed?: number;
   chilled?: number;
+  /** Erschüttert: in den letzten 2 Runden betäubt – für den Heiligen Hammer */
+  shaken?: number;
 };
 
 /** Ein Begleiter des Bosses – seine `uid` ist zugleich seine Id in Ereignissen. */
@@ -504,8 +507,12 @@ export interface CoopHero {
     empower?: ActiveBuff;
     /** Schildwall/Wutschrei: erlittener Schaden × (1 + percent) – negativ: weniger */
     damageTaken?: ActiveBuff;
-    /** Titanenschlag: Faktor auf den Schaden der nächsten Aktion */
+    /** Titanenschlag: Faktor auf den Schaden des nächsten normalen Angriffs */
     charged?: number;
+    /** Schattenschritt: Die nächste Aktion trifft sicher kritisch */
+    ambush?: boolean;
+    /** Finte: Der nächste normale Angriff trifft doppelt */
+    feint?: boolean;
     /** Arkane Heilung: heilt `percent` der max. LP am Rundenende */
     renew?: ActiveBuff;
     /** Gegenschlag: Faktor auf die Aktion nach dem Abwehren */
@@ -1045,6 +1052,7 @@ function tickEnemyEffects(fx: CoopEnemyEffects): CoopEnemyEffects {
     stunImmunity: tickStunImmunity(fx.stunImmunity),
     ...(fx.dazed !== undefined && { dazed: mark(fx.dazed) }),
     ...(fx.chilled !== undefined && { chilled: mark(fx.chilled) }),
+    ...(fx.shaken !== undefined && { shaken: mark(fx.shaken) }),
   };
 }
 
@@ -1176,6 +1184,8 @@ export function resolveRound(
 
   /** Pro Held die in dieser Runde eingesetzte Fähigkeit (für die Abklingzeit) */
   const used = new Map<string, { id: AbilityId; cooldown: number }>();
+  /** Ein Wuchtiger Schlag hat den Boss getroffen – das bricht sein Aufladen ab */
+  let interruptHit = false;
 
   // 1. Die Helden handeln der Reihe nach.
   for (const hero of heroes) {
@@ -1277,9 +1287,14 @@ export function resolveRound(
     // Schadensart: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe (matchups.ts)
     const heroWeapon = ability?.weapon ?? hero.weapon;
     const heroKind = ability?.kind ?? (heroWeapon ? WEAPON_KIND[heroWeapon] : null);
-    // Titanenschlag: Die Aktion nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
-    const charge = hero.effects.charged ?? 1;
-    hero.effects.charged = undefined;
+    // Titanenschlag: Der nächste normale Angriff nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
+    const charge = ability ? 1 : (hero.effects.charged ?? 1);
+    if (!ability) hero.effects.charged = undefined;
+    // Schattenschritt: Die nächste Aktion trifft sicher kritisch – Finte: der nächste normale Angriff doppelt
+    const ambush = !!hero.effects.ambush;
+    hero.effects.ambush = undefined;
+    const feint = !ability && !!hero.effects.feint;
+    if (feint) hero.effects.feint = undefined;
     // Ziel: ein lebender Begleiter – sonst der Boss
     const target = adds.find((f) => f.id === action.target && f.c.hp > 0) ?? boss;
     const plain = buffed(hero);
@@ -1328,6 +1343,8 @@ export function resolveRound(
       }
       if (ability.damageTaken) hero.effects.damageTaken = { percent: ability.damageTaken.percent, roundsLeft: ability.damageTaken.rounds };
       if (ability.charge) hero.effects.charged = ability.charge;
+      if (ability.ambush) hero.effects.ambush = true;
+      if (ability.feint) hero.effects.feint = true;
       if (ability.manaGain) hero.mana = Math.min(hero.maxMana, hero.mana + ability.manaGain);
       if (ability.taunt) taunts.push(hero);
       // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner
@@ -1337,7 +1354,14 @@ export function resolveRound(
           foe.fx = { ...foe.fx, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
         }
         if (ability.armorBreak) foe.fx = { ...foe.fx, armorBreak: ability.armorBreak };
-        if (stunLands(ability, rng, skills)) stunAttempts.set(foe, { ability, hero });
+        if (stunLands(ability, rng, skills, !!foe.fx.burn)) stunAttempts.set(foe, { ability, hero });
+        // Fluch der Schwäche: Gift und Feuer auf dem Ziel halten länger
+        if (ability.extendDots) {
+          for (const kind of ["poison", "burn"] as const) {
+            const dot = foe.fx[kind];
+            if (dot) foe.fx = { ...foe.fx, [kind]: { ...dot, roundsLeft: dot.roundsLeft + ability.extendDots } };
+          }
+        }
         for (const kind of OVER_TIME) {
           const effect = ability[kind];
           if (effect) applyDot(foe, kind, strong.damage * effect.percent, effect.rounds, hero.id);
@@ -1349,12 +1373,16 @@ export function resolveRound(
       }
     }
     let dealt = 0;
+    /** Getroffene Gegner dieses Helden */
+    const dealtTo = new Set<Foe>();
     /** Ein Treffer des Helden – `share` < 1 bei Splash-Schaden auf Umstehende. */
     const strike = (foe: Foe, share = 1) => {
       // Finisher (Meucheln), Ausbluten und Verwundbarkeit des Gegners
       const execute =
         (ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1) *
         (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1) *
+        // Heiliger Hammer: mehr Schaden gegen erschütterte Gegner
+        (ability?.shakenBonus && foe.fx.shaken ? 1 + ability.shakenBonus : 1) *
         // Segen „Henker“: mehr Schaden gegen angeschlagene Gegner
         (foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(hero.blessings, "executioner") : 1);
       const vulnerable = 1 + (foe.fx.vulnerable?.percent ?? 0);
@@ -1390,14 +1418,21 @@ export function resolveRound(
       const critChance = strong.critChance + effectCritBonus(effects, foeBoss) + skillCritBonus(skills, foeState);
       // Panzerplatten des Erzkönigs – nur direkte Treffer auf den Boss
       const plate = foe === boss ? plateFactor(plates) : 1;
+      // Schattenschritt: sicher kritisch – Richterstoss: stärker gegen einen aufladenden Boss
+      const sureCrit = ambush;
+      const charging = ability?.chargingBonus && foe === boss && turn?.intent === "charging" ? 1 + ability.chargingBonus : 1;
       const attacker: Combatant = ability
         ? {
             ...strong,
             damage:
-              strong.damage * ability.multiplier * execute * charge * vulnerable * share * taken * plate * kindFactor * itemFactor * skillFactor,
-            critChance: ability.guaranteedCrit ? 1 : critChance,
+              strong.damage * ability.multiplier * execute * charge * charging * vulnerable * share * taken * plate * kindFactor * itemFactor * skillFactor,
+            critChance: ability.guaranteedCrit || sureCrit ? 1 : critChance,
           }
-        : { ...strong, damage: strong.damage * charge * share * vulnerable * taken * plate * kindFactor * itemFactor * skillFactor, critChance };
+        : {
+            ...strong,
+            damage: strong.damage * charge * share * vulnerable * taken * plate * kindFactor * itemFactor * skillFactor,
+            critChance: sureCrit ? 1 : critChance,
+          };
       const armor = ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0)));
       const rolled = rollHit(attacker, { ...foe.c, armor }, rng, rankIn(skills, "piercing") > 0);
       // Der Schild des Schildträgers schluckt direkte Treffer auf den Boss
@@ -1410,6 +1445,7 @@ export function resolveRound(
         addHitters.set(foe.id, [...(addHitters.get(foe.id) ?? []), hero]);
       }
       dealt += Math.min(foe.c.hp, hit.damage);
+      dealtTo.add(foe);
       foe.c.hp = Math.max(0, foe.c.hp - hit.damage);
       hero.threat += rolled.damage * threatFactor;
       events.push({
@@ -1460,7 +1496,7 @@ export function resolveRound(
       addDown(foe);
     };
     const volley = () => {
-      for (let i = 0; i < (ability?.hits ?? 1) && boss.c.hp > 0; i++) {
+      for (let i = 0; i < abilityHits(ability, hero.combatant.hp, hero.combatant.maxHp) && boss.c.hp > 0; i++) {
         if (aoe === "all") {
           for (const foe of living()) strike(foe);
         } else if (aoe === "spread") {
@@ -1479,6 +1515,10 @@ export function resolveRound(
       echoShare = SKILL.echo.share;
       volley();
     }
+    // Finte: Der normale Angriff trifft ein zweites Mal
+    if (feint && target.c.hp > 0 && boss.c.hp > 0) strike(target);
+    // Wuchtiger Schlag hat den Boss getroffen – das bricht sein Aufladen ab
+    if (ability?.interrupt && dealtTo.has(boss)) interruptHit = true;
     // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
     if (!ability && hero.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
     // Item-Effekt „Kettenblitz“: Ein normaler Angriff springt auf einen zweiten Gegner über
@@ -1610,6 +1650,8 @@ export function resolveRound(
         foe.fx = { ...foe.fx, stunImmunity: freshStunImmunity() };
         // Skills des Betäubenden: Erschütterung und Kryomant/Schmelzen markieren, Unterbrecher gibt Mana
         const by = attempt?.hero ?? frozenByItem.get(foe)!;
+        // Erschüttert: zählt in den 2 Runden danach (Heiliger Hammer)
+        foe.fx = { ...foe.fx, shaken: 3 };
         if (rankIn(by.skills, "concussion") > 0) foe.fx = { ...foe.fx, dazed: 2 };
         const freezing = frozen || !!attempt?.ability.freeze;
         if (freezing && (rankIn(by.skills, "cryomancer") > 0 || rankIn(by.skills, "melt") > 0)) foe.fx = { ...foe.fx, chilled: 2 };
@@ -1910,7 +1952,8 @@ export function resolveRound(
           heroHits: heroHitsOnBoss,
           damageTaken: bossDamageTaken,
           bossMaxHp: boss.c.maxHp,
-          stunned: bossStunned,
+          // Wuchtiger Schlag bricht das Aufladen ab wie eine Betäubung
+          stunned: bossStunned || interruptHit,
           bossHp: boss.c.hp,
           abilitiesUsed,
           staticMax: COOP_STATIC_PER_HERO * heroes.length,

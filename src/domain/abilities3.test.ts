@@ -52,14 +52,14 @@ describe("Neue Fähigkeiten: Wirkung im Solo-Kampf", () => {
     expect(plain.find((e) => e.type === "hit" && e.attacker === "hero")).not.toHaveProperty("matchup");
   });
 
-  it("Läuterung heilt und entfernt Gift, Feuer und Bluten – ohne anzugreifen", () => {
+  it("Läuterung schlägt zu, heilt und entfernt Gift, Feuer und Bluten", () => {
     const base = battleWith(["mace-30"]);
     const sick = { ...base, heroEffects: { poison: { damage: 50, roundsLeft: 3 }, bleed: { damage: 50, roundsLeft: 2 } } };
     const { state, events } = round(sick, "mace-3");
     expect(events).toContainEqual({ type: "cleansed" });
     expect(events.some((e) => e.type === "poison" || e.type === "bleed")).toBe(false);
     expect(state.heroEffects.poison).toBeUndefined();
-    expect(dealt(events)).toBe(0);
+    expect(dealt(events)).toBeGreaterThan(0);
     expect(events.some((e) => e.type === "selfHeal")).toBe(true);
   });
 
@@ -84,20 +84,65 @@ describe("Neue Fähigkeiten: Wirkung im Solo-Kampf", () => {
     near(dealt(round(shout.state).events), dealt(plain.events) * 1.4);
   });
 
-  it("Ausbluten: +60 % gegen blutende Gegner", () => {
-    const base = battleWith(["greataxe-30"]);
+  it("Ausbluten (Axt): +60 % gegen blutende Gegner", () => {
+    const base = battleWith(["axe-30"]);
     const bleeding = { ...base, enemyEffects: { bleed: { damage: 1, roundsLeft: 3 } } };
-    near(dealt(round(bleeding, "greataxe-6").events) - 1, dealt(round(base, "greataxe-6").events) * 1.6 - 1);
+    near(dealt(round(bleeding, "axe-4").events) - 1, dealt(round(base, "axe-4").events) * 1.6 - 1);
   });
 
-  it("Titanenschlag: erst ausholen, dann dreifacher Schaden – nur einmal", () => {
+  it("Raserei: drei Hiebe, unter halben LP vier", () => {
+    const base = battleWith(["greataxe-30"]);
+    const hits = (state: BattleState) => round(state, "greataxe-6").events.filter((e) => e.type === "hit" && e.attacker === "hero").length;
+    expect(hits(base)).toBe(3);
+    expect(hits({ ...base, hero: { ...base.hero, hp: 40_000 } })).toBe(4);
+  });
+
+  it("Schattenschritt: Der nächste Angriff trifft sicher kritisch", () => {
+    const shadow = round(battleWith(["dagger-30"]), "dagger-4");
+    expect(shadow.state.heroEffects.ambush).toBe(true);
+    const next = round(shadow.state);
+    expect(next.events.find((e) => e.type === "hit" && e.attacker === "hero")).toMatchObject({ crit: true });
+    expect(next.state.heroEffects.ambush).toBeUndefined();
+  });
+
+  it("Finte: Der nächste normale Angriff trifft doppelt", () => {
+    const base = battleWith(["sword-30"]);
+    const plain = dealt(round(base).events);
+    const feinted = round(base, "sword-3");
+    expect(feinted.state.heroEffects.feint).toBe(true);
+    near(dealt(round(feinted.state).events), plain * 2);
+  });
+
+  it("Heiliger Hammer: +30 % gegen erschütterte Gegner", () => {
+    const base = battleWith(["mace-30"]);
+    const shaken = { ...base, enemyEffects: { shaken: 2 } };
+    near(dealt(round(shaken, "mace-4").events), dealt(round(base, "mace-4").events) * 1.3);
+  });
+
+  it("Fluch der Schwäche: Gift und Feuer halten 1 Runde länger", () => {
+    const base = battleWith(["scepter-30"]);
+    const sick = { ...base, enemyEffects: { poison: { damage: 10, roundsLeft: 2 }, burn: { damage: 10, roundsLeft: 2 } } };
+    const { state } = round(sick, "scepter-2");
+    expect(state.enemyEffects.poison?.roundsLeft).toBe(2);
+    expect(state.enemyEffects.burn?.roundsLeft).toBe(2);
+  });
+
+  it("Mordschlag zählt als Wucht", () => {
+    const { events } = round(battleWith(["greatsword-30"], "stone-golem"), "greatsword-6");
+    const hit = events.find((e) => e.type === "hit" && e.attacker === "hero");
+    expect(hit).toMatchObject({ matchup: "weak" });
+  });
+
+  it("Titanenschlag: erst ausholen, dann macht der nächste normale Angriff 3,5-fachen Schaden – nur einmal", () => {
     const base = battleWith(["greathammer-30"]);
     const plain = dealt(round(base).events);
     const charging = round(base, "greathammer-6");
     expect(dealt(charging.events)).toBe(0);
-    expect(charging.state.heroEffects.charged).toBe(3);
+    expect(charging.state.heroEffects.charged).toBe(3.5);
+    // Fähigkeiten verbrauchen das Ausholen nicht
+    expect(round(charging.state, "greathammer").state.heroEffects.charged).toBe(3.5);
     const smash = round(charging.state);
-    near(dealt(smash.events), plain * 3);
+    near(dealt(smash.events), plain * 3.5);
     expect(smash.state.heroEffects.charged).toBeUndefined();
     near(dealt(round(smash.state).events), plain);
   });
@@ -155,9 +200,9 @@ describe("Neue Fähigkeiten im Koop", () => {
     expect(a.effects.damageTaken).toMatchObject({ percent: -0.5 });
   });
 
-  it("Titanenschlag wirkt auch im Koop auf die nächste Aktion", () => {
+  it("Titanenschlag wirkt auch im Koop auf den nächsten normalen Angriff", () => {
     const first = resolveRound(coop(["greathammer-30"]), { a: { ability: "greathammer-6" } }, rng(0.5), 0);
-    expect(first.state.heroes.find((h) => h.id === "a")!.effects.charged).toBe(3);
+    expect(first.state.heroes.find((h) => h.id === "a")!.effects.charged).toBe(3.5);
     const second = resolveRound(first.state, {}, rng(0.5), 0);
     expect(second.state.heroes.find((h) => h.id === "a")!.effects.charged).toBeUndefined();
   });

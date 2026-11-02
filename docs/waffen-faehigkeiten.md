@@ -52,28 +52,28 @@ Der Item-Effekt „Kettenblitz“ traf den zweiten Gegner mit vollem statt 60 % 
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
-| 🗡️ | Hinterhältiger Stoss | 20 | 1 | Ein gezielter Stich – trifft immer kritisch. |
+| 🗡️ | **Hinterhältiger Stoss** (geändert) | 20 | 2 | Ein gezielter Stich mit 1,4-fachem Schaden – trifft immer kritisch. |
 | 🩸 | Meucheln | 30 | 2 | Ein Stich ins Herz: dreifacher Schaden, wenn der Gegner unter 30 % seiner Lebenspunkte ist. |
-| 🐍 | **Giftklinge** (neu) | 25 | 2 | Ein Stich mit vergifteter Klinge – der Gegner erleidet 3 Runden lang Giftschaden. |
-| 🌑 | **Schattenschritt** (neu) | 25 | 3 | Ein Stich, dann verschwindest du in den Schatten: Der nächste gegnerische Angriff geht komplett ins Leere. |
+| 🐍 | Giftklinge | 25 | 2 | Ein Stich mit vergifteter Klinge – der Gegner erleidet 3 Runden lang Giftschaden. |
+| 🌑 | **Schattenschritt** (geändert) | 25 | 3 | Ein Stich, dann verschwindest du in den Schatten: Der nächste gegnerische Angriff geht komplett ins Leere – und dein nächster Angriff trifft sicher kritisch. |
 
 ### Schwert (4)
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
-| 🌀 | Schwertwirbel | 25 | 1 | Drei schnelle Hiebe – jeder kann kritisch treffen. Bei mehreren Gegnern trifft jeder Hieb einen zufälligen. |
+| 🌀 | **Schwertwirbel** (geändert) | 25 | 2 | Drei schnelle Hiebe – jeder kann kritisch treffen. Bei mehreren Gegnern trifft jeder Hieb einen zufälligen. |
 | 🤺 | Parade | 25 | 2 | Ein leichter Hieb, dann in Abwehrhaltung: Der nächste gegnerische Angriff macht nur halben Schaden und du konterst mit vollem Schaden. |
-| 🩸 | **Tiefe Wunde** (neu) | 30 | 2 | Ein tiefer Schnitt mit 1,3-fachem Schaden – der Gegner blutet 3 Runden lang. |
-| 🤚 | **Entwaffnen** (neu) | 25 | 3 | Ein Hieb gegen die Waffenhand: Der Gegner macht 2 Runden lang 30 % weniger Schaden. |
+| 🎭 | **Finte** (geändert) | 20 | 2 | Ein angedeuteter Stich lockt die Deckung des Gegners: Dein nächster normaler Angriff trifft doppelt. |
+| 🤚 | Entwaffnen | 25 | 3 | Ein Hieb gegen die Waffenhand: Der Gegner macht 2 Runden lang 30 % weniger Schaden. |
 
 ### Axt (4)
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
-| 🪓 | Axtwurf | 25 | 1 | Die geworfene Axt durchschlägt jede Rüstung. |
+| 🪓 | **Axtwurf** (geändert) | 25 | 2 | Die geworfene Axt durchschlägt jede Rüstung – 1,4-facher Schaden, der Gegner blutet 2 Runden lang. |
 | 🐺 | Zerfleischen | 30 | 2 | Zwei wilde Hiebe – der Gegner blutet 2 Runden lang. |
-| 🌪️ | **Hackwirbel** (neu) | 30 | 2 | Ein Wirbel aus Axthieben trifft alle Gegner mit 0,9-fachem Schaden. |
-| 🪵 | **Spaltschlag** (neu) | 25 | 3 | Ein Hieb mit 1,3-fachem Schaden, der die Rüstung spaltet: −25 % Rüstung des Gegners für den Rest des Kampfes. |
+| 🌪️ | Hackwirbel | 30 | 2 | Ein Wirbel aus Axthieben trifft alle Gegner mit 0,9-fachem Schaden. |
+| 🔪 | **Ausbluten** (geändert) | 30 | 2 | Ein Hieb mit 1,4-fachem Schaden in die offene Wunde – gegen blutende Gegner 60 % stärker. |
 
 ### Streitkolben (4)
 
@@ -81,17 +81,17 @@ Der Item-Effekt „Kettenblitz“ traf den zweiten Gegner mit vollem statt 60 % 
 |---|---|---|---|---|
 | 💫 | Betäubender Schlag | 30 | 3 | Betäubt den Gegner – er kann in dieser Runde nicht zurückschlagen. |
 | ✨ | Heiliges Licht | 35 | 4 | Heilt dich um 25 % deiner Lebenspunkte, dazu ein leichter Schlag. |
-| 🕊️ | **Läuterung** (neu) | 25 | 3 | Statt anzugreifen: Du heilst dich um 20 % deiner Lebenspunkte und befreist dich von Gift, Feuer und Bluten. |
-| 🌟 | **Heiliger Hammer** (neu) | 30 | 2 | Ein Schlag voll heiliger Kraft mit 1,4-fachem Schaden – er zählt als Magie statt als Wucht. |
+| 🕊️ | **Läuterung** (geändert) | 25 | 3 | Ein Schlag mit 0,8-fachem Schaden, dann heilst du dich um 15 % deiner Lebenspunkte und befreist dich von Gift, Feuer und Bluten. |
+| 🌟 | **Heiliger Hammer** (geändert) | 30 | 2 | Ein Schlag voll heiliger Kraft mit 1,4-fachem Schaden – er zählt als Magie statt als Wucht. Gegen erschütterte Gegner (in den letzten 2 Runden betäubt) 30 % stärker. |
 
 ### Zepter (4)
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
 | ☠️ | Giftstrahl | 25 | 2 | Vergiftet den Gegner: 3 Runden Giftschaden, der Rüstung ignoriert. |
-| 🕯️ | Fluch der Schwäche | 30 | 4 | Verflucht den Gegner für 3 Runden: Er macht 30 % weniger Schaden und erleidet 20 % mehr. |
-| 🟣 | **Seelenfeuer** (neu) | 30 | 2 | Dunkles Feuer mit 0,7-fachem Schaden, das Rüstung ignoriert – der Gegner brennt 3 Runden lang. |
-| 🧪 | **Lebensentzug** (neu) | 35 | 3 | Saugt dem Gegner das Leben aus: 1,5-facher Schaden, der Rüstung ignoriert – du heilst dich um die Hälfte davon. |
+| 🕯️ | **Fluch der Schwäche** (geändert) | 30 | 4 | Verflucht den Gegner für 3 Runden: Er macht 30 % weniger Schaden und erleidet 20 % mehr. Gift und Feuer auf ihm halten 1 Runde länger. |
+| 🟣 | Seelenfeuer | 30 | 2 | Dunkles Feuer mit 0,7-fachem Schaden, das Rüstung ignoriert – der Gegner brennt 3 Runden lang. |
+| 🧪 | Lebensentzug | 35 | 3 | Saugt dem Gegner das Leben aus: 1,5-facher Schaden, der Rüstung ignoriert – du heilst dich um die Hälfte davon. |
 
 ### Schild (4)
 
@@ -99,41 +99,41 @@ Der Item-Effekt „Kettenblitz“ traf den zweiten Gegner mit vollem statt 60 % 
 |---|---|---|---|---|
 | 🛡️ | Bollwerk | 20 | 3 | Statt anzugreifen hinter dem Schild verschanzen: Der nächste gegnerische Angriff wird komplett geblockt. |
 | 🔁 | Vergeltung | 25 | 3 | Statt anzugreifen: Der nächste gegnerische Angriff macht nur halben Schaden – und der volle Schaden trifft den Angreifer. |
-| 💢 | **Schildstoss** (neu) | 25 | 3 | Ein Stoss mit dem Schildrand – mit 60 % Chance ist der Gegner betäubt und kann nicht zurückschlagen. |
-| 🧱 | **Schildwall** (neu) | 30 | 4 | Ein Schildhieb mit 0,6-fachem Schaden, dann gehst du in Deckung: 3 Runden lang erleidest du 50 % weniger Schaden. Im Koop ziehst du die Aufmerksamkeit der Gegner auf dich. |
+| 💢 | Schildstoss | 25 | 3 | Ein Stoss mit dem Schildrand – mit 60 % Chance ist der Gegner betäubt und kann nicht zurückschlagen. |
+| 🧱 | Schildwall | 30 | 4 | Ein Schildhieb mit 0,6-fachem Schaden, dann gehst du in Deckung: 3 Runden lang erleidest du 50 % weniger Schaden. Im Koop ziehst du die Aufmerksamkeit der Gegner auf dich. |
 
 ### Zweihandschwert (6)
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
-| ⚖️ | Richterstoss | 35 | 2 | Ein gewaltiger Stoss mit 2,3-fachem Schaden. |
+| ⚖️ | **Richterstoss** (geändert) | 35 | 2 | Ein gewaltiger Stoss mit 2,3-fachem Schaden – gegen einen Gegner, der gerade auflädt, 30 % stärker. |
 | 📯 | Kriegsschrei | 30 | 4 | Ein Hieb mit lautem Schrei: In den nächsten 3 Runden machst du 25 % mehr Schaden. |
 | 🌪️ | Klingensturm | 40 | 4 | Zwei wuchtige Hiebe gegen alle Gegner – jeder kann kritisch treffen. Danach erleiden sie 2 Runden lang 10 % mehr Schaden. |
-| ✖️ | **Kreuzhieb** (neu) | 35 | 2 | Zwei gekreuzte Hiebe mit je 0,9-fachem Schaden – jeder kann kritisch treffen, der Gegner blutet 2 Runden lang. |
-| 🗡️ | **Konterstellung** (neu) | 30 | 3 | Ein Hieb, dann in Stellung: Der nächste gegnerische Angriff macht 40 % weniger Schaden und du konterst mit 1,5-fachem Schaden. |
-| 🦁 | **Heldenmut** (neu) | 35 | 4 | Ein Hieb voller Heldenmut: Du heilst dich um 15 % deiner Lebenspunkte und machst in den nächsten 2 Runden 15 % mehr Schaden. |
+| ✖️ | **Kreuzhieb** (geändert) | 35 | 2 | Zwei gekreuzte Hiebe mit je vollem Schaden – jeder kann kritisch treffen. |
+| 🗡️ | Konterstellung | 30 | 3 | Ein Hieb, dann in Stellung: Der nächste gegnerische Angriff macht 40 % weniger Schaden und du konterst mit 1,5-fachem Schaden. |
+| 🔃 | **Mordschlag** (geändert) | 30 | 3 | Du packst die Klinge und schlägst mit dem Knauf zu: 1,2-facher Schaden, der als Wucht statt als Klinge zählt – mit 30 % Chance ist der Gegner betäubt. |
 
 ### Grossaxt (6)
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
-| 💥 | Spalter | 30 | 3 | Ein Hieb mit 1,2-fachem Schaden, der die Panzerung spaltet: −20 % Rüstung des Gegners für den Rest des Kampfes, dazu blutet er 3 Runden lang. Umstehende Gegner erleiden halben Schaden. |
+| 💥 | **Spalter** (geändert) | 30 | 3 | Ein Hieb mit 1,4-fachem Schaden – der Gegner blutet 3 Runden lang, umstehende Gegner erleiden halben Schaden. |
 | 🧛 | Blutrausch | 35 | 3 | Ein rasender Hieb mit 1,6-fachem Schaden – du heilst dich um 40 % des Schadens. |
 | 💀 | Enthaupten | 35 | 3 | Ein Hieb mit 1,3-fachem Schaden – 2,5-fach so stark, wenn der Gegner unter 30 % seiner Lebenspunkte ist. |
-| 🌀 | **Wirbelwind** (neu) | 40 | 3 | Zwei kreisende Hiebe gegen alle Gegner mit je 0,7-fachem Schaden – jeder kann kritisch treffen. |
-| 😤 | **Wutschrei** (neu) | 25 | 4 | Ein Hieb mit wildem Schrei: In den nächsten 3 Runden machst du 40 % mehr Schaden – aber du erleidest ab sofort 20 % mehr. |
-| 🔪 | **Ausbluten** (neu) | 30 | 2 | Ein Hieb mit 1,4-fachem Schaden in die offene Wunde – gegen blutende Gegner 60 % stärker. |
+| 🌀 | Wirbelwind | 40 | 3 | Zwei kreisende Hiebe gegen alle Gegner mit je 0,7-fachem Schaden – jeder kann kritisch treffen. |
+| 😤 | Wutschrei | 25 | 4 | Ein Hieb mit wildem Schrei: In den nächsten 3 Runden machst du 40 % mehr Schaden – aber du erleidest ab sofort 20 % mehr. |
+| 🔥 | **Raserei** (geändert) | 35 | 3 | Drei wilde Hiebe mit je 0,6-fachem Schaden – jeder kann kritisch treffen. Unter 50 % deiner Lebenspunkte sind es vier. |
 
 ### Grosshammer (6)
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
-| 🔨 | Wuchtiger Schlag | 40 | 2 | Ein vernichtender Hieb mit 2,2-fachem Schaden. |
+| 🔨 | **Wuchtiger Schlag** (geändert) | 40 | 2 | Ein vernichtender Hieb mit 2,2-fachem Schaden – er bricht das Aufladen eines Gegners immer ab. |
 | 🌋 | Erdbeben | 40 | 3 | Der Boden bebt unter allen Gegnern: voller Schaden, der Rüstung ignoriert – sie machen 2 Runden lang 30 % weniger Schaden. |
 | ⚡ | Schockwelle | 40 | 3 | Ein Schlag mit 1,5-fachem Schaden gegen alle Gegner – jeder ist mit 30 % Chance betäubt und kann nicht zurückschlagen. |
-| 🪨 | **Zertrümmern** (neu) | 35 | 3 | Ein Hieb mit 1,2-fachem Schaden, der die Panzerung zertrümmert: −25 % Rüstung des Gegners für den Rest des Kampfes. |
-| ⛰️ | **Unerschütterlich** (neu) | 30 | 4 | Statt anzugreifen: Du heilst dich um 15 % deiner Lebenspunkte, der nächste gegnerische Angriff macht nur halben Schaden. |
-| 🌋 | **Titanenschlag** (neu) | 45 | 4 | Statt anzugreifen holst du weit aus: Dein nächster Angriff oder deine nächste Fähigkeit macht dreifachen Schaden. |
+| 🪨 | Zertrümmern | 35 | 3 | Ein Hieb mit 1,2-fachem Schaden, der die Panzerung zertrümmert: −25 % Rüstung des Gegners für den Rest des Kampfes. |
+| ⛰️ | **Unerschütterlich** (geändert) | 30 | 4 | Statt anzugreifen: Du heilst dich um 15 % deiner Lebenspunkte, der nächste gegnerische Angriff macht nur halben Schaden – und du stösst mit halbem Schaden zurück. |
+| 🌋 | **Titanenschlag** (geändert) | 45 | 4 | Statt anzugreifen holst du weit aus: Dein nächster normaler Angriff macht 3,5-fachen Schaden. |
 
 ### Stab (6)
 
@@ -141,21 +141,22 @@ Der Item-Effekt „Kettenblitz“ traf den zweiten Gegner mit vollem statt 60 % 
 |---|---|---|---|---|
 | 🔥 | Feuerball | 40 | 2 | Ein Feuerball mit 1,9-fachem Schaden, der Rüstung ignoriert und den Gegner 2 Runden lang in Brand setzt. |
 | ☄️ | Meteor | 60 | 4 | Ein Meteor mit 2,3-fachem Schaden, der Rüstung ignoriert und das Ziel 3 Runden lang in Brand setzt. Umstehende Gegner erleiden halben Schaden. |
-| ❄️ | Eisstrahl | 40 | 3 | Ein eisiger Strahl mit 1,5-fachem Schaden, der Rüstung ignoriert – mit 40 % Chance friert der Gegner ein und setzt eine Runde aus. |
-| ⚡ | **Kettenblitz** (neu) | 40 | 3 | Ein Blitz mit 1,3-fachem Schaden, der Rüstung ignoriert – er springt auf alle anderen Gegner über (60 % Schaden). |
-| 💚 | **Arkane Heilung** (neu) | 40 | 4 | Statt anzugreifen: Du heilst dich sofort um 20 % deiner Lebenspunkte und 3 Runden lang um je 5 %. Im Koop heilt sie alle Mitspieler halb so stark. |
-| 🔮 | **Arkaner Schild** (neu) | 20 | 3 | Statt anzugreifen: Ein Schild aus Magie – der nächste gegnerische Angriff macht 60 % weniger Schaden, und du gewinnst 15 Mana zurück. |
+| ❄️ | **Eisstrahl** (geändert) | 40 | 3 | Ein eisiger Strahl mit 1,5-fachem Schaden, der Rüstung ignoriert – mit 40 % Chance friert der Gegner ein und setzt eine Runde aus, wenn er brennt sogar mit 60 %. |
+| ⚡ | Kettenblitz | 40 | 3 | Ein Blitz mit 1,3-fachem Schaden, der Rüstung ignoriert – er springt auf alle anderen Gegner über (60 % Schaden). |
+| 💚 | Arkane Heilung | 40 | 4 | Statt anzugreifen: Du heilst dich sofort um 20 % deiner Lebenspunkte und 3 Runden lang um je 5 %. Im Koop heilt sie alle Mitspieler halb so stark. |
+| 🔮 | Arkaner Schild | 20 | 3 | Statt anzugreifen: Ein Schild aus Magie – der nächste gegnerische Angriff macht 60 % weniger Schaden, und du gewinnst 15 Mana zurück. |
 
 ### Bogen (6)
 
 | | Fähigkeit | Mana | Abklingzeit | Wirkung |
 |---|---|---|---|---|
 | 🏹 | Pfeilhagel | 35 | 2 | Vier Pfeile regnen herab – jeder kann kritisch treffen. Bei mehreren Gegnern verteilen sie sich zufällig. |
-| 🎯 | Durchbohrender Schuss | 35 | 2 | Ein gezielter Schuss mit 1,8-fachem Schaden, der Rüstung durchschlägt – der Gegner blutet 2 Runden lang. |
+| 🎯 | **Durchbohrender Schuss** (geändert) | 35 | 2 | Ein gezielter Schuss mit 2-fachem Schaden, der Rüstung durchschlägt. |
 | 💨 | Ausweichschuss | 30 | 3 | Ein Schuss mit 1,2-fachem Schaden, dann Rückzug: Der nächste gegnerische Angriff macht 60 % weniger Schaden. |
-| 🟢 | **Giftpfeil** (neu) | 25 | 2 | Ein vergifteter Pfeil – der Gegner erleidet 3 Runden lang Giftschaden. |
-| 🔥 | **Brandpfeil** (neu) | 30 | 2 | Ein brennender Pfeil mit 1,1-fachem Schaden – der Gegner brennt 3 Runden lang. |
-| 🦅 | **Kopfschuss** (neu) | 40 | 4 | Ein Schuss genau zwischen die Augen: 1,5-facher Schaden, trifft immer kritisch. |
+| 🎯 | **Jägermal** (geändert) | 25 | 3 | Ein Schuss mit 0,8-fachem Schaden markiert die Beute: 3 Runden lang erleidet sie 20 % mehr Schaden. Im Koop trifft die ganze Gruppe härter. |
+| 🔥 | Brandpfeil | 30 | 2 | Ein brennender Pfeil mit 1,1-fachem Schaden – der Gegner brennt 3 Runden lang. |
+| 🦅 | Kopfschuss | 40 | 4 | Ein Schuss genau zwischen die Augen: 1,5-facher Schaden, trifft immer kritisch. |
+
 ## Abstimmung (Simulation)
 
 Weil jede Waffe eine zufällige Auswahl trägt, zählt vor allem, dass die Fähigkeiten eines Pools ähnlich
@@ -186,6 +187,65 @@ Der Balance-Test in `combat.test.ts` spielt den Champion mit einer durchschnittl
 seltener Ausrüstung nur etwa ein Drittel der Kämpfe – die Streuung zwischen Waffen ist gewollt.
 
 Simulation: Scratchpad `zzabil.test.ts`, Bericht mit `abilrep.cjs`.
+
+## Überarbeitung: passender zur Waffe (2026-11-02)
+
+Die Pools bleiben gleich gross. Jede Fähigkeit soll zum Thema ihrer Waffe passen, Mechaniken gehören möglichst
+einer Waffe:
+
+- **Rüstung brechen** nur noch beim Grosshammer (Zertrümmern). Spalter und Spaltschlag haben es verloren.
+- **Bluten** gehört Axt und Grossaxt. Tiefe Wunde (Schwert), Kreuzhieb und Durchbohrender Schuss lassen nicht mehr bluten.
+- **Gift** nur noch bei Dolch und Zepter – der Giftpfeil ist weg.
+- **Abklingzeit 1** gibt es nicht mehr: Hinterhältiger Stoss, Schwertwirbel und Axtwurf haben 2, dafür mehr Schaden.
+
+Ersetzt (die Ids bleiben, Waffen mit der alten Fähigkeit haben jetzt die neue):
+
+| Id | vorher | jetzt |
+|---|---|---|
+| `sword-3` | Tiefe Wunde | 🎭 **Finte** – der nächste normale Angriff trifft doppelt |
+| `axe-4` | Spaltschlag | 🔪 **Ausbluten** – von der Grossaxt, +60 % gegen Blutende |
+| `greatsword-6` | Heldenmut | 🔃 **Mordschlag** – Knaufschlag, zählt als Wucht, 30 % Betäubung |
+| `greataxe-6` | Ausbluten | 🔥 **Raserei** – drei Hiebe à 0,6, unter 50 % LP vier |
+| `bow-4` | Giftpfeil | 🎯 **Jägermal** – 3 Runden +20 % erlittener Schaden (im Koop für alle) |
+
+Neue Mechaniken (`AbilityDef`):
+
+| Feld | Fähigkeit | Wirkung |
+|---|---|---|
+| `ambush` | Schattenschritt | Die nächste Aktion trifft sicher kritisch |
+| `feint` | Finte | Der nächste normale Angriff trifft ein zweites Mal |
+| `shakenBonus` | Heiliger Hammer | +30 % gegen erschütterte Gegner – in den letzten 2 Runden betäubt (`EnemyEffects.shaken`) |
+| `extendDots` | Fluch der Schwäche | Gift und Feuer auf dem Ziel halten 1 Runde länger |
+| `chargingBonus` | Richterstoss | +30 % gegen einen Boss, der gerade auflädt |
+| `frenzyHits` | Raserei | Mehr Treffer unter 50 % LP (`abilityHits`) |
+| `interrupt` | Wuchtiger Schlag | Trifft er den Boss, bricht sein Aufladen ab wie eine Betäubung |
+| `freezeVsBurning` | Eisstrahl | 60 % statt 40 % Einfrier-Chance gegen brennende Gegner |
+
+Dazu: Titanenschlag gilt nur noch für den nächsten **normalen** Angriff (3,5×), Fähigkeiten verbrauchen das
+Ausholen nicht – damit ist die 6,6×-Kombo mit dem Wuchtigen Schlag weg. Unerschütterlich stösst nach der Abwehr mit
+halbem Schaden zurück, Läuterung schlägt zu und heilt 15 %.
+
+**Simulation** (wie oben, 150 Kämpfe pro Gebietsboss, Siegquote selten/gewöhnlich, Mittel aller Kombinationen):
+
+| Klasse | vorher | jetzt |
+|---|---|---|
+| Magier | 39/14 | 40/14 |
+| Hexer | 31/2 | 30/2 |
+| Assassine | 29/2 | 36/5 |
+| Waldläufer | 43/10 | 42/8 |
+| Duellant | 18/0 | 19/0 |
+| Plünderer | 13/0 | 20/0 |
+| Kleriker | 26/0 | 33/0 |
+| Paladin | 28/0 | 29/0 |
+| Berserker | 17/0 | 18/1 |
+| Champion | 61/6 | 63/7 |
+| Wächter | 61/13 | 61/6 |
+
+Die Klassen bleiben fast, wo sie waren. Assassine, Kleriker und Plünderer legen etwas zu. Die erste Fassung gab dem
+Richterstoss gegen aufladende Bosse einen sicheren Krit – das brach das Aufladen des Urmammuts so zuverlässig ab,
+dass der Champion es mit gewöhnlicher Ausrüstung ohne Tränke schlug. Jetzt sind es +30 %. Die Simulations-KI greift
+nach Finte und Titanenschlag normal an, sonst verpufft beides. Die Finte bleibt in der Simulation eher schwach
+(Schwert-Pool 8–35 %, wie vorher).
 
 ## Ideen für später
 

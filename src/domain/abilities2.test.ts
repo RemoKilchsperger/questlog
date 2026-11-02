@@ -148,9 +148,9 @@ describe("Zweite Fähigkeiten: Wirkung im Solo-Kampf", () => {
     expect(heroDamage(attackRound(cursed, rng(0.5)).events)).toBeCloseTo(plain * 1.2, -1);
   });
 
-  it("Meteor und Durchbohrender Schuss: Feuer bzw. Bluten", () => {
+  it("Meteor setzt in Brand, Axtwurf lässt bluten", () => {
     expect(attackRound(battleWith("staff-30"), rng(0.5), "staff-2").state.enemyEffects.burn?.roundsLeft).toBe(2);
-    expect(attackRound(battleWith("bow-30"), rng(0.5), "bow-2").state.enemyEffects.bleed?.roundsLeft).toBe(1);
+    expect(attackRound(battleWith("axe-30"), rng(0.5), "axe").state.enemyEffects.bleed?.roundsLeft).toBe(1);
     expect(getAbility("axe-2").hits).toBe(2);
   });
 

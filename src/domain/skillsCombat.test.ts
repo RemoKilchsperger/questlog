@@ -33,8 +33,8 @@ const enemyDamage = (events: Events) => events.reduce((sum, e) => sum + (e.type 
 
 describe("Klinge", () => {
   it("Gezahnte Klingen: eigenes Bluten macht mehr Schaden", () => {
-    const plain = attackRound(battle({}), calm, "sword-3").events.find((e) => e.type === "bleed")!;
-    const sharp = attackRound(battle({ serratedEdge: 3 }), calm, "sword-3").events.find((e) => e.type === "bleed")!;
+    const plain = attackRound(battle({}, "axe-30"), calm, "axe-2").events.find((e) => e.type === "bleed")!;
+    const sharp = attackRound(battle({ serratedEdge: 3 }, "axe-30"), calm, "axe-2").events.find((e) => e.type === "bleed")!;
     expect(sharp.type === "bleed" && plain.type === "bleed" && sharp.damage / plain.damage).toBeCloseTo(1 + 3 * SKILL.serratedEdge, 1);
   });
 

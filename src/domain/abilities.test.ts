@@ -145,10 +145,10 @@ describe("Fähigkeiten", () => {
     expect(dealt).toBe(before - after.enemy.hp);
   });
 
-  it("Spalter senkt die Rüstung des Gegners dauerhaft, Axtwurf ignoriert sie", () => {
-    const battle = battleWith(withWeapons("greataxe-0"));
-    const split = attackRound(battle, rng(0.5), "greataxe").state;
-    expect(split.enemyEffects.armorBreak).toBe(0.2);
+  it("Zertrümmern senkt die Rüstung des Gegners dauerhaft, Axtwurf ignoriert sie", () => {
+    const battle = battleWith(withWeapons("greathammer-0"));
+    const split = attackRound(battle, rng(0.5), "greathammer-4").state;
+    expect(split.enemyEffects.armorBreak).toBe(0.25);
     const normalBefore = attackRound(battle, rng(0.5)).events[0];
     const normalAfter = attackRound(split, rng(0.5)).events[0];
     expect(normalAfter.type === "hit" && normalBefore.type === "hit" && normalAfter.damage).toBeGreaterThanOrEqual(
