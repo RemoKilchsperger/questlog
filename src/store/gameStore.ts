@@ -101,7 +101,7 @@ import {
   type QuestEvent,
   type QuestLog,
 } from "../domain/quests";
-import { clampSkills, learnSkill, resetSkills, type SkillWeapon } from "../domain/skills";
+import { learnSkill, resetSkills, sanitizeSkills, type SkillId } from "../domain/skills";
 import { dateKey, weekKey } from "../domain/calendar";
 import { allocatePoint, convertLinearCurveXp, getLevel, resetAttributes } from "../domain/leveling";
 import { buyOffer, EMPTY_SHOP, rerollShop, rollShopStock, shopSlot, type ShopStock } from "../domain/shop";
@@ -174,7 +174,7 @@ interface GameState {
   /** Alle Attributpunkte zurücksetzen – das erste Mal kostenlos, danach teuer. */
   resetAttributes: () => void;
   /** Steigert einen Waffen-Skill um einen Rang (kostet einen Skillpunkt). */
-  learnSkill: (weapon: SkillWeapon) => void;
+  learnSkill: (id: SkillId) => void;
   /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`) – braucht den Trainingsplatz. */
   resetSkills: () => void;
   dismissReward: () => void;
@@ -421,8 +421,8 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     ...fresh,
     ...savedCharacter,
     stats: { ...fresh.stats, ...saved.character.stats },
-    // Ränge über dem aktuellen Maximum werden gekappt, die Punkte sind wieder frei.
-    skills: clampSkills(saved.character.skills ?? {}),
+    // Neuer Skilltree: Ränge des alten (pro Waffentyp) fallen weg, zu hohe werden gekappt – die Punkte sind wieder frei.
+    skills: sanitizeSkills(saved.character.skills),
   };
   // Erfolge, die es nicht mehr gibt (z. B. Serien der früheren To-dos), fallen weg – samt Titel.
   const achievements = Object.fromEntries(
@@ -894,7 +894,7 @@ export const useGameStore = create<GameState>()(
 
       resetAttributes: () => attempt(() => set((s) => ({ character: resetAttributes(s.character) }))),
 
-      learnSkill: (weapon) => attempt(() => set((s) => ({ character: learnSkill(s.character, weapon) }))),
+      learnSkill: (id) => attempt(() => set((s) => ({ character: learnSkill(s.character, id) }))),
 
 
       resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character, s.village.training) }))),

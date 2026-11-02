@@ -95,7 +95,37 @@ import { HEROIC_HP, heroicAffixes } from "./heroic";
 import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
-import type { SkillWeapon } from "./skills";
+import {
+  bandageHeal,
+  bloodburstDamage,
+  cooldownSkipChance,
+  critMana,
+  defendMana,
+  defendTaken,
+  defendThorns,
+  dodgeChance,
+  dotTakenFactor,
+  echoDue,
+  interruptMana,
+  manaRegen,
+  melts,
+  ownDotFactor,
+  ownDotRounds,
+  potionSkillFactor,
+  rankIn,
+  riposteFactor,
+  rotBurst,
+  skillCostFactor,
+  skillCritBonus,
+  skillDamageFactor,
+  skillLifesteal,
+  stackPoison,
+  wrathFactor,
+  SKILL,
+  type FoeState,
+  type SkillRanks,
+  type SkillWeapon,
+} from "./skills";
 import { DUNGEON_MATERIAL_FACTOR, scaleMaterials } from "./village";
 
 export const COOP_MIN_PLAYERS = 2;
@@ -416,6 +446,9 @@ export type CoopEnemyEffects = Partial<Record<OverTimeKind, SourcedDot>> & {
   vulnerable?: ActiveBuff;
   /** So viele Runden (inkl. der aktuellen) noch immun gegen Betäubung – gilt für jeden Koop-Gegner */
   stunImmunity?: number;
+  /** Betäubt bzw. eingefroren – zählt in der Runde danach (Erschütterung, Kryomant, Schmelzen) */
+  dazed?: number;
+  chilled?: number;
 };
 
 /** Ein Begleiter des Bosses – seine `uid` ist zugleich seine Id in Ereignissen. */
@@ -447,6 +480,8 @@ export interface CoopHero {
   weapon?: SkillWeapon | null;
   /** Spezialeffekte der angelegten Items (itemEffects.ts) */
   itemEffects?: ItemEffectId[];
+  /** Ränge im Skilltree (skills.ts) – fehlt ohne vergebene Punkte */
+  skills?: SkillRanks;
   /** „Unbeugsam“ hat in diesem Kampf schon gerettet */
   endured?: boolean;
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
@@ -466,6 +501,14 @@ export interface CoopHero {
     charged?: number;
     /** Arkane Heilung: heilt `percent` der max. LP am Rundenende */
     renew?: ActiveBuff;
+    /** Gegenschlag: Faktor auf die Aktion nach dem Abwehren */
+    riposte?: number;
+    /** Zorn des Bollwerks: Stapel */
+    wrath?: number;
+    /** Notverband hat in diesem Kampf schon geheilt */
+    bandaged?: boolean;
+    /** Eingesetzte Fähigkeiten in diesem Kampf – für das Echo */
+    casts?: number;
   };
   threat: number;
   /** Auf 0 LP gefallen – handelt nicht und wird nicht angegriffen */
@@ -476,7 +519,9 @@ export interface CoopHero {
 
 export type CoopEvent =
   | { type: "potion"; heroId: string; targetId: string; potionId: string; heal: number; buff?: BuffKind; revive?: boolean }
-  | { type: "ability"; heroId: string; ability: AbilityId; weapon: SkillWeapon; manaCost: number }
+  | { type: "ability"; heroId: string; ability: AbilityId; weapon: SkillWeapon; manaCost: number; echo?: boolean }
+  /** Skill „Schemen“: Ein Held weicht einem Angriff aus (`attacker`: BOSS oder uid eines Begleiters) */
+  | { type: "dodged"; heroId: string; attacker: string }
   /** Ein Held heilt sich durch eine Fähigkeit – `by`: Ein Mitspieler hat geheilt (Arkane Heilung) */
   | { type: "selfHeal"; heroId: string; heal: number; by?: string }
   /** Läuterung: Gift, Feuer und Bluten auf dem Helden sind weg */
@@ -537,7 +582,8 @@ export type CoopEvent =
   | { type: "enemyRegen"; heal: number }
   /** Elite „Explosiv“: Der Gegner explodiert beim Tod und trifft alle stehenden Helden (Bollwerk blockt) */
   | { type: "explosion"; hits: { heroId: string; damage: number; blocked?: boolean }[] }
-  | { type: OverTimeKind; target: string; damage: number }
+  /** `burst`: Blutsturz bzw. Fäulnis lässt Wunde oder Gift platzen */
+  | { type: OverTimeKind; target: string; damage: number; burst?: boolean }
   | { type: "bossAbility"; bossId: string; abilityId: string; name: string }
   /** Mit `add`: ein Begleiter statt des Bosses */
   | { type: "stunned"; freeze?: boolean; add?: string }
@@ -672,6 +718,7 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
       },
       weapon: profile.weapon ?? null,
       ...(profile.itemEffects?.length && { itemEffects: profile.itemEffects }),
+      ...(profile.skills && { skills: profile.skills }),
       mana: profile.maxMana,
       maxMana: profile.maxMana,
       abilities: profile.abilities,
@@ -824,13 +871,18 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
   return null;
 }
 
+/** Manakosten einer Fähigkeit im Koop – mit Klasse und Skilltree (Eröffnung in Runde 1, Echo). */
+export function coopAbilityCost(hero: CoopHero, id: AbilityId, round = 0): number {
+  return Math.round(classAbility(id, hero.heroClass).manaCost * skillCostFactor(hero.skills, round, hero.effects.casts));
+}
+
 /** Warum diese Fähigkeit nicht geht – oder null. `turn`: Absicht des Bosses (verschlungene Fähigkeit). */
-export function coopAbilityBlocker(hero: CoopHero, id: AbilityId, turn?: BossTurn | null): string | null {
+export function coopAbilityBlocker(hero: CoopHero, id: AbilityId, turn?: BossTurn | null, round = 0): string | null {
   if (!hero.abilities.includes(id)) return "Diese Fähigkeit liegt auf keiner deiner angelegten Waffen.";
   if (turn?.devoured?.ability === id && turn.devoured.heroId === hero.id) return "Der Gegner hält diese Fähigkeit gefangen.";
   const wait = hero.cooldowns?.[id] ?? 0;
   if (wait > 0) return cooldownText(wait);
-  const { manaCost } = classAbility(id, hero.heroClass);
+  const manaCost = coopAbilityCost(hero, id, round);
   if (hero.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
   return null;
 }
@@ -884,7 +936,15 @@ function stolenAbility(hero: CoopHero | undefined, id: AbilityId): CoopBossAbili
 /** Am Rundenende laufen Schwächung, Verwundbarkeit und Betäubungs-Immunität eine Runde ab. */
 function tickEnemyEffects(fx: CoopEnemyEffects): CoopEnemyEffects {
   const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
-  return { ...fx, weaken: tick(fx.weaken), vulnerable: tick(fx.vulnerable), stunImmunity: tickStunImmunity(fx.stunImmunity) };
+  const mark = (rounds: number | undefined) => (rounds && rounds > 1 ? rounds - 1 : undefined);
+  return {
+    ...fx,
+    weaken: tick(fx.weaken),
+    vulnerable: tick(fx.vulnerable),
+    stunImmunity: tickStunImmunity(fx.stunImmunity),
+    ...(fx.dazed !== undefined && { dazed: mark(fx.dazed) }),
+    ...(fx.chilled !== undefined && { chilled: mark(fx.chilled) }),
+  };
 }
 
 /**
@@ -913,19 +973,47 @@ export function resolveRound(
   /** Treffer der Helden auf den Boss und getroffene Begleiter (unterbricht ein Heilritual) */
   let heroHitsOnBoss = 0;
   const hitAdds = new Set<string>();
+  /** Wer welchen Begleiter getroffen hat, und wer betäubt oder unterbrochen hat (Unterbrecher) */
+  const addHitters = new Map<string, CoopHero[]>();
+  const interrupters = new Set<CoopHero>();
+  /** Zorn des Bollwerks: Helden, die in dieser Runde abgewehrt, geblockt oder pariert haben */
+  const warded = new Set<CoopHero>();
   /** Eingesetzte Fähigkeiten der Gruppe – sie laden Kaelthar auf */
   let abilitiesUsed = 0;
   /** Wer abwehrt, und wer sich geläutert hat (bricht einen Fluch) */
   const defending = new Set<string>();
   const cleansed = new Set<string>();
-  /** Gift, Feuer oder Bluten auf einen Gegner legen – mit Schwäche/Resistenz; bei Immunität wirkt es nicht. */
+  /** Skillränge des Helden, der Gift, Feuer oder Bluten gelegt hat */
+  const sourceSkills = (sourceId: string | undefined) => heroes.find((h) => h.id === sourceId)?.skills;
+  /**
+   * Gift, Feuer oder Bluten auf einen Gegner legen – mit Schwäche/Resistenz; bei Immunität wirkt es nicht.
+   * Der Skilltree des Verursachers macht es stärker oder länger; sein eigenes Gift stapelt sich und platzt (Fäulnis).
+   */
   const applyDot = (foe: Foe, kind: OverTimeKind, base: number, rounds: number, sourceId: string) => {
     const factor = matchupFactor(foe.creatureId, kind);
     if (factor === 0) {
       events.push({ type: "immune", target: foe.id, kind });
       return;
     }
-    foe.fx = { ...foe.fx, [kind]: { damage: Math.max(1, Math.round(base * factor)), roundsLeft: rounds, sourceId } };
+    const skills = sourceSkills(sourceId);
+    const damage = Math.max(1, Math.round(base * factor * ownDotFactor(skills, kind)));
+    const length = ownDotRounds(skills, kind, rounds);
+    if (kind !== "poison") {
+      foe.fx = { ...foe.fx, [kind]: { damage, roundsLeft: length, sourceId } };
+      return;
+    }
+    const own = foe.fx.poison?.sourceId === sourceId ? foe.fx.poison : undefined;
+    const poison = stackPoison(skills, own, damage, length);
+    const burst = rotBurst(skills, poison);
+    if (burst > 0 && foe.c.hp > 0) {
+      const dealt = Math.max(1, Math.round(burst * (1 + (foe.fx.vulnerable?.percent ?? 0))));
+      foe.c.hp = Math.max(0, foe.c.hp - dealt);
+      foe.fx = { ...foe.fx, poison: undefined };
+      events.push({ type: "poison", target: foe.id, damage: dealt, burst: true });
+      addDown(foe);
+      return;
+    }
+    foe.fx = { ...foe.fx, poison: { ...poison, sourceId } };
   };
   const foes = [boss, ...adds];
   let phase = state.phase;
@@ -933,9 +1021,9 @@ export function resolveRound(
   const takenBy = (foe: Foe) => (foe === boss ? bossTurnTakenFactor(turn) : 1);
   const living = () => foes.filter((f) => f.c.hp > 0);
   /** Fähigkeit, die einen Gegner in dieser Runde betäuben würde */
-  const stunAttempts = new Map<Foe, AbilityDef>();
+  const stunAttempts = new Map<Foe, { ability: AbilityDef; hero: CoopHero }>();
   /** Vom Item-Effekt „Frostbiss“ eingefrorene Gegner – sie setzen diese Runde aus */
-  const frozenByItem = new Set<Foe>();
+  const frozenByItem = new Map<Foe, CoopHero>();
   const enemyIsBoss = enemy.boss;
   /** Helden mit Bollwerk – ihre Bedrohung wird nach der Heldenphase hochgesetzt */
   const taunts: CoopHero[] = [];
@@ -955,14 +1043,20 @@ export function resolveRound(
     hero.buffs = {};
     events.push({ type: "down", heroId: hero.id });
   };
-  /** Ein Begleiter fällt – der Kampf geht weiter. */
-  const addDown = (foe: Foe) => {
-    if (foe !== boss && foe.c.hp === 0) events.push({ type: "addDown", add: foe.id });
-  };
-  /** Item-Effekt „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst. */
+  /** Ein Begleiter fällt – der Kampf geht weiter. Skill „Seuche“: Sein Gift springt auf einen anderen über. */
+  function addDown(foe: Foe) {
+    if (foe === boss || foe.c.hp !== 0) return;
+    events.push({ type: "addDown", add: foe.id });
+    const poison = foe.fx.poison;
+    if (!poison || rankIn(sourceSkills(poison.sourceId), "plague") === 0) return;
+    const next = foes.find((f) => f !== foe && f.c.hp > 0 && !f.fx.poison && matchupFactor(f.creatureId, "poison") > 0);
+    if (next) next.fx = { ...next.fx, poison };
+  }
+  /** Item-Effekt „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst – Stachelwehr beim Abwehren. */
   const thorns = (hero: CoopHero, foe: Foe, damage: number) => {
-    if (!hasEffect(hero.itemEffects, "thorns") || damage <= 0 || foe.c.hp <= 0) return;
-    const back = Math.max(1, Math.round(damage * EFFECT.thorns));
+    const share = (hasEffect(hero.itemEffects, "thorns") ? EFFECT.thorns : 0) + (defending.has(hero.id) ? defendThorns(hero.skills) : 0);
+    if (share <= 0 || damage <= 0 || foe.c.hp <= 0) return;
+    const back = Math.max(1, Math.round(damage * share));
     foe.c.hp = Math.max(0, foe.c.hp - back);
     events.push({ type: "thorns", heroId: hero.id, target: foe.id, damage: back });
     addDown(foe);
@@ -993,7 +1087,10 @@ export function resolveRound(
         target.combatant.hp = Math.max(1, potionHeal(potion, target.combatant.maxHp));
         events.push({ type: "potion", heroId: hero.id, targetId: target.id, potionId: potion.id, heal: target.combatant.hp, revive: true });
       } else if (potion.effect.kind === "heal") {
-        const factor = (hero.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) * (hasEffect(hero.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1);
+        const factor =
+          (hero.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) *
+          (hasEffect(hero.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1) *
+          potionSkillFactor(hero.skills);
         const heal = Math.min(Math.round(potionHeal(potion, hero.combatant.maxHp) * factor), hero.combatant.maxHp - hero.combatant.hp);
         hero.combatant.hp += heal;
         events.push({ type: "potion", heroId: hero.id, targetId: hero.id, potionId: potion.id, heal });
@@ -1004,15 +1101,26 @@ export function resolveRound(
       }
     }
 
+    const skills = hero.skills;
+    // Gegenschlag: Die Aktion nach dem Abwehren macht mehr Schaden – wer wieder abwehrt, lädt ihn neu
+    const riposte = hero.effects.riposte ?? 1;
+    hero.effects.riposte = undefined;
     // Abwehren: kein Angriff, dafür halber Schaden in dieser Runde und etwas Mana
     if (action.defend) {
-      const gain = Math.min(hero.maxMana - hero.mana, DEFEND_MANA);
+      const gain = Math.min(hero.maxMana - hero.mana, defendMana(skills, DEFEND_MANA));
       hero.mana += gain;
       defending.add(hero.id);
+      if (rankIn(skills, "riposte") > 0) hero.effects.riposte = riposteFactor(skills);
       events.push({ type: "defend", heroId: hero.id, mana: gain });
       continue;
     }
-    const ability = action.ability && !coopAbilityBlocker(hero, action.ability, turn) ? classAbility(action.ability, hero.heroClass) : null;
+    const ability =
+      action.ability && !coopAbilityBlocker(hero, action.ability, turn, state.round) ? classAbility(action.ability, hero.heroClass) : null;
+    // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit halbem Schaden
+    const echo = !!ability && echoDue(skills, hero.effects.casts);
+    const wrath = wrathFactor(hero.effects.wrath);
+    let echoShare = 1;
+    const fire = !!ability?.burn;
     const aoe = ability?.aoe;
     // Schadensart: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe (matchups.ts)
     const heroWeapon = ability?.weapon ?? hero.weapon;
@@ -1033,10 +1141,15 @@ export function resolveRound(
     };
     const threatFactor = hero.heroClass === "paladin" ? PALADIN_THREAT : 1;
     if (ability) {
-      hero.mana -= ability.manaCost;
-      // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen
-      used.set(hero.id, hasEffect(hero.itemEffects, "quickHands") ? { id: ability.id, cooldown: ability.cooldown - 1 } : ability);
-      events.push({ type: "ability", heroId: hero.id, ability: ability.id, weapon: ability.weapon, manaCost: ability.manaCost });
+      const manaCost = coopAbilityCost(hero, ability.id, state.round);
+      hero.mana -= manaCost;
+      if (rankIn(skills, "echo") > 0) hero.effects.casts = (hero.effects.casts ?? 0) + 1;
+      // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen – Nachhall: manchmal gar nicht
+      const skip = cooldownSkipChance(skills);
+      if (!(skip > 0 && rng() < skip)) {
+        used.set(hero.id, hasEffect(hero.itemEffects, "quickHands") ? { id: ability.id, cooldown: ability.cooldown - 1 } : ability);
+      }
+      events.push({ type: "ability", heroId: hero.id, ability: ability.id, weapon: ability.weapon, manaCost, ...(echo && { echo }) });
       abilitiesUsed++;
       // Kaelthar saugt die Kraft jeder Fähigkeit auf – ausser in der Runde, in der er sich entlädt
       if (turn?.static !== undefined && turn.ability !== "storm-lord-discharge") {
@@ -1072,7 +1185,7 @@ export function resolveRound(
           foe.fx = { ...foe.fx, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
         }
         if (ability.armorBreak) foe.fx = { ...foe.fx, armorBreak: ability.armorBreak };
-        if (stunLands(ability, rng)) stunAttempts.set(foe, ability);
+        if (stunLands(ability, rng, skills)) stunAttempts.set(foe, { ability, hero });
         for (const kind of OVER_TIME) {
           const effect = ability[kind];
           if (effect) applyDot(foe, kind, strong.damage * effect.percent, effect.rounds, hero.id);
@@ -1110,24 +1223,38 @@ export function resolveRound(
         foeBoss,
         foeElite: foe === boss && (state.elite?.length ?? 0) > 0 && !state.heroic,
       });
-      const critChance = strong.critChance + effectCritBonus(effects, foeBoss);
+      // Skilltree: Hinrichter, Erschütterung, Pyromant, Kryomant, Schmelzen – dazu Gegenschlag, Zorn und Echo
+      const foeState: FoeState = {
+        hp: foe.c.hp,
+        maxHp: foe.c.maxHp,
+        bleeding: foe.fx.bleed !== undefined,
+        burning: foe.fx.burn !== undefined,
+        dazed: !!foe.fx.dazed,
+        chilled: !!foe.fx.chilled,
+      };
+      const skillFactor = skillDamageFactor(skills, foeState, fire) * riposte * wrath * echoShare;
+      const critChance = strong.critChance + effectCritBonus(effects, foeBoss) + skillCritBonus(skills, foeState);
       // Panzerplatten des Erzkönigs – nur direkte Treffer auf den Boss
       const plate = foe === boss ? plateFactor(plates) : 1;
       const attacker: Combatant = ability
         ? {
             ...strong,
-            damage: strong.damage * ability.multiplier * execute * charge * vulnerable * share * taken * plate * kindFactor * itemFactor,
+            damage:
+              strong.damage * ability.multiplier * execute * charge * vulnerable * share * taken * plate * kindFactor * itemFactor * skillFactor,
             critChance: ability.guaranteedCrit ? 1 : critChance,
           }
-        : { ...strong, damage: strong.damage * charge * share * vulnerable * taken * plate * kindFactor * itemFactor, critChance };
+        : { ...strong, damage: strong.damage * charge * share * vulnerable * taken * plate * kindFactor * itemFactor * skillFactor, critChance };
       const armor = ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0)));
-      const rolled = rollHit(attacker, { ...foe.c, armor }, rng);
+      const rolled = rollHit(attacker, { ...foe.c, armor }, rng, rankIn(skills, "piercing") > 0);
       // Der Schild des Schildträgers schluckt direkte Treffer auf den Boss
       const absorbed = foe === boss ? Math.min(bossShield, rolled.damage) : 0;
       bossShield -= absorbed;
       const hit = { ...rolled, damage: rolled.damage - absorbed };
       if (foe === boss) heroHitsOnBoss++;
-      else hitAdds.add(foe.id);
+      else {
+        hitAdds.add(foe.id);
+        addHitters.set(foe.id, [...(addHitters.get(foe.id) ?? []), hero]);
+      }
       dealt += Math.min(foe.c.hp, hit.damage);
       foe.c.hp = Math.max(0, foe.c.hp - hit.damage);
       hero.threat += rolled.damage * threatFactor;
@@ -1154,29 +1281,49 @@ export function resolveRound(
           applyDot(foe, "bleed", strong.damage * PLUNDERER_BLEED.percent, PLUNDERER_BLEED.rounds, hero.id);
         }
       }
+      // Skills bei kritischen Treffern: Adrenalin (Mana), Schnitter (Bluten), Offene Wunde (länger bluten)
+      if (hit.crit) {
+        hero.mana = Math.min(hero.maxMana, hero.mana + critMana(skills));
+        if (foe.c.hp > 0 && rankIn(skills, "reaper") > 0 && (foe.fx.bleed?.damage ?? 0) <= strong.damage * SKILL.reaper.percent) {
+          applyDot(foe, "bleed", strong.damage * SKILL.reaper.percent, SKILL.reaper.rounds, hero.id);
+        }
+        const bleed = foe.fx.bleed;
+        if (foe.c.hp > 0 && foeState.bleeding && bleed && rankIn(skills, "openWound") > 0) {
+          foe.fx = { ...foe.fx, bleed: { ...bleed, roundsLeft: bleed.roundsLeft + 1 } };
+        }
+      }
+      // Schmelzen: Das Feuer taut den eingefrorenen Gegner auf
+      if (melts(skills, foeState.chilled, fire)) foe.fx = { ...foe.fx, chilled: undefined };
       // Item-Effekte bei einem Treffer: Glut/Drachenfeuer, Giftzahn, Frostbiss, Manadieb
       if (foe.c.hp > 0) {
         if (hit.crit && critBurns(effects)) applyDot(foe, "burn", strong.damage * EFFECT.ember.percent, EFFECT.ember.rounds, hero.id);
         if (hasEffect(effects, "venomFang") && rng() < EFFECT.venomFang.chance) {
           applyDot(foe, "poison", strong.damage * EFFECT.venomFang.percent, EFFECT.venomFang.rounds, hero.id);
         }
-        if (hasEffect(effects, "frostBite") && rng() < EFFECT.frostBite) frozenByItem.add(foe);
+        if (hasEffect(effects, "frostBite") && rng() < EFFECT.frostBite) frozenByItem.set(foe, hero);
       }
       if (hasEffect(effects, "manaThief")) hero.mana = Math.min(hero.maxMana, hero.mana + EFFECT.manaThief);
       addDown(foe);
     };
-    for (let i = 0; i < (ability?.hits ?? 1) && boss.c.hp > 0; i++) {
-      if (aoe === "all") {
-        for (const foe of living()) strike(foe);
-      } else if (aoe === "spread") {
-        // Jeder Treffer geht an einen zufälligen Gegner
-        const options = living();
-        strike(options.length > 1 ? options[Math.floor(rng() * options.length)] : options[0]);
-      } else {
-        if (target.c.hp === 0) break;
-        strike(target);
-        if (typeof aoe === "object") for (const foe of living()) if (foe !== target) strike(foe, aoe.splash);
+    const volley = () => {
+      for (let i = 0; i < (ability?.hits ?? 1) && boss.c.hp > 0; i++) {
+        if (aoe === "all") {
+          for (const foe of living()) strike(foe);
+        } else if (aoe === "spread") {
+          // Jeder Treffer geht an einen zufälligen Gegner
+          const options = living();
+          strike(options.length > 1 ? options[Math.floor(rng() * options.length)] : options[0]);
+        } else {
+          if (target.c.hp === 0) break;
+          strike(target);
+          if (typeof aoe === "object") for (const foe of living()) if (foe !== target) strike(foe, aoe.splash);
+        }
       }
+    };
+    volley();
+    if (echo && ability && ability.multiplier > 0) {
+      echoShare = SKILL.echo.share;
+      volley();
     }
     // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
     if (!ability && hero.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
@@ -1186,7 +1333,8 @@ export function resolveRound(
       if (others.length > 0) strike(others[Math.floor(rng() * others.length)], EFFECT.chainLightning.share);
     }
     // Lebensraub: Blutrausch, Plünderer und Item-Effekt „Seelenraub“
-    const lifesteal = lifestealShare(hero.heroClass, ability) + (hasEffect(hero.itemEffects, "soulDrain") ? EFFECT.soulDrain : 0);
+    const lifesteal =
+      lifestealShare(hero.heroClass, ability) + (hasEffect(hero.itemEffects, "soulDrain") ? EFFECT.soulDrain : 0) + skillLifesteal(skills);
     if (lifesteal > 0 && dealt > 0) {
       const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(dealt * lifesteal));
       hero.combatant.hp += heal;
@@ -1211,8 +1359,17 @@ export function resolveRound(
       const source = heroes.find((h) => h.id === effect.sourceId && !h.down);
       if (source) source.threat += damage * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
       events.push({ type: kind, target: foe.id, damage });
-      foe.fx = { ...foe.fx, [kind]: effect.roundsLeft > 1 ? { ...effect, roundsLeft: effect.roundsLeft - 1 } : undefined };
+      const ending = effect.roundsLeft <= 1;
+      foe.fx = { ...foe.fx, [kind]: ending ? undefined : { ...effect, roundsLeft: effect.roundsLeft - 1 } };
       addDown(foe);
+      // Blutsturz des Verursachers: Läuft das Bluten aus, platzt die Wunde
+      const burst = kind === "bleed" && ending && foe.c.hp > 0 && boss.c.hp > 0 ? bloodburstDamage(sourceSkills(effect.sourceId), effect.damage) : 0;
+      if (burst > 0) {
+        const dealt = Math.max(1, Math.round(burst * (1 + (foe.fx.vulnerable?.percent ?? 0)) * takenBy(foe)));
+        foe.c.hp = Math.max(0, foe.c.hp - dealt);
+        events.push({ type: "bleed", target: foe.id, damage: dealt, burst: true });
+        addDown(foe);
+      }
     }
   }
   if (boss.c.hp > 0) {
@@ -1220,8 +1377,10 @@ export function resolveRound(
       for (const kind of OVER_TIME) {
         const effect = hero.effects[kind];
         if (!effect || hero.down) continue;
-        hero.combatant.hp = Math.max(0, hero.combatant.hp - effect.damage);
-        events.push({ type: kind, target: hero.id, damage: effect.damage });
+        // Gegengift: weniger Schaden durch Gift, Feuer und Bluten
+        const damage = Math.max(1, Math.round(effect.damage * dotTakenFactor(hero.skills)));
+        hero.combatant.hp = Math.max(0, hero.combatant.hp - damage);
+        events.push({ type: kind, target: hero.id, damage });
         hero.effects[kind] = effect.roundsLeft > 1 ? { ...effect, roundsLeft: effect.roundsLeft - 1 } : undefined;
         knockDown(hero);
       }
@@ -1249,7 +1408,8 @@ export function resolveRound(
   /** Wie Gruppen-Fähigkeiten: Was alle trifft, trifft jeden mit dem Schaden wie solo (ohne Gruppenzuschlag) */
   const soloScale = 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1);
   /** Schildwall/Wutschrei: Faktor auf den Schaden, den ein Held erleidet */
-  const hurt = (hero: CoopHero) => Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0)) * (defending.has(hero.id) ? DEFEND_DAMAGE_TAKEN : 1);
+  const hurt = (hero: CoopHero) =>
+    Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0)) * (defending.has(hero.id) ? defendTaken(hero.skills, DEFEND_DAMAGE_TAKEN) : 1);
   /** Der Gegner fällt – ein explosiver Elite trifft alle stehenden Helden (Bollwerk blockt). Fallen alle, ist der Kampf verloren. */
   const enemyDown = () => {
     if (elite.includes("explosive")) {
@@ -1289,9 +1449,17 @@ export function resolveRound(
       const frozen = frozenByItem.has(foe);
       if ((!attempt && !frozen) || foe.c.hp <= 0) return false;
       const stunned = !foe.fx.stunImmunity;
-      if (stunned) foe.fx = { ...foe.fx, stunImmunity: freshStunImmunity() };
+      if (stunned) {
+        foe.fx = { ...foe.fx, stunImmunity: freshStunImmunity() };
+        // Skills des Betäubenden: Erschütterung und Kryomant/Schmelzen markieren, Unterbrecher gibt Mana
+        const by = attempt?.hero ?? frozenByItem.get(foe)!;
+        if (rankIn(by.skills, "concussion") > 0) foe.fx = { ...foe.fx, dazed: 2 };
+        const freezing = frozen || !!attempt?.ability.freeze;
+        if (freezing && (rankIn(by.skills, "cryomancer") > 0 || rankIn(by.skills, "melt") > 0)) foe.fx = { ...foe.fx, chilled: 2 };
+        interrupters.add(by);
+      }
       const tag = foe === boss ? {} : { add: foe.id };
-      events.push({ type: stunned ? "stunned" : "stunResisted", ...(frozen ? { freeze: true as const } : freezeFlag(attempt!)), ...tag });
+      events.push({ type: stunned ? "stunned" : "stunResisted", ...(frozen ? { freeze: true as const } : freezeFlag(attempt!.ability)), ...tag });
       return stunned;
     };
     // Zweite Phase: Raserei und/oder Sammelruf – wirkt schon auf die folgende Gegnerphase
@@ -1357,9 +1525,11 @@ export function resolveRound(
         if (target.effects.bulwark) {
           // Bollwerk blockt den Angriff samt Zusatzeffekten
           shielded.add(target);
+          warded.add(target);
           events.push({ type: "blocked", heroId: target.id });
           continue;
         }
+        const dodge = dodgeChance(target.skills);
         const defender = special?.ignoreArmor ? { ...buffed(target), armor: 0 } : buffed(target);
         // Item-Effekt „Standhaft“: Boss-Fähigkeiten treffen schwächer
         const attackerFor = {
@@ -1367,7 +1537,15 @@ export function resolveRound(
           damage: attacker.damage * hurt(target) * (special && hasEffect(target.itemEffects, "steadfast") ? 1 - EFFECT.steadfast : 1),
         };
         let taken = 0;
+        /** Treffer, denen der Held nicht ausgewichen ist (Schemen) */
+        let landed = 0;
         for (let i = 0; i < (special?.hits ?? (swift ? 2 : 1)) && target.combatant.hp > 0; i++) {
+          if (dodge > 0 && rng() < dodge) {
+            events.push({ type: "dodged", heroId: target.id, attacker: BOSS });
+            continue;
+          }
+          landed++;
+          if (defending.has(target.id) || target.effects.guard) warded.add(target);
           const rolled = rollHit(attackerFor, defender, rng);
           // Parade/Vergeltung: nur ein Teil kommt durch, dann Konter bzw. Rückwurf (nur beim ersten Treffer)
           const guard = target.effects.guard;
@@ -1399,6 +1577,11 @@ export function resolveRound(
           }
         }
         thorns(target, boss, taken);
+        // Wer allem ausgewichen ist, entgeht auch den Zusatzeffekten
+        if (landed === 0) {
+          knockDown(target);
+          continue;
+        }
         if (target.combatant.hp > 0) {
           for (const kind of OVER_TIME) {
             const effect = special?.[kind];
@@ -1456,7 +1639,10 @@ export function resolveRound(
       if (add.role === "healer") {
         // Heilritual: Ein Treffer oder eine Betäubung unterbricht es – angreifen tut der Heiler nie
         if (stunned || hitAdds.has(add.id)) {
-          if (add.cast) events.push({ type: "interrupted", add: add.id });
+          if (add.cast) {
+            events.push({ type: "interrupted", add: add.id });
+            for (const hero of addHitters.get(add.id) ?? []) interrupters.add(hero);
+          }
           add.cast = 0;
           continue;
         }
@@ -1497,9 +1683,16 @@ export function resolveRound(
       const target = pickBossTarget(heroes, rng)!;
       if (target.effects.bulwark) {
         shielded.add(target);
+        warded.add(target);
         events.push({ type: "blocked", heroId: target.id, add: add.id });
         continue;
       }
+      const dodge = dodgeChance(target.skills);
+      if (dodge > 0 && rng() < dodge) {
+        events.push({ type: "dodged", heroId: target.id, attacker: add.id });
+        continue;
+      }
+      if (defending.has(target.id)) warded.add(target);
       const hit = rollHit({ ...add.c, damage: add.c.damage * (1 - (add.fx.weaken?.percent ?? 0)) * hurt(target) }, buffed(target), rng);
       target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
       events.push({ type: "hit", attacker: add.id, target: target.id, ...hit });
@@ -1541,6 +1734,15 @@ export function resolveRound(
         events.push({ type: "regen", heroId: hero.id, heal });
       }
     }
+    // Notverband: Wer zum ersten Mal unter 30 % fällt, heilt sich einmal pro Kampf
+    for (const hero of heroes) {
+      const bandage = hero.down ? 0 : bandageHeal(hero.skills, hero.combatant.hp, hero.combatant.maxHp, hero.effects.bandaged);
+      if (bandage <= 0) continue;
+      const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(hero.combatant.maxHp * bandage));
+      hero.combatant.hp += heal;
+      hero.effects.bandaged = true;
+      events.push({ type: "selfHeal", heroId: hero.id, heal });
+    }
   }
 
   // Der Boss wählt seine Absicht für die nächste Runde
@@ -1570,6 +1772,14 @@ export function resolveRound(
     events.push({ type: "freed", heroId: turn.devoured.heroId ?? "", ability: turn.devoured.ability as AbilityId });
   }
 
+  // Unterbrecher: Wer betäubt, ein Ritual unterbrochen oder den Boss ins Taumeln gebracht hat, bekommt Mana
+  if (turn?.intent === "charging" && nextTurn?.intent === "staggered") for (const hero of heroes) interrupters.add(hero);
+  for (const hero of interrupters) if (!hero.down) hero.mana = Math.min(hero.maxMana, hero.mana + interruptMana(hero.skills));
+  // Zorn des Bollwerks: ein Stapel pro Runde, in der der Held abgewehrt, geblockt oder pariert hat
+  for (const hero of warded) {
+    if (!hero.down && rankIn(hero.skills, "wrath") > 0) hero.effects.wrath = Math.min(SKILL.wrath.max, (hero.effects.wrath ?? 0) + 1);
+  }
+
   // 4. Mana, Verstärkungen und abklingende Bedrohung
   const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
   heroes = heroes.map((h) => ({
@@ -1577,7 +1787,7 @@ export function resolveRound(
     effects: { ...h.effects, empower: tick(h.effects.empower), damageTaken: tick(h.effects.damageTaken), renew: tick(h.effects.renew) },
     cooldowns: tickCooldowns(h.cooldowns, used.get(h.id) ?? null),
     threat: Math.round(h.threat * (1 - THREAT_DECAY)),
-    mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + MANA_REGEN),
+    mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + manaRegen(h.skills, MANA_REGEN)),
     buffs: Object.fromEntries(
       Object.entries(h.buffs)
         .filter(([, b]) => b && b.roundsLeft > 1)

@@ -10,7 +10,7 @@ Sammlung aller Vorschläge, damit nichts verloren geht. Status: ✅ umgesetzt ·
 | 2 | **Begleiter mit Aufgabe:** Heiler, Schildträger, Trommler | ✅ `bossMechanics.ts` |
 | 3 | **Unterbrechbare Attacken:** Der Boss lädt 2 Runden lang auf. Genug Schaden oder eine Betäubung bricht sie ab, sonst kommt ein gewaltiger Treffer. Wertet Betäubung und das Aufsparen von Fähigkeiten auf. | 💡 |
 | 4 | **Schwächen und Resistenzen:** Klingen, Wucht, Stich, Magie; Immunität gegen Gift, Feuer, Bluten | ✅ `matchups.ts`, docs/schwaechen-resistenzen.md |
-| 5 | **Effekt-Synergien:** Feuer auf einen Eingefrorenen = „Schmelzen“ (doppelter Schaden), Enthaupten stärker gegen Blutende, eine Fähigkeit, die alle Gift-Stapel auf einmal auslöst. Ablauf: vorbereiten, dann auslösen. | 💡 |
+| 5 | **Effekt-Synergien:** Feuer auf einen Eingefrorenen = „Schmelzen“ (doppelter Schaden), Enthaupten stärker gegen Blutende, eine Fähigkeit, die alle Gift-Stapel auf einmal auslöst. Ablauf: vorbereiten, dann auslösen. | 🚧 Schmelzen, Gift-Stapel (Fäulnis) und Blutsturz im Skilltree (#32) |
 | 6 | **Elite-Gegner:** 9 Modifikatoren, solo und im Koop-Dungeon | ✅ `elites.ts`, docs/elite-gegner.md |
 | 7 | **Koop-Rollen:** Spott (Bedrohung an sich ziehen); Kombos über Spieler hinweg (einer macht verwundbar, der andere nutzt es aus); Mechaniken, die die Gruppe aufteilen (zwei Begleiter müssen in derselben Runde fallen) | 💡 |
 
@@ -57,3 +57,10 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 29 | **Kaelthar:** lädt sich mit jeder Fähigkeit des Helden auf, entlädt sich bei 3 Ladungen (Koop: 4 pro Held) | ✅ Solo und Koop |
 | 30 | **Xal'Zar:** verschlingt die stärkste Fähigkeit und setzt sie gegen dich ein, bis du ihm genug Schaden machst | ✅ Solo und Koop |
 | 31 | **Neue Begleiter:** Dieb (stiehlt Tränke), Bombenleger (Countdown), Kettenwächter (zwingt das Ziel), Fluchwirker (versiegelt eine Fähigkeit) | 💡 |
+
+## Skilltree (2026-11-02)
+
+| # | Idee | Status |
+|---|---|---|
+| 32 | **Vier Pfade statt +2 % Schaden:** Klinge, Wehr, Arkan, Plage – aufeinander aufbauend mit Stufen, Gabelung und einer Meisterschaft. Enthält Idee 5 (Schmelzen, Gift platzen lassen) | ✅ `skills.ts`, docs/skilltree.md, solo und Koop |
+| 33 | **Mehr Gabelungen und Erfolge:** Gabelung auch auf Stufe 4, Erfolge für Meisterschaften, Stapel (Zorn, Gift) im Kampfbild sichtbar | 💡 |

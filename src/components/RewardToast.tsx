@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import type { QuestSource } from "../domain/quests";
-import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
+import { skillPointsNote } from "../domain/skills";
 import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
@@ -56,8 +56,7 @@ export function RewardToast() {
             {levelUp && (
               <p className="mb-2 text-sm text-xp">
                 +<span className="num">{(event.levelAfter - event.levelBefore) * POINTS_PER_LEVEL}</span> Attributpunkte
-                und +<span className="num">{(event.levelAfter - event.levelBefore) * SKILL_POINTS_PER_LEVEL}</span>{" "}
-                Skillpunkt{event.levelAfter - event.levelBefore > 1 ? "e" : ""}
+                {skillPointsNote(event.levelBefore, event.levelAfter)}
               </p>
             )}
             <p className={`text-sm ${event.source === "story" ? "text-muted" : "text-gold"}`}>

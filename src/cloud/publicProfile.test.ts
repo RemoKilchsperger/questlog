@@ -20,7 +20,7 @@ const character: Character = {
   essence: 0,
   stats: { strength: 4, intellect: 2, endurance: 3, charisma: 1 },
   spentPoints: 0,
-  skills: { sword: 2 },
+  skills: { keenEdge: 2 },
 };
 
 const records = { ...EMPTY_RECORDS, questsCompleted: 2 };
@@ -36,7 +36,7 @@ describe("Öffentliches Profil", () => {
     expect(profile).toMatchObject({ hero_name: "Remo", level: 3, total_xp: character.totalXp, quests_done: 2, boss_items: 1 });
     expect(profile.snapshot.title).toBeUndefined();
     expect(profile.snapshot.equipment.weapon1?.itemId).toBe("sword-0");
-    expect(profile.snapshot.skills).toEqual({ sword: 2 });
+    expect(profile.snapshot.skills).toEqual({ keenEdge: 2 });
     // Attribute inkl. Ausrüstungsbonus
     expect(Object.values(profile.snapshot.stats).reduce((a, b) => a + b, 0)).toBeGreaterThan(10);
   });

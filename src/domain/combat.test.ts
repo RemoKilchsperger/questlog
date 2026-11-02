@@ -40,6 +40,7 @@ import { buyPotion, getPotion } from "./potions";
 import { matchupOf, WEAPON_KIND } from "./matchups";
 import { untouchable } from "./bossIntents";
 import type { SkillWeapon } from "./skills";
+import { pathOrder, withSkills } from "../test/skills";
 import type { Character, Equipment, Rarity } from "./types";
 
 const xpForLevel = (level: number) => {
@@ -427,12 +428,14 @@ describe("Gebiete und Balance", () => {
   const champion = (level: number, rarity: Rarity = "common", weapon: HeavyWeapon = "greatsword") => {
     const points = 2 * (level - 1);
     const strength = Math.round(points * 0.6);
-    const character: Character = {
+    const base: Character = {
       ...heroAt(level),
       stats: { strength: 1 + strength, intellect: 1, endurance: 1 + points - strength, charisma: 1 },
       spentPoints: points,
-      skills: { [weapon]: 5 },
+      skills: {},
     };
+    // Skillpunkte: Champion in Klinge, Wächter in Wehr – jeweils von oben nach unten
+    const character = withSkills(base, pathOrder(weapon === "greatsword" ? "blade" : "guard"));
     // Eine durchschnittliche Waffe: die beiden klassischen Fähigkeiten und eine neue (abilities.ts)
     const abilities: AbilityId[] = [weapon, `${weapon}-2`, `${weapon}-4`];
     const weapon1 = { ...createItem(`${weapon}-${indexForLevel(level)}`, rarity, "gs", () => 0.5), abilities };

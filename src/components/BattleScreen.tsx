@@ -11,8 +11,7 @@ import {
   BUFF_POTION_DROP_CHANCE,
   chestCount,
   DEFEND,
-  DEFEND_DAMAGE_TAKEN,
-  DEFEND_MANA,
+  defendEffect,
   fleeCost,
   getHeroCombatProfile,
   potionBlocker,
@@ -41,7 +40,7 @@ import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { questsForCreature, trackedQuests } from "../domain/quests";
-import { SKILL_POINTS_PER_LEVEL } from "../domain/skills";
+import { skillPointsNote } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
 import { getPotion, POTIONS, potionEffectText, potionHeal } from "../domain/potions";
 import { materialEntries } from "../domain/village";
@@ -657,10 +656,13 @@ function Battle({ battle }: { battle: BattleState }) {
                 whileTap={{ scale: 0.95 }}
                 disabled={busy || !active}
                 onClick={() => act(() => attack(DEFEND))}
-                title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(DEFEND_DAMAGE_TAKEN * 100)} % Schaden und bekommst ${DEFEND_MANA} Mana zusätzlich.`}
+                title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(defendEffect(battle.skills).taken * 100)} % Schaden und bekommst ${defendEffect(battle.skills).mana} Mana zusätzlich.`}
                 className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                🛡️ Abwehren <span className="font-sans text-xs">½ Schaden · +{DEFEND_MANA} Mana</span>
+                🛡️ Abwehren{" "}
+                <span className="font-sans text-xs">
+                  {Math.round(defendEffect(battle.skills).taken * 100)} % Schaden · +{defendEffect(battle.skills).mana} Mana
+                </span>
               </motion.button>
               {battle.abilities.map((id) => (
                 <AbilityButton
@@ -877,9 +879,8 @@ function BattleResult({ battle }: { battle: BattleState }) {
             >
               LEVEL UP! → <span className="num">{reward.levelAfter}</span>
               <span className="block font-sans text-sm text-xp">
-                +{(reward.levelAfter - reward.levelBefore) * POINTS_PER_LEVEL} Attributpunkte und +
-                {(reward.levelAfter - reward.levelBefore) * SKILL_POINTS_PER_LEVEL} Skillpunkt
-                {reward.levelAfter - reward.levelBefore > 1 ? "e" : ""}
+                +{(reward.levelAfter - reward.levelBefore) * POINTS_PER_LEVEL} Attributpunkte
+                {skillPointsNote(reward.levelBefore, reward.levelAfter)}
               </span>
             </motion.p>
           )}
@@ -1309,7 +1310,11 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "fled":
       return e.goldLost > 0 ? `Du fliehst und verlierst ${e.goldLost} Gold.` : "Du fliehst.";
     case "ability":
-      return `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
+      return e.echo
+        ? `🔮 Echo! Du setzt ${getAbility(e.ability).name} ein – ohne Mana, und es hallt nach.`
+        : `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
+    case "dodged":
+      return `👻 Du weichst dem Angriff von ${enemy} aus.`;
     case "selfHeal":
       return `Du heilst dich um ${e.heal} LP.`;
     case "cleansed":
@@ -1319,8 +1324,10 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "counter":
       return `Dein Gegenschlag trifft ${enemy} für ${e.damage} Schaden.`;
     case "poison":
+      if (e.burst) return `☠️ Fäulnis! Das Gift in ${enemy} platzt: ${e.damage} Schaden.`;
       return e.target === "enemy" ? `Gift fügt ${enemy} ${e.damage} Schaden zu.` : `Gift fügt dir ${e.damage} Schaden zu.`;
     case "bleed":
+      if (e.burst) return `💥 Blutsturz! Die Wunde von ${enemy} platzt: ${e.damage} Schaden.`;
       return e.target === "enemy" ? `${enemy} blutet und erleidet ${e.damage} Schaden.` : `Du blutest und erleidest ${e.damage} Schaden.`;
     case "burn":
       return e.target === "enemy" ? `Feuer fügt ${enemy} ${e.damage} Schaden zu.` : `Feuer fügt dir ${e.damage} Schaden zu.`;

@@ -10,7 +10,8 @@ import { getEffectiveStats } from "../domain/equipment";
 import { getLevel } from "../domain/leveling";
 import type { QuestLog } from "../domain/quests";
 import { EMPTY_TOWER_RECORD, type TowerRecord } from "../domain/tower";
-import type { Character, Equipment, Stats, WeaponType } from "../domain/types";
+import type { SkillRanks } from "../domain/skills";
+import type { Character, Equipment, Stats } from "../domain/types";
 
 /** Was ein öffentliches Profil zeigt. */
 export interface ProfileSnapshot {
@@ -20,7 +21,7 @@ export interface ProfileSnapshot {
   stats: Stats;
   equipment: Equipment;
   bossCollection: string[];
-  skills: Partial<Record<WeaponType, number>>;
+  skills: SkillRanks;
   /** Koop-Erfolge – fehlt bei Profilen von vor Etappe 3 */
   coop?: CoopStats;
   /** Gewählter Titel (Id des Erfolgs) und Avatar-Rahmen – fehlen bei älteren Profilen */

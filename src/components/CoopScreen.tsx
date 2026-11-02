@@ -13,6 +13,7 @@ import {
   COOP_REWARD_FACTOR,
   coopBossCreature,
   coopAbilityBlocker,
+  coopAbilityCost,
   coopAbilityDue,
   coopBossTurn,
   coopContent,
@@ -62,7 +63,7 @@ import {
 } from "./BattleStatus";
 import { ADD_SKILLS, addIntentText, getBossPhase } from "../domain/bossMechanics";
 import { describeIntent, type IntentView } from "../domain/bossIntents";
-import { DEFEND_DAMAGE_TAKEN, DEFEND_MANA } from "../domain/combat";
+import { defendEffect } from "../domain/combat";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
@@ -714,16 +715,19 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
             whileTap={{ scale: 0.95 }}
             disabled={locked}
             onClick={defend}
-            title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(DEFEND_DAMAGE_TAKEN * 100)} % Schaden und bekommst ${DEFEND_MANA} Mana zusätzlich.`}
+            title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(defendEffect(me.skills).taken * 100)} % Schaden und bekommst ${defendEffect(me.skills).mana} Mana zusätzlich.`}
             className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            🛡️ Abwehren <span className="font-sans text-xs">½ Schaden · +{DEFEND_MANA} Mana</span>
+            🛡️ Abwehren{" "}
+            <span className="font-sans text-xs">
+              {Math.round(defendEffect(me.skills).taken * 100)} % Schaden · +{defendEffect(me.skills).mana} Mana
+            </span>
           </motion.button>
           {me.abilities.map((id) => (
             <AbilityButton
               key={id}
-              ability={classAbility(id, me.heroClass)}
-              blocker={coopAbilityBlocker(me, id, turn)}
+              ability={{ ...classAbility(id, me.heroClass), manaCost: coopAbilityCost(me, id, battle.round) }}
+              blocker={coopAbilityBlocker(me, id, turn, battle.round)}
               disabled={locked}
               onClick={() => send(id)}
               matchup={against(abilityKind(getAbility(id)))}
@@ -938,7 +942,11 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
         ? `${name(e.heroId)} belebt ${name(e.targetId)} mit ${getPotion(e.potionId).name} wieder.`
         : `${name(e.heroId)} trinkt ${getPotion(e.potionId).name}${e.heal > 0 ? ` (+${e.heal} LP)` : ""}.`;
     case "ability":
-      return `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
+      return e.echo
+        ? `🔮 Echo! ${name(e.heroId)} setzt ${getAbility(e.ability).name} ohne Mana ein – es hallt nach.`
+        : `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
+    case "dodged":
+      return `👻 ${name(e.heroId)} weicht ${name(e.attacker)} aus.`;
     case "selfHeal":
       return e.by ? `${name(e.by)} heilt ${name(e.heroId)} um ${e.heal} LP.` : `${name(e.heroId)} heilt sich um ${e.heal} LP.`;
     case "cleansed":
@@ -966,11 +974,11 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return phase ? `${bossName}: ${phase.icon} ${phase.name}! ${phase.description}` : `${bossName} wird wütend!`;
     }
     case "poison":
-      return `Gift: ${name(e.target)} −${e.damage}.`;
+      return e.burst ? `☠️ Fäulnis! Das Gift in ${name(e.target)} platzt: −${e.damage}.` : `Gift: ${name(e.target)} −${e.damage}.`;
     case "burn":
       return `Feuer: ${name(e.target)} −${e.damage}.`;
     case "bleed":
-      return `Bluten: ${name(e.target)} −${e.damage}.`;
+      return e.burst ? `💥 Blutsturz! Die Wunde von ${name(e.target)} platzt: −${e.damage}.` : `Bluten: ${name(e.target)} −${e.damage}.`;
     case "bossAbility":
       return `${bossName} setzt ${e.name} ein!`;
     case "stunned":

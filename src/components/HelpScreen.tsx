@@ -54,7 +54,7 @@ import {
   type MaterialId,
 } from "../domain/village";
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
-import { MAX_SKILL_RANK, SKILL_BONUS_PER_RANK, SKILL_POINTS_PER_LEVEL } from "../domain/skills";
+import { earnedSkillPoints, SKILL_PATHS, TIER_POINTS } from "../domain/skills";
 import { formatNumber, Gold } from "./Gold";
 
 /** 0.05 → "5 %" */
@@ -176,8 +176,8 @@ export function HelpScreen() {
             weniger, höchstens bis auf 10 %. Im Kampf-Tab steht bei jedem Gegner, wie viel er dir noch bringt.
           </p>
           <p>
-            Jedes Level-up bringt <b>{POINTS_PER_LEVEL} Attributpunkte</b> (im Charakter-Tab frei verteilen) und{" "}
-            <b>{SKILL_POINTS_PER_LEVEL} Skillpunkt</b> (im Skills-Tab).
+            Jedes Level-up bringt <b>{POINTS_PER_LEVEL} Attributpunkte</b> (im Charakter-Tab frei verteilen), jedes zweite
+            dazu <b>1 Skillpunkt</b> (im Skills-Tab).
           </p>
           <Table
             head={["Attribut", "Wirkung im Kampf"]}
@@ -202,16 +202,25 @@ export function HelpScreen() {
 
         <Topic id="skills" title="🌳 Skills & Fähigkeiten">
           <p>
-            Jeder Waffentyp (und der Schild) hat einen eigenen Skill mit {MAX_SKILL_RANK} Rängen. Jeder Rang gibt{" "}
-            {pct(SKILL_BONUS_PER_RANK)} Schaden mit Waffen dieses Typs – beim Schild {pct(SKILL_BONUS_PER_RANK)} mehr
-            Schild-Rüstung.
+            Alle 2 Level gibt es einen Skillpunkt – auf Level {MAX_LEVEL} sind es {earnedSkillPoints(MAX_LEVEL)}. Der Skilltree
+            hat vier Pfade, die mit jeder Waffe wirken:{" "}
+            {SKILL_PATHS.map((p) => `${p.icon} ${p.name} (${p.theme})`).join(", ")}.
           </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              Jeder Pfad hat vier Stufen und eine Meisterschaft. Die Stufen öffnen sich mit {TIER_POINTS[2]}, {TIER_POINTS[3]}{" "}
+              und {TIER_POINTS[4]} Punkten im selben Pfad, die Meisterschaft mit {TIER_POINTS[5]}.
+            </li>
+            <li>Die meisten Knoten brauchen einen Knoten darüber – im Baum sind sie mit Linien verbunden.</li>
+            <li>Auf Stufe 3 gabelt sich jeder Pfad: Du wählst einen der beiden Knoten.</li>
+            <li>Von den vier Meisterschaften kannst du nur eine lernen.</li>
+          </ul>
           <H>Fähigkeiten</H>
           <p>
             Kampf-Fähigkeiten liegen auf den Waffen selbst. Jede Waffe trägt einen zufälligen Teil der Fähigkeiten ihres
             Typs: Einhandwaffen und Schilde 2 von 4, Zweihandwaffen 3 von 6. Welche es sind, steht im Tooltip der Waffe – so
             ist jeder Waffenfund eine kleine Überraschung. Mit zwei Einhandwaffen (oder Waffe und Schild) hast du bis zu vier
-            Fähigkeiten. Im Skilltree siehst du unter jedem Waffentyp alle möglichen; die deiner angelegten Waffen leuchten.
+            Fähigkeiten. Unten im Skills-Tab siehst du für jeden Waffentyp alle möglichen; die deiner angelegten Waffen leuchten.
             Im Kampf stehen die Fähigkeiten der gerade angelegten Waffen bereit.
           </p>
           <ul className="list-disc space-y-1 pl-5">
