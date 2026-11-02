@@ -17,6 +17,7 @@ import {
   VAMPIRE_SHARE,
   type EliteAffix,
 } from "./elites";
+import { stepCreature } from "./dungeonPaths";
 import { EMPTY_EQUIPMENT } from "./equipment";
 import { createItem } from "./items";
 import { xpForNextLevel } from "./leveling";
@@ -154,13 +155,13 @@ describe("Elite-Gegner im Koop-Dungeon", () => {
   const mine = getDungeon("abandoned-mine");
   /** Erste Durchgangs-Id, deren erster Gegner Elite ist – bzw. gewöhnlich. */
   const runWith = (elite: boolean) => {
-    for (let i = 0; ; i++) if ((coopElite(`run-${i}`, 0, mine.creatures[0]).length > 0) === elite) return `run-${i}`;
+    for (let i = 0; ; i++) if ((coopElite(`run-${i}`, 0, stepCreature(mine, `run-${i}`, 0)).length > 0) === elite) return `run-${i}`;
   };
 
   it("gewürfelt aus Durchgang und Kampf – gleich für Server und Truhe, nie beim Raid- oder Dungeon-Boss", () => {
     const id = runWith(true);
     const state = startCoopBattle(id, mine.id, players, 0);
-    expect(state.elite).toEqual(coopElite(id, 0, mine.creatures[0]));
+    expect(state.elite).toEqual(coopElite(id, 0, stepCreature(mine, id, 0)));
     expect(startCoopBattle(runWith(false), mine.id, players, 0).elite).toBeUndefined();
     expect(startCoopBattle("r", "swamp-hydra", players, 0).elite).toBeUndefined();
     expect(coopElite(id, mine.creatures.length - 1, mine.creatures.at(-1)!)).toEqual([]);
@@ -168,10 +169,11 @@ describe("Elite-Gegner im Koop-Dungeon", () => {
 
   it("die Truhe zählt den Elite-Kampf doppelt", () => {
     const won = (id: string): CoopBattleState => ({ ...startCoopBattle(id, mine.id, players, 0), status: "won" });
-    const elite = rollCoopDungeonChest(won(runWith(true)), profile, "a");
-    const plain = rollCoopDungeonChest(won(runWith(false)), profile, "a");
-    expect(elite.xp).toBe(getCreatureXp(mine.creatures[0], profile.level) * ELITE_REWARD_FACTOR);
-    expect(plain.xp).toBe(getCreatureXp(mine.creatures[0], profile.level));
+    const [eliteRun, plainRun] = [runWith(true), runWith(false)];
+    const elite = rollCoopDungeonChest(won(eliteRun), profile, "a");
+    const plain = rollCoopDungeonChest(won(plainRun), profile, "a");
+    expect(elite.xp).toBe(getCreatureXp(stepCreature(mine, eliteRun, 0), profile.level) * ELITE_REWARD_FACTOR);
+    expect(plain.xp).toBe(getCreatureXp(stepCreature(mine, plainRun, 0), profile.level));
   });
 
   it("Explosiv trifft beim Tod alle stehenden Helden – Bollwerk blockt, fallen alle, ist der Kampf verloren", () => {

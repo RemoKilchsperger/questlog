@@ -323,6 +323,8 @@ interface GameState {
   dungeonTrap: (choice: TrapChoice) => void;
   /** Rätsel: eine der Antworten wählen */
   dungeonRiddle: (answer: string) => void;
+  /** Koop-Dungeon: Kauf beim Händler mit eigenem Gold bezahlen, Tränke kommen in den Vorrat (die Wirkung rechnet der Server) */
+  payDungeonMerchant: (offer: MerchantOffer) => void;
   /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
   leaveDungeonWithChest: () => void;
 
@@ -1463,6 +1465,12 @@ export const useGameStore = create<GameState>()(
             });
           }
         }),
+
+      payDungeonMerchant: (offer) =>
+        set((s) => ({
+          character: { ...s.character, gold: Math.max(0, s.character.gold - offer.price) },
+          ...(offer.kind === "potion" && { potions: { ...s.potions, [offer.potionId]: (s.potions[offer.potionId] ?? 0) + 1 } }),
+        })),
 
       dungeonTrap: (choice) =>
         attempt(() => {

@@ -13,6 +13,7 @@ import {
   type CoopAction,
   type CoopBattleState,
 } from "../domain/coopCombat";
+import { awaitsDecision } from "../domain/coopDungeonPaths";
 import { EventBus } from "../game/EventBus";
 import { useGameStore, type ClaimedChest } from "../store/gameStore";
 import { availableBackend, getBackend, type CoopBackend } from "./backend";
@@ -53,6 +54,8 @@ interface CoopState {
   /** Dungeon nach einem Sieg (nur der Host): nächster Kampf bzw. mit der Truhe aussteigen */
   continueDungeon: () => Promise<void>;
   exitDungeon: () => Promise<void>;
+  /** Dungeon-Wege: Stimme für eine Tür, Segen, Kauf beim Händler, Falle oder Rätsel */
+  dungeonCommand: (command: Extract<CoopCommand, { type: "door" | "blessing" | "buy" | "trap" | "riddle" }>) => Promise<void>;
   /** Lobby verlassen bzw. Kampf verlassen (der Held greift dann automatisch an) */
   leave: () => void;
   /** Nachsehen, ob ein laufender Koop-Kampf auf einen wartet */
@@ -98,6 +101,8 @@ let unsubscribe: (() => void) | null = null;
 let tickTimer: number | undefined;
 /** Kämpfe, für die schon Beute gewürfelt wurde (nie doppelt) */
 const rewarded = new Set<string>();
+/** Käufe beim Händler im Dungeon, die schon bezahlt sind (Lauf | Schritt | Angebot) */
+const purchased = new Set<string>();
 
 export const useCoopStore = create<CoopState>()((set, get) => {
   function reset(error: string | null = null) {
@@ -132,6 +137,18 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     // Kampfbeginn: das Gericht aus der Taverne ist aufgegessen – der Server hat es in die Kampfwerte eingerechnet
     if (prev?.id === next.id && prev.phase === "lobby" && next.phase === "battle") useGameStore.getState().finishMealInCoop();
 
+    // Händler im Dungeon: eigene Käufe mit dem eigenen Gold bezahlen, Tränke in den Vorrat – jeden nur einmal
+    const run = next.state?.dungeon;
+    if (run?.room?.kind === "merchant") {
+      for (const index of run.room.bought[myId] ?? []) {
+        const key = `${run.runId}|${run.stage}|${index}`;
+        const offer = run.room.offers[myId]?.[index];
+        if (purchased.has(key) || !offer) continue;
+        purchased.add(key);
+        useGameStore.getState().payDungeonMerchant(offer);
+      }
+    }
+
     // Ende erlebt (Sieg, Niederlage oder Ausstieg aus dem Dungeon): eigene Beute – nur einmal
     let result = get().result;
     const runId = next.state?.dungeon?.runId ?? next.state?.id;
@@ -154,10 +171,11 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     scheduleTick(next);
   }
 
-  /** Zur Deadline nachfragen: ist die Zeit um, löst der Server die Runde auf. */
+  /** Zur Deadline nachfragen: ist die Zeit um, löst der Server die Runde auf – im Dungeon auch Tür und Raum. */
   function scheduleTick(row: CoopRow) {
     window.clearTimeout(tickTimer);
-    if (row.phase !== "battle" || !row.state || row.state.status !== "active") return;
+    if (row.phase !== "battle" || !row.state) return;
+    if (row.state.status !== "active" && !awaitsDecision(row.state)) return;
     const wait = Math.max(0, localDeadline(row.state, get().clockOffset) - Date.now()) + 600;
     tickTimer = window.setTimeout(() => void send({ type: "tick" }), wait);
   }
@@ -245,6 +263,10 @@ export const useCoopStore = create<CoopState>()((set, get) => {
 
     exitDungeon: async () => {
       await send({ type: "exit" });
+    },
+
+    dungeonCommand: async (command) => {
+      await send(command);
     },
 
     leave: () => {
