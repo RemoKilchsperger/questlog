@@ -217,9 +217,7 @@ function OutfitScreen({ companionId }: { companionId: string }) {
   const equipBest = useGameStore((s) => s.companionEquipBest);
   if (!companion) return null;
   const level = companionLevel(companion);
-  const wearable = inventory
-    .filter((o) => getItemStats(o).def.requiredLevel <= level)
-    .sort((a, b) => itemScore(b) - itemScore(a));
+  const wearable = [...inventory].sort((a, b) => itemScore(b) - itemScore(a));
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -265,7 +263,7 @@ function OutfitScreen({ companionId }: { companionId: string }) {
         </p>
       </section>
       <section className="panel flex flex-col gap-2 p-4">
-        <h3 className="font-pixel text-lg">Aus dem Inventar (bis Lv. {level})</h3>
+        <h3 className="font-pixel text-lg">Aus dem Inventar</h3>
         {wearable.length === 0 ? (
           <p className="text-sm text-muted">Nichts in deinem Inventar, was {companion.name} tragen kann.</p>
         ) : (

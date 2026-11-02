@@ -189,10 +189,9 @@ describe("Level", () => {
 });
 
 describe("Ausrüstung", () => {
-  it("braucht das Level des Begleiters, nicht des Helden", () => {
+  it("trägt Items unabhängig vom Level", () => {
     const sword = owned(itemAt("sword", 30));
-    expect(() => equipCompanion(companion(20), [sword], sword.uid)).toThrow("Level");
-    const result = equipCompanion(companion(30), [sword], sword.uid);
+    const result = equipCompanion(companion(1), [sword], sword.uid);
     expect(result.companion.equipment.weapon1).toBe(sword);
     expect(result.inventory).toHaveLength(0);
   });
@@ -210,19 +209,19 @@ describe("Ausrüstung", () => {
       owned(itemAt("greatsword", 20), "epic"),
       owned(itemAt("shield", 20)),
       owned(itemAt("shield", 20)),
-      owned(itemAt("chest", 40, "medium"), "legendary"), // zu hoch
+      owned(itemAt("chest", 40, "medium"), "legendary"), // über dem Begleiterlevel
     ];
     const result = equipBest(companion(20, [], old), better);
     const eq = result.companion.equipment;
     expect(eq.head).toBe(better[0]);
-    expect(eq.chest).toBe(old.chest);
+    expect(eq.chest).toBe(better[4]);
     // Epische Zweihandwaffe (doppelt) schlägt zwei gewöhnliche Einhänder
     expect(eq.weapon1).toBe(better[1]);
     expect(eq.weapon2).toBeNull();
     // Nichts geht verloren
     const worn = Object.values(eq).filter((o) => o !== null);
     expect(worn.length + result.inventory.length).toBe(7 + better.length);
-    expect(result.inventory).toContain(better[4]);
+    expect(result.inventory).toContain(old.chest);
   });
 
   it("Bestes anlegen nimmt höchstens einen Schild", () => {

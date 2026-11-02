@@ -280,14 +280,14 @@ export function dismissCompanion(
 
 /* ───────────── Ausrüstung ───────────── */
 
-/** Legt ein Item aus dem Inventar des Helden an – mit dem Level des Begleiters, ohne Rüstungsklasse. */
+/** Legt ein Item aus dem Inventar des Helden an – unabhängig von Level und Rüstungsklasse. */
 export function equipCompanion(
   companion: Companion,
   inventory: readonly OwnedItem[],
   uid: string,
   slot?: EquipSlot,
 ): { companion: Companion; inventory: OwnedItem[] } {
-  const gear = equipItem({ inventory: [...inventory], equipment: companion.equipment }, uid, companionLevel(companion), slot);
+  const gear = equipItem({ inventory: [...inventory], equipment: companion.equipment }, uid, Infinity, slot);
   return { companion: { ...companion, equipment: gear.equipment }, inventory: gear.inventory };
 }
 
@@ -306,11 +306,8 @@ export function unequipCompanion(
  * oder die zwei besten Einhandwaffen – mit höchstens einem Schild.
  */
 export function equipBest(companion: Companion, inventory: readonly OwnedItem[]): { companion: Companion; inventory: OwnedItem[] } {
-  const level = companionLevel(companion);
   const pool = [...inventory, ...Object.values(companion.equipment).filter((o): o is OwnedItem => o !== null)];
-  const usable = pool
-    .filter((o) => getItem(o.itemId).requiredLevel <= level)
-    .sort((a, b) => itemScore(b) - itemScore(a));
+  const usable = pool.sort((a, b) => itemScore(b) - itemScore(a));
   const equipment: Equipment = { ...EMPTY_EQUIPMENT };
   for (const slot of ARMOR_SLOTS) {
     equipment[slot] = usable.find((o) => getItem(o.itemId).type === slot) ?? null;

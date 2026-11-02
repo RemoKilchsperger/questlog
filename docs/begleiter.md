@@ -79,15 +79,15 @@ Begleiter jede Mission verkürzen.
 
 - Begleiter leveln mit derselben Kurve wie der Held (`xpForNextLevel`).
 - Sie können **höchstens das Level des Helden** erreichen. EP darüber hinaus verfallen. Der Begleiter
-  wird so nie stärker als man selbst und braucht keine eigenen Items über dem Heldenlevel.
-- Mit dem Level steigt nur, welche Items er tragen kann. Für Missionen zählt der Gearscore.
+  wird so nie stärker als man selbst.
+- Das Level bestimmt nur den Preis beim Anwerben. Für Missionen zählt der Gearscore.
 
 ## Ausrüstung
 
 - Begleiter haben dieselben 7 Plätze wie der Held (5 Rüstung, 2 Waffen). Ihr Gearscore wird mit der
   bestehenden Funktion `gearScore` berechnet, danach kommt der Trait „Kampferprobt“ dazu.
-- Sie tragen **Items aus dem Inventar des Helden**. Für jedes Item braucht der Begleiter das passende
-  Level, die Rüstungsklasse spielt keine Rolle.
+- Sie tragen **Items aus dem Inventar des Helden**, und zwar jedes: Level und Rüstungsklasse spielen
+  keine Rolle.
 - Ein angelegtes Item gehört so lange dem Begleiter. Man kann es nicht verkaufen, zerlegen oder beim
   Schmied verbessern, bis man es wieder abnimmt.
 - Während einer Mission lässt sich die Ausrüstung nicht ändern.
