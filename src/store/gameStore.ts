@@ -525,6 +525,20 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
       materials: Object.fromEntries(Object.entries(state.materials).map(([id, n]) => [renamed[id] ?? id, n])),
     };
   }
+  // v17 → v18: die Anschlagtafel hat nur noch Stufe 1 – die bezahlten Stufen 2 und 3 gibt es zurück.
+  if (version < 18 && state.village && state.village.board > 1) {
+    const refunds: [number, MaterialStock][] = [
+      [1500, { crystalShard: 25, darkwood: 10 }],
+      [6000, { obsidian: 30, crystalShard: 15 }],
+    ];
+    const paid = refunds.slice(0, state.village.board - 1);
+    state = {
+      ...state,
+      character: { ...state.character, gold: state.character.gold + paid.reduce((sum, [gold]) => sum + gold, 0) },
+      materials: paid.reduce((stock, [, materials]) => addMaterials(stock, materials), state.materials ?? {}),
+      village: { ...state.village, board: 1 },
+    };
+  }
   return state;
 }
 
@@ -1271,7 +1285,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 17,
+      version: 18,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,

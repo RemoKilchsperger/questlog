@@ -66,14 +66,13 @@ Ohne Schmiede fehlt anfangs wenig, weil man zum Zerlegen ohnehin erst seltene It
 ### 📜 Anschlagtafel
 
 Das Questbuch mit den Gebiets-, Boss- und Dungeon-Quests gibt es immer. Die Tafel bringt die
-zusätzlichen Aufträge.
+zusätzlichen Aufträge. Sie hat nur eine Stufe, die gleich alle Aufträge freischaltet (früher drei;
+alte Spielstände bekommen die Kosten der Stufen 2 und 3 zurück).
 
 | Stufe | Name | Wirkung |
 |---|---|---|
 | 0 | – | nur Questbuch |
-| 1 | Anschlagtafel | 3 tägliche Jagdaufträge |
-| 2 | Auftragsbrett | heutiger Stand: dazu Händler-Aufträge und Wochenaufträge |
-| 3 | Kopfgeld-Tafel | täglich wechselnde Steckbriefe für Elite-Gegner (Idee #14) |
+| 1 | Anschlagtafel | tägliche Jagd-, Händler- und Turm-Aufträge, Steckbriefe für Elite-Gegner (Idee #14) und Wochenaufträge |
 
 ### ⚗️ Alchemist
 
@@ -142,7 +141,7 @@ Der Bonus gilt für XP aus Solo-Kämpfen, Dungeons, dem Turm und abgegebenen Que
 village.ts). Kampf-Ergebnis und Truhen zeigen die XP schon mit Bonus. Im Koop gilt er nicht, wie das
 übrige Dorf.
 
-### 🎯 Steckbriefe (Kopfgeld-Tafel)
+### 🎯 Steckbriefe
 
 - Jeden Tag 2 Steckbriefe für Kreaturen aus den Tagesaufträgen deines Levels, jeder mit 2 festen
   Elite-Modifikatoren (z. B. Rasend und Explosiv).
@@ -152,9 +151,9 @@ village.ts). Kampf-Ergebnis und Truhen zeigen die XP schon mit Bonus. Im Koop gi
 
 ### Aufträge, die noch nicht sichtbar sind
 
-Die Tages- und Wochenaufträge werden immer vollständig ausgewürfelt. Die Anschlagtafel zeigt davon nur,
-was ihre Stufe freigibt (`visibleBoard` in quests.ts). Unsichtbare Aufträge kommen nicht voran. Wer
-die Tafel mitten am Tag ausbaut, sieht die neuen Aufträge sofort, mit Fortschritt 0.
+Die Tages- und Wochenaufträge werden immer vollständig ausgewürfelt. Ohne Anschlagtafel sind sie
+unsichtbar (`visibleBoard` in quests.ts) und kommen nicht voran. Wer die Tafel mitten am Tag baut,
+sieht die Aufträge sofort, mit Fortschritt 0.
 
 ## Kosten
 
@@ -164,21 +163,21 @@ Quest-Belohnungen und Verkäufe. Die Kosten richten sich danach:
 
 | Stufe | Gold | Material | Erreichbar ab etwa |
 |---|---|---|---|
-| 1 | 150–400 | 10–20 Düsterholz (Alchemist: Lehm) | Level 5–12 |
-| 2 | 1'500–2'500 | 25 Kristallsplitter oder Hartholz, 10 Material aus Stufe 1 | Level 25–35 |
-| 3 | 6'000–10'000 | 30 Obsidian oder Drachenerz, 15 Material aus Stufe 2 | Level 45–60 |
+| 1 | 100 | 10–20 Düsterholz (Alchemist: Lehm) | Level 5–12 |
+| 2 | 1'000 | 25 Kristallsplitter oder Hartholz, 10 Material aus Stufe 1 | Level 25–35 |
+| 3 | 5'000 | 30 Obsidian oder Drachenerz, 15 Material aus Stufe 2 | Level 45–60 |
 
 Vorschlag pro Gebäude:
 
 | Gebäude | Stufe 1 | Stufe 2 | Stufe 3 |
 |---|---|---|---|
-| Händler | 300 G, 15 🐺 | 2'000 G, 25 💎, 10 🐺 | 8'000 G, 30 💀, 15 💎 |
-| Schmiede | 400 G, 20 🐺 | 2'500 G, 25 ❄️, 10 🦎 | 10'000 G, 30 🐉, 15 ❄️ |
-| Anschlagtafel | 150 G, 10 🐺 | 1'500 G, 25 💎, 10 🐺 | 6'000 G, 30 💀, 15 💎 |
-| Alchemist | 300 G, 15 🦎 | 2'000 G, 25 ❄️, 10 🦎 | 8'000 G, 30 🐉, 15 ❄️ |
-| Taverne | 250 G, 15 🐺 | 1'800 G, 25 💎, 10 🦎 | 7'000 G, 30 💀, 15 💎 |
-| Trainingsplatz | 300 G, 20 🐺 | 2'000 G, 25 ❄️, 10 🐺 | 8'000 G, 30 💀, 15 ❄️ |
-| Statue | 500 G, 20 🦎 | 3'000 G, 25 💎, 10 🦎 | 12'000 G, 30 🐉, 15 💀 |
+| Händler | 100 G, 15 🐺 | 1'000 G, 25 💎, 10 🐺 | 5'000 G, 30 💀, 15 💎 |
+| Schmiede | 100 G, 20 🐺 | 1'000 G, 25 ❄️, 10 🦎 | 5'000 G, 30 🐉, 15 ❄️ |
+| Anschlagtafel | 100 G, 10 🐺 | – | – |
+| Alchemist | 100 G, 15 🦎 | 1'000 G, 25 ❄️, 10 🦎 | 5'000 G, 30 🐉, 15 ❄️ |
+| Taverne | 100 G, 15 🐺 | 1'000 G, 25 💎, 10 🦎 | 5'000 G, 30 💀, 15 💎 |
+| Trainingsplatz | 100 G, 20 🐺 | 1'000 G, 25 ❄️, 10 🐺 | 5'000 G, 30 💀, 15 ❄️ |
+| Statue | 100 G, 20 🦎 | 1'000 G, 25 💎, 10 🦎 | 5'000 G, 30 🐉, 15 💀 |
 
 Weil die Material-Stufen an Gebiete gebunden sind, braucht es **keine zusätzlichen Level-Sperren**.
 Wer Stufe 3 bauen will, muss in den Schattenruinen oder im Drachenhort bestehen.
@@ -228,7 +227,7 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
 
 - **Grundstein:** erstes Gebäude gebaut
 - **Dorfgründer:** alle Gebäude mindestens auf Stufe 1
-- **Baumeister:** alle Gebäude auf Stufe 3
+- **Baumeister:** alle Gebäude ganz ausgebaut (die Anschlagtafel auf Stufe 1, die übrigen auf Stufe 3)
 
 ## Spätere Erweiterungen
 

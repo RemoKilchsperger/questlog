@@ -66,7 +66,7 @@ describe("Dorf im Spielstand", () => {
     expect(store().shop.offers).toHaveLength(4);
     store().build("merchant");
     expect(store().village.merchant).toBe(1);
-    expect(store().character.gold).toBe(700);
+    expect(store().character.gold).toBe(900);
     expect(store().materials.darkwood).toBe(5);
     expect(store().shop.offers).toHaveLength(6);
     // Zu wenig für die nächste Stufe: nichts passiert
@@ -87,7 +87,7 @@ describe("Dorf im Spielstand", () => {
     const bounty = daily.quests.find((q) => q.def.goal.kind === "bounty")!;
     if (bounty.def.goal.kind !== "bounty") throw new Error("kein Steckbrief");
     const { creatureId, affixes } = bounty.def.goal;
-    useGameStore.setState({ dailyQuests: daily, village: { ...EMPTY_VILLAGE, board: 3 } });
+    useGameStore.setState({ dailyQuests: daily, village: { ...EMPTY_VILLAGE, board: 1 } });
     store().startBattle(creatureId);
     expect(store().battle?.elite).toEqual(affixes);
     winCurrent();
@@ -104,6 +104,27 @@ describe("Spielstand v16 → v17", () => {
     const old = { ...store(), materials: { wolfPelt: 12, crystalShard: 4, dragonScale: 2 } };
     const state = migrateSave(old, 16);
     expect(state.materials).toEqual({ darkwood: 12, crystalShard: 4, dragonOre: 2 });
+  });
+});
+
+describe("Spielstand v17 → v18", () => {
+  it("setzt die Anschlagtafel auf Stufe 1 und gibt die Kosten der Stufen 2 und 3 zurück", () => {
+    const base = store();
+    const old = {
+      ...base,
+      character: { ...base.character, gold: 50 },
+      materials: { darkwood: 2 },
+      village: { ...EMPTY_VILLAGE, board: 3, smith: 2 },
+    };
+    const state = migrateSave(old, 17);
+    expect(state.village).toEqual({ ...EMPTY_VILLAGE, board: 1, smith: 2 });
+    expect(state.character.gold).toBe(50 + 1500 + 6000);
+    expect(state.materials).toEqual({ darkwood: 12, crystalShard: 40, obsidian: 30 });
+  });
+
+  it("lässt eine Tafel auf Stufe 0 oder 1 unverändert", () => {
+    const old = { ...store(), village: { ...EMPTY_VILLAGE, board: 1 } };
+    expect(migrateSave(old, 17)).toBe(old);
   });
 });
 

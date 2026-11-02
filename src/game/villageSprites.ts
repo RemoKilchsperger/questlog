@@ -231,49 +231,7 @@ const SMITH_3 = stamp(
 
 /* ───────────── Anschlagtafel ───────────── */
 
-const BOARD_1 = [
-  "2222222222222222",
-  "2111111111111112",
-  "21pp1111pp11pp12",
-  "21pk111kpp11kp12",
-  "21pp1111pp11pp12",
-  "2111111111111112",
-  "2222222222222222",
-  ".2............2.",
-  ".2............2.",
-  ".2............2.",
-  ".2............2.",
-  "3.3..........3.3",
-];
-
-const BOARD_2 = stamp(
-  sym(
-    [
-      ".......RRRR",
-      ".....RRrrrr",
-      "...RRrrrrrr",
-      ".RRrrrrrrrr",
-      "RRRRRRRRRRR",
-      ".2222222222",
-      ".2111111111",
-      ".21ppp11ppp",
-      ".21pkp11pkk",
-      ".21ppp11ppp",
-      ".2111111111",
-      ".21pp111ppp",
-      ".21pk111pkp",
-      ".2111111111",
-      ".2222222222",
-      "..2........",
-      "..2........",
-      "..2........",
-      ".323.......",
-    ],
-    11,
-  ),
-);
-
-const BOARD_3 = stamp(
+const BOARD = stamp(
   sym(
     [
       "..........BBBB",
@@ -635,7 +593,7 @@ const STATUE_3 = stamp(
 const SPRITES: Readonly<Record<BuildingId, readonly (readonly string[])[]>> = {
   merchant: [MERCHANT_0, MERCHANT_1, MERCHANT_2, MERCHANT_3],
   smith: [PLOT, SMITH_1, SMITH_2, SMITH_3],
-  board: [PLOT, BOARD_1, BOARD_2, BOARD_3],
+  board: [PLOT, BOARD],
   alchemist: [PLOT, ALCHEMIST_1, ALCHEMIST_2, ALCHEMIST_3],
   tavern: [PLOT, TAVERN_1, TAVERN_2, TAVERN_3],
   training: [PLOT, TRAINING_1, TRAINING_2, TRAINING_3],

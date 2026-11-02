@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CLASSIC_VILLAGE } from "../test/village";
 import { addToChest, EMPTY_CHEST, startBattle, type BattleState, type HeroCombatProfile } from "../domain/combat";
+import type { EliteAffix } from "../domain/elites";
 import { AREA_BOSS_RESPAWN_MS, formatRespawn, getCreature, getDungeon, hasRespawn, respawnLeft, startRespawn } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
 import { createItem, getItem } from "../domain/items";
@@ -21,9 +22,9 @@ const hero: HeroCombatProfile = {
   critMultiplier: 1.5,
 };
 
-/** Kampf, den der nächste Schlag gewinnt. */
-const winnable = (creatureId: string): BattleState => {
-  const base = startBattle("b", "Held", hero, getCreature(creatureId).creature);
+/** Kampf, den der nächste Schlag gewinnt – mit Modifikatoren als Elite-Gegner. */
+const winnable = (creatureId: string, elite: readonly EliteAffix[] = []): BattleState => {
+  const base = startBattle("b", "Held", hero, getCreature(creatureId).creature, hero.maxHp, elite);
   return { ...base, enemy: { ...base.enemy, hp: 1 } };
 };
 
@@ -40,8 +41,8 @@ const trade = (action: TradeAction) => {
   if (action === "upgrade") store().upgrade(uid);
 };
 
-const win = (creatureId: string) => {
-  useGameStore.setState({ battle: winnable(creatureId), battleReward: null, dungeon: null });
+const win = (creatureId: string, elite: readonly EliteAffix[] = []) => {
+  useGameStore.setState({ battle: winnable(creatureId, elite), battleReward: null, dungeon: null });
   useGameStore.getState().battleAttack();
   expect(useGameStore.getState().battle?.status).toBe("won");
 };
@@ -89,16 +90,17 @@ describe("Quests im Spielstand", () => {
     if (rat) expect(rat.progress).toBe(1);
   });
 
-  it("alle Tagesaufträge abgegeben – auch der Händler-Auftrag – zählt als perfekter Tag", () => {
+  it("alle Tagesaufträge abgegeben – auch Händler-Auftrag und Steckbriefe – zählt als perfekter Tag", () => {
     const store = useGameStore.getState;
     store().refreshQuestBoards();
     for (const q of store().dailyQuests.quests) {
       const { goal } = q.def;
       if (goal.kind === "kill") for (let i = 0; i < goal.count; i++) win(goal.creatureId);
+      if (goal.kind === "bounty") win(goal.creatureId, goal.affixes);
       if (goal.kind === "trade") for (let i = 0; i < goal.count; i++) trade(goal.action);
     }
     for (const q of store().dailyQuests.quests) store().turnInQuest(q.def.id);
-    expect(store().records.dailyQuestsCompleted).toBe(4);
+    expect(store().records.dailyQuestsCompleted).toBe(6);
     expect(store().records.perfectBonusDays).toBe(1);
   });
 

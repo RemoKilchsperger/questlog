@@ -1,7 +1,8 @@
 // Dorf-Ausbau: Das Dorf baut der Spieler selbst auf. Am Anfang gibt es nur einen
 // Strassenhändler – Schmiede, Anschlagtafel, Alchemist, Taverne, Trainingsplatz
 // und Statue muss man bauen und kann
-// sie in Stufen ausbauen (0 = nicht gebaut, höchstens 3). Bauen kostet Gold und
+// sie in Stufen ausbauen (0 = nicht gebaut, höchstens 3; die Anschlagtafel hat nur
+// Stufe 1, die gleich alle Aufträge bringt). Bauen kostet Gold und
 // Material, das Monster im jeweiligen Gebiet sicher fallen lassen. Stufe 2
 // entspricht jeweils dem früheren festen Dorf, Stufe 3 bringt etwas Neues dazu.
 // Siehe docs/dorf-ausbau.md.
@@ -82,7 +83,6 @@ export function materialEntries(stock: MaterialStock | undefined): { def: Materi
 
 export type BuildingId = "merchant" | "smith" | "board" | "alchemist" | "tavern" | "training" | "statue";
 export type BuildingTier = 0 | 1 | 2 | 3;
-export const MAX_BUILDING_TIER = 3;
 
 /** Stufe jedes Gebäudes – wird gespeichert. */
 export type Village = Record<BuildingId, BuildingTier>;
@@ -110,8 +110,8 @@ export interface BuildingDef {
   name: string;
   icon: string;
   description: string;
-  /** Stufen 0 bis 3 */
-  tiers: readonly [BuildingTierDef, BuildingTierDef, BuildingTierDef, BuildingTierDef];
+  /** Stufen ab 0 – meist bis 3, die Anschlagtafel nur bis 1 */
+  tiers: readonly BuildingTierDef[];
 }
 
 const cost = (gold: number, materials: MaterialStock): BuildCost => ({ gold, materials });
@@ -124,18 +124,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Verkauft wechselnde Ausrüstung und kauft deine Beute.",
     tiers: [
       { name: "Strassenhändler", icon: "🧺", effect: "4 Stück, nur gewöhnlich und selten (10 %), kein Neuwürfeln" },
-      { name: "Krämerladen", icon: "⛺", effect: "6 Stück, 20 % selten, 5 % episch, 2× Neuwürfeln am Tag", cost: cost(300, { darkwood: 15 }) },
+      { name: "Krämerladen", icon: "⛺", effect: "6 Stück, 20 % selten, 5 % episch, 2× Neuwürfeln am Tag", cost: cost(100, { darkwood: 15 }) },
       {
         name: "Handelshaus",
         icon: "🏠",
         effect: "8 Stück, mit Glück legendär (0,2 %), 5× Neuwürfeln am Tag",
-        cost: cost(2000, { crystalShard: 25, darkwood: 10 }),
+        cost: cost(1000, { crystalShard: 25, darkwood: 10 }),
       },
       {
         name: "Grosshandel",
         icon: "🏛️",
         effect: "10 Stück, 8 % episch, 0,5 % legendär, Verkaufspreise +10 %",
-        cost: cost(8000, { obsidian: 30, crystalShard: 15 }),
+        cost: cost(5000, { obsidian: 30, crystalShard: 15 }),
       },
     ],
   },
@@ -146,13 +146,13 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Zerlegt Ausrüstung in Essenz und verbessert Waffen und Rüstungen.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Noch keine Schmiede: kein Zerlegen, kein Verbessern" },
-      { name: "Esse", icon: "🔥", effect: "Zerlegen, Verbessern bis +2", cost: cost(400, { darkwood: 20 }) },
-      { name: "Schmiede", icon: "🏠", effect: "Verbessern bis +5", cost: cost(2500, { hardwood: 25, clay: 10 }) },
+      { name: "Esse", icon: "🔥", effect: "Zerlegen, Verbessern bis +2", cost: cost(100, { darkwood: 20 }) },
+      { name: "Schmiede", icon: "🏠", effect: "Verbessern bis +5", cost: cost(1000, { hardwood: 25, clay: 10 }) },
       {
         name: "Meisterschmiede",
         icon: "🏛️",
         effect: "Verbessern kostet 20 % weniger Essenz, beim Zerlegen 75 % statt 50 % zurück",
-        cost: cost(10000, { dragonOre: 30, hardwood: 15 }),
+        cost: cost(5000, { dragonOre: 30, hardwood: 15 }),
       },
     ],
   },
@@ -163,18 +163,11 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Bringt zusätzliche Aufträge – das Questbuch gibt es immer.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Nur das Questbuch" },
-      { name: "Anschlagtafel", icon: "🪵", effect: "3 tägliche Jagdaufträge", cost: cost(150, { darkwood: 10 }) },
       {
-        name: "Auftragsbrett",
-        icon: "🏠",
-        effect: "Dazu Händler- und Turm-Aufträge sowie die Wochenaufträge",
-        cost: cost(1500, { crystalShard: 25, darkwood: 10 }),
-      },
-      {
-        name: "Kopfgeld-Tafel",
-        icon: "🏛️",
-        effect: "Täglich 2 Steckbriefe für gesuchte Elite-Gegner",
-        cost: cost(6000, { obsidian: 30, crystalShard: 15 }),
+        name: "Anschlagtafel",
+        icon: "🪵",
+        effect: "Tägliche Jagd-, Händler- und Turm-Aufträge, 2 Steckbriefe für gesuchte Elite-Gegner und die Wochenaufträge",
+        cost: cost(100, { darkwood: 10 }),
       },
     ],
   },
@@ -185,18 +178,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Verkauft Tränke – ohne ihn gibt es beim Händler nur kleine Heiltränke.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Nur kleine Heiltränke beim Händler" },
-      { name: "Kräuterhütte", icon: "🛖", effect: "Dazu Heiltränke", cost: cost(300, { clay: 15 }) },
+      { name: "Kräuterhütte", icon: "🛖", effect: "Dazu Heiltränke", cost: cost(100, { clay: 15 }) },
       {
         name: "Alchemistenlabor",
         icon: "🏠",
         effect: "Angriffs- und Rüstungstränke kaufbar",
-        cost: cost(2000, { hardwood: 25, clay: 10 }),
+        cost: cost(1000, { hardwood: 25, clay: 10 }),
       },
       {
         name: "Meisteralchemist",
         icon: "🏛️",
         effect: "Grosse Heiltränke kaufbar, alle Tränke wirken 25 % stärker",
-        cost: cost(8000, { dragonOre: 30, hardwood: 15 }),
+        cost: cost(5000, { dragonOre: 30, hardwood: 15 }),
       },
     ],
   },
@@ -207,18 +200,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Kocht Buff-Food, das dich für den nächsten Kampf, Dungeon, Turm-Lauf oder Koop-Kampf stärkt.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Noch keine Taverne" },
-      { name: "Schankstube", icon: "🍲", effect: "Einfache Gerichte: mehr LP, Schaden oder Rüstung", cost: cost(250, { darkwood: 15 }) },
+      { name: "Schankstube", icon: "🍲", effect: "Einfache Gerichte: mehr LP, Schaden oder Rüstung", cost: cost(100, { darkwood: 15 }) },
       {
         name: "Gasthaus",
         icon: "🏠",
         effect: "Kräftigere Gerichte, dazu Krit-Chance und Mana",
-        cost: cost(1800, { crystalShard: 25, clay: 10 }),
+        cost: cost(1000, { crystalShard: 25, clay: 10 }),
       },
       {
         name: "Festhalle",
         icon: "🏛️",
         effect: "Festmahle mit mehreren Buffs",
-        cost: cost(7000, { obsidian: 30, crystalShard: 15 }),
+        cost: cost(5000, { obsidian: 30, crystalShard: 15 }),
       },
     ],
   },
@@ -229,18 +222,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Hier lernst du um: Ohne Trainingsplatz lassen sich die Skillpunkte nicht zurücksetzen.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Skillpunkte zurücksetzen nicht möglich" },
-      { name: "Übungsplatz", icon: "🪵", effect: "Skillpunkte zurücksetzen gegen Gold", cost: cost(300, { darkwood: 20 }) },
+      { name: "Übungsplatz", icon: "🪵", effect: "Skillpunkte zurücksetzen gegen Gold", cost: cost(100, { darkwood: 20 }) },
       {
         name: "Trainingsplatz",
         icon: "🏠",
         effect: "Zurücksetzen kostet 50 % weniger",
-        cost: cost(2000, { hardwood: 25, darkwood: 10 }),
+        cost: cost(1000, { hardwood: 25, darkwood: 10 }),
       },
       {
         name: "Kampfschule",
         icon: "🏛️",
         effect: "Zurücksetzen ist kostenlos",
-        cost: cost(8000, { obsidian: 30, hardwood: 15 }),
+        cost: cost(5000, { obsidian: 30, hardwood: 15 }),
       },
     ],
   },
@@ -251,18 +244,18 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Ein Denkmal deiner Taten – es spornt dich an: Du bekommst mehr XP.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Kein XP-Bonus" },
-      { name: "Gedenkstein", icon: "🪨", effect: "+5 % XP aus Kämpfen und Quests", cost: cost(500, { clay: 20 }) },
+      { name: "Gedenkstein", icon: "🪨", effect: "+5 % XP aus Kämpfen und Quests", cost: cost(100, { clay: 20 }) },
       {
         name: "Heldenstatue",
         icon: "🗿",
         effect: "+10 % XP aus Kämpfen und Quests",
-        cost: cost(3000, { crystalShard: 25, clay: 10 }),
+        cost: cost(1000, { crystalShard: 25, clay: 10 }),
       },
       {
         name: "Goldenes Denkmal",
         icon: "🏆",
         effect: "+15 % XP aus Kämpfen und Quests",
-        cost: cost(12000, { dragonOre: 30, obsidian: 15 }),
+        cost: cost(5000, { dragonOre: 30, obsidian: 15 }),
       },
     ],
   },
@@ -274,10 +267,15 @@ export function getBuilding(id: BuildingId): BuildingDef {
   return def;
 }
 
+/** Höchste Stufe dieses Gebäudes. */
+export function maxTier(id: BuildingId): BuildingTier {
+  return (getBuilding(id).tiers.length - 1) as BuildingTier;
+}
+
 /** Kosten der nächsten Stufe – null, wenn das Gebäude schon ganz ausgebaut ist. */
 export function nextBuildCost(village: Village, id: BuildingId): BuildCost | null {
   const tier = village[id];
-  return tier >= MAX_BUILDING_TIER ? null : getBuilding(id).tiers[tier + 1].cost!;
+  return tier >= maxTier(id) ? null : getBuilding(id).tiers[tier + 1].cost!;
 }
 
 /** Was zur nächsten Stufe noch fehlt (leer: genug von allem). */
@@ -321,6 +319,11 @@ export function build(
 /** Gebäude, die mindestens auf dieser Stufe stehen (für Erfolge). */
 export function buildingsAtLeast(village: Village | undefined, tier: number): number {
   return BUILDINGS.filter((b) => (village?.[b.id] ?? 0) >= tier).length;
+}
+
+/** Gebäude, die ganz ausgebaut sind (für Erfolge). */
+export function buildingsMaxed(village: Village | undefined): number {
+  return BUILDINGS.filter((b) => (village?.[b.id] ?? 0) >= maxTier(b.id)).length;
 }
 
 /* ───────────── Wirkung der Stufen ───────────── */
@@ -389,9 +392,6 @@ export const MASTER_POTION_BONUS = 0.25;
 export function potionPower(alchemist: BuildingTier): number {
   return alchemist >= 3 ? 1 + MASTER_POTION_BONUS : 1;
 }
-
-/** Ab welcher Stufe der Anschlagtafel es die Tages-Jagden, die übrigen Aufträge und die Steckbriefe gibt. */
-export const BOARD_TIERS = { hunts: 1, all: 2, bounties: 3 } as const;
 
 /** Statue: XP-Bonus pro Stufe auf alle XP aus Solo-Kämpfen und Quests (0.1 = +10 %). */
 export const STATUE_XP_BONUS: Readonly<Record<BuildingTier, number>> = { 0: 0, 1: 0.05, 2: 0.1, 3: 0.15 };

@@ -4,6 +4,7 @@ import { dateKey, formatCountdown, nextBoundary, nextWeekStart, weekKey } from "
 import { AREAS, DUNGEONS, getCreature, getDungeon, isAreaUnlocked } from "../domain/creatures";
 import { getLevel } from "../domain/leveling";
 import {
+  boardBuilt,
   EMPTY_BOARD,
   isQuestComplete,
   QUESTS,
@@ -16,7 +17,6 @@ import {
   type TradeAction,
   type TrackedQuest,
 } from "../domain/quests";
-import { BOARD_TIERS } from "../domain/village";
 import { useGameStore } from "../store/gameStore";
 import { CreatureSprite } from "./CreatureSprite";
 import { Gold } from "./Gold";
@@ -64,19 +64,15 @@ type BoardView = "daily" | "weekly";
 /** Gewählte Ansicht der Aufträge – nur eine Bequemlichkeit pro Browser. */
 const BOARD_VIEW_KEY = "questlog-board-view";
 
-const BOARD_VIEWS: Record<BoardView, { label: string; intro: (boardTier: number) => string }> = {
+const BOARD_VIEWS: Record<BoardView, { label: string; intro: string }> = {
   daily: {
     label: "⭐ Täglich",
-    intro: (tier) =>
-      tier >= BOARD_TIERS.bounties
-        ? "Jeden Tag Jagdaufträge, ein Auftrag für Händler oder Schmied und zwei Steckbriefe: Gesuchte Elite-Gegner erscheinen genau so, wenn du gegen die Kreatur kämpfst. Alles zählt sofort, ohne Annehmen."
-        : tier >= BOARD_TIERS.all
-          ? "Jeden Tag drei Jagdaufträge passend zu deinem Level und ein Auftrag für Händler oder Schmied – sie zählen sofort, ohne Annehmen."
-          : "Jeden Tag drei Jagdaufträge passend zu deinem Level – sie zählen sofort, ohne Annehmen. Baust du die Anschlagtafel aus, kommen weitere dazu.",
+    intro:
+      "Jeden Tag Jagdaufträge, ein Auftrag für Händler oder Schmied und zwei Steckbriefe: Gesuchte Elite-Gegner erscheinen genau so, wenn du gegen die Kreatur kämpfst. Alles zählt sofort, ohne Annehmen.",
   },
   weekly: {
     label: "📅 Wöchentlich",
-    intro: () => "Grössere Ziele für die ganze Woche, jeden Montag neu – mit garantiertem Item.",
+    intro: "Grössere Ziele für die ganze Woche, jeden Montag neu – mit garantiertem Item.",
   },
 };
 
@@ -133,19 +129,15 @@ function BoardPanel({ now }: { now: Date }) {
           ))}
         </div>
       </div>
-      {boardTier < BOARD_TIERS.hunts ? (
+      {!boardBuilt(boardTier) ? (
         <p className="text-sm text-muted">
           🪧 Im Dorf gibt es noch keine Anschlagtafel. Baue sie unter <span className="text-parchment">🏘️ Dorf → 🏗️ Ausbau</span>,
-          dann hängen hier jeden Tag Jagdaufträge – später auch Wochenaufträge und Steckbriefe. Das Questbuch rechts steht dir
+          dann hängen hier jeden Tag Jagdaufträge, Steckbriefe und die Wochenaufträge. Das Questbuch rechts steht dir
           jederzeit offen.
-        </p>
-      ) : view === "weekly" && boardTier < BOARD_TIERS.all ? (
-        <p className="text-sm text-muted">
-          📅 Wochenaufträge hängen erst am Auftragsbrett (Anschlagtafel Stufe {BOARD_TIERS.all}) – baue sie im Dorf aus.
         </p>
       ) : (
         <p className="mb-3 text-xs text-muted">
-          {BOARD_VIEWS[view].intro(boardTier)}{" "}
+          {BOARD_VIEWS[view].intro}{" "}
           <span className="num text-parchment">
             {done}/{board.quests.length}
           </span>{" "}

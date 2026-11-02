@@ -17,7 +17,7 @@ import { QUESTS, type QuestLog } from "./quests";
 import type { HeroClassId } from "./heroClasses";
 import { HEROIC_AFFIX } from "./heroic";
 import type { Character } from "./types";
-import { BUILDINGS, buildingsAtLeast, MAX_BUILDING_TIER, type Village } from "./village";
+import { BUILDINGS, buildingsAtLeast, buildingsMaxed, type Village } from "./village";
 
 /** Zähler, die das Spiel ab jetzt mitführt (im Spielstand). */
 export interface Records {
@@ -191,7 +191,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   // Dorf
   { id: "foundation", name: "Grundstein", icon: "🧱", category: "village", description: "Das erste Gebäude im Dorf gebaut", tiers: [1], title: "Siedler", progress: (i) => Math.min(1, buildingsAtLeast(i.village, 1)) },
   { id: "village-founder", name: "Dorfgründer", icon: "🏘️", category: "village", description: "Alle {n} Gebäude mindestens auf Stufe 1", tiers: [BUILDINGS.length], title: "Dorfgründer", progress: (i) => buildingsAtLeast(i.village, 1) },
-  { id: "master-builder", name: "Baumeister", icon: "🏛️", category: "village", description: "Alle {n} Gebäude auf Stufe 3", tiers: [BUILDINGS.length], title: "Baumeister", progress: (i) => buildingsAtLeast(i.village, MAX_BUILDING_TIER) },
+  { id: "master-builder", name: "Baumeister", icon: "🏛️", category: "village", description: "Alle {n} Gebäude ganz ausgebaut", tiers: [BUILDINGS.length], title: "Baumeister", progress: (i) => buildingsMaxed(i.village) },
   // Sammeln
   { id: "treasure-hunter", name: "Schatzjäger", icon: "💎", category: "collection", description: "{n} legendäre Items gefunden", tiers: [1, 10, 30], title: "Schatzjäger", progress: (i) => i.records.legendarySeen.length },
   { id: "boss-collector", name: "Boss-Sammler", icon: "👑", category: "collection", description: "{n} Boss-Items gesammelt", tiers: [5, 20, BOSS_ITEMS.length], title: "Sammler", progress: (i) => i.bossCollection.length },
