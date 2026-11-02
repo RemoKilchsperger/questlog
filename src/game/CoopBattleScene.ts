@@ -5,8 +5,9 @@
 import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
 import { animationOf } from "./abilityAnimations";
-import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
-import { BOSS, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
+import { ADD_SKILLS, getBossPhase, RITUAL_ROUNDS, SHIELD_EVERY } from "../domain/bossMechanics";
+import { STATIC_MAX } from "../domain/bossIntents";
+import { BOSS, coopBossTurn, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { getCreature } from "../domain/creatures";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
@@ -67,6 +68,14 @@ const ARROW: SpriteDef = {
   palette: { t: "#e8e1d4", h: "#8a5a2b", L: "#d0d4db" },
 };
 
+/** Farbschicht über einer Figur (applyLooks) */
+interface Look {
+  color: number;
+  alpha: number;
+  pulse?: number;
+  dark?: boolean;
+}
+
 interface Unit {
   body: Phaser.GameObjects.Container;
   images: Phaser.GameObjects.Image[];
@@ -93,6 +102,10 @@ export class CoopBattleScene extends Phaser.Scene {
   private adds = new Map<string, Unit>();
   /** Pfeil über dem eigenen Ziel – nur, wenn Begleiter mitkämpfen */
   private targetMarker: Phaser.GameObjects.Text | null = null;
+  /** Dauerhafte Zeichen des Zustands (applyLooks): Farbschicht über der Figur, solange er anhält */
+  private looks = new Map<Unit, { overlay: Phaser.GameObjects.Image; pulse: Phaser.Tweens.Tween | null; key: string }>();
+  /** Schild des Schildträgers über dem Boss */
+  private shieldDome: Phaser.GameObjects.Graphics | null = null;
 
   constructor() {
     super("coop-battle");
@@ -103,6 +116,8 @@ export class CoopBattleScene extends Phaser.Scene {
     this.heroes = new Map();
     this.adds = new Map();
     this.targetMarker = null;
+    this.looks = new Map();
+    this.shieldDome = null;
   }
 
   /** Boss mit eigenem Bild (creatureImages.ts) vorab laden. */
@@ -138,7 +153,7 @@ export class CoopBattleScene extends Phaser.Scene {
     }
     (state.adds ?? []).forEach((add, i) => {
       // Begleiter mit Rolle tragen ihr Zeichen vor dem Namen (💚 Heiler, 🛡️ Schildträger, 🥁 Trommler)
-      const label = add.role ? `${ADD_ROLES[add.role].icon} ${add.combatant.name}` : add.combatant.name;
+      const label = add.role ? `${ADD_SKILLS[add.role].icon} ${add.combatant.name}` : add.combatant.name;
       const unit = this.addAdd(add.creatureId, ADD_X[i % ADD_X.length], label, add.combatant.hp, add.combatant.maxHp);
       unit.body.setDepth(i % 2 === 0 ? 2 : -0.5);
       this.adds.set(add.uid, unit);
@@ -151,6 +166,7 @@ export class CoopBattleScene extends Phaser.Scene {
     if (state.status === "won") this.showBanner("SIEG!", "#f4c95d", true);
     if (state.status === "lost") this.showBanner("NIEDERLAGE", "#f0776a", true);
     if (state.status === "active") music.start(true, this);
+    this.applyLooks(state);
 
     const off = EventBus.on("coop:events", ({ state: next, events }) => {
       if (next.id === this.setup.state.id) this.play(events, next);
@@ -404,8 +420,13 @@ export class CoopBattleScene extends Phaser.Scene {
         (mainTarget ??= event.target) !== event.target;
       if (event.type === "bossAbility") {
         const enemy = getCoopEnemy(next.bossId);
-        aoe = enemy.abilities.find((a) => (a.id ?? enemy.id) === event.abilityId)?.aoe === true;
+        aoe = enemy.abilities.find((a) => (a.id ?? enemy.id) === event.abilityId)?.aoe === true || event.abilityId === "storm-lord-discharge";
         special = event.abilityId;
+      }
+      // Xal'Zar schlägt mit der verschlungenen Fähigkeit zu – im Stil seines Leerenschlunds
+      if (event.type === "stolen") {
+        aoe = false;
+        special = "void-lord";
       }
       const ability = special;
       this.time.delayedCall(delay, () => (sideHit && event.type === "hit" ? this.sideImpact(event) : this.animate(event, ability)));
@@ -432,7 +453,10 @@ export class CoopBattleScene extends Phaser.Scene {
                   ? 500
                   : 700;
     }
-    this.time.delayedCall(delay + 200, () => EventBus.emit("coop:animation-done", { logLength: next.log.length }));
+    this.time.delayedCall(delay + 200, () => {
+      this.applyLooks(next);
+      EventBus.emit("coop:animation-done", { logLength: next.log.length });
+    });
   }
 
   /** Nebentreffer einer Flächen-Fähigkeit: nur Einschlag und Schadenszahl, ohne eigenen Angriff. */
@@ -474,7 +498,7 @@ export class CoopBattleScene extends Phaser.Scene {
         else if (this.adds.has(event.attacker)) this.addHits(event);
         else this.heroHits(event);
         // Der Schildträger fängt einen Teil ab – blauer Schimmer um den Boss
-        if (event.shielded) this.time.delayedCall(150, () => fx.ring(this, this.center(this.boss), 0x7aa7f0, 75, 350));
+        if (event.shielded || event.absorbed) this.time.delayedCall(150, () => fx.ring(this, this.center(this.boss), 0x7aa7f0, 75, 350));
         // Schwäche oder Resistenz gegen die Waffe
         if (event.matchup) {
           const foe = this.unit(event.target);
@@ -635,7 +659,181 @@ export class CoopBattleScene extends Phaser.Scene {
         this.time.delayedCall(250, () => sfx.defeat());
         this.showBanner("NIEDERLAGE", "#f0776a", false);
         break;
+      case "defend": {
+        const hero = this.unit(event.heroId);
+        this.float(hero, "ABWEHR", "#7aa7f0", 16, 30);
+        fx.ring(this, this.center(hero), 0xa9c6ff, 50);
+        this.tint(hero, 0xa9c6ff, 350);
+        sfx.block();
+        break;
+      }
+      case "interrupted": {
+        const add = this.unit(event.add);
+        this.float(add, "UNTERBROCHEN!", "#7dd3a8", 15, 30);
+        fx.burst(this, this.center(add), 0x7dd3a8, 10, 40);
+        break;
+      }
+      case "ritual": {
+        const add = this.unit(event.add);
+        this.float(add, `✦ ${event.roundsLeft}`, "#7dd3a8", 15, 30);
+        fx.rise(this, this.center(add), 0x7dd3a8, 5);
+        break;
+      }
+      case "drumming": {
+        const add = this.unit(event.add);
+        this.float(add, `♪ ×${event.stacks}`, "#f0776a", 15, 30);
+        this.tweens.add({ targets: add.body, y: add.body.y - 4, duration: 80, yoyo: true, repeat: 1 });
+        break;
+      }
+      case "bossShield":
+        fx.siphon(this, this.center(this.unit(event.add)), this.center(this.boss), 0x7aa7f0, 10);
+        sfx.block();
+        this.time.delayedCall(350, () => {
+          fx.ring(this, this.center(this.boss), 0x7aa7f0, 90, 500);
+          this.float(this.boss, `SCHILD ${event.shield}`, "#7aa7f0", 18, 40);
+        });
+        break;
+      case "platesBroken":
+        this.float(this.boss, "PANZER BRICHT!", "#f4c95d", 20, 40);
+        fx.burst(this, this.center(this.boss), 0x8a909a, 18, 110, 8);
+        sfx.quake(0.5);
+        break;
+      case "platesRegrown":
+        fx.ring(this, this.center(this.boss), 0x8a909a, 90, 500);
+        this.tint(this.boss, 0xc0c6d0, 400);
+        sfx.block();
+        break;
+      case "cursed":
+        fx.curseRing(this, this.center(this.unit(event.heroId)), 0x3ad6c5, () => undefined);
+        sfx.curse();
+        break;
+      case "curseBroken":
+        if (event.heroId) {
+          const hero = this.unit(event.heroId);
+          this.float(hero, "FLUCH GEBROCHEN", "#7dd3a8", 15, 30);
+          fx.burst(this, this.center(hero), 0x3ad6c5, 14, 60);
+        }
+        break;
+      case "curseBurst": {
+        const hero = this.unit(event.heroId);
+        fx.pillar(this, this.center(hero), 0x3ad6c5, 40);
+        sfx.curse();
+        this.time.delayedCall(250, () => this.impact(hero, event.damage, false));
+        break;
+      }
+      case "static":
+        fx.siphon(this, this.center(this.unit(event.heroId)), this.center(this.boss), 0xffe66b, 8);
+        this.time.delayedCall(250, () => this.float(this.boss, "⚡".repeat(Math.min(event.charges, 6)), "#ffe66b", 16, 40));
+        break;
+      case "devoured": {
+        // Die Kraft der Fähigkeit wird in den Schlund gezogen
+        const hero = this.unit(event.heroId);
+        fx.vortex(this, this.center(hero), [0x5a2a8a, 0x4af0ff]);
+        this.time.delayedCall(200, () => fx.siphon(this, this.center(hero), this.center(this.boss), 0x9a5ad0, 14));
+        this.float(hero, `${getAbility(event.ability).name} VERSCHLUNGEN`, "#c08bff", 14, 30);
+        sfx.manaBurn();
+        break;
+      }
+      case "stolen":
+        this.float(this.boss, `${getAbility(event.ability).name}!`, "#c08bff", 20, 40);
+        this.tint(this.boss, 0x9a5ad0, 400);
+        sfx.roar();
+        break;
+      case "freed": {
+        const hero = this.unit(event.heroId);
+        fx.siphon(this, this.center(this.boss), this.center(hero), 0x4af0ff, 14);
+        this.time.delayedCall(300, () => this.float(hero, `${getAbility(event.ability).name} BEFREIT`, "#4af0ff", 14, 30));
+        break;
+      }
     }
+  }
+
+  /**
+   * Zustand an den Figuren – wie in der Solo-Szene ohne Worte: Panzerplatten machen den
+   * Erzkönig grau, Ladungen lassen Kaelthar glühen, Xal'Zar flackert mit der verschlungenen
+   * Kraft, der Verfluchte schimmert türkis. Heiler leuchten mit dem Ritual, der Schild liegt
+   * als Kuppel über dem Boss. Läuft nach jeder Runde und beim Aufbau.
+   */
+  private applyLooks(state: CoopBattleState) {
+    const active = state.status === "active";
+    const turn = active ? coopBossTurn(state) : null;
+    let look: Look | null = null;
+    if (turn?.intent === "ability") look = { color: 0xff5a3a, alpha: 0.5, pulse: 240 };
+    else if (turn?.intent === "devour") look = { color: 0x1a0628, alpha: 0.6, pulse: 220, dark: true };
+    else if (turn?.intent === "stolen" || turn?.devoured) look = { color: 0x9a5ad0, alpha: 0.45, pulse: 350 };
+    else if (turn?.plates !== undefined) {
+      look = turn.plates > 0 ? { color: 0x5a606a, alpha: (0.45 * turn.plates) / (turn.platesMax ?? turn.plates), dark: true } : { color: 0xff8a5a, alpha: 0.3, pulse: 500 };
+    } else if (turn?.static) {
+      const max = turn.staticMax ?? STATIC_MAX;
+      look = { color: 0xffe66b, alpha: (0.5 * turn.static) / max, pulse: turn.static >= max - 1 ? 160 : 0 };
+    }
+    this.setLook(this.boss, look);
+
+    // Neferets Fluch auf einem Helden
+    for (const hero of state.heroes) {
+      const curse = turn?.curse?.heroId === hero.id ? turn.curse : null;
+      this.setLook(this.unit(hero.id), curse && !hero.down ? { color: 0x3ad6c5, alpha: curse.roundsLeft <= 1 ? 0.55 : 0.3, pulse: curse.roundsLeft <= 1 ? 160 : 600 } : null);
+    }
+
+    // Schild über dem Boss
+    const shield = active && state.boss.hp > 0 ? (state.bossShield ?? 0) : 0;
+    if (shield > 0 && !this.shieldDome) {
+      const at = this.center(this.boss);
+      this.shieldDome = this.add.graphics().setDepth(1);
+      this.shieldDome.fillStyle(0x7aa7f0, 0.15).fillEllipse(at.x, at.y - 20, 260, 290);
+      this.shieldDome.lineStyle(4, 0xa9c6ff, 0.8).strokeEllipse(at.x, at.y - 20, 260, 290);
+      this.tweens.add({ targets: this.shieldDome, alpha: 0.55, duration: 900, yoyo: true, repeat: -1 });
+    } else if (shield === 0 && this.shieldDome) {
+      fx.burst(this, this.center(this.boss), 0xa9c6ff, 14, 110);
+      this.shieldDome.destroy();
+      this.shieldDome = null;
+    }
+
+    for (const add of state.adds ?? []) {
+      const unit = this.adds.get(add.uid);
+      if (!unit) continue;
+      const cast = add.cast ?? 0;
+      const alive = active && add.combatant.hp > 0;
+      if (!alive || !add.role) this.setLook(unit, null);
+      else if (add.role === "healer") this.setLook(unit, cast > 0 ? { color: 0x5dff9a, alpha: 0.2 * cast, pulse: cast >= RITUAL_ROUNDS - 1 ? 250 : 0 } : null);
+      else if (add.role === "shield") this.setLook(unit, cast >= SHIELD_EVERY - 1 ? { color: 0x7aa7f0, alpha: 0.5, pulse: 260 } : null);
+      else this.setLook(unit, cast > 0 ? { color: 0xff7a3a, alpha: 0.07 * cast } : null);
+    }
+  }
+
+  /** Farbschicht über einer Figur – `dark` verdunkelt statt aufzuhellen, `pulse` lässt sie atmen (ms). */
+  private setLook(unit: Unit, look: Look | null) {
+    let entry = this.looks.get(unit);
+    const key = look ? `${look.color}-${look.alpha}-${look.pulse ?? 0}-${look.dark ?? false}` : "none";
+    if (entry?.key === key) return;
+    if (!entry) {
+      if (!look) return;
+      const figure = unit.images[0];
+      const overlay = this.add.image(figure.x, figure.y, figure.texture.key).setOrigin(figure.originX, figure.originY).setAlpha(0);
+      unit.body.addAt(overlay, unit.body.getIndex(figure) + 1);
+      entry = { overlay, pulse: null, key: "none" };
+      this.looks.set(unit, entry);
+    }
+    const current = entry;
+    current.key = key;
+    current.pulse?.stop();
+    current.pulse = null;
+    this.tweens.killTweensOf(current.overlay);
+    if (!look) {
+      this.tweens.add({ targets: current.overlay, alpha: 0, duration: 400 });
+      return;
+    }
+    current.overlay.setTintFill(look.color).setBlendMode(look.dark ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: current.overlay,
+      alpha: look.alpha,
+      duration: 400,
+      onComplete: () => {
+        if (look.pulse && current.key === key) {
+          current.pulse = this.tweens.add({ targets: current.overlay, alpha: look.alpha * 0.5, duration: look.pulse, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        }
+      },
+    });
   }
 
   /** Angriff eines Helden – Form nach Waffe: Pfeil, Feuerball, Strahl oder Nahkampf. */
@@ -1107,6 +1305,7 @@ export class CoopBattleScene extends Phaser.Scene {
         this.time.delayedCall(60, hit);
         return;
       case "storm-lord-thunder": // Donnerschlag: ein greller Blitz, die Erde bebt
+      case "storm-lord-discharge": // Entladung
         fx.lightning(this, at);
         fx.flash(this, 0xffffff, 0.35, 150);
         this.cameras.main.shake(220, 0.012);

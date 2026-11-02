@@ -10,6 +10,11 @@ Jeder Gebiets- und Dungeon-Boss hat zwei Begleiter (`creatures.ts`, `withAdds`):
 gewöhnlichen und einen mit Aufgabe. Beide haben 25 % LP und 50 % Schaden einer normalen Kreatur
 auf dem Level des Bosses.
 
+> **Seit November 2026:** Die Begleiter mit Aufgabe setzen aktive Fähigkeiten ein (Heilritual,
+> Schild, Trommelwirbel), solo und im Koop-Dungeon, siehe [boss-absichten.md](boss-absichten.md).
+> Die passiven Rollen in der Tabelle unten gibt es nicht mehr. Die Abschnitte darunter beschreiben
+> die Abstimmung von damals.
+
 | Rolle | Wirkung, solange er steht |
 |---|---|
 | 💚 Heiler | heilt den Boss jede Runde um 7 % seiner maximalen LP, statt anzugreifen |

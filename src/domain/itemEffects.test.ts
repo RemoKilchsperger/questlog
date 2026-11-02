@@ -93,7 +93,8 @@ describe("Item-Effekte: Wirkung im Kampf", () => {
   it("Wachsam blockt den ersten Angriff, Standhaft schwächt Boss-Fähigkeiten, Dornen werfen zurück", () => {
     const vigilant = startBattle("b", "Held", profile(["vigilant"]), getCreature("grey-wolf").creature);
     expect(vigilant.heroEffects.bulwark).toBe(true);
-    const special = fight([], "goblin-chief", { round: 3, adds: [] });
+    // Der Lichkönig setzt seine Fähigkeit im festen Takt in Runde 3 ein
+    const special = fight([], "lich-king", { round: 3, adds: [], bossTurn: { intent: "ability", ability: "lich-king" } });
     const plain = enemyHit(attackRound(special, rng(0.5)).events)!.damage;
     const steady = enemyHit(attackRound({ ...special, itemEffects: ["steadfast"] }, rng(0.5)).events)!.damage;
     expect(steady).toBeLessThan(plain);

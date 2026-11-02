@@ -3,6 +3,9 @@
 // angekündigt, damit man reagieren kann: Bollwerk (Schild) blockt sie komplett,
 // ein Betäubender Schlag (Streitkolben) verhindert sie.
 //
+// Bosse mit eigenem Ablauf (bossIntents.ts) setzen ihre Fähigkeit nicht im
+// festen Takt ein, sondern wenn ihr Ablauf es vorsieht – `every` zählt dort nicht.
+//
 // Dungeon-Bosse haben zwei Fähigkeiten, die sich abwechseln: erst eine gegen
 // ein einzelnes Ziel, dann eine gegen die ganze Gruppe (`target: "group"`).
 // Solo treffen beide den Helden, im Koop trifft die zweite alle (coopCombat.ts).
@@ -32,27 +35,29 @@ export interface BossAbilityDef {
   drain?: number;
   /** Raubt dem Helden so viel Mana */
   manaBurn?: number;
+  /** Nur im eigenen Ablauf des Bosses (bossIntents.ts) – nicht im festen Takt und nicht im Koop */
+  scripted?: boolean;
 }
 
 export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
   {
     id: "goblin-chief",
     bossId: "goblin-chief",
-    name: "Rasender Hieb",
-    icon: "🪓",
-    description: "Drei wilde Hiebe hintereinander.",
+    name: "Wutanfall",
+    icon: "😡",
+    description: "Vier wilde Hiebe hintereinander.",
     every: 3,
     multiplier: 0.6,
-    hits: 3,
+    hits: 4,
   },
   {
     id: "ancient-lizard",
     bossId: "ancient-lizard",
-    name: "Giftbiss",
+    name: "Hinterhalt",
     icon: "🐍",
-    description: "Ein Biss, der den Helden 3 Runden lang vergiftet.",
-    every: 3,
-    multiplier: 1,
+    description: "Schnellt aus dem Sumpf: ein Biss mit doppeltem Schaden, der 3 Runden lang vergiftet.",
+    every: 4,
+    multiplier: 2,
     poison: { percent: 0.3, rounds: 3 },
   },
   {
@@ -69,11 +74,11 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
   {
     id: "primal-mammoth",
     bossId: "primal-mammoth",
-    name: "Erdstampfer",
+    name: "Ansturm",
     icon: "🦣",
-    description: "Ein gewaltiges Stampfen mit 2,5-fachem Schaden.",
+    description: "Ein gewaltiger Ansturm mit 4-fachem Schaden.",
     every: 4,
-    multiplier: 2.5,
+    multiplier: 4,
   },
   {
     id: "lich-king",
@@ -90,9 +95,9 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     bossId: "ignaroth",
     name: "Feueratem",
     icon: "🔥",
-    description: "Ein Flammenstoss, der Rüstung ignoriert und 2 Runden nachbrennt.",
-    every: 3,
-    multiplier: 1.6,
+    description: "Ein Flammenstoss mit doppeltem Schaden, der Rüstung ignoriert und 2 Runden nachbrennt.",
+    every: 5,
+    multiplier: 2,
     ignoreArmor: true,
     burn: { percent: 0.25, rounds: 2 },
   },
@@ -164,6 +169,18 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     ignoreArmor: true,
   },
   {
+    id: "storm-lord-discharge",
+    bossId: "storm-lord",
+    target: "group",
+    name: "Entladung",
+    icon: "🌩️",
+    description: "Entlädt die aufgestaute Energie in einem einzigen Blitz: 3-facher Schaden, der Rüstung ignoriert.",
+    every: 0,
+    multiplier: 3,
+    ignoreArmor: true,
+    scripted: true,
+  },
+  {
     id: "void-lord",
     bossId: "void-lord",
     name: "Leerenschlund",
@@ -189,9 +206,9 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
   },
 ];
 
-/** Alle Fähigkeiten eines Bosses in Einsatzreihenfolge – leer für normale Kreaturen. */
+/** Alle Fähigkeiten eines Bosses im festen Takt, in Einsatzreihenfolge – leer für normale Kreaturen. */
 export function getBossAbilities(creatureId: string): BossAbilityDef[] {
-  return BOSS_ABILITIES.filter((a) => a.bossId === creatureId);
+  return BOSS_ABILITIES.filter((a) => a.bossId === creatureId && !a.scripted);
 }
 
 /** Erste Fähigkeit eines Bosses – oder null. */

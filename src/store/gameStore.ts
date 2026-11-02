@@ -23,6 +23,7 @@ import {
   type BattleReward,
   type BattleState,
   type DungeonChest,
+  type HeroAction,
 } from "../domain/combat";
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type BossRespawns } from "../domain/creatures";
 import { rollElite } from "../domain/elites";
@@ -101,7 +102,6 @@ import {
   type QuestLog,
 } from "../domain/quests";
 import { clampSkills, learnSkill, resetSkills, type SkillWeapon } from "../domain/skills";
-import type { AbilityId } from "../domain/abilities";
 import { dateKey, weekKey } from "../domain/calendar";
 import { allocatePoint, convertLinearCurveXp, getLevel, resetAttributes } from "../domain/leveling";
 import { buyOffer, EMPTY_SHOP, rerollShop, rollShopStock, shopSlot, type ShopStock } from "../domain/shop";
@@ -275,7 +275,8 @@ interface GameState {
   startBattle: (creatureId: string, heroic?: boolean) => void;
   battleDrinkPotion: (potionId: string) => void;
   /** Angriff der Runde – ohne Argument normal, sonst mit der Fähigkeit dieses Waffentyps. */
-  battleAttack: (ability?: AbilityId) => void;
+  /** Angriff, Fähigkeit oder Abwehren (DEFEND) */
+  battleAttack: (action?: HeroAction) => void;
   /** Wählt das Ziel: einen Begleiter (uid) oder den Boss (undefined). */
   battleTarget: (target: string | undefined) => void;
   /** Flucht: kostet Gold (siehe `fleeCost`), beendet den Kampf ohne Gegenangriff. */

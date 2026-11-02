@@ -5,7 +5,7 @@
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import type { AbilityDef, Guard } from "../domain/abilities";
-import { ADD_ROLES, DRUMMER_BONUS, getBossPhase, SHIELD_DAMAGE_TAKEN, type AddRole } from "../domain/bossMechanics";
+import { ADD_SKILLS, DRUM_BONUS, getBossPhase, type AddRole, type AddRoleDef } from "../domain/bossMechanics";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
 import { getEliteAffix, type EliteAffix } from "../domain/elites";
 import { FOODS, foodEffectText } from "../domain/food";
@@ -145,29 +145,27 @@ export function enemyStatusChips(effects: EnemyEffects): StatusChip[] {
 }
 
 /**
- * Was die Boss-Mechaniken gerade bewirken (bossMechanics.ts): Raserei nach der
- * zweiten Phase, Schutz durch den Schildträger, Anfeuern durch den Trommler.
- * Rot getönt – es hilft dem Boss.
+ * Was den Boss gerade stärkt (solo und im Koop) – Raserei nach der zweiten Phase, der
+ * Schild des Schildträgers und die Trommelwirbel (bossMechanics.ts). Was die
+ * Begleiter vorhaben, steht bei ihnen in der Zielauswahl.
  */
-export function bossMechanicChips(
+export function soloBossChips(
   bossId: string,
   phase: boolean | undefined,
-  adds: readonly { role?: AddRole; combatant: { hp: number } }[],
+  bossShield: number | undefined,
+  adds: readonly { role?: AddRole; cast?: number; combatant: { hp: number } }[],
 ): StatusChip[] {
   const chips: StatusChip[] = [];
   const phaseDef = getBossPhase(bossId);
   if (phase && phaseDef?.enrage) {
     chips.push({ key: "enrage", icon: phaseDef.icon, text: `Raserei +${pct(phaseDef.enrage)}`, tone: "bad", title: `${phaseDef.name}: ${phaseDef.description}` });
   }
-  const alive = (role: AddRole) => adds.some((a) => a.role === role && a.combatant.hp > 0);
-  if (alive("shield")) {
-    chips.push({ key: "shield", icon: ADD_ROLES.shield.icon, text: `Geschützt −${pct(1 - SHIELD_DAMAGE_TAKEN)}`, tone: "bad", title: ADD_ROLES.shield.description });
+  if (bossShield) {
+    chips.push({ key: "shield", icon: ADD_SKILLS.shield.icon, text: `Schild ${bossShield}`, tone: "bad", title: "Schluckt so viel Schaden" });
   }
-  if (alive("drummer")) {
-    chips.push({ key: "drummer", icon: ADD_ROLES.drummer.icon, text: `Angefeuert +${pct(DRUMMER_BONUS)}`, tone: "bad", title: ADD_ROLES.drummer.description });
-  }
-  if (alive("healer")) {
-    chips.push({ key: "healer", icon: ADD_ROLES.healer.icon, text: "Wird geheilt", tone: "bad", title: ADD_ROLES.healer.description });
+  const drums = adds.reduce((sum, a) => sum + (a.role === "drummer" && a.combatant.hp > 0 ? (a.cast ?? 0) : 0), 0);
+  if (drums > 0) {
+    chips.push({ key: "drummer", icon: ADD_SKILLS.drummer.icon, text: `Angefeuert +${pct(drums * DRUM_BONUS)}`, tone: "bad", title: ADD_SKILLS.drummer.description });
   }
   return chips;
 }
@@ -288,6 +286,8 @@ export interface TargetOption {
   role?: AddRole;
   /** Für Schwächen und Resistenzen (matchups.ts) */
   creatureId: string;
+  /** Was der Begleiter gerade vorhat (Solo) – `urgent`: diese Runde */
+  intent?: { text: string; urgent: boolean };
 }
 
 /** Boss und Begleiter als Knöpfe: Lebenspunkte und Effekte im Blick, das gewählte Ziel hervorgehoben. */
@@ -296,19 +296,22 @@ export function TargetPicker({
   selected,
   disabled,
   onChoose,
+  roles = ADD_SKILLS,
 }: {
   foes: TargetOption[];
   selected: string | undefined;
   disabled: boolean;
   onChoose: (uid: string | undefined) => void;
+  /** Beschreibung der Rollen – Standard: ihre Fähigkeiten (ADD_SKILLS) */
+  roles?: Record<AddRole, AddRoleDef>;
 }) {
   return (
     <ActionGroup label="Ziel" hint="Fällt der Anführer, ist der Kampf gewonnen · Flächen-Fähigkeiten treffen mehrere">
       <div className="grid gap-2 sm:grid-cols-3">
-        {foes.map(({ uid, combatant, effects, boss, role, creatureId }) => {
+        {foes.map(({ uid, combatant, effects, boss, role, creatureId, intent }) => {
           const down = combatant.hp === 0;
           const isSelected = selected === uid;
-          const roleDef = role && ADD_ROLES[role];
+          const roleDef = role && roles[role];
           return (
             <button
               key={uid ?? "boss"}
@@ -332,7 +335,14 @@ export function TargetPicker({
                   {down ? "besiegt" : `${combatant.hp}/${combatant.maxHp}`}
                 </span>
               </span>
-              {roleDef && <span className="truncate text-xs text-danger">{roleDef.name}</span>}
+              {intent && !down ? (
+                <span className={`truncate text-xs ${intent.urgent ? "font-bold text-danger" : "text-gold"}`}>
+                  {intent.urgent && "⚠️ "}
+                  {intent.text}
+                </span>
+              ) : (
+                roleDef && <span className="truncate text-xs text-danger">{roleDef.name}</span>
+              )}
               <span className="h-1.5 overflow-hidden rounded-sm bg-night-700">
                 <span className="block h-full bg-danger" style={{ width: `${(combatant.hp / combatant.maxHp) * 100}%` }} />
               </span>

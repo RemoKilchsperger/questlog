@@ -48,6 +48,7 @@ src/
     potions.ts       Heil- und Verstärkungstränke
     creatures.ts     Gebiete, Dungeons, Kreaturen, Beute
     bossAbilities.ts Fähigkeiten der Solo-Bosse
+    bossIntents.ts   Absichten der Bosse: was sie jede Runde vorhaben, eigene Abläufe aller Bosse (Wut, Ansturm, Abtauchen, Panzer, Fluch …)
     heroic.ts        Heroische Bosse: mehr LP, Zusatzmechanik, mehr Boss-Beute
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse

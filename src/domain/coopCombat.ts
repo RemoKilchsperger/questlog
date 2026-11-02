@@ -17,8 +17,12 @@
 //
 // Begleiter: Dungeon-Bosse bringen sie wie solo mit (creatures.ts) – mit der
 // Gruppe skaliert wie die übrigen Dungeon-Gegner. Fällt der Boss, ist der
-// Kampf gewonnen. Begleiter mit Aufgabe und die zweite Phase wirken wie solo
-// (bossMechanics.ts, docs/boss-mechaniken.md).
+// Kampf gewonnen. Begleiter mit Aufgabe setzen ihre Fähigkeiten ein, die zweite
+// Phase wirkt wie solo (bossMechanics.ts, docs/boss-mechaniken.md).
+//
+// Absichten (bossIntents.ts, docs/boss-absichten.md): Dungeon-Bosse zeigen wie solo
+// jede Runde, was sie vorhaben, und folgen ihrem eigenen Ablauf. Statt anzugreifen
+// kann jeder Held abwehren. Raid-Bosse setzen ihre Fähigkeit weiter im festen Takt ein.
 
 import { freshStunImmunity, MANA_REGEN, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
@@ -35,6 +39,8 @@ import {
 import {
   addToChest,
   cooldownText,
+  DEFEND_DAMAGE_TAKEN,
+  DEFEND_MANA,
   EMPTY_CHEST,
   freezeFlag,
   rollBattleReward,
@@ -48,8 +54,21 @@ import {
   type DungeonChest,
   type HeroCombatProfile,
 } from "./combat";
-import { abilityForRound, getBossAbilities } from "./bossAbilities";
-import { bossDamageDealtFactor, bossDamageTakenFactor, HEALER_HEAL, phaseDue, type AddRole } from "./bossMechanics";
+import { abilityForRound, getBossAbilities, type BossAbilityDef } from "./bossAbilities";
+import { DRUM_BONUS, DRUM_MAX, phaseDue, RITUAL_HEAL, RITUAL_ROUNDS, SHIELD_EVERY, SHIELD_SHARE, type AddRole } from "./bossMechanics";
+import {
+  bossAttacks,
+  bossTurnTakenFactor,
+  firstBossTurn,
+  nextBossTurn,
+  plateFactor,
+  stolenStrike,
+  turnAbility,
+  CURSE_DAMAGE,
+  COOP_STATIC_PER_HERO,
+  CURSE_ROUNDS,
+  type BossTurn,
+} from "./bossIntents";
 import { matchupFactor, matchupOf, WEAPON_KIND } from "./matchups";
 import {
   critBurns,
@@ -241,11 +260,31 @@ export function getCoopEnemy(id: string): CoopEnemy {
   if (!area.dungeon) throw new Error(`Kein Koop-Gegner: ${id}`);
   // Dungeon-Bosse behalten ihre Solo-Fähigkeiten: die gegen ein Ziel trifft das Ziel mit der höchsten
   // Bedrohung, die gegen die Gruppe alle – dafür schwächer (siehe DUNGEON_COOP_ABILITY_FACTOR).
-  const abilities = getBossAbilities(id).map((ability): CoopBossAbility =>
-    ability.target === "group" ? { ...ability, aoe: true, multiplier: ability.multiplier * DUNGEON_COOP_ABILITY_FACTOR } : { ...ability },
-  );
+  const abilities = getBossAbilities(id).map(coopAbility);
   const { name, sprite, level, boss: isBoss } = creature;
   return { id, name, sprite, level, boss: isBoss, raid: false, areaId: area.id, abilities, creature };
+}
+
+/** Eine Fähigkeit eines Dungeon-Bosses im Koop: Die gegen die Gruppe trifft alle, dafür schwächer. */
+function coopAbility(ability: BossAbilityDef): CoopBossAbility {
+  return ability.target === "group" ? { ...ability, aoe: true, multiplier: ability.multiplier * DUNGEON_COOP_ABILITY_FACTOR } : { ...ability };
+}
+
+/**
+ * Absicht zu Kampfbeginn – nur Dungeon-Bosse mit Fähigkeiten haben eine (Raid-Bosse folgen ihrem Takt).
+ * Die Panzerplatten des Erzkönigs wachsen mit der Gruppe: so viele pro Held wie solo – sonst bricht
+ * die Gruppe sie in einer Runde.
+ */
+const withBossTurn = (enemy: CoopEnemy, players: number): { bossTurn?: BossTurn } => {
+  const turn = enemy.raid ? null : firstBossTurn(enemy.id);
+  if (!turn) return {};
+  return { bossTurn: turn.plates !== undefined ? { ...turn, plates: turn.plates * players, platesMax: turn.plates * players } : turn };
+};
+
+/** Absicht des Gegners in dieser Runde – bei älteren Kämpfen (ohne gespeicherte) wie zu Kampfbeginn. */
+export function coopBossTurn(state: CoopBattleState): BossTurn | null {
+  if (state.bossTurn) return state.bossTurn;
+  return withBossTurn(getCoopEnemy(state.bossId), state.heroes.length).bossTurn ?? null;
 }
 
 /**
@@ -386,6 +425,8 @@ export interface CoopAdd {
   creatureId: string;
   /** Aufgabe im Kampf: Heiler, Schildträger, Trommler (bossMechanics.ts) */
   role?: AddRole;
+  /** Fortschritt seiner Fähigkeit: Runden im Heilritual, Runden seit dem letzten Schild, Trommelwirbel */
+  cast?: number;
   combatant: Combatant;
   effects: CoopEnemyEffects;
 }
@@ -458,7 +499,34 @@ export type CoopEvent =
       shielded?: boolean;
       /** Schwäche oder Resistenz des Ziels gegen die Schadensart (matchups.ts) */
       matchup?: "weak" | "resist";
+      /** So viel hat der Schild des Schildträgers geschluckt (zusätzlich zu `damage`) */
+      absorbed?: number;
+      /** Eine Panzerplatte des Erzkönigs hat den Treffer gemindert */
+      plated?: boolean;
     }
+  /** Ein Held wehrt ab: kein Angriff, halber Schaden, etwas Mana */
+  | { type: "defend"; heroId: string; mana: number }
+  /** Das Ritual des Heilers bzw. der Takt des Trommlers ist unterbrochen */
+  | { type: "interrupted"; add: string }
+  /** Der Heiler setzt sein Ritual fort – `roundsLeft` bis zur Heilung */
+  | { type: "ritual"; add: string; roundsLeft: number }
+  /** Der Trommler trommelt lauter */
+  | { type: "drumming"; add: string; stacks: number }
+  /** Der Schildträger hebt einen Schild über den Boss */
+  | { type: "bossShield"; add: string; shield: number }
+  /** Die letzte Panzerplatte ist ab bzw. sie sind nachgewachsen */
+  | { type: "platesBroken" }
+  | { type: "platesRegrown" }
+  /** Ein Fluch liegt auf einem Helden, ist gebrochen (Schaden oder Läuterung) oder bricht los */
+  | { type: "cursed"; heroId: string }
+  | { type: "curseBroken"; heroId: string; cleansed?: boolean }
+  | { type: "curseBurst"; heroId: string; damage: number }
+  /** Der Boss saugt die Kraft einer Fähigkeit auf – `charges`: so viele hat er jetzt */
+  | { type: "static"; heroId: string; charges: number }
+  /** Der Boss verschlingt eine Fähigkeit eines Helden, schlägt mit ihr zu (Treffer folgen als "hit") – bis die Gruppe sie befreit */
+  | { type: "devoured"; heroId: string; ability: AbilityId }
+  | { type: "stolen"; heroId: string; ability: AbilityId }
+  | { type: "freed"; heroId: string; ability: AbilityId }
   /** Das Ziel (BOSS oder uid eines Begleiters) ist gegen diesen Zustand immun – er wirkt nicht */
   | { type: "immune"; target: string; kind: OverTimeKind }
   /** Ein Heiler unter den Begleitern heilt den Boss */
@@ -509,6 +577,10 @@ export interface CoopBattleState {
   adds?: CoopAdd[];
   /** Der Boss ist in seiner zweiten Phase (bossMechanics.ts) – sie kommt nur einmal */
   phase?: boolean;
+  /** Absicht des Dungeon-Bosses in dieser Runde (bossIntents.ts) – fehlt bei Raid-Bossen und normalen Gegnern */
+  bossTurn?: BossTurn;
+  /** Schild des Schildträgers über dem Boss: so viel Schaden schluckt er noch */
+  bossShield?: number;
   /** Elite-Gegner im Koop-Dungeon: seine Modifikatoren (elites.ts) – fehlt bei gewöhnlichen Gegnern */
   elite?: EliteAffix[];
   /** Heroischer Endboss (heroic.ts): `elite` ist seine Zusatzmechanik, er zählt aber nicht als Elite */
@@ -550,6 +622,8 @@ function foeStats(enemy: CoopEnemy, players: number, elite: readonly EliteAffix[
 export interface CoopAction {
   potion?: { potionId: string; targetId: string };
   ability?: AbilityId;
+  /** Abwehren statt anzugreifen: halber Schaden in dieser Runde, etwas Mana (geht vor `ability`) */
+  defend?: boolean;
   /** Ziel des Angriffs: uid eines Begleiters – fehlt, geht es gegen den Boss */
   target?: string;
 }
@@ -614,6 +688,7 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
     boss: foeStats(enemy, players.length, elite, heroic),
     bossEffects: {},
     adds: coopAdds(enemy, players.length, elite),
+    ...withBossTurn(enemy, players.length),
     ...(elite.length > 0 && { elite }),
     ...(heroic && { heroic }),
     status: "active",
@@ -687,6 +762,7 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
     boss: foeStats(enemy, state.heroes.length, elite, heroic),
     bossEffects: {},
     adds: coopAdds(enemy, state.heroes.length, elite),
+    ...withBossTurn(enemy, state.heroes.length),
     ...(elite.length > 0 && { elite }),
     ...(heroic && { heroic }),
     status: "active",
@@ -748,9 +824,10 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
   return null;
 }
 
-/** Warum diese Fähigkeit nicht geht – oder null. */
-export function coopAbilityBlocker(hero: CoopHero, id: AbilityId): string | null {
+/** Warum diese Fähigkeit nicht geht – oder null. `turn`: Absicht des Bosses (verschlungene Fähigkeit). */
+export function coopAbilityBlocker(hero: CoopHero, id: AbilityId, turn?: BossTurn | null): string | null {
   if (!hero.abilities.includes(id)) return "Diese Fähigkeit liegt auf keiner deiner angelegten Waffen.";
+  if (turn?.devoured?.ability === id && turn.devoured.heroId === hero.id) return "Der Gegner hält diese Fähigkeit gefangen.";
   const wait = hero.cooldowns?.[id] ?? 0;
   if (wait > 0) return cooldownText(wait);
   const { manaCost } = classAbility(id, hero.heroClass);
@@ -782,8 +859,26 @@ interface Foe {
   /** Für Schwächen und Resistenzen (matchups.ts) */
   creatureId: string;
   role?: AddRole;
+  /** Fortschritt der Fähigkeit eines Begleiters mit Aufgabe (CoopAdd.cast) */
+  cast?: number;
   c: Combatant;
   fx: CoopEnemyEffects;
+}
+
+/** Die stärkste Schadens-Fähigkeit eines Helden (Multiplikator × Treffer) – die verschlingt Xal'Zar. */
+function strongestAbility(hero: CoopHero): AbilityDef | null {
+  return (
+    hero.abilities
+      .map((id) => classAbility(id, hero.heroClass))
+      .filter((a) => a.multiplier > 0 && a.hits !== 0)
+      .sort((a, b) => b.multiplier * (b.hits ?? 1) - a.multiplier * (a.hits ?? 1))[0] ?? null
+  );
+}
+
+/** Xal'Zar schlägt mit der verschlungenen Fähigkeit eines Helden zu – wie mit einer eigenen gegen ein Ziel. */
+function stolenAbility(hero: CoopHero | undefined, id: AbilityId): CoopBossAbility {
+  const ability = classAbility(id, hero?.heroClass);
+  return { id: `stolen-${id}`, name: ability.name, icon: ability.icon, description: "", every: 0, ...stolenStrike(ability) };
 }
 
 /** Am Rundenende laufen Schwächung, Verwundbarkeit und Betäubungs-Immunität eine Runde ab. */
@@ -808,7 +903,21 @@ export function resolveRound(
   let heroes = state.heroes.map((h) => ({ ...h, combatant: { ...h.combatant }, effects: { ...h.effects } }));
   // Der Boss zuerst, dann die Begleiter – Kopien, die sich in dieser Runde ändern
   const boss: Foe = { id: BOSS, creatureId: state.bossId, c: { ...state.boss }, fx: { ...state.bossEffects } };
-  const adds: Foe[] = (state.adds ?? []).map((a) => ({ id: a.uid, creatureId: a.creatureId, role: a.role, c: { ...a.combatant }, fx: { ...a.effects } }));
+  const adds: Foe[] = (state.adds ?? []).map((a) => ({ id: a.uid, creatureId: a.creatureId, role: a.role, cast: a.cast, c: { ...a.combatant }, fx: { ...a.effects } }));
+  const enemy = getCoopEnemy(state.bossId);
+  /** Absicht des Bosses in dieser Runde (nur Dungeon-Bosse) */
+  const turn = coopBossTurn(state);
+  /** Erzkönig: Panzerplatten – jeder Treffer bricht eine ab (fehlt bei anderen Bossen) */
+  let plates = turn?.plates;
+  let bossShield = state.bossShield ?? 0;
+  /** Treffer der Helden auf den Boss und getroffene Begleiter (unterbricht ein Heilritual) */
+  let heroHitsOnBoss = 0;
+  const hitAdds = new Set<string>();
+  /** Eingesetzte Fähigkeiten der Gruppe – sie laden Kaelthar auf */
+  let abilitiesUsed = 0;
+  /** Wer abwehrt, und wer sich geläutert hat (bricht einen Fluch) */
+  const defending = new Set<string>();
+  const cleansed = new Set<string>();
   /** Gift, Feuer oder Bluten auf einen Gegner legen – mit Schwäche/Resistenz; bei Immunität wirkt es nicht. */
   const applyDot = (foe: Foe, kind: OverTimeKind, base: number, rounds: number, sourceId: string) => {
     const factor = matchupFactor(foe.creatureId, kind);
@@ -820,16 +929,14 @@ export function resolveRound(
   };
   const foes = [boss, ...adds];
   let phase = state.phase;
-  /** Rollen der Begleiter zählen nur, solange sie stehen */
-  const roleHolders = () => adds.map((f) => ({ role: f.role, hp: f.c.hp }));
-  /** Schildträger: Der Boss erleidet weniger Schaden, solange einer steht */
-  const takenBy = (foe: Foe) => (foe === boss ? bossDamageTakenFactor(roleHolders()) : 1);
+  /** Absicht des Bosses: Taumelnd oder mit geschlossenem Auge erleidet er mehr Schaden */
+  const takenBy = (foe: Foe) => (foe === boss ? bossTurnTakenFactor(turn) : 1);
   const living = () => foes.filter((f) => f.c.hp > 0);
   /** Fähigkeit, die einen Gegner in dieser Runde betäuben würde */
   const stunAttempts = new Map<Foe, AbilityDef>();
   /** Vom Item-Effekt „Frostbiss“ eingefrorene Gegner – sie setzen diese Runde aus */
   const frozenByItem = new Set<Foe>();
-  const enemyIsBoss = getCoopEnemy(state.bossId).boss;
+  const enemyIsBoss = enemy.boss;
   /** Helden mit Bollwerk – ihre Bedrohung wird nach der Heldenphase hochgesetzt */
   const taunts: CoopHero[] = [];
   const byId = (id: string) => heroes.find((h) => h.id === id)!;
@@ -897,7 +1004,15 @@ export function resolveRound(
       }
     }
 
-    const ability = action.ability && !coopAbilityBlocker(hero, action.ability) ? classAbility(action.ability, hero.heroClass) : null;
+    // Abwehren: kein Angriff, dafür halber Schaden in dieser Runde und etwas Mana
+    if (action.defend) {
+      const gain = Math.min(hero.maxMana - hero.mana, DEFEND_MANA);
+      hero.mana += gain;
+      defending.add(hero.id);
+      events.push({ type: "defend", heroId: hero.id, mana: gain });
+      continue;
+    }
+    const ability = action.ability && !coopAbilityBlocker(hero, action.ability, turn) ? classAbility(action.ability, hero.heroClass) : null;
     const aoe = ability?.aoe;
     // Schadensart: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe (matchups.ts)
     const heroWeapon = ability?.weapon ?? hero.weapon;
@@ -922,6 +1037,12 @@ export function resolveRound(
       // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen
       used.set(hero.id, hasEffect(hero.itemEffects, "quickHands") ? { id: ability.id, cooldown: ability.cooldown - 1 } : ability);
       events.push({ type: "ability", heroId: hero.id, ability: ability.id, weapon: ability.weapon, manaCost: ability.manaCost });
+      abilitiesUsed++;
+      // Kaelthar saugt die Kraft jeder Fähigkeit auf – ausser in der Runde, in der er sich entlädt
+      if (turn?.static !== undefined && turn.ability !== "storm-lord-discharge") {
+        events.push({ type: "static", heroId: hero.id, charges: turn.static + abilitiesUsed });
+      }
+      if (ability.cleanse) cleansed.add(hero.id);
       if (ability.guard) hero.effects.guard = ability.guard;
       // +1, weil die Verstärkung erst ab der nächsten Runde zählt
       if (ability.empower) hero.effects.empower = { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 };
@@ -990,18 +1111,26 @@ export function resolveRound(
         foeElite: foe === boss && (state.elite?.length ?? 0) > 0 && !state.heroic,
       });
       const critChance = strong.critChance + effectCritBonus(effects, foeBoss);
+      // Panzerplatten des Erzkönigs – nur direkte Treffer auf den Boss
+      const plate = foe === boss ? plateFactor(plates) : 1;
       const attacker: Combatant = ability
         ? {
             ...strong,
-            damage: strong.damage * ability.multiplier * execute * charge * vulnerable * share * taken * kindFactor * itemFactor,
+            damage: strong.damage * ability.multiplier * execute * charge * vulnerable * share * taken * plate * kindFactor * itemFactor,
             critChance: ability.guaranteedCrit ? 1 : critChance,
           }
-        : { ...strong, damage: strong.damage * charge * share * vulnerable * taken * kindFactor * itemFactor, critChance };
+        : { ...strong, damage: strong.damage * charge * share * vulnerable * taken * plate * kindFactor * itemFactor, critChance };
       const armor = ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0)));
-      const hit = rollHit(attacker, { ...foe.c, armor }, rng);
+      const rolled = rollHit(attacker, { ...foe.c, armor }, rng);
+      // Der Schild des Schildträgers schluckt direkte Treffer auf den Boss
+      const absorbed = foe === boss ? Math.min(bossShield, rolled.damage) : 0;
+      bossShield -= absorbed;
+      const hit = { ...rolled, damage: rolled.damage - absorbed };
+      if (foe === boss) heroHitsOnBoss++;
+      else hitAdds.add(foe.id);
       dealt += Math.min(foe.c.hp, hit.damage);
       foe.c.hp = Math.max(0, foe.c.hp - hit.damage);
-      hero.threat += hit.damage * threatFactor;
+      hero.threat += rolled.damage * threatFactor;
       events.push({
         type: "hit",
         attacker: hero.id,
@@ -1009,8 +1138,15 @@ export function resolveRound(
         ...hit,
         ...(ability && { weapon: ability.weapon, ability: ability.id }),
         ...(taken < 1 && { shielded: true }),
+        ...(absorbed > 0 && { absorbed }),
+        ...(plate < 1 && { plated: true }),
         ...((matchup === "weak" || matchup === "resist") && { matchup }),
       });
+      // Jeder Treffer bricht eine Panzerplatte ab, Wucht gleich zwei
+      if (foe === boss && plates !== undefined && plates > 0) {
+        plates = Math.max(0, plates - (kind === "blunt" ? 2 : 1));
+        if (plates === 0) events.push({ type: "platesBroken" });
+      }
       // Plünderer: kritische Treffer lassen bluten
       if (hit.crit && hero.heroClass === "plunderer" && foe.c.hp > 0) {
         const damage = strong.damage * PLUNDERER_BLEED.percent * matchupFactor(foe.creatureId, "bleed");
@@ -1092,13 +1228,28 @@ export function resolveRound(
     }
   }
 
+  /** Was der Boss in der Heldenphase samt Gift, Feuer und Bluten verloren hat */
+  const bossDamageTaken = state.boss.hp - boss.c.hp;
+  // Neferets Fluch bricht, wenn sie genug LP verloren hat oder sich der Verfluchte läutert
+  const curse = turn?.curse;
+  const curseCleansed = !!curse?.heroId && cleansed.has(curse.heroId);
+  const curseBroken = !!curse && boss.c.hp > 0 && (boss.c.hp <= curse.breakAt || curseCleansed);
+  if (curseBroken) events.push({ type: "curseBroken", heroId: curse.heroId ?? "", ...(boss.c.hp > curse.breakAt && { cleansed: true }) });
+  let bossStunned = false;
+  /** Xal'Zar hat diese Fähigkeit dieses Helden verschlungen */
+  let devoured: { heroId: string; ability: AbilityId } | undefined;
+  /** Neferet: Fluch der Mumie hat getroffen (auf wen), bzw. der Fluch springt über */
+  let abilityLanded: string | undefined;
+  let cursedHero: string | undefined;
+  let curseJumpTo: string | undefined;
+
   // 3. Gegnerphase: erst der Boss, dann die Begleiter
   let status: CoopStatus = "active";
   const elite = state.elite ?? [];
   /** Wie Gruppen-Fähigkeiten: Was alle trifft, trifft jeden mit dem Schaden wie solo (ohne Gruppenzuschlag) */
   const soloScale = 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1);
   /** Schildwall/Wutschrei: Faktor auf den Schaden, den ein Held erleidet */
-  const hurt = (hero: CoopHero) => Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0));
+  const hurt = (hero: CoopHero) => Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0)) * (defending.has(hero.id) ? DEFEND_DAMAGE_TAKEN : 1);
   /** Der Gegner fällt – ein explosiver Elite trifft alle stehenden Helden (Bollwerk blockt). Fallen alle, ist der Kampf verloren. */
   const enemyDown = () => {
     if (elite.includes("explosive")) {
@@ -1156,12 +1307,30 @@ export function resolveRound(
       }
       events.push({ type: "bossPhase", bossId: state.bossId, ...(nextPhase.rally && { rally: rallied.map((f) => f.id) }) });
     }
-    // Trommler: Der Boss macht mehr Schaden, solange einer steht
-    const drums = bossDamageDealtFactor(roleHolders());
-    if (!stunnedNow(boss)) {
-      const enemy = getCoopEnemy(state.bossId);
-      const special = abilityForRound(enemy.abilities, state.round);
-      if (special) events.push({ type: "bossAbility", bossId: enemy.id, abilityId: special.id ?? enemy.id, name: special.name });
+    // Trommler: Der Boss macht mehr Schaden, je lauter er trommelt (seine Wirbel aus den Runden davor)
+    const drums = 1 + DRUM_BONUS * adds.reduce((sum, f) => sum + (f.role === "drummer" && f.c.hp > 0 ? (f.cast ?? 0) : 0), 0);
+    if (stunnedNow(boss)) {
+      bossStunned = true;
+    } else if (!bossAttacks(turn)) {
+      // Xal'Zar verschlingt die stärkste Fähigkeit des Helden mit der meisten Bedrohung
+      if (turn?.intent === "devour") {
+        const victim = [...heroes].filter((h) => !h.down && strongestAbility(h)).sort((a, b) => b.threat - a.threat)[0];
+        if (victim) {
+          devoured = { heroId: victim.id, ability: strongestAbility(victim)!.id };
+          events.push({ type: "devoured", ...devoured });
+        }
+      }
+    } else {
+      // Dungeon-Bosse: die Fähigkeit ihres Ablaufs – Xal'Zar schlägt mit der verschlungenen zu. Raid-Bosse: fester Takt.
+      const stolenFrom = turn?.intent === "stolen" ? turn.devoured : undefined;
+      const scripted = turnAbility(turn);
+      const special = stolenFrom
+        ? stolenAbility(heroes.find((h) => h.id === stolenFrom.heroId), stolenFrom.ability as AbilityId)
+        : turn
+          ? scripted && coopAbility(scripted)
+          : abilityForRound(enemy.abilities, state.round);
+      if (stolenFrom) events.push({ type: "stolen", heroId: stolenFrom.heroId ?? "", ability: stolenFrom.ability as AbilityId });
+      else if (special) events.push({ type: "bossAbility", bossId: enemy.id, abilityId: special.id ?? enemy.id, name: special.name });
       // Geschwächt (Erdbeben, Fluch): weniger Schaden
       // Gruppen-Fähigkeiten der Dungeon-Bosse treffen alle – jeden mit dem Schaden wie solo, ohne den
       // Gruppenzuschlag. Fähigkeiten gegen ein Ziel haben ihn wie normale Angriffe.
@@ -1251,6 +1420,11 @@ export function resolveRound(
           if (amount > 0) events.push({ type: "manaBurn", heroId: target.id, amount });
         }
         knockDown(target);
+        // Neferet: Der Fluch der Mumie verflucht den Getroffenen mit der meisten Bedrohung
+        if (special?.id && !target.down) {
+          abilityLanded = special.id;
+          if (!cursedHero || target.threat > byId(cursedHero).threat) cursedHero = target.id;
+        }
       }
       if (special?.freeze) {
         const frozen = pickBossTarget(heroes, rng);
@@ -1260,14 +1434,65 @@ export function resolveRound(
         }
       }
     }
-    // Begleiter: je ein normaler Angriff auf ein Ziel nach Bedrohung, solange der Boss steht – Heiler heilen stattdessen den Boss
+    // Neferets Fluch bricht los – auch wenn sie betäubt ist; Bollwerk hilft nicht, Abwehren schon.
+    // Danach springt er auf einen anderen Helden über.
+    if (curse && !curseBroken && curse.roundsLeft <= 1 && boss.c.hp > 0) {
+      const living = heroes.filter((h) => !h.down);
+      const victim = living.find((h) => h.id === curse.heroId) ?? pickBossTarget(heroes, rng);
+      if (victim) {
+        const damage = Math.max(1, Math.round(victim.combatant.maxHp * CURSE_DAMAGE * hurt(victim)));
+        victim.combatant.hp = Math.max(0, victim.combatant.hp - damage);
+        events.push({ type: "curseBurst", heroId: victim.id, damage });
+        knockDown(victim);
+        const others = heroes.filter((h) => !h.down && h !== victim);
+        if (others.length > 0) curseJumpTo = others[Math.floor(rng() * others.length)].id;
+      }
+    }
+    // Begleiter, solange der Boss steht: Die mit Aufgabe setzen ihre Fähigkeit ein (bossMechanics.ts),
+    // sonst je ein normaler Angriff auf ein Ziel nach Bedrohung
     for (const add of adds) {
-      if (add.c.hp <= 0 || boss.c.hp <= 0 || heroes.every((h) => h.down) || stunnedNow(add)) continue;
+      if (add.c.hp <= 0 || boss.c.hp <= 0 || heroes.every((h) => h.down)) continue;
+      const stunned = stunnedNow(add);
       if (add.role === "healer") {
-        const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * HEALER_HEAL));
-        boss.c.hp += heal;
-        if (heal > 0) events.push({ type: "addHeal", add: add.id, heal });
+        // Heilritual: Ein Treffer oder eine Betäubung unterbricht es – angreifen tut der Heiler nie
+        if (stunned || hitAdds.has(add.id)) {
+          if (add.cast) events.push({ type: "interrupted", add: add.id });
+          add.cast = 0;
+          continue;
+        }
+        const cast = (add.cast ?? 0) + 1;
+        if (cast >= RITUAL_ROUNDS) {
+          add.cast = 0;
+          const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * RITUAL_HEAL));
+          boss.c.hp += heal;
+          if (heal > 0) events.push({ type: "addHeal", add: add.id, heal });
+        } else {
+          add.cast = cast;
+          events.push({ type: "ritual", add: add.id, roundsLeft: RITUAL_ROUNDS - cast });
+        }
         continue;
+      }
+      if (stunned) {
+        // Der Trommler kommt aus dem Takt
+        if (add.role === "drummer" && add.cast) {
+          add.cast = 0;
+          events.push({ type: "interrupted", add: add.id });
+        }
+        continue;
+      }
+      if (add.role === "shield") {
+        // Statt anzugreifen hebt er regelmässig den Schild
+        const cast = (add.cast ?? 0) + 1;
+        add.cast = cast % SHIELD_EVERY;
+        if (cast >= SHIELD_EVERY) {
+          bossShield = Math.round(boss.c.maxHp * SHIELD_SHARE);
+          events.push({ type: "bossShield", add: add.id, shield: bossShield });
+          continue;
+        }
+      }
+      if (add.role === "drummer") {
+        add.cast = Math.min(DRUM_MAX, (add.cast ?? 0) + 1);
+        events.push({ type: "drumming", add: add.id, stacks: add.cast });
       }
       const target = pickBossTarget(heroes, rng)!;
       if (target.effects.bulwark) {
@@ -1318,6 +1543,33 @@ export function resolveRound(
     }
   }
 
+  // Der Boss wählt seine Absicht für die nächste Runde
+  const nextTurn =
+    turn && status === "active"
+      ? nextBossTurn(state.bossId, turn, {
+          round: state.round + 1,
+          heroHits: heroHitsOnBoss,
+          damageTaken: bossDamageTaken,
+          bossMaxHp: boss.c.maxHp,
+          stunned: bossStunned,
+          bossHp: boss.c.hp,
+          abilitiesUsed,
+          staticMax: COOP_STATIC_PER_HERO * heroes.length,
+          ...(abilityLanded && { abilityLanded }),
+          ...(cursedHero && { cursedHero }),
+          ...(curseJumpTo && { curseJumpTo }),
+          curseBroken,
+          ...(plates !== undefined && { platesLeft: plates }),
+          ...(devoured && { devoured: devoured.ability, devouredFrom: devoured.heroId }),
+        })
+      : null;
+  const fresh = nextTurn?.curse;
+  if (fresh?.heroId && fresh.roundsLeft === CURSE_ROUNDS && fresh !== turn?.curse) events.push({ type: "cursed", heroId: fresh.heroId });
+  if (turn?.plates === 0 && (nextTurn?.plates ?? 0) > 0) events.push({ type: "platesRegrown" });
+  if (turn?.devoured && nextTurn && !nextTurn.devoured) {
+    events.push({ type: "freed", heroId: turn.devoured.heroId ?? "", ability: turn.devoured.ability as AbilityId });
+  }
+
   // 4. Mana, Verstärkungen und abklingende Bedrohung
   const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
   heroes = heroes.map((h) => ({
@@ -1340,9 +1592,16 @@ export function resolveRound(
       boss: boss.c,
       bossEffects: tickEnemyEffects(boss.fx),
       ...(state.adds && {
-        adds: state.adds.map((a, i) => ({ ...a, combatant: adds[i].c, effects: tickEnemyEffects(adds[i].fx) })),
+        adds: state.adds.map((a, i) => ({
+          ...a,
+          ...(adds[i].cast !== undefined && { cast: adds[i].cast }),
+          combatant: adds[i].c,
+          effects: tickEnemyEffects(adds[i].fx),
+        })),
       }),
       ...(phase && { phase }),
+      ...(nextTurn && { bossTurn: nextTurn }),
+      bossShield: bossShield > 0 ? bossShield : undefined,
       status,
       round: status === "active" ? state.round + 1 : state.round,
       deadline: now + COOP_TURN_SECONDS * 1000,
@@ -1367,7 +1626,10 @@ export function recordCoopWin(stats: CoopStats, bossId: string): CoopStats {
 
 /** Die Fähigkeit, die der Gegner in dieser Runde einsetzt – oder null (für die Ankündigung). */
 export function coopAbilityDue(state: CoopBattleState): CoopBossAbility | null {
-  return abilityForRound(getCoopEnemy(state.bossId).abilities, state.round);
+  const turn = coopBossTurn(state);
+  if (!turn) return abilityForRound(getCoopEnemy(state.bossId).abilities, state.round);
+  const ability = turnAbility(turn);
+  return ability && coopAbility(ability);
 }
 
 /**

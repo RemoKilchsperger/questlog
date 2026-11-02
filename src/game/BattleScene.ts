@@ -6,8 +6,9 @@ import Phaser from "phaser";
 import { getAbility, type AbilityId } from "../domain/abilities";
 import { animationOf } from "./abilityAnimations";
 import { getBossAbilityById } from "../domain/bossAbilities";
-import { ADD_ROLES, getBossPhase } from "../domain/bossMechanics";
-import type { BattleEvent, BattleState, Side } from "../domain/combat";
+import { RAGE_MAX, STATIC_MAX } from "../domain/bossIntents";
+import { ADD_SKILLS, getBossPhase, RITUAL_ROUNDS, SHIELD_EVERY } from "../domain/bossMechanics";
+import { bossTurnOf, type BattleEvent, type BattleState, type Side } from "../domain/combat";
 import { getCreature } from "../domain/creatures";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
@@ -102,6 +103,16 @@ export class BattleScene extends Phaser.Scene {
   private bulwark: Phaser.GameObjects.Graphics | null = null;
   /** Eissplitter schweben ab der Ankündigung über dem Helden, bis sie losfliegen */
   private iceShards: fx.IceShards | null = null;
+  /** Dauerhafte Zeichen des Zustands (applyLooks): Farbschicht über der Figur, solange er anhält */
+  private looks: Record<string, { overlay: Phaser.GameObjects.Image; pulse: Phaser.Tweens.Tween | null; key: string }> = {};
+  /** Schild des Schildträgers über dem Boss */
+  private bossShield: Phaser.GameObjects.Graphics | null = null;
+  /** Grösse des Bosses beim Aufbau – Wut und Lidschlag verändern sie relativ dazu */
+  private bossScale: number | null = null;
+  /** Wie weit der Boss gerade gehoben (negativ) bzw. abgetaucht (positiv) ist */
+  private bossLift = 0;
+  /** Noten über dem Trommler – je lauter, desto öfter */
+  private drumNotes: Record<string, { stacks: number; timer: Phaser.Time.TimerEvent }> = {};
 
   constructor() {
     super("battle");
@@ -157,7 +168,7 @@ export class BattleScene extends Phaser.Scene {
       parts.body.setDepth(i % 2 === 0 ? 2 : -0.5);
       const { name, level, hp, maxHp } = add.combatant;
       // Begleiter mit Rolle tragen ihr Zeichen vor dem Namen (💚 Heiler, 🛡️ Schildträger, 🥁 Trommler)
-      const label = add.role ? `${ADD_ROLES[add.role].icon} ${name}` : name;
+      const label = add.role ? `${ADD_SKILLS[add.role].icon} ${name}` : name;
       this.fighters[add.uid] = this.createFighter(parts, label, level, hp, maxHp, true);
     });
     if (battle.adds?.length) this.enableTargeting(battle);
@@ -191,6 +202,8 @@ export class BattleScene extends Phaser.Scene {
       this.events.once(event, off);
       this.events.once(event, offTarget);
     }
+
+    this.applyLooks(battle);
 
     if (battle.status === "active") {
       music.start(this.setup.boss, this);
@@ -411,6 +424,8 @@ export class BattleScene extends Phaser.Scene {
         mainTarget = null;
       }
       if (event.type === "bossAbility") bossAbility = event.abilityId;
+      // Xal'Zar schlägt mit der verschlungenen Fähigkeit zu – im Stil seines Leerenschlunds
+      if (event.type === "stolen") bossAbility = "void-lord";
       // Begleiter setzen keine Boss-Fähigkeiten ein
       const special =
         event.type === "hit" ? (event.attacker === "hero" ? heroAbility : event.add ? null : bossAbility) : null;
@@ -428,11 +443,11 @@ export class BattleScene extends Phaser.Scene {
             : 900
           : event.type === "bossPhase" || event.type === "explosion"
             ? 1100
-            : event.type === "ability" || event.type === "bossAbility"
+            : event.type === "ability" || event.type === "bossAbility" || event.type === "stolen" || event.type === "risen" || event.type === "devoured"
             ? 600
-            : event.type === "immune"
+            : event.type === "immune" || event.type === "drumming" || event.type === "ritual" || event.type === "static" || event.type === "evaded"
               ? 300
-            : event.type === "manaBurn" || event.type === "drain" || event.type === "addHeal"
+            : event.type === "manaBurn" || event.type === "drain" || event.type === "addHeal" || event.type === "defend" || event.type === "interrupted"
               ? 500
               : sideHit || event.type === "blocked" || (event.type === "stunned" && event.add)
                 ? 300
@@ -440,6 +455,7 @@ export class BattleScene extends Phaser.Scene {
     }
     this.time.delayedCall(delay, () => {
       this.markTarget(next.target);
+      this.applyLooks(next);
       EventBus.emit("battle:animation-done", { battleId: next.id });
     });
   }
@@ -543,13 +559,124 @@ export class BattleScene extends Phaser.Scene {
       sfx.stun();
       this.tweens.add({ targets: enemy.body, angle: 8, duration: 90, yoyo: true, repeat: 3 });
       fx.dizzyStars(this, { x: enemy.homeX, y: GROUND_Y - 150 });
+    } else if (event.type === "defend") {
+      // Abwehren: der Held hebt die Deckung
+      const hero = this.fighters.hero;
+      this.floatText(hero.homeX, GROUND_Y - 115, "ABWEHR", "#7aa7f0", 24);
+      if (event.mana > 0) this.time.delayedCall(250, () => this.floatText(hero.homeX, GROUND_Y - 90, `+${event.mana} Mana`, "#7aa7f0", 18));
+      fx.ring(this, this.center("hero"), 0xa9c6ff, 70);
+      this.tint(hero, 0xa9c6ff, 350);
+      sfx.block();
+    } else if (event.type === "reflected") {
+      // Das offene Auge wirft die Fähigkeit zurück
+      const hero = this.fighters.hero;
+      fx.siphon(this, this.center("enemy"), this.center("hero"), 0xd39bf0, 12);
+      sfx.manaBurn();
+      this.time.delayedCall(300, () => {
+        this.setHp("hero", Math.max(0, hero.hp - event.damage));
+        this.floatText(hero.homeX, GROUND_Y - 110, `↩ -${event.damage}`, "#d39bf0", 26);
+        this.tint(hero, 0xd39bf0, 300);
+      });
+      this.floatText(this.fighters.enemy.homeX, GROUND_Y - 140, "ZURÜCKGEWORFEN!", "#d39bf0", 20);
+    } else if (event.type === "charging") {
+      const enemy = this.fighters.enemy;
+      this.floatText(enemy.homeX, GROUND_Y - 130, "LÄDT AUF …", "#f4c95d", 24);
+      this.tint(enemy, 0xffd27a, 600);
+      fx.rise(this, this.center("enemy"), 0xf4c95d, 10);
+    } else if (event.type === "interrupted") {
+      const key = event.add ?? "enemy";
+      this.floatText(this.fighters[key].homeX, GROUND_Y - 135, event.add ? "UNTERBROCHEN!" : "ANSTURM GEBROCHEN!", "#7dd3a8", 22);
+      fx.burst(this, this.center(key), 0x7dd3a8, 10, 50);
+    } else if (event.type === "staggered") {
+      const enemy = this.fighters.enemy;
+      this.floatText(enemy.homeX, GROUND_Y - 120, "TAUMELT", "#7dd3a8", 26);
+      this.tweens.add({ targets: enemy.body, angle: 6, duration: 110, yoyo: true, repeat: 3 });
+      fx.dizzyStars(this, { x: enemy.homeX, y: GROUND_Y - 150 });
+    } else if (event.type === "bossShield") {
+      // Der Schildträger hebt einen Schild über den Boss
+      fx.siphon(this, this.center(event.add), this.center("enemy"), 0x7aa7f0, 10);
+      sfx.block();
+      this.time.delayedCall(350, () => {
+        fx.ring(this, this.center("enemy"), 0x7aa7f0, 90, 500);
+        this.floatText(this.fighters.enemy.homeX, GROUND_Y - 120, `SCHILD ${event.shield}`, "#7aa7f0", 22);
+      });
+    } else if (event.type === "drumming") {
+      const f = this.fighters[event.add];
+      this.floatText(f.homeX, GROUND_Y - 120, `♪ ×${event.stacks}`, "#f0776a", 18);
+      this.tweens.add({ targets: f.body, y: f.body.y - 4, duration: 80, yoyo: true, repeat: 1 });
+    } else if (event.type === "ritual") {
+      const f = this.fighters[event.add];
+      this.floatText(f.homeX, GROUND_Y - 120, `✦ ${event.roundsLeft}`, "#7dd3a8", 18);
+      fx.rise(this, this.center(event.add), 0x7dd3a8, 5);
+    } else if (event.type === "evaded") {
+      this.floatText(this.fighters.enemy.homeX, GROUND_Y - 90, "INS LEERE", "#a49cb8", 22);
+      fx.burst(this, { x: this.fighters.enemy.homeX, y: GROUND_Y - 10 }, 0x6fb7c8, 10, 60);
+      sfx.whoosh();
+    } else if (event.type === "submerged") {
+      const at = { x: this.fighters.enemy.homeX, y: GROUND_Y - 10 };
+      fx.ring(this, at, 0x6fb7c8, 110, 500, true);
+      fx.rise(this, at, 0xbfe8f0, 10, 90);
+      if (event.extinguished) this.floatText(at.x, GROUND_Y - 110, "ZISCH!", "#bfe8f0", 22);
+    } else if (event.type === "platesBroken") {
+      const enemy = this.fighters.enemy;
+      this.floatText(enemy.homeX, GROUND_Y - 140, "PANZER BRICHT!", "#f4c95d", 24);
+      fx.burst(this, this.center("enemy"), 0x8a909a, 18, 110, 8);
+      sfx.quake(0.5);
+    } else if (event.type === "platesRegrown") {
+      const enemy = this.fighters.enemy;
+      fx.ring(this, this.center("enemy"), 0x8a909a, 90, 500);
+      this.tint(enemy, 0xc0c6d0, 400);
+      sfx.block();
+    } else if (event.type === "risen") {
+      // Das Seelengefäss zerspringt, der Lich erhebt sich
+      const enemy = this.fighters.enemy;
+      fx.flash(this, 0x2a6a3a, 0.4, 400);
+      fx.pillar(this, this.center("enemy"), 0x5dff9a);
+      fx.burst(this, this.center("enemy"), 0x5dff9a, 20, 120);
+      sfx.curse();
+      this.time.delayedCall(300, () => {
+        enemy.body.setAlpha(1).setAngle(0);
+        this.setHp("enemy", event.heal);
+        this.floatText(enemy.homeX, GROUND_Y - 140, "ERHEBT SICH!", "#5dff9a", 28);
+      });
+    } else if (event.type === "cursed") {
+      fx.curseRing(this, this.center("hero"), 0x3ad6c5, () => undefined);
+    } else if (event.type === "curseBroken") {
+      const hero = this.fighters.hero;
+      this.floatText(hero.homeX, GROUND_Y - 120, "FLUCH GEBROCHEN", "#7dd3a8", 22);
+      fx.burst(this, this.center("hero"), 0x3ad6c5, 14, 80);
+    } else if (event.type === "curseBurst") {
+      fx.pillar(this, this.center("hero"), 0x3ad6c5);
+      sfx.curse();
+      this.time.delayedCall(250, () => this.impact("hero", event.damage, false, 0.012));
+    } else if (event.type === "static") {
+      fx.siphon(this, this.center("hero"), this.center("enemy"), 0xffe66b, 8);
+      this.time.delayedCall(250, () => this.floatText(this.fighters.enemy.homeX, GROUND_Y - 130, "⚡".repeat(Math.min(event.charges, 5)), "#ffe66b", 20));
+    } else if (event.type === "devoured") {
+      // Die Kraft der Fähigkeit wird in den Schlund gezogen
+      fx.vortex(this, this.center("hero"), [0x5a2a8a, 0x4af0ff]);
+      this.time.delayedCall(200, () => fx.siphon(this, this.center("hero"), this.center("enemy"), 0x9a5ad0, 14));
+      this.floatText(this.fighters.hero.homeX, GROUND_Y - 120, `${getAbility(event.ability).name} VERSCHLUNGEN`, "#c08bff", 20);
+      sfx.manaBurn();
+    } else if (event.type === "stolen") {
+      const enemy = this.fighters.enemy;
+      this.floatText(enemy.homeX, GROUND_Y - 130, `${getAbility(event.ability).name}!`, "#c08bff", 26);
+      this.tint(enemy, 0x9a5ad0, 400);
+      sfx.roar();
+    } else if (event.type === "freed") {
+      fx.siphon(this, this.center("enemy"), this.center("hero"), 0x4af0ff, 14);
+      this.time.delayedCall(300, () => this.floatText(this.fighters.hero.homeX, GROUND_Y - 120, `${getAbility(event.ability).name} BEFREIT`, "#4af0ff", 20));
     } else if (event.type === "stunResisted") {
       this.floatText(this.fighters.enemy.homeX, GROUND_Y - 120, "WIDERSTEHT!", "#a49cb8", 22);
     } else if (event.type === "hit") {
       if (event.attacker === "hero") this.heroHit(event, special as AbilityId | null);
       else this.enemyHit(event, special);
       // Der Schildträger fängt einen Teil ab – blauer Schimmer um den Boss
-      if (event.shielded) this.time.delayedCall(150, () => fx.ring(this, this.center("enemy"), 0x7aa7f0, 75, 350));
+      if (event.shielded || event.absorbed) this.time.delayedCall(150, () => fx.ring(this, this.center("enemy"), 0x7aa7f0, 75, 350));
+      if (event.absorbed) {
+        const absorbed = event.absorbed;
+        this.time.delayedCall(200, () => this.floatText(this.fighters.enemy.homeX, GROUND_Y - 150, `🛡 ${absorbed}`, "#7aa7f0", 18));
+      }
       // Schwäche oder Resistenz gegen die Waffe
       if (event.attacker === "hero" && event.matchup) {
         const f = this.fighters[event.add ?? "enemy"];
@@ -631,6 +758,189 @@ export class BattleScene extends Phaser.Scene {
   /* ───────────── Bausteine für Treffer ───────────── */
 
   /** Mitte der Figur – Ziel für Geschosse, Strahlen und Effekte. */
+  /**
+   * Zeigt den Zustand der Gegner an ihnen selbst – ohne Worte, damit man ihn
+   * selbst deuten lernt: Krummzahn läuft vor Wut rot an, das Höhlenauge glüht
+   * offen und verdunkelt sich geschlossen, das Mammut bäumt sich beim Aufladen
+   * auf. Heiler leuchten mit dem Ritual, Trommler schicken Noten, der Schild
+   * liegt als Kuppel über dem Boss. Läuft nach jeder Runde und beim Aufbau.
+   */
+  private applyLooks(state: BattleState) {
+    const active = state.status === "active";
+    const turn = active ? bossTurnOf(state) : null;
+    const boss = this.fighters.enemy;
+    // Haltung: geneigt (Grad) und gestreckt/gestaucht – relativ zur Grösse beim Aufbau
+    this.bossScale ??= boss.body.scaleX;
+    let angle = 0;
+    let grow = 1;
+    let squash = 1;
+    /** Höhe über dem Boden (negativ: in der Luft, positiv: abgetaucht) und Deckkraft */
+    let lift = 0;
+    let alpha = 1;
+    if (!turn) {
+      this.setLook("enemy", null);
+    } else if (state.creatureId === "goblin-chief") {
+      // Läuft rot an und bläht sich auf – beim Wutanfall pulsierend
+      const rage = turn.rage ?? 0;
+      if (turn.intent === "ability") {
+        this.setLook("enemy", { color: 0xff1a0a, alpha: 0.65, pulse: 180, dark: true });
+        grow = 1.12;
+      } else {
+        this.setLook("enemy", rage > 0 ? { color: 0xff1a0a, alpha: (0.5 * rage) / RAGE_MAX, pulse: rage >= RAGE_MAX - 1 ? 400 : 0, dark: true } : null);
+        grow = 1 + (0.06 * rage) / RAGE_MAX;
+      }
+    } else if (state.creatureId === "cave-eye") {
+      // Offen glüht es, geschlossen wird es dunkel und kneift sich zusammen
+      if (turn.intent === "ability") this.setLook("enemy", { color: 0xc08bff, alpha: 0.6, pulse: 240 });
+      else if (turn.eye === "open") this.setLook("enemy", { color: 0xc08bff, alpha: 0.35, pulse: 700 });
+      else {
+        this.setLook("enemy", { color: 0x0c0814, alpha: 0.75, dark: true });
+        squash = 0.85;
+      }
+    } else if (turn.intent === "submerged") {
+      // Abgetaucht: nur noch ein Schatten unter Wasser
+      this.setLook("enemy", { color: 0x12303c, alpha: 0.6, dark: true });
+      lift = 45;
+      alpha = 0.35;
+    } else if (turn.airborne) {
+      // Hoch in der Luft, kleiner und von unten rot beschienen
+      this.setLook("enemy", { color: 0xffa040, alpha: 0.18 });
+      lift = -80;
+      grow = 0.88;
+    } else if (turn.intent === "devour") {
+      // Der Schlund reisst auf – dunkel und gierig
+      this.setLook("enemy", { color: 0x1a0628, alpha: 0.6, pulse: 220, dark: true });
+      grow = 1.08;
+    } else if (turn.intent === "stolen" || (turn.devoured && turn.intent !== "ability")) {
+      // Die verschlungene Kraft flackert in ihm
+      this.setLook("enemy", { color: 0x9a5ad0, alpha: 0.45, pulse: 350 });
+    } else if (turn.plates !== undefined && turn.intent !== "ability") {
+      // Grau gepanzert – je mehr Platten, desto stumpfer; ohne Platten glüht er verwundbar
+      this.setLook("enemy", turn.plates > 0 ? { color: 0x5a606a, alpha: 0.15 * turn.plates, dark: true } : { color: 0xff8a5a, alpha: 0.3, pulse: 500 });
+      squash = turn.plates > 0 ? 1 : 0.95;
+    } else if ((turn.static ?? 0) > 0 && turn.intent !== "ability") {
+      // Kaelthar lädt sich auf – kurz vor der Entladung flackert er
+      const charges = turn.static ?? 0;
+      this.setLook("enemy", { color: 0xffe66b, alpha: (0.5 * charges) / STATIC_MAX, pulse: charges >= STATIC_MAX - 1 ? 160 : 0 });
+    } else if (state.creatureId === "lich-king" && turn.intent !== "ability") {
+      // Das Seelengefäss leuchtet grün – je mehr Seelen, desto heller
+      const vessel = turn.vessel ?? 0;
+      this.setLook("enemy", vessel > 0 ? { color: 0x5dff9a, alpha: 0.08 + 0.1 * vessel, pulse: 900 } : null);
+    } else if (turn.intent === "charging") {
+      // Bäumt sich auf, glüht und wirbelt Schnee auf
+      this.setLook("enemy", { color: 0xffd27a, alpha: 0.6, pulse: 180 });
+      angle = 12;
+      grow = 1.05;
+      fx.rise(this, { x: boss.homeX - 40, y: GROUND_Y }, 0xd8d0c0, 14, 160);
+    } else if (turn.intent === "staggered") {
+      this.setLook("enemy", { color: 0x9fb4d0, alpha: 0.35 });
+      angle = -8;
+    } else if (turn.intent === "ability") {
+      this.setLook("enemy", { color: 0xff5a3a, alpha: 0.5, pulse: 240 });
+      if (state.creatureId === "primal-mammoth") angle = -6;
+    } else {
+      this.setLook("enemy", null);
+    }
+    const scaleX = this.bossScale * grow;
+    const scaleY = this.bossScale * grow * squash;
+    if (boss.body.angle !== angle || boss.body.scaleX !== scaleX || boss.body.scaleY !== scaleY) {
+      this.tweens.add({ targets: boss.body, angle, scaleX, scaleY, duration: 300, ease: "Sine.easeOut" });
+    }
+    // Heben und Senken über die Teile der Figur – der Container atmet weiter
+    if (lift !== this.bossLift) {
+      const delta = lift - this.bossLift;
+      this.bossLift = lift;
+      this.tweens.add({ targets: boss.body.list, y: `+=${delta}`, duration: 450, ease: "Sine.easeInOut" });
+    }
+    if (active && state.enemy.hp > 0 && boss.body.alpha !== alpha) this.tweens.add({ targets: boss.body, alpha, duration: 400 });
+
+    // Neferets Fluch liegt auf dem Helden – kurz vor dem Ausbruch pulsiert er schnell
+    const curse = turn?.curse;
+    this.setLook("hero", curse ? { color: 0x3ad6c5, alpha: curse.roundsLeft <= 1 ? 0.55 : 0.3, pulse: curse.roundsLeft <= 1 ? 160 : 600 } : null);
+
+    // Schild über dem Boss
+    const shield = active && state.enemy.hp > 0 ? (state.bossShield ?? 0) : 0;
+    if (shield > 0 && !this.bossShield) {
+      const at = this.center("enemy");
+      this.bossShield = this.add.graphics().setDepth(1);
+      this.bossShield.fillStyle(0x7aa7f0, 0.15).fillEllipse(at.x, at.y - 20, 300, 330);
+      this.bossShield.lineStyle(4, 0xa9c6ff, 0.8).strokeEllipse(at.x, at.y - 20, 300, 330);
+      this.tweens.add({ targets: this.bossShield, alpha: 0.55, duration: 900, yoyo: true, repeat: -1 });
+    } else if (shield === 0 && this.bossShield) {
+      fx.burst(this, this.center("enemy"), 0xa9c6ff, 14, 110);
+      this.bossShield.destroy();
+      this.bossShield = null;
+    }
+
+    for (const add of state.adds ?? []) {
+      const alive = active && add.combatant.hp > 0;
+      const cast = add.cast ?? 0;
+      if (!alive || !add.role) this.setLook(add.uid, null);
+      else if (add.role === "healer") this.setLook(add.uid, cast > 0 ? { color: 0x5dff9a, alpha: 0.2 * cast, pulse: cast >= RITUAL_ROUNDS - 1 ? 250 : 0 } : null);
+      else if (add.role === "shield") this.setLook(add.uid, cast >= SHIELD_EVERY - 1 ? { color: 0x7aa7f0, alpha: 0.5, pulse: 260 } : null);
+      else this.setLook(add.uid, cast > 0 ? { color: 0xff7a3a, alpha: 0.07 * cast } : null);
+      this.setDrumNotes(add.uid, alive && add.role === "drummer" ? cast : 0);
+    }
+  }
+
+  /** Farbschicht über einer Figur – `dark` verdunkelt statt aufzuhellen, `pulse` lässt sie atmen (ms). */
+  private setLook(side: string, look: { color: number; alpha: number; pulse?: number; dark?: boolean } | null) {
+    const f = this.fighters[side];
+    if (!f) return;
+    let entry = this.looks[side];
+    const key = look ? `${look.color}-${look.alpha}-${look.pulse ?? 0}-${look.dark ?? false}` : "none";
+    if (entry?.key === key) return;
+    if (!entry) {
+      if (!look) return;
+      const figure = f.images[0];
+      const overlay = this.add.image(figure.x, figure.y, figure.texture.key).setOrigin(figure.originX, figure.originY).setAlpha(0);
+      f.body.addAt(overlay, f.body.getIndex(figure) + 1);
+      entry = this.looks[side] = { overlay, pulse: null, key: "none" };
+    }
+    entry.key = key;
+    entry.pulse?.stop();
+    entry.pulse = null;
+    this.tweens.killTweensOf(entry.overlay);
+    if (!look) {
+      this.tweens.add({ targets: entry.overlay, alpha: 0, duration: 400 });
+      return;
+    }
+    entry.overlay.setTintFill(look.color).setBlendMode(look.dark ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: entry.overlay,
+      alpha: look.alpha,
+      duration: 400,
+      onComplete: () => {
+        if (look.pulse && entry.key === key) {
+          entry.pulse = this.tweens.add({ targets: entry.overlay, alpha: look.alpha * 0.5, duration: look.pulse, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        }
+      },
+    });
+  }
+
+  /** Noten über dem Trommler: je mehr Wirbel, desto öfter. */
+  private setDrumNotes(uid: string, stacks: number) {
+    const current = this.drumNotes[uid];
+    if (current?.stacks === stacks) return;
+    current?.timer.remove();
+    delete this.drumNotes[uid];
+    if (stacks <= 0) return;
+    const f = this.fighters[uid];
+    const timer = this.time.addEvent({
+      delay: Math.max(250, 1100 - stacks * 170),
+      loop: true,
+      callback: () => {
+        const note = this.add
+          .text(f.homeX + Phaser.Math.Between(-30, 30), GROUND_Y - 110, Math.random() < 0.5 ? "♪" : "♫", { fontFamily: NUMBER_FONT, fontSize: `${14 + stacks * 2}px`, color: "#f0a060" })
+          .setOrigin(0.5)
+          .setStroke("#0e0b16", 3)
+          .setDepth(18);
+        this.tweens.add({ targets: note, y: note.y - 50, alpha: 0, duration: 1100, onComplete: () => note.destroy() });
+      },
+    });
+    this.drumNotes[uid] = { stacks, timer };
+  }
+
   private center(side: string): fx.Point {
     return { x: this.fighters[side].homeX, y: GROUND_Y - 65 };
   }
@@ -1191,6 +1501,7 @@ export class BattleScene extends Phaser.Scene {
         fx.rise(this, at, 0xf4c95d, 12, 80);
         break;
       case "storm-lord":
+      case "storm-lord-discharge":
       case "storm-lord-thunder": // Himmel verdunkelt sich
         fx.flash(this, 0x141e36, 0.5, 400);
         break;
@@ -1255,6 +1566,7 @@ export class BattleScene extends Phaser.Scene {
         sfx.curse();
         break;
       case "storm-lord": // Kettenblitz: Blitz von oben
+      case "storm-lord-discharge": // Entladung: ein einziger, greller Blitz
         fx.lightning(this, target);
         sfx.thunder();
         this.time.delayedCall(60, () => hit());

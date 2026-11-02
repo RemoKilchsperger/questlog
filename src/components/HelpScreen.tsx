@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
-import { ADD_ROLES, type AddRole } from "../domain/bossMechanics";
+import { ADD_SKILLS, type AddRole } from "../domain/bossMechanics";
 import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL, getEliteAffix } from "../domain/elites";
 import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
 import { ITEM_EFFECTS } from "../domain/itemEffects";
@@ -10,7 +10,7 @@ import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { FOODS, foodEffectText, foodPrice } from "../domain/food";
 import { MAX_CHANCE, RECRUIT_LEVEL_GAP, RECRUITS_PER_DAY, TAVERN_RULES, TRAITS } from "../domain/companions";
 import { HEROIC_AFFIX, HEROIC_BOSS_LOOT_CHANCE, HEROIC_HP, HEROIC_REWARD_FACTOR } from "../domain/heroic";
-import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
+import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE, DEFEND_DAMAGE_TAKEN, DEFEND_MANA } from "../domain/combat";
 import {
   BULWARK_SHARE,
   COOP_BOSSES,
@@ -521,12 +521,21 @@ export function HelpScreen() {
               </li>
             ))}
           </ul>
-          <H>Boss-Fähigkeiten</H>
+          <H>Boss-Fähigkeiten und Absichten</H>
           <p>
-            Bosse setzen alle paar Runden eine besondere Attacke ein. Sie wird eine Runde vorher angekündigt: Ein Bollwerk
-            (Schild) blockt sie komplett, ein Betäubender Schlag (Streitkolben) verhindert sie. Nach einer Betäubung ist ein
-            Boss {STUN_IMMUNITY_ROUNDS} Runden lang immun dagegen – im Koop gilt das für jeden Gegner. Dungeon-Bosse haben
-            zwei Fähigkeiten, die sich abwechseln.
+            Bosse zeigen dir jede Runde, was sie vorhaben – bevor du handelst. Ihre besonderen Attacken kommen mit Ansage:
+            Ein Bollwerk (Schild) blockt sie komplett, eine Betäubung (Streitkolben, Grosshammer …) verhindert sie. Nach einer
+            Betäubung ist ein Boss {STUN_IMMUNITY_ROUNDS} Runden lang immun dagegen – im Koop gilt das für jeden Gegner.
+            Dungeon-Bosse haben zwei Fähigkeiten, die sich abwechseln.
+          </p>
+          <p>
+            Jeder Boss kämpft mit eigener Taktik: Sie werden wütend, laden auf, tauchen ab, heben ab oder greifen nach deinen Kräften. Was genau,
+            erfährst du erst im Kampf: Achte auf ihre Absicht und darauf, wie sie aussehen – und finde selbst heraus, wann der richtige Moment ist.
+          </p>
+          <p>
+            🛡️ <b>Abwehren:</b> Statt anzugreifen gehst du in Deckung – du erleidest diese Runde nur{" "}
+            {pct(DEFEND_DAMAGE_TAKEN)} Schaden und bekommst {DEFEND_MANA} Mana zusätzlich. Lohnt sich vor allem gegen grosse,
+            angekündigte Treffer.
           </p>
           <H>Bosse mit Begleitern</H>
           <p>
@@ -547,12 +556,13 @@ export function HelpScreen() {
           </p>
           <H>Begleiter mit Aufgabe</H>
           <p>
-            Einer der beiden Begleiter hilft dem Boss, solange er steht – meist lohnt es sich, ihn zuerst auszuschalten:
+            Einer der beiden Begleiter hilft dem Boss mit einer eigenen Fähigkeit. In der Ziel-Leiste siehst du, was er
+            gerade vorhat. Wie man ihm beikommt, findest du selbst heraus:
           </p>
           <ul className="list-disc space-y-1 pl-5">
-            {(Object.keys(ADD_ROLES) as AddRole[]).map((role) => (
+            {(Object.keys(ADD_SKILLS) as AddRole[]).map((role) => (
               <li key={role}>
-                {ADD_ROLES[role].icon} <b>{ADD_ROLES[role].name}:</b> {ADD_ROLES[role].description}
+                {ADD_SKILLS[role].icon} <b>{ADD_SKILLS[role].name}:</b> {ADD_SKILLS[role].description}
               </li>
             ))}
           </ul>
@@ -594,7 +604,8 @@ export function HelpScreen() {
             </li>
             <li>
               Die Fähigkeiten der Koop-Bosse treffen die ganze Gruppe. Dungeon-Bosse wechseln ab: eine Fähigkeit gegen ein
-              Ziel, eine gegen alle.
+              Ziel, eine gegen alle. Wie solo zeigen sie jede Runde ihre Absicht und kämpfen mit eigener Taktik – und jeder
+              kann abwehren.
             </li>
             <li>Gefallene Mitspieler belebst du mit einem Heiltrank wieder – jeden höchstens einmal pro Kampf.</li>
             <li>

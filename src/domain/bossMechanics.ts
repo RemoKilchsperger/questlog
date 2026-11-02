@@ -8,25 +8,30 @@
 // Gegenangriff derselben Runde.
 //
 // Rollen der Begleiter: Einer der beiden Begleiter jedes Bosses hat eine
-// Aufgabe. Solange er steht, hilft er dem Boss – es lohnt sich, ihn zuerst
-// auszuschalten. Er kommt auch beim Sammelruf nicht zurück, sonst lohnte es
-// sich nicht (Simulation: dann war es am besten, die Begleiter zu ignorieren).
-//   - Heiler: heilt den Boss jede Runde, statt selbst anzugreifen
-//   - Schildträger: der Boss erleidet weniger Schaden
-//   - Trommler: der Boss macht mehr Schaden
+// Aufgabe. Er kommt auch beim Sammelruf nicht zurück, sonst lohnte es sich nicht,
+// ihn auszuschalten (Simulation: dann war es am besten, die Begleiter zu ignorieren).
 //
-// Stärke per Simulation abgestimmt (docs/boss-mechaniken.md): Schwächere Heiler
-// (4 %) und Trommler (+25 %) lohnten sich in kurzen Dungeon-Kämpfen nicht – es
-// war besser, sie zu ignorieren.
+// Die Begleiter mit Aufgabe setzen Fähigkeiten ein, die man kommen sieht und
+// kontern kann (docs/boss-absichten.md) – solo wie im Koop. Wie man sie kontert,
+// verraten die Beschreibungen nicht – das soll man im Kampf herausfinden.
+//   - Heiler: Heilritual über mehrere Runden – jeder Treffer oder eine Betäubung unterbricht es
+//   - Schildträger: hebt regelmässig einen Schild über den Boss, der Schaden schluckt (Gift, Feuer und Bluten gehen durch)
+//   - Trommler: trommelt jede Runde lauter – der Boss macht mehr Schaden, eine Betäubung bringt ihn aus dem Takt
+
+/** Heiler: Das Heilritual dauert so viele Runden – in der letzten heilt er. */
+export const RITUAL_ROUNDS = 3;
+/** Heiler: Das vollendete Ritual heilt diesen Anteil der maximalen Lebenspunkte des Bosses. */
+export const RITUAL_HEAL = 0.2;
+/** Schildträger: In jeder so vielten Runde hebt er den Schild, statt anzugreifen. */
+export const SHIELD_EVERY = 3;
+/** Schildträger: Der Schild schluckt diesen Anteil der maximalen Lebenspunkte des Bosses. */
+export const SHIELD_SHARE = 0.15;
+/** Trommler: höchstens so viele Trommelwirbel … */
+export const DRUM_MAX = 5;
+/** … je so viel mehr Schaden für den Boss. */
+export const DRUM_BONUS = 0.08;
 
 export type AddRole = "healer" | "shield" | "drummer";
-
-/** Der Heiler heilt den Boss jede Runde um diesen Anteil seiner maximalen Lebenspunkte. */
-export const HEALER_HEAL = 0.07;
-/** Solange ein Schildträger steht, erleidet der Boss nur noch diesen Anteil des Schadens. */
-export const SHIELD_DAMAGE_TAKEN = 0.5;
-/** Solange ein Trommler steht, macht der Boss so viel mehr Schaden. */
-export const DRUMMER_BONUS = 0.4;
 
 export interface AddRoleDef {
   name: string;
@@ -34,40 +39,38 @@ export interface AddRoleDef {
   description: string;
 }
 
-export const ADD_ROLES: Record<AddRole, AddRoleDef> = {
+export const ADD_SKILLS: Record<AddRole, AddRoleDef> = {
   healer: {
     name: "Heiler",
     icon: "💚",
-    description: `Heilt den Boss jede Runde um ${HEALER_HEAL * 100} % seiner Lebenspunkte, statt anzugreifen.`,
+    description: `Heilritual: Nach ${RITUAL_ROUNDS} Runden heilt er den Boss um ${RITUAL_HEAL * 100} %.`,
   },
   shield: {
     name: "Schildträger",
     icon: "🛡️",
-    description: `Schützt den Boss: Solange er steht, erleidet der Boss nur ${SHIELD_DAMAGE_TAKEN * 100} % des Schadens.`,
+    description: `Hebt alle ${SHIELD_EVERY} Runden einen Schild über den Boss, der ${SHIELD_SHARE * 100} % seiner Lebenspunkte an Schaden schluckt.`,
   },
   drummer: {
     name: "Trommler",
     icon: "🥁",
-    description: `Feuert den Boss an: Solange er steht, macht der Boss ${DRUMMER_BONUS * 100} % mehr Schaden.`,
+    description: `Trommelt jede Runde lauter: +${DRUM_BONUS * 100} % Boss-Schaden pro Wirbel, bis zu ${DRUM_MAX}.`,
   },
 };
 
-/** Ein Begleiter, soweit es für seine Rolle zählt: lebt er noch? */
-interface RoleHolder {
-  role?: AddRole;
-  hp: number;
-}
-
-const active = (adds: readonly RoleHolder[], role: AddRole) => adds.some((a) => a.role === role && a.hp > 0);
-
-/** Faktor auf den Schaden, den der Boss erleidet – kleiner, solange ein Schildträger steht. */
-export function bossDamageTakenFactor(adds: readonly RoleHolder[]): number {
-  return active(adds, "shield") ? SHIELD_DAMAGE_TAKEN : 1;
-}
-
-/** Faktor auf den Schaden des Bosses – grösser, solange ein Trommler steht. */
-export function bossDamageDealtFactor(adds: readonly RoleHolder[]): number {
-  return active(adds, "drummer") ? 1 + DRUMMER_BONUS : 1;
+/** Was der Begleiter mit Aufgabe gerade vorhat – `cast` ist sein Fortschritt (BattleAdd.cast). */
+export function addIntentText(role: AddRole, cast = 0): { text: string; urgent: boolean } {
+  if (role === "healer") {
+    const left = RITUAL_ROUNDS - cast;
+    return left <= 1
+      ? { text: `Heilt den Boss diese Runde um ${RITUAL_HEAL * 100} %!`, urgent: true }
+      : { text: `Heilritual: Heilung in ${left} Runden`, urgent: false };
+  }
+  if (role === "shield") {
+    const left = SHIELD_EVERY - cast;
+    return left <= 1 ? { text: "Hebt diese Runde den Schild!", urgent: true } : { text: `Schild in ${left} Runden`, urgent: false };
+  }
+  if (cast === 0) return { text: "Hebt die Trommelstöcke …", urgent: false };
+  return { text: `Trommelwirbel ×${cast} (+${Math.round(cast * DRUM_BONUS * 100)} % Boss-Schaden)`, urgent: cast >= 3 };
 }
 
 export interface BossPhaseDef {
