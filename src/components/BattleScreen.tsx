@@ -15,7 +15,6 @@ import {
   fleeCost,
   getHeroCombatProfile,
   potionBlocker,
-  type BattleReward,
   type BattleState,
 } from "../domain/combat";
 import {
@@ -35,6 +34,7 @@ import {
   type CreatureDef,
 } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
+import { dungeonMobs, ROOMS } from "../domain/dungeonPaths";
 import { foodEffectText, getFood, withMeal } from "../domain/food";
 import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked } from "../domain/heroic";
 import { getBossItems, getItemStats } from "../domain/items";
@@ -43,7 +43,6 @@ import { questsForCreature, trackedQuests } from "../domain/quests";
 import { skillPointsNote } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
 import { DRINK_POTIONS, getPotion, isThrowable, potionEffectText, potionHeal, THROW_POTIONS } from "../domain/potions";
-import { materialEntries } from "../domain/village";
 import { MaterialGain } from "./materialUi";
 import { EventBus } from "../game/EventBus";
 import { unlockAudio } from "../game/sfx";
@@ -53,6 +52,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { CoopDungeonList, CoopJoinForm, CoopPanel, CoopScreen } from "./CoopScreen";
 import { useCoopStore } from "../coop/coopStore";
 import { DungeonChest } from "./DungeonChest";
+import { ChestDeposit, DungeonOnward, DungeonProgress, DungeonRoomView } from "./DungeonPath";
 import { TowerPanel, TowerProgress, TowerResultActions } from "./TowerScreen";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
@@ -87,9 +87,13 @@ const PhaserBattle = lazy(() => import("../game/PhaserBattle"));
 
 export function BattleScreen() {
   const battle = useGameStore((s) => s.battle);
+  const dungeon = useGameStore((s) => s.dungeon);
   const coop = useCoopStore((s) => s.phase !== "idle");
   if (coop) return <CoopScreen />;
-  return battle ? <Battle battle={battle} /> : <AreaSelect />;
+  if (!battle) return <AreaSelect />;
+  // Raum ohne Kampf im Dungeon: ersetzt die Kampfansicht
+  if (dungeon?.room) return <DungeonRoomView battle={battle} run={{ ...dungeon, room: dungeon.room }} />;
+  return <Battle battle={battle} />;
 }
 
 /* ───────────────────────── Gebietsauswahl ───────────────────────── */
@@ -101,7 +105,7 @@ const BATTLE_VIEW_KEY = "questlog-battle-view";
 
 const BATTLE_VIEWS: Record<BattleView, { label: string; intro: string }> = {
   areas: { label: "🌲 Gebiete", intro: "Kreaturen und Bosse der Gebiete – jedes öffnet sich ab seinem Mindestlevel." },
-  dungeons: { label: "🗝️ Dungeons", intro: "Acht Kämpfe hintereinander ohne Heilung, in der Mitte ein Zwischenboss, am Ende ein Boss mit eigenem Set – solo oder im Koop." },
+  dungeons: { label: "🗝️ Dungeons", intro: "Ein Weg ohne Heilung mit Gabelungen – Kampf, Elite, Schrein, Händler, Falle oder Rätsel. In der Mitte ein Zwischenboss, am Ende ein Boss mit eigenem Set – solo oder im Koop." },
   tower: { label: "🗼 Endlos-Turm", intro: "So hoch wie möglich: Stockwerk für Stockwerk stärkere Gegner, Segen und eine Wochen-Rangliste." },
   coop: { label: "🤝 Koop-Bosse", intro: "Raid-Bosse für 2–4 Helden – mit eigenen Sets." },
 };
@@ -324,20 +328,26 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
         )}
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
-        {dungeon.creatures.map((creature, i) => (
+        {[...dungeonMobs(dungeon), ...dungeon.creatures.filter((c) => c.midBoss || c.boss)].map((creature) => (
           <Hint
-            key={i}
-            text={`${i + 1}. Kampf: ${creature.name}${creature.boss ? " (Boss)" : creature.midBoss ? " (Zwischenboss: Elite mit zwei Modifikatoren)" : ""} · Lv. ${creature.level}`}
+            key={creature.id}
+            text={`${creature.name}${creature.boss ? " (Endboss)" : creature.midBoss ? " (Zwischenboss: Elite mit zwei Modifikatoren)" : ""} · Lv. ${creature.level}`}
           >
             <div className="flex flex-col items-center text-center">
               <CreatureSprite sprite={creature.sprite} size={creature.boss ? 48 : creature.midBoss ? 42 : 36} />
               <span className={`text-[10px] leading-tight ${creature.boss ? "text-legendary" : creature.midBoss ? "text-epic" : "text-muted"}`}>
-                {i + 1}. Lv. {creature.level}
+                Lv. {creature.level}
               </span>
             </div>
           </Hint>
         ))}
       </div>
+      <p className="mt-1 text-xs text-muted">
+        🔀 An den Gabelungen wählst du deinen Weg:{" "}
+        {Object.values(ROOMS)
+          .map((r) => `${r.icon} ${r.name}`)
+          .join(" · ")}
+      </p>
       <p className="mt-1 text-xs">
         <span className="text-legendary">Boss: {boss.name}</span>
         {bossAbilities.length > 0 && (
@@ -991,50 +1001,12 @@ function BattleResult({ battle }: { battle: BattleState }) {
   );
 }
 
-/** Kurzer Hinweis nach einem Dungeon-Sieg: Was in die Truhe gewandert ist. */
-function ChestDeposit({ reward }: { reward: BattleReward }) {
-  const things = [reward.bossLoot, reward.loot].filter((i) => i !== null).length;
-  const potions = (reward.potions?.count ?? 0) + (reward.buffPotion ? 1 : 0);
-  return (
-    <motion.p
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-md bg-night-800 px-3 py-1.5 text-sm"
-    >
-      🧰 In die Truhe: <span className="num text-xp">+{reward.xp} XP</span>
-      {reward.gold > 0 && (
-        <>
-          {" · "}
-          <Gold amount={reward.gold} className="font-bold text-gold" />
-        </>
-      )}
-      {potions > 0 && <span className="text-xp"> · {potions}× Trank</span>}
-      {materialEntries(reward.materials).length > 0 && (
-        <>
-          {" · "}
-          <MaterialGain materials={reward.materials} />
-        </>
-      )}
-      {things > 0 && (
-        <span className={reward.bossLoot ? "text-legendary" : "text-epic"}>
-          {" · "}
-          {things} {things === 1 ? "Item" : "Items"}
-          {reward.bossLoot && " 👑"}
-        </span>
-      )}
-    </motion.p>
-  );
-}
-
-/** Nach einem Dungeon-Kampf: weiter, Truhe öffnen (Abschluss/Verlassen) oder Scheitern. */
+/** Nach einem Dungeon-Kampf: Gabelung bzw. weiter, Truhe öffnen (Abschluss/Verlassen) oder Scheitern. */
 function DungeonResultActions({ battle, won }: { battle: BattleState; won: boolean }) {
   const dungeon = useGameStore((s) => s.dungeon)!;
-  const next = useGameStore((s) => s.nextDungeonFight);
   const leave = useGameStore((s) => s.leaveBattle);
-  const leaveWithChest = useGameStore((s) => s.leaveDungeonWithChest);
   const { name, creatures } = getDungeon(dungeon.dungeonId);
   const finished = won && dungeon.stage === creatures.length - 1;
-  const following = creatures[dungeon.stage + 1];
   const collected = chestCount(dungeon.chest);
 
   if (dungeon.claimed) {
@@ -1054,79 +1026,21 @@ function DungeonResultActions({ battle, won }: { battle: BattleState; won: boole
     );
   }
 
+  if (won && !finished) return <DungeonOnward battle={battle} />;
+
   return (
     <div className="flex flex-col items-center gap-2">
       {finished ? (
         <p className="font-pixel text-xl text-legendary">🏆 {name} abgeschlossen!</p>
-      ) : won ? (
-        <p className="text-sm text-muted">
-          Als Nächstes: <span className={following.boss ? "text-legendary" : "text-parchment"}>{following.name}</span>{" "}
-          (Lv. {following.level}). Du gehst mit{" "}
-          <span className="num text-xp">
-            {battle.hero.hp}/{battle.hero.maxHp} LP
-          </span>{" "}
-          weiter – keine Heilung im Dungeon.
-        </p>
       ) : (
         <p className="text-sm text-danger">
           Der Dungeon ist gescheitert
           {collected > 0 ? ` – die Truhe mit ${collected} Beutestück${collected === 1 ? "" : "en"} ist verloren.` : "."}
         </p>
       )}
-      {won && !finished && collected > 0 && (
-        <p className="text-xs text-muted">
-          🧰 In der Truhe: {collected} Beutestück{collected === 1 ? "" : "e"} – bei einer Niederlage ist sie verloren.
-        </p>
-      )}
-      <div className="flex gap-2">
-        <button
-          onClick={won && !finished ? leaveWithChest : leave}
-          className="rounded-md border-2 border-night-700 px-4 py-1.5 text-muted hover:text-parchment"
-        >
-          {won && !finished ? "Verlassen & Truhe öffnen" : "Zurück zur Gebietskarte"}
-        </button>
-        {won && !finished && (
-          <motion.button
-            whileTap={{ scale: 0.92 }}
-            onClick={next}
-            className="font-pixel rounded-md border-2 border-legendary bg-legendary/15 px-4 py-1.5 text-legendary hover:bg-legendary/25"
-          >
-            Weiter zu Gegner {dungeon.stage + 2}/{creatures.length} ▶
-          </motion.button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Gegner des Dungeons als Leiste: besiegte abgehakt, aktueller hervorgehoben. */
-function DungeonProgress({ area }: { area: AreaDef }) {
-  const stage = useGameStore((s) => s.dungeon?.stage ?? 0);
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs" aria-label="Fortschritt im Dungeon">
-      <span className="text-muted">
-        Gegner <span className="num text-parchment">{stage + 1}</span>/{area.creatures.length} · keine Heilung
-        zwischen den Kämpfen
-      </span>
-      {area.creatures.map((creature, i) => (
-        <span
-          key={i}
-          className={`rounded px-1.5 py-0.5 ${
-            i < stage
-              ? "bg-xp/15 text-xp line-through"
-              : i === stage
-                ? "bg-gold/20 text-gold"
-                : creature.boss
-                  ? "bg-night-800 text-legendary"
-                  : creature.midBoss
-                    ? "bg-night-800 text-epic"
-                    : "bg-night-800 text-muted"
-          }`}
-        >
-          {i < stage ? "✓ " : ""}
-          {creature.name}
-        </span>
-      ))}
+      <button onClick={leave} className="rounded-md border-2 border-night-700 px-4 py-1.5 text-muted hover:text-parchment">
+        Zurück zur Gebietskarte
+      </button>
     </div>
   );
 }

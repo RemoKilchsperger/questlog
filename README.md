@@ -50,6 +50,7 @@ src/
     bossAbilities.ts Fähigkeiten der Solo-Bosse
     bossIntents.ts   Absichten der Bosse: was sie jede Runde vorhaben, eigene Abläufe aller Bosse (Wut, Ansturm, Abtauchen, Panzer, Fluch …)
     heroic.ts        Heroische Bosse: mehr LP, Zusatzmechanik, mehr Boss-Beute
+    dungeonPaths.ts  Wege durch die Dungeons: Gabelungen, Türen, Schrein, Händler, Falle, Rätsel
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse
     achievements.ts  Erfolge, Titel, Avatar-Rahmen
@@ -180,9 +181,10 @@ Klassen, Boss-Sets und leichte Rüstung kommen jeweils noch dazu.
 Frostgipfel (31–40), Schattenruinen (41–50), Drachenhort (51–60). Je 4 Kreaturen und ein Boss.
 
 **Dungeons:** Verlassene Mine (ab 10), Versunkener Tempel (ab 25), Gewitterturm (ab 40),
-Abgrund der Leere (ab 60). Acht Kämpfe ohne Heilung dazwischen: drei Gegner, ein Zwischenboss (Elite
-mit zwei Modifikatoren), dieselben drei Gegner noch einmal, Endboss. Beute in einer Truhe, die bei einer
-Niederlage verloren geht.
+Abgrund der Leere (ab 60). Acht Schritte ohne Heilung dazwischen: Eingangskampf, Gabelungen, ein
+Zwischenboss (Elite mit zwei Modifikatoren), wieder Gabelungen, Endboss. An den Gabelungen wählt man
+zwischen Kampf, Elite-Raum, Schrein, Händler, Falle und Rätsel (`dungeonPaths.ts`, `docs/dungeon-wege.md`,
+Koop-Dungeons noch linear). Beute in einer Truhe, die bei einer Niederlage verloren geht.
 
 **Heroische Bosse** (`heroic.ts`): Besiegte Gebiets- und Dungeon-Bosse lassen sich heroisch erneut fordern –
 +50 % LP, eine feste Zusatzmechanik pro Boss (ein Elite-Modifikator, zählt aber nicht als Elite), 15 % statt

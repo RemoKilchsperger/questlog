@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import {
   EMPTY_EQUIPMENT,
   equipItem,
+  getArmorClassSummary,
   getCombatStats,
   sellCommonItems,
   sellItem,
@@ -25,8 +26,28 @@ import {
   type DungeonChest,
   type HeroAction,
 } from "../domain/combat";
-import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type BossRespawns } from "../domain/creatures";
-import { rollElite } from "../domain/elites";
+import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type AreaDef, type BossRespawns, type CreatureDef } from "../domain/creatures";
+import { rollElite, type EliteAffix } from "../domain/elites";
+import {
+  eliteRoomAffixes,
+  forkDoors,
+  getRiddle,
+  isCalm,
+  mainArmorClass,
+  merchantOffers,
+  pickRiddle,
+  pickTrap,
+  RIDDLE_DAMAGE,
+  sectionOf,
+  shrineOffer,
+  stepCreature,
+  stepKind,
+  trapOutcome,
+  type Door,
+  type MerchantOffer,
+  type RoomKind,
+  type TrapChoice,
+} from "../domain/dungeonPaths";
 import {
   BLESSING,
   blessedProfile,
@@ -37,6 +58,7 @@ import {
   towerReward,
   isBlessingFloor,
   recordFloor,
+  stacks,
   TOWER_MIN_LEVEL,
   type BlessingId,
   type TowerRecord,
@@ -289,8 +311,18 @@ interface GameState {
   dungeon: DungeonRun | null;
   /** Betritt einen Dungeon und startet den ersten Kampf. */
   startDungeon: (dungeonId: string, heroic?: boolean) => void;
-  /** Nach einem Sieg: nächster Gegner, mit den übrig gebliebenen Lebenspunkten. */
+  /** Nach einem Sieg oder Raum: Zwischen- bzw. Endboss, mit den übrigen Lebenspunkten (nicht an einer Gabelung). */
   nextDungeonFight: () => void;
+  /** An einer Gabelung: durch die Tür `index` gehen – Kampf oder Raum ohne Kampf. */
+  chooseDungeonDoor: (index: number) => void;
+  /** Schrein: einen der Segen wählen */
+  dungeonBlessing: (id: BlessingId) => void;
+  /** Händler: Angebot `index` mit eigenem Gold kaufen */
+  dungeonBuy: (index: number) => void;
+  /** Falle: ausweichen oder einstecken */
+  dungeonTrap: (choice: TrapChoice) => void;
+  /** Rätsel: eine der Antworten wählen */
+  dungeonRiddle: (answer: string) => void;
   /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
   leaveDungeonWithChest: () => void;
 
@@ -321,14 +353,67 @@ interface GameState {
 
 export interface DungeonRun {
   dungeonId: string;
-  /** Index des aktuellen Gegners in `creatures` */
+  /** Aktueller Schritt (Index in `creatures` – Zwischen- und Endboss stehen dort an ihrem Platz) */
   stage: number;
+  /** Startwert des Laufs – bestimmt Türen, Gegner und Räume (dungeonPaths.ts) */
+  seed: string;
+  /** Gewählte Räume, einer pro Schritt (Eingang, Zwischen- und Endboss zählen als Kampf) */
+  path: RoomKind[];
+  /** Türen für den nächsten Schritt – null: der nächste Schritt steht fest (oder es war der letzte) */
+  doors: Door[] | null;
+  /** Raum ohne Kampf, in dem man gerade steht */
+  room: DungeonRoom | null;
+  /** Pro Abschnitt (bis und nach dem Zwischenboss): schon ein Raum ohne Kampf gewählt? */
+  calm: [boolean, boolean];
+  /** Fallen und Rätsel, die schon vorkamen – keines doppelt */
+  seen: string[];
+  /** Segen aus Schrein und Händler (wie im Endlos-Turm) */
+  blessings: BlessingId[];
+  secondWindUsed: boolean;
   /** Gesammelte Beute – erst am Ende gutgeschrieben, bei einer Niederlage verloren. */
   chest: DungeonChest;
   /** Gutgeschriebene Truhe (Abschluss oder Verlassen) – die UI zeigt sie mit Animation. */
   claimed: ClaimedChest | null;
   /** Heroischer Dungeon: der Endboss kämpft auf heroischer Stufe */
   heroic?: boolean;
+}
+
+/** Frischer Dungeon-Lauf am Eingang (Schritt 0, ein Kampf). */
+export function newDungeonRun(dungeonId: string, seed: string, heroic = false): DungeonRun {
+  return {
+    dungeonId,
+    stage: 0,
+    seed,
+    path: ["fight"],
+    doors: null,
+    room: null,
+    calm: [false, false],
+    seen: [],
+    blessings: [],
+    secondWindUsed: false,
+    chest: EMPTY_CHEST,
+    claimed: null,
+    ...(heroic && { heroic: true }),
+  };
+}
+
+/** Raum ohne Kampf im Dungeon – mit `chosen` bzw. `outcome` erledigt, dann geht es weiter. */
+export type DungeonRoom =
+  | { kind: "shrine"; offer: BlessingId[]; chosen: BlessingId | null }
+  | { kind: "merchant"; offers: MerchantOffer[]; bought: number[] }
+  | { kind: "trap"; trapId: string; outcome: { choice: TrapChoice; dodged: boolean; damage: number; reward: BattleReward } | null }
+  | {
+      kind: "riddle";
+      riddleId: string;
+      options: string[];
+      outcome: { answer: string; correct: boolean; damage: number; reward: BattleReward | null } | null;
+    };
+
+/** Ist der Raum erledigt? Beim Händler kann man jederzeit weiter. */
+export function isRoomDone(room: DungeonRoom): boolean {
+  if (room.kind === "shrine") return room.chosen !== null;
+  if (room.kind === "merchant") return true;
+  return room.outcome !== null;
 }
 
 export interface TowerRun {
@@ -757,6 +842,53 @@ export const useGameStore = create<GameState>()(
         return { ...battle, towerFloor: run.floor, blessings: run.blessings, secondWindUsed: run.secondWindUsed };
       };
 
+      /** Neuer Segen (Turm oder Dungeon): Rast und Vitalität wirken sofort auf die mitgenommenen Lebenspunkte. */
+      const blessBattle = (battle: BattleState, before: readonly BlessingId[], id: BlessingId): BattleState => {
+        const { character, equipment } = get();
+        const base = withMeal(getHeroCombatProfile(character, equipment), get().mealInUse);
+        const maxBefore = blessedProfile(base, before).maxHp;
+        const maxAfter = blessedProfile(base, [...before, id]).maxHp;
+        const healed = id === "rest" ? Math.round(maxAfter * BLESSING.rest) : id === "vitality" ? maxAfter - maxBefore : 0;
+        return { ...battle, hero: { ...battle.hero, hp: Math.min(maxAfter, battle.hero.hp + healed), maxHp: maxAfter } };
+      };
+
+      /** Kampf im Dungeon – mit den Segen des Laufs; der heroische Endboss kommt mit Zusatzmechanik. */
+      const dungeonBattle = (run: DungeonRun, creature: CreatureDef, heroHp: number | null, elite?: EliteAffix[]) => {
+        const { character } = get();
+        const hero = blessedProfile(soloHero(), run.blessings);
+        const heroicBoss = !!run.heroic && creature.boss;
+        const affixes = heroicBoss ? heroicAffixes(creature.id) : (elite ?? rollElite(creature));
+        const started = startBattle(newId(), character.name, hero, creature, heroHp ?? hero.maxHp, affixes);
+        const battle = heroicBoss ? makeHeroic(started) : started;
+        return { ...battle, blessings: run.blessings, secondWindUsed: run.secondWindUsed };
+      };
+
+      /** Türen für den Schritt nach `run.stage` – null, wenn dort Zwischen- oder Endboss warten. */
+      const nextDoors = (dungeon: AreaDef, run: DungeonRun): Door[] | null => {
+        const step = run.stage + 1;
+        if (step >= dungeon.creatures.length || stepKind(dungeon, step) !== "fork") return null;
+        return forkDoors(run.seed, step, !run.calm[sectionOf(dungeon, step)]);
+      };
+
+      /** Beute aus Kampf oder Raum für die Dungeon-Truhe: Material doppelt, „Schatzsucher“ gibt mehr Erfahrung und Gold. */
+      const dungeonLoot = (reward: BattleReward, blessings: readonly BlessingId[]): BattleReward => {
+        const factor = 1 + BLESSING.treasure * stacks(blessings, "treasure");
+        return {
+          ...reward,
+          xp: Math.round(reward.xp * factor),
+          gold: Math.round(reward.gold * factor),
+          materials: scaleMaterials(reward.materials, DUNGEON_MATERIAL_FACTOR),
+        };
+      };
+
+      /** Raum ohne Kampf, der gerade offen ist – sonst ein Fehler. */
+      const currentRoom = <K extends DungeonRoom["kind"]>(kind: K) => {
+        const { dungeon, battle } = get();
+        const room = dungeon?.room;
+        if (!dungeon || !battle || !room || room.kind !== kind || dungeon.claimed) throw new Error("Du bist gerade nicht in so einem Raum.");
+        return { dungeon, battle, room: room as Extract<DungeonRoom, { kind: K }> };
+      };
+
       return {
       character: createCharacter(),
       questLog: EMPTY_QUEST_LOG,
@@ -1170,7 +1302,6 @@ export const useGameStore = create<GameState>()(
 
       startDungeon: (dungeonId, heroic = false) =>
         attempt(() => {
-          const { character } = get();
           const dungeon = getDungeon(dungeonId);
           const { meal } = get();
           const hero = soloHero(meal);
@@ -1181,11 +1312,14 @@ export const useGameStore = create<GameState>()(
           if (heroic && !isHeroicUnlocked(boss.id, get().records.bossesDefeated)) {
             throw new Error(`Besiege ${boss.name} zuerst, dann kannst du den Dungeon heroisch betreten.`);
           }
-          const battle = startBattle(newId(), character.name, hero, dungeon.creatures[0], hero.maxHp, rollElite(dungeon.creatures[0]));
+          const run = newDungeonRun(dungeonId, newId(), heroic);
+          // Das Gericht gilt ab dem ersten Kampf (soloHero liest mealInUse)
+          set({ mealInUse: meal });
+          const battle = dungeonBattle(run, stepCreature(dungeon, run.seed, 0), null);
           set({
             battle,
             battleReward: null,
-            dungeon: { dungeonId, stage: 0, chest: EMPTY_CHEST, claimed: null, ...(heroic && { heroic: true }) },
+            dungeon: run,
             tower: null,
             // Das Gericht wirkt im ganzen Dungeon
             meal: null,
@@ -1220,22 +1354,15 @@ export const useGameStore = create<GameState>()(
 
       chooseBlessing: (id) =>
         attempt(() => {
-          const { battle, tower, character, equipment } = get();
+          const { battle, tower } = get();
           if (!tower?.offer || !battle) throw new Error("Gerade gibt es keinen Segen zur Wahl.");
           if (!tower.offer.includes(id)) throw new Error("Dieser Segen steht nicht zur Wahl.");
           const blessings = [...tower.blessings, id];
-          // Rast und Vitalität wirken sofort auf die mitgenommenen Lebenspunkte
-          const base = withMeal(getHeroCombatProfile(character, equipment), get().mealInUse);
-          const maxBefore = blessedProfile(base, tower.blessings).maxHp;
-          const maxAfter = blessedProfile(base, blessings).maxHp;
-          const healed =
-            id === "rest" ? Math.round(maxAfter * BLESSING.rest) : id === "vitality" ? maxAfter - maxBefore : 0;
-          const hp = Math.min(maxAfter, battle.hero.hp + healed);
           const { records } = get();
           set({
             records: { ...records, towerBlessings: Math.max(records.towerBlessings, blessings.length) },
             tower: { ...tower, blessings, offer: null },
-            battle: { ...battle, hero: { ...battle.hero, hp, maxHp: maxAfter } },
+            battle: blessBattle(battle, tower.blessings, id),
           });
         }),
 
@@ -1248,21 +1375,143 @@ export const useGameStore = create<GameState>()(
 
       nextDungeonFight: () =>
         attempt(() => {
-          const { character, battle, dungeon } = get();
-          if (!dungeon || !battle || battle.status !== "won") throw new Error("Kein Dungeon-Kampf gewonnen.");
-          const { creatures } = getDungeon(dungeon.dungeonId);
+          const { battle, dungeon } = get();
+          if (!dungeon || !battle || battle.status !== "won" || dungeon.claimed) throw new Error("Kein Dungeon-Kampf gewonnen.");
+          if (dungeon.room && !isRoomDone(dungeon.room)) throw new Error("Schliesse zuerst den Raum ab.");
+          if (dungeon.doors) throw new Error("Wähle zuerst eine Tür.");
+          const area = getDungeon(dungeon.dungeonId);
           const stage = dungeon.stage + 1;
-          if (stage >= creatures.length) throw new Error("Der Dungeon ist schon abgeschlossen.");
+          if (stage >= area.creatures.length) throw new Error("Der Dungeon ist schon abgeschlossen.");
           // Keine Heilung zwischen den Kämpfen: die Lebenspunkte werden mitgenommen.
-          const hero = soloHero();
-          const creature = creatures[stage];
-          // Heroischer Dungeon: der Endboss kommt mit seiner Zusatzmechanik und mehr Lebenspunkten
-          const heroicBoss = dungeon.heroic && creature.boss;
-          const elite = heroicBoss ? heroicAffixes(creature.id) : rollElite(creature);
-          const started = startBattle(newId(), character.name, hero, creature, battle.hero.hp, elite);
-          const next = heroicBoss ? makeHeroic(started) : started;
-          set({ battle: next, battleReward: null, dungeon: { ...dungeon, stage } });
+          const run: DungeonRun = { ...dungeon, stage, path: [...dungeon.path, "fight"], room: null };
+          const next = dungeonBattle(run, stepCreature(area, run.seed, stage), battle.hero.hp);
+          set({ battle: next, battleReward: null, dungeon: run });
           EventBus.emit("battle:started", { battle: next });
+        }),
+
+      chooseDungeonDoor: (index) =>
+        attempt(() => {
+          const { battle, dungeon } = get();
+          if (!dungeon || !battle || battle.status !== "won" || dungeon.claimed) throw new Error("Kein Dungeon-Kampf gewonnen.");
+          if (dungeon.room && !isRoomDone(dungeon.room)) throw new Error("Schliesse zuerst den Raum ab.");
+          const door = dungeon.doors?.[index];
+          if (!door) throw new Error("Diese Tür gibt es nicht.");
+          const area = getDungeon(dungeon.dungeonId);
+          const stage = dungeon.stage + 1;
+          const { seed } = dungeon;
+          const moved: DungeonRun = { ...dungeon, stage, path: [...dungeon.path, door.kind], doors: null, room: null };
+
+          if (!isCalm(door.kind)) {
+            const creature = stepCreature(area, seed, stage);
+            const elite = door.kind === "elite" ? eliteRoomAffixes(area, seed, stage) : undefined;
+            const next = dungeonBattle(moved, creature, battle.hero.hp, elite);
+            set({ battle: next, battleReward: null, dungeon: moved });
+            EventBus.emit("battle:started", { battle: next });
+            return;
+          }
+
+          // Raum ohne Kampf: höchstens einer pro Abschnitt
+          const calm: [boolean, boolean] = [...moved.calm];
+          calm[sectionOf(area, stage)] = true;
+          let seen = moved.seen;
+          let room: DungeonRoom;
+          if (door.kind === "shrine") room = { kind: "shrine", offer: shrineOffer(seed, stage, moved.blessings), chosen: null };
+          else if (door.kind === "merchant") room = { kind: "merchant", offers: merchantOffers(area, seed, stage, moved.blessings), bought: [] };
+          else if (door.kind === "trap") {
+            const trap = pickTrap(seed, stage, seen);
+            seen = [...seen, trap.id];
+            room = { kind: "trap", trapId: trap.id, outcome: null };
+          } else {
+            const { riddle, options } = pickRiddle(seed, stage, seen);
+            seen = [...seen, riddle.id];
+            room = { kind: "riddle", riddleId: riddle.id, options, outcome: null };
+          }
+          const run: DungeonRun = { ...moved, calm, seen, room };
+          set({ dungeon: { ...run, doors: nextDoors(area, run) }, battleReward: null });
+        }),
+
+      dungeonBlessing: (id) =>
+        attempt(() => {
+          const { dungeon, battle, room } = currentRoom("shrine");
+          if (room.chosen) throw new Error("Du hast hier schon einen Segen gewählt.");
+          if (!room.offer.includes(id)) throw new Error("Dieser Segen steht nicht zur Wahl.");
+          set({
+            battle: blessBattle(battle, dungeon.blessings, id),
+            dungeon: { ...dungeon, blessings: [...dungeon.blessings, id], room: { ...room, chosen: id } },
+          });
+        }),
+
+      dungeonBuy: (index) =>
+        attempt(() => {
+          const { dungeon, battle, room } = currentRoom("merchant");
+          const offer = room.offers[index];
+          if (!offer) throw new Error("Dieses Angebot gibt es nicht.");
+          if (room.bought.includes(index)) throw new Error("Das hast du schon gekauft.");
+          const { character, potions } = get();
+          if (character.gold < offer.price) throw new Error("Nicht genug Gold.");
+          const bought = { ...dungeon, room: { ...room, bought: [...room.bought, index] } };
+          set({ character: { ...character, gold: character.gold - offer.price } });
+          if (offer.kind === "potion") {
+            set({ dungeon: bought, potions: { ...potions, [offer.potionId]: (potions[offer.potionId] ?? 0) + 1 } });
+          } else if (offer.kind === "care") {
+            const hp = Math.min(battle.hero.maxHp, battle.hero.hp + Math.round(battle.hero.maxHp * offer.percent));
+            set({ dungeon: bought, battle: { ...battle, hero: { ...battle.hero, hp } } });
+          } else {
+            set({
+              dungeon: { ...bought, blessings: [...dungeon.blessings, offer.blessing] },
+              battle: blessBattle(battle, dungeon.blessings, offer.blessing),
+            });
+          }
+        }),
+
+      dungeonTrap: (choice) =>
+        attempt(() => {
+          const { dungeon, battle, room } = currentRoom("trap");
+          if (room.outcome) throw new Error("Die Falle ist schon ausgelöst.");
+          const armorClass = mainArmorClass(getArmorClassSummary(get().equipment).pieces);
+          const { dodged, damage } = trapOutcome(choice, armorClass, battle.hero.maxHp, battle.hero.hp, Math.random);
+          // Hinter der Falle: Beute wie von einem Gegner des Dungeons, aber ohne Erfahrung
+          const creature = stepCreature(getDungeon(dungeon.dungeonId), dungeon.seed, dungeon.stage);
+          const reward = dungeonLoot({ ...rollBattleReward(creature, soloHero(), newId()), xp: 0 }, dungeon.blessings);
+          set({
+            battle: { ...battle, hero: { ...battle.hero, hp: battle.hero.hp - damage } },
+            dungeon: { ...dungeon, chest: addToChest(dungeon.chest, reward), room: { ...room, outcome: { choice, dodged, damage, reward } } },
+          });
+        }),
+
+      dungeonRiddle: (answer) =>
+        attempt(() => {
+          const { dungeon, battle, room } = currentRoom("riddle");
+          if (room.outcome) throw new Error("Das Rätsel ist schon beantwortet.");
+          if (!room.options.includes(answer)) throw new Error("Diese Antwort steht nicht zur Wahl.");
+          const riddle = getRiddle(room.riddleId);
+          const area = getDungeon(dungeon.dungeonId);
+          const creature = stepCreature(area, dungeon.seed, dungeon.stage);
+          if (answer === riddle.answer) {
+            // Richtig: Beute wie von einem Elite-Gegner, aber ohne Erfahrung
+            const reward = dungeonLoot({ ...rollBattleReward(creature, soloHero(), newId(), Math.random, [], true), xp: 0 }, dungeon.blessings);
+            set({
+              dungeon: {
+                ...dungeon,
+                chest: addToChest(dungeon.chest, reward),
+                room: { ...room, outcome: { answer, correct: true, damage: 0, reward } },
+              },
+            });
+            return;
+          }
+          if (riddle.failure === "guardian") {
+            // Falsch: ein Wächter erwacht – ein Kampf, danach geht es weiter wie nach jedem Sieg
+            const run: DungeonRun = { ...dungeon, room: null, doors: null };
+            const next = dungeonBattle(run, creature, battle.hero.hp);
+            set({ battle: next, battleReward: null, dungeon: run });
+            EventBus.emit("battle:started", { battle: next });
+            return;
+          }
+          const damage = Math.min(Math.round(battle.hero.maxHp * RIDDLE_DAMAGE), battle.hero.hp - 1);
+          set({
+            battle: { ...battle, hero: { ...battle.hero, hp: battle.hero.hp - damage } },
+            dungeon: { ...dungeon, room: { ...room, outcome: { answer, correct: false, damage, reward: null } } },
+          });
         }),
 
       leaveDungeonWithChest: () =>
@@ -1360,11 +1609,16 @@ export const useGameStore = create<GameState>()(
           const rolled = { ...raw, xp: statueXp(raw.xp, get().village.statue) };
           if (dungeon) {
             // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende. Material gibt es doppelt.
-            const reward = { ...rolled, materials: scaleMaterials(rolled.materials, DUNGEON_MATERIAL_FACTOR) };
+            const reward = dungeonLoot(rolled, dungeon.blessings);
             const level = getLevel(character.totalXp);
+            const run: DungeonRun = {
+              ...dungeon,
+              chest: addToChest(dungeon.chest, reward),
+              secondWindUsed: !!result.state.secondWindUsed,
+            };
             set({
               battleReward: { ...reward, levelBefore: level, levelAfter: level },
-              dungeon: { ...dungeon, chest: addToChest(dungeon.chest, reward) },
+              dungeon: { ...run, doors: nextDoors(getDungeon(dungeon.dungeonId), run) },
             });
             if (dungeon.stage === getDungeon(dungeon.dungeonId).creatures.length - 1) claimChest(true);
             return;

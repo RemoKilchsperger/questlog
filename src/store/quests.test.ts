@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CLASSIC_VILLAGE } from "../test/village";
-import { addToChest, EMPTY_CHEST, startBattle, type BattleState, type HeroCombatProfile } from "../domain/combat";
+import { startBattle, type BattleState, type HeroCombatProfile } from "../domain/combat";
 import type { EliteAffix } from "../domain/elites";
 import { AREA_BOSS_RESPAWN_MS, formatRespawn, getCreature, getDungeon, hasRespawn, respawnLeft, startRespawn } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
 import { createItem, getItem } from "../domain/items";
 import { getQuest, rollDailyQuests, rollWeeklyQuests, type TradeAction } from "../domain/quests";
 import { convertLinearCurveXp } from "../domain/leveling";
-import { migrateSave, useGameStore } from "./gameStore";
+import { migrateSave, newDungeonRun, useGameStore } from "./gameStore";
 
 const hero: HeroCombatProfile = {
   level: 30,
@@ -145,7 +145,7 @@ describe("Quests im Spielstand", () => {
     const base = startBattle("b", "Held", hero, dungeon.creatures[last]);
     useGameStore.setState({
       battle: { ...base, enemy: { ...base.enemy, hp: 1 } },
-      dungeon: { dungeonId: dungeon.id, stage: last, chest: addToChest(EMPTY_CHEST, { xp: 0, gold: 0, loot: null, bossLoot: null, potions: null, buffPotion: null }), claimed: null },
+      dungeon: { ...newDungeonRun(dungeon.id, "s"), stage: last },
     });
     useGameStore.getState().battleAttack();
     expect(useGameStore.getState().questLog.active["dungeon-abandoned-mine"]).toBe(1);

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addToChest, chestCount, EMPTY_CHEST, startBattle, type BattleReward, type BattleState, type HeroCombatProfile } from "../domain/combat";
 import { getDungeon } from "../domain/creatures";
 import { createItem } from "../domain/items";
-import { useGameStore } from "./gameStore";
+import { newDungeonRun, useGameStore } from "./gameStore";
 
 const reward = (overrides: Partial<BattleReward> = {}): BattleReward => ({
   xp: 10,
@@ -52,7 +52,7 @@ describe("Dungeon-Truhe (Store)", () => {
     useGameStore.setState({
       battle,
       battleReward: null,
-      dungeon: { dungeonId: dungeon.id, stage, chest: addToChest(EMPTY_CHEST, reward({ xp: 100, gold: 50 })), claimed: null },
+      dungeon: { ...newDungeonRun(dungeon.id, "seed"), stage, chest: addToChest(EMPTY_CHEST, reward({ xp: 100, gold: 50 })) },
     });
   };
   const xp = () => useGameStore.getState().character.totalXp;
