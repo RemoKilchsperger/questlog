@@ -80,8 +80,8 @@ const GOLD_PER_UNIT = 0.6;
 const BOSS_UNITS = 8;
 const DUNGEON_UNITS = 12;
 
-const KILL_WEIGHTS: Record<Rarity, number> = { common: 50, rare: 40, epic: 9, legendary: 1 };
-const BOSS_WEIGHTS: Record<Rarity, number> = { common: 20, rare: 50, epic: 25, legendary: 5 };
+export const KILL_WEIGHTS: Record<Rarity, number> = { common: 50, rare: 40, epic: 9, legendary: 1 };
+export const BOSS_WEIGHTS: Record<Rarity, number> = { common: 20, rare: 50, epic: 25, legendary: 5 };
 const DUNGEON_WEIGHTS: Record<Rarity, number> = { common: 0, rare: 45, epic: 45, legendary: 10 };
 
 /** Jagdquests geben mit 50 % ein Item, Boss- und Dungeon-Quests immer. */

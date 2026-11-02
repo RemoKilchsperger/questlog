@@ -149,12 +149,17 @@ bringt:
 | 2 Std. | 8 | 25 % |
 | 8 Std. | 20 | 60 % |
 
-- **Gold, Material, Essenz:** so viel, wie die Sieg-Äquivalente durchschnittlich geben, mal
-  Truppstärke. Material ist das des Gebiets. Schwer gibt ×1,25, heroisch ×1,5.
+- **Sieg-Äquivalente der Mission** = Tabellenwert × Truppstärke, schwer ×1,25, heroisch ×1,5.
+- **Gold:** wie ein normaler Sieg, 0,4 × (3 + Level) pro Sieg-Äquivalent.
+- **Material:** 0,5 pro Sieg-Äquivalent, das Material des Gebiets.
+- **Essenz:** 0,2 × (1 + Level / 10) pro Sieg-Äquivalent. Kämpfe geben keine Essenz, das ist also
+  ein eigener Wert (auf Level 30 bringt eine 8-Stunden-Mission eines Begleiters 16 Essenz, etwa zwei
+  zerlegte seltene Items).
 - **Item:** aus dem Beutepool des Missionslevels. Die Seltenheit hängt von der Schwierigkeit ab:
   normal wie ein normaler Drop, schwer wie eine Gebiets-Quest, heroisch wie eine Boss-Quest.
-- **EP:** jeder Begleiter erhält die EP der Sieg-Äquivalente, plus „Lernbegierig“ und „Lehrmeister“.
-  Der Held erhält keine EP.
+- **EP:** jeder Begleiter erhält die EP der Sieg-Äquivalente (ohne Truppstärke) **× 3**, plus
+  „Lernbegierig“ und „Lehrmeister“. Der Faktor 3 gilt, weil Begleiter nur über Missionen leveln. Der
+  Held erhält keine EP.
 - **Misserfolg:** 25 % der EP, sonst nichts.
 
 Zum Vergleich: Eine 8-Stunden-Mission mit 3 Begleitern bringt 60 Sieg-Äquivalente, also so viel wie 60
