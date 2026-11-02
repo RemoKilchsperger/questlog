@@ -197,20 +197,26 @@ export const BUILDINGS: readonly BuildingDef[] = [
     id: "tavern",
     name: "Taverne",
     icon: "🍺",
-    description: "Kocht Buff-Food, das dich für den nächsten Kampf, Dungeon, Turm-Lauf oder Koop-Kampf stärkt.",
+    description:
+      "Kocht Buff-Food für den nächsten Einsatz. Hier wirbst du Begleiter an und schickst sie auf Missionen.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Noch keine Taverne" },
-      { name: "Schankstube", icon: "🍲", effect: "Einfache Gerichte: mehr LP, Schaden oder Rüstung", cost: cost(100, { darkwood: 15 }) },
+      {
+        name: "Schankstube",
+        icon: "🍲",
+        effect: "Einfache Gerichte: mehr LP, Schaden oder Rüstung. 2 Begleiter mit je 1 Trait",
+        cost: cost(100, { darkwood: 15 }),
+      },
       {
         name: "Gasthaus",
         icon: "🏠",
-        effect: "Kräftigere Gerichte, dazu Krit-Chance und Mana",
+        effect: "Kräftigere Gerichte, dazu Krit-Chance und Mana. 3 Begleiter, bis zu 2 Traits, auch episch",
         cost: cost(1000, { crystalShard: 25, clay: 10 }),
       },
       {
         name: "Festhalle",
         icon: "🏛️",
-        effect: "Festmahle mit mehreren Buffs",
+        effect: "Festmahle mit mehreren Buffs. 4 Begleiter, 2–3 Traits, auch legendär",
         cost: cost(5000, { obsidian: 30, crystalShard: 15 }),
       },
     ],

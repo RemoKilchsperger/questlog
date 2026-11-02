@@ -1,19 +1,66 @@
 import { motion } from "motion/react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { dateKey } from "../domain/calendar";
 import { FOODS, foodEffectText, foodPrice, getFood } from "../domain/food";
 import { getLevel } from "../domain/leveling";
 import { skillResetCost } from "../domain/skills";
 import { getBuilding, maxTier, STATUE_XP_BONUS, type BuildingId } from "../domain/village";
 import { getBuildingSprite } from "../game/villageSprites";
 import { useGameStore } from "../store/gameStore";
+import { CompanionsPanel, MissionsPanel, useReadyMissions } from "./CompanionScreen";
 import { Gold } from "./Gold";
 import { PixelSprite } from "./PixelSprite";
 import { SkillReset } from "./SkillTree";
+import { useNow } from "./useNow";
 
 // Menüs der kleineren Gebäude im Dorf: Taverne, Trainingsplatz und Statue.
 
-/** Die Taverne – Buff-Food für den nächsten Kampf, Dungeon, Turm-Lauf oder Koop-Kampf. */
+type TavernView = "food" | "companions" | "missions";
+
+/** Die Taverne – Buff-Food, Begleiter und Missionen (CompanionScreen.tsx). */
 export function TavernScreen() {
+  const [view, setView] = useState<TavernView>("food");
+  const tier = useGameStore((s) => s.village.tavern);
+  const refreshTavern = useGameStore((s) => s.refreshTavern);
+  const ready = useReadyMissions();
+  const today = dateKey(useNow());
+  // Kandidaten und Missionstafel wechseln täglich
+  useEffect(() => refreshTavern(), [refreshTavern, tier, today]);
+
+  return (
+    <BuildingIntro id="tavern">
+      <div className="flex flex-wrap gap-1">
+        <TabChip active={view === "food"} onClick={() => setView("food")}>
+          🍲 Gerichte
+        </TabChip>
+        <TabChip active={view === "companions"} onClick={() => setView("companions")}>
+          🧑‍🤝‍🧑 Begleiter
+        </TabChip>
+        <TabChip active={view === "missions"} onClick={() => setView("missions")}>
+          🗺️ Missionen{ready > 0 && <span className="ml-1 rounded-sm bg-xp px-1 text-night-950">{ready}</span>}
+        </TabChip>
+      </div>
+      {view === "food" ? <FoodMenu /> : view === "companions" ? <CompanionsPanel /> : <MissionsPanel />}
+    </BuildingIntro>
+  );
+}
+
+function TabChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-md border-2 px-3 py-1 text-sm ${
+        active ? "border-gold text-gold" : "border-night-700 text-muted hover:text-parchment"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Buff-Food für den nächsten Kampf, Dungeon, Turm-Lauf oder Koop-Kampf. */
+function FoodMenu() {
   const tier = useGameStore((s) => s.village.tavern);
   const gold = useGameStore((s) => s.character.gold);
   const level = useGameStore((s) => getLevel(s.character.totalXp));
@@ -23,7 +70,7 @@ export function TavernScreen() {
   const eaten = meal ? getFood(meal) : null;
 
   return (
-    <BuildingIntro id="tavern">
+    <>
       <p className="text-sm text-muted">
         Ein Gericht stärkt dich für den nächsten Einsatz: einen Kampf im Gebiet, einen ganzen Dungeon, einen Lauf im
         Endlos-Turm oder einen Koop-Kampf. Du kannst nur ein Gericht auf einmal essen – danach bist du satt, bis du
@@ -76,7 +123,7 @@ export function TavernScreen() {
           );
         })}
       </ul>
-    </BuildingIntro>
+    </>
   );
 }
 

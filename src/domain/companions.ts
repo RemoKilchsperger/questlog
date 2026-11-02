@@ -497,9 +497,12 @@ export function missionXp(mission: MissionDef, companion: Companion, group: read
   return Math.round(base * (1 + traitValue(companion, "eager") + mentor));
 }
 
-/** Beute bei Erfolg – Gold, Material und Essenz im Durchschnitt, ohne das Item. */
+/**
+ * Beute bei Erfolg – Gold, Material und Essenz, ohne das Item. Gerechnet mit der Truppstärke,
+ * die Traits kommen von `companions` (für die Vorschau auch weniger als die volle Gruppe).
+ */
 export function missionLoot(mission: MissionDef, companions: readonly Companion[]): { gold: number; essence: number; materials: MaterialStock; itemChance: number } {
-  const wins = missionWins(mission) * companions.length;
+  const wins = missionWins(mission) * mission.size;
   const level = mission.level;
   return {
     // Ein normaler Sieg gibt mit 40 % Gold, im Schnitt 3 + Level (getCreatureGoldDrop)

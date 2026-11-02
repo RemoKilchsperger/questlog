@@ -63,8 +63,9 @@ describe("Begleiter im Spielstand", () => {
     // Unterwegs: Ausrüstung gesperrt, Entlassen nicht möglich, Abholen noch nicht
     store().companionUnequip(candidate.id, "chest");
     expect(Object.values(store().companions[0].equipment).filter((o) => o !== null)).toHaveLength(worn.length);
+    const count = store().companions.length;
     store().dismissCompanion(candidate.id);
-    expect(store().companions).toHaveLength(1);
+    expect(store().companions).toHaveLength(count);
     expect(store().claimMission(mission.id)).toBeNull();
 
     finish(mission.id);

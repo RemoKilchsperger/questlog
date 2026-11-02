@@ -6,6 +6,7 @@ import { sfx } from "../game/sfx";
 import { renderSprite } from "../game/sprites";
 import { getBuildingSprite, VILLAGE_SLOTS } from "../game/villageSprites";
 import { useGameStore } from "../store/gameStore";
+import { useReadyMissions } from "./CompanionScreen";
 import { Hint } from "./HoverCard";
 import { spriteUrl } from "./spriteImage";
 
@@ -121,8 +122,27 @@ function BuildingSpot({
           🔨
         </motion.button>
       )}
+      {def.id === "tavern" && <MissionsReady />}
       <AnimatePresence>{built && <Dust key={tier} />}</AnimatePresence>
     </div>
+  );
+}
+
+/** Schriftrolle über der Taverne, sobald Begleiter mit einem Bericht zurück sind. */
+function MissionsReady() {
+  const ready = useReadyMissions();
+  if (ready === 0) return null;
+  const text = ready === 1 ? "Eine Mission ist fertig" : `${ready} Missionen sind fertig`;
+  return (
+    <motion.span
+      aria-label={text}
+      title={text}
+      className="pointer-events-none absolute -top-2 right-0 text-base drop-shadow sm:-top-4 sm:text-2xl"
+      animate={{ y: [0, -6, 0], rotate: [0, -8, 0] }}
+      transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+    >
+      📜
+    </motion.span>
   );
 }
 
