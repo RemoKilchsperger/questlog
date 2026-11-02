@@ -91,9 +91,9 @@ stärkere Wirkung gilt für Heilung und Verstärkung, aber nur im Solo-Kampf (Ge
 | Stufe | Name | Wirkung |
 |---|---|---|
 | 0 | – | nicht vorhanden |
-| 1 | Schankstube | einfache Gerichte |
-| 2 | Gasthaus | kräftigere Gerichte |
-| 3 | Festhalle | Festmahle mit mehreren Buffs |
+| 1 | Schankstube | einfache Gerichte, 2 Begleiter mit je 1 Trait |
+| 2 | Gasthaus | kräftigere Gerichte, 3 Begleiter mit 1–2 Traits |
+| 3 | Festhalle | Festmahle mit mehreren Buffs, 4 Begleiter mit 2–3 Traits |
 
 Die Taverne verkauft **Buff-Food** (`food.ts`). Ein Gericht wirkt für den nächsten Einsatz:
 
@@ -232,7 +232,7 @@ Koop-Dungeons bekommt jeder Spieler für sich. Die Koop-Beute würfelt jeder Spi
 ## Spätere Erweiterungen
 
 - **Lagerhaus:** mehr Inventarplätze
-- **Taverne:** später vielleicht Treffpunkt für den Koop oder ein Söldner als Begleiter
+- **Taverne:** später vielleicht Treffpunkt für den Koop. Begleiter und Missionen gibt es inzwischen (docs/begleiter.md)
 
 ## Entscheidungen
 

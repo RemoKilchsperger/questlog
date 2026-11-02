@@ -45,6 +45,27 @@ import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
 import { createItem, ensureItemExtras, getItem, MAX_UPGRADE, weaponAbilities, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
 import { eatMeal, withMeal } from "../domain/food";
+import {
+  applyMissionXp,
+  dismissCompanion,
+  EMPTY_MISSION_BOARD,
+  EMPTY_RECRUIT_POOL,
+  equipBest,
+  equipCompanion,
+  isBusy,
+  isMissionDone,
+  recruit,
+  rerollRecruits,
+  rollMissionBoard,
+  rollRecruitPool,
+  startMission,
+  unequipCompanion,
+  type ActiveMission,
+  type Companion,
+  type MissionBoard,
+  type MissionOutcome,
+  type RecruitPool,
+} from "../domain/companions";
 import { heroicAffixes, isHeroicUnlocked, makeHeroic } from "../domain/heroic";
 import {
   ACHIEVEMENTS,
@@ -201,6 +222,32 @@ interface GameState {
   /** Baut die nächste Stufe eines Gebäudes – sofort, gegen Gold und Material. */
   build: (id: BuildingId) => void;
 
+  /** Begleiter aus der Taverne (companions.ts) */
+  companions: Companion[];
+  /** Kandidaten des Tages in der Taverne */
+  recruitPool: RecruitPool;
+  /** Missionstafel des Tages */
+  missionBoard: MissionBoard;
+  /** Laufende Missionen – das Ergebnis steht schon fest */
+  activeMissions: ActiveMission[];
+  /** Würfelt Kandidaten und Missionstafel neu aus, sobald ein neuer Tag begonnen hat (nur mit Taverne). */
+  refreshTavern: () => void;
+  recruitCompanion: (id: string) => void;
+  /** Kandidaten einmal am Tag gegen Gold neu würfeln */
+  rerollRecruits: () => void;
+  /** Entlässt einen Begleiter – seine Items kommen zurück ins Inventar. */
+  dismissCompanion: (id: string) => void;
+  /** Legt einem Begleiter ein Item aus dem Inventar an. */
+  companionEquip: (companionId: string, uid: string, slot?: EquipSlot) => void;
+  companionUnequip: (companionId: string, slot: EquipSlot) => void;
+  /** „Bestes anlegen“ aus Inventar und bisheriger Ausrüstung */
+  companionEquipBest: (companionId: string) => void;
+  startMission: (missionId: string, companionIds: string[]) => void;
+  /** Bricht eine laufende Mission ab – ohne Beute. */
+  cancelMission: (missionId: string) => void;
+  /** Holt das Ergebnis einer fertigen Mission ab und gibt es für die Anzeige zurück. */
+  claimMission: (missionId: string) => MissionOutcome | null;
+
   /** IDs aller Boss-Items, die der Held je erbeutet hat – auch wenn sie inzwischen verkauft sind. */
   bossCollection: string[];
   /** Wann besiegte Gebietsbosse wieder erscheinen (siehe AREA_BOSS_RESPAWN_MS) */
@@ -329,6 +376,10 @@ type SaveState = Pick<
   | "village"
   | "materials"
   | "meal"
+  | "companions"
+  | "recruitPool"
+  | "missionBoard"
+  | "activeMissions"
 >;
 
 const createCharacter = (): Character => ({
@@ -403,6 +454,10 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     village: { ...EMPTY_VILLAGE, ...saved.village },
     materials: saved.materials ?? {},
     meal: saved.meal ?? null,
+    companions: saved.companions ?? [],
+    recruitPool: saved.recruitPool ?? EMPTY_RECRUIT_POOL,
+    missionBoard: saved.missionBoard ?? EMPTY_MISSION_BOARD,
+    activeMissions: saved.activeMissions ?? [],
   };
 }
 
@@ -539,6 +594,7 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
       village: { ...state.village, board: 1 },
     };
   }
+  // v18 → v19: Begleiter und Missionen – die leeren Listen ergänzt repairSave.
   return state;
 }
 
@@ -638,6 +694,19 @@ export const useGameStore = create<GameState>()(
         return { levelBefore, levelAfter };
       };
 
+      /** Ändert die Ausrüstung eines Begleiters – nicht, solange er unterwegs ist. */
+      const changeCompanionGear = (
+        companionId: string,
+        change: (companion: Companion, inventory: OwnedItem[]) => { companion: Companion; inventory: OwnedItem[] },
+      ) => {
+        const { companions, inventory, activeMissions } = get();
+        const companion = companions.find((c) => c.id === companionId);
+        if (!companion) throw new Error("Diesen Begleiter gibt es nicht.");
+        if (isBusy(activeMissions, companionId)) throw new Error(`${companion.name} ist unterwegs – die Ausrüstung bleibt, wie sie ist.`);
+        const result = change(companion, inventory);
+        set({ companions: companions.map((c) => (c.id === companionId ? result.companion : c)), inventory: result.inventory });
+      };
+
       /** Kampfwerte für Solo-Kämpfe – mit der Trankwirkung des Alchemisten (im Koop gilt das Dorf nicht). */
       const soloHero = (meal = get().mealInUse) => {
         const { character, equipment, village } = get();
@@ -714,6 +783,10 @@ export const useGameStore = create<GameState>()(
       mealInUse: null,
       coopMeal: null,
       lastReward: null,
+      companions: [],
+      recruitPool: EMPTY_RECRUIT_POOL,
+      missionBoard: EMPTY_MISSION_BOARD,
+      activeMissions: [],
 
       setTitle: (achievementId) =>
         set((s) => {
@@ -855,6 +928,10 @@ export const useGameStore = create<GameState>()(
           mealInUse: null,
           coopMeal: null,
           lastReward: null,
+          companions: [],
+          recruitPool: EMPTY_RECRUIT_POOL,
+          missionBoard: EMPTY_MISSION_BOARD,
+          activeMissions: [],
         }),
 
       equip: (uid, slot) =>
@@ -982,6 +1059,75 @@ export const useGameStore = create<GameState>()(
             set({ shop: rollShopStock(shopSlot(), getLevel(character.totalXp), newId, Math.random, MERCHANT_RULES[result.village.merchant]) });
           }
         }),
+
+      refreshTavern: () => {
+        const { village, recruitPool, missionBoard, companions, character } = get();
+        if (village.tavern === 0) return;
+        const today = dateKey();
+        const level = getLevel(character.totalXp);
+        if (recruitPool.date !== today) {
+          set({ recruitPool: rollRecruitPool(today, village.tavern, level, companions.map((c) => c.name), newId) });
+        }
+        if (missionBoard.date !== today) set({ missionBoard: rollMissionBoard(today, level, village.tavern) });
+      },
+
+      recruitCompanion: (id) =>
+        attempt(() => {
+          const { recruitPool, companions, character, village } = get();
+          const result = recruit(recruitPool, companions, character.gold, id, village.tavern);
+          set({ recruitPool: result.pool, companions: result.companions, character: { ...character, gold: result.gold } });
+        }),
+
+      rerollRecruits: () =>
+        attempt(() => {
+          const { recruitPool, companions, character, village } = get();
+          const result = rerollRecruits(
+            recruitPool,
+            character.gold,
+            dateKey(),
+            village.tavern,
+            getLevel(character.totalXp),
+            companions.map((c) => c.name),
+            newId,
+          );
+          set({ recruitPool: result.pool, character: { ...character, gold: result.gold } });
+        }),
+
+      dismissCompanion: (id) =>
+        attempt(() => {
+          const { companions, inventory, activeMissions } = get();
+          set(dismissCompanion(companions, inventory, id, activeMissions));
+        }),
+
+      companionEquip: (companionId, uid, slot) =>
+        attempt(() => changeCompanionGear(companionId, (c, inv) => equipCompanion(c, inv, uid, slot))),
+      companionUnequip: (companionId, slot) =>
+        attempt(() => changeCompanionGear(companionId, (c, inv) => unequipCompanion(c, inv, slot))),
+      companionEquipBest: (companionId) => attempt(() => changeCompanionGear(companionId, equipBest)),
+
+      startMission: (missionId, companionIds) =>
+        attempt(() => {
+          const { missionBoard, activeMissions, companions } = get();
+          const result = startMission(missionBoard, activeMissions, companions, missionId, companionIds, dateKey(), Date.now(), newId());
+          set({ missionBoard: result.board, activeMissions: result.active });
+        }),
+
+      cancelMission: (missionId) => set((s) => ({ activeMissions: s.activeMissions.filter((a) => a.mission.id !== missionId) })),
+
+      claimMission: (missionId) => {
+        const { activeMissions, companions, character, inventory, materials } = get();
+        const active = activeMissions.find((a) => a.mission.id === missionId);
+        if (!active || !isMissionDone(active)) return null;
+        const { outcome } = active;
+        set({
+          activeMissions: activeMissions.filter((a) => a !== active),
+          companions: applyMissionXp(companions, outcome, getLevel(character.totalXp)),
+          character: { ...character, gold: character.gold + outcome.gold, essence: character.essence + outcome.essence },
+          inventory: outcome.item ? [...inventory, outcome.item] : inventory,
+          materials: addMaterials(materials, outcome.materials),
+        });
+        return outcome;
+      },
 
       startBattle: (creatureId, heroic = false) =>
         attempt(() => {
@@ -1285,7 +1431,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 18,
+      version: 19,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,
@@ -1307,6 +1453,10 @@ export const useGameStore = create<GameState>()(
         village: s.village,
         materials: s.materials,
         meal: s.meal,
+        companions: s.companions,
+        recruitPool: s.recruitPool,
+        missionBoard: s.missionBoard,
+        activeMissions: s.activeMissions,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),
