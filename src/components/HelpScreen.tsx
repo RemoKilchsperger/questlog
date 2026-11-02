@@ -22,6 +22,7 @@ import {
   THREAT_DECAY,
 } from "../domain/coopCombat";
 import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, getCreature, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
+import { ROOMS } from "../domain/dungeonPaths";
 import { FRAMES } from "../domain/achievements";
 import { FORGE_COST_FACTOR, forgeCost, UPGRADE_REFUND } from "../domain/forge";
 import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
@@ -597,18 +598,27 @@ export function HelpScreen() {
 
         <Topic id="dungeons" title="🗝️ Dungeons">
           <p>
-            Acht stärkere Gegner nacheinander, ohne Heilung dazwischen: drei Gegner, ein Zwischenboss (immer Elite mit zwei
-            Modifikatoren), dieselben drei Gegner noch einmal und am Ende ein Boss mit eigenem Set. Kämpfe
-            kosten nichts – du kannst so oft antreten, wie du willst.
+            Ein Weg aus acht Schritten ohne Heilung dazwischen: ein Kampf am Eingang, dann Gabelungen, in der Mitte ein
+            Zwischenboss (immer Elite mit zwei Modifikatoren) und am Ende ein Boss mit eigenem Set. Dungeons kosten nichts –
+            du kannst so oft antreten, wie du willst.
           </p>
+          <p>
+            An jeder <b>Gabelung</b> wählst du eine von zwei oder drei Türen. Hinter einer wartet immer ein Kampf, hinter den
+            anderen vielleicht ein Raum ohne Kampf – davon gibt es vor und nach dem Zwischenboss höchstens einen. Manche
+            Türen sind verschlossen: Was dahinter liegt, siehst du erst drinnen.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {Object.values(ROOMS).map((r) => (
+              <li key={r.kind}>
+                {r.icon} <b>{r.name}:</b> {r.description}
+              </li>
+            ))}
+          </ul>
           <p>
             Die Beute sammelt sich in einer <b>Truhe</b> und wird erst am Ende gutgeschrieben. Du kannst zwischen zwei
             Kämpfen aussteigen und behältst, was drin ist. Verlierst du, ist die Truhe weg.
           </p>
-          <Table
-            head={["Dungeon", "ab Level", "Kämpfe"]}
-            rows={DUNGEONS.map((d) => [d.name, `${d.minLevel}`, `${d.creatures.length}`])}
-          />
+          <Table head={["Dungeon", "ab Level", "Schritte"]} rows={DUNGEONS.map((d) => [d.name, `${d.minLevel}`, `${d.creatures.length}`])} />
         </Topic>
 
         <Topic id="coop" title="🤝 Koop">

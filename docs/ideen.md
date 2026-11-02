@@ -26,7 +26,7 @@ Sammlung aller Vorschläge, damit nichts verloren geht. Status: ✅ umgesetzt ·
 
 | # | Idee | Status |
 |---|---|---|
-| 8 | **Segen (Roguelite):** Nach Kämpfen einen von 3 zufälligen Segen für den Rest des Durchgangs wählen, z. B. +15 % Feuerschaden, 20 % LP heilen, erste Fähigkeit pro Kampf ohne Mana | ✅ im Endlos-Turm (12 Segen) – für Dungeons noch offen |
+| 8 | **Segen (Roguelite):** Nach Kämpfen einen von 3 zufälligen Segen für den Rest des Durchgangs wählen, z. B. +15 % Feuerschaden, 20 % LP heilen, erste Fähigkeit pro Kampf ohne Mana | ✅ im Endlos-Turm (12 Segen) und im Schrein der Dungeon-Wege (#37) |
 | 9 | **Bestiarium mit Entdecken:** Schwächen und Resistenzen sind anfangs verdeckt („???“). Man deckt sie auf, wenn man einen Gegner mit dieser Schadensart trifft oder ihn mehrmals besiegt. Dazu Sammelfortschritt und Erfolge pro Gebiet. | 💡 |
 | 10 | **Gegenstände mit Spezialeffekt:** Legendäre und Boss-Items bekommen einen Effekt („Kritische Treffer setzen in Brand“, „Bei Kampfbeginn Bollwerk“, „+50 % gegen Elite-Gegner“). Passt gut zu Idee 5. | ✅ `itemEffects.ts`, docs/item-effekte.md |
 | 11 | **Wochen-Mutatoren für Dungeons:** Ein Modifikator pro Woche für alle Dungeons („Alle Gegner Elite“, „Bosse mit dritter Phase“, „Tränke doppelt, Gegner +30 % Schaden“), dafür mehr Beute | 💡 |
@@ -72,3 +72,16 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 34 | **Wurftränke:** Brandflasche, Giftphiole, Frostbombe, Säureflasche, Rauchbombe, Sprengflasche. Teilen sich das Limit „ein Trank pro Runde“ mit den Trinktränken | ✅ `potions.ts`, docs/wurftraenke.md, solo und Koop |
 | 35 | **Mehr Trinktränke:** Gegengift (reinigt Gift/Feuer/Bluten, bricht Neferets Fluch), Manatrank | 💡 |
 | 36 | **Wurf-Limit pro Kampf:** höchstens ein oder zwei Wurftränke pro Kampf, falls der volle Satz zu stark ist (siehe Sim in docs/wurftraenke.md) | 💡 |
+
+## Vierte Runde (2026-11-02)
+
+| # | Idee | Status |
+|---|---|---|
+| 37 | **Dungeons mit Weggabelungen:** Zwischen den Kämpfen den Weg wählen – Kampf, Elite-Raum, Schrein (Segen), Händler, Falle, Rätsel. Manche Türen verschlossen | ✅ Solo, `dungeonPaths.ts`, docs/dungeon-wege.md – Koop offen |
+| 38 | **Begleiter im Kampf:** Einen Begleiter in Bosskämpfe mitnehmen, Traits werden zu kleinen Fähigkeiten (spotten, unterbrechen) | 💡 |
+| 39 | **Wetter und Gelände im Kampf:** Regen schwächt Feuer, Frost erleichtert Schmelzen, Nebel senkt die Trefferchance von Bögen | 💡 |
+| 40 | **Sockel und Edelsteine** beim Schmied, um Schadensarten und Resistenzen anzupassen | 💡 |
+| 41 | **Prestige nach dem Maximallevel** und **Turm-Saisons** mit exklusivem Titel | 💡 |
+| 42 | **Gilden mit Gildenprojekt:** gemeinsam Material für ein Gebäude sammeln | 💡 |
+| 43 | **Komfort:** Ausrüstungs-Sets speichern, Schnellkampf gegen schwache Gegner, Statistik-Seite, Benachrichtigung bei fertiger Mission | 💡 |
+| 44 | **Geführter Einstiegskampf**, der Absichten, Abwehren und Wurftränke zeigt | 💡 |

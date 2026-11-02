@@ -54,7 +54,7 @@ export function TowerPanel({ heroLevel }: { heroLevel: number }) {
 }
 
 /** Kleine Plakette eines Segens – gestapelte zeigen ×n. */
-function BlessingChip({ id, count }: { id: BlessingId; count: number }) {
+export function BlessingChip({ id, count }: { id: BlessingId; count: number }) {
   const def = getBlessing(id);
   return (
     <Hint text={`${def.name}: ${def.description}`}>

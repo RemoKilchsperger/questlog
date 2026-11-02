@@ -176,8 +176,11 @@ describe("Taverne: Buff-Food", () => {
     store().startDungeon("abandoned-mine");
     const first = store().battle!.hero.damage;
     expect(store().meal).toBeNull();
+    const firstId = store().battle!.id;
     winCurrent();
-    store().nextDungeonFight();
+    // An der Gabelung durch eine Kampf-Tür – jede Gabelung hat mindestens eine
+    store().chooseDungeonDoor(store().dungeon!.doors!.findIndex((d) => d.kind === "fight" || d.kind === "elite"));
+    expect(store().battle!.id).not.toBe(firstId);
     expect(store().battle!.hero.damage).toBeCloseTo(first);
     expect(store().mealInUse).toBe("roast");
   });
