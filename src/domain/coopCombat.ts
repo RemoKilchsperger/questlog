@@ -45,6 +45,7 @@ import {
   freezeFlag,
   rollBattleReward,
   rollHit,
+  strongerDot,
   stunLands,
   tickCooldowns,
   type ActiveBuff,
@@ -519,6 +520,13 @@ export interface CoopHero {
 
 export type CoopEvent =
   | { type: "potion"; heroId: string; targetId: string; potionId: string; heal: number; buff?: BuffKind; revive?: boolean }
+  /** Ein Held wirft einen Wurftrank auf `target` (BOSS oder uid) – bei der Sprengflasche auf alle Gegner */
+  | { type: "thrown"; heroId: string; target: string; potionId: string }
+  /** Die Sprengflasche trifft einen Gegner – `absorbed`: so viel hat der Schild des Schildträgers geschluckt */
+  | { type: "blast"; heroId: string; target: string; damage: number; absorbed?: number }
+  /** Säure frisst die Rüstung an bzw. Rauch schwächt das Ziel */
+  | { type: "corroded"; target: string }
+  | { type: "smoked"; target: string }
   | { type: "ability"; heroId: string; ability: AbilityId; weapon: SkillWeapon; manaCost: number; echo?: boolean }
   /** Skill „Schemen“: Ein Held weicht einem Angriff aus (`attacker`: BOSS oder uid eines Begleiters) */
   | { type: "dodged"; heroId: string; attacker: string }
@@ -664,6 +672,7 @@ function foeStats(enemy: CoopEnemy, players: number, elite: readonly EliteAffix[
 /**
  * Was ein Spieler in einer Runde tut: optional ein Trank (Ziel: er selbst oder
  * ein gefallener Mitspieler), dann ein Angriff – mit `ability` als Fähigkeit.
+ * Ein Wurftrank fliegt auf das Ziel des Angriffs (`target`), `potion.targetId` zählt dann nicht.
  */
 export interface CoopAction {
   potion?: { potionId: string; targetId: string };
@@ -856,11 +865,13 @@ function buffed(hero: CoopHero): Combatant {
 /** Warum dieser Trank nicht geht – oder null. Ziel: man selbst oder ein gefallener Mitspieler. */
 export function coopPotionBlocker(state: CoopBattleState, heroId: string, potionId: string, targetId: string): string | null {
   const hero = state.heroes.find((h) => h.id === heroId);
-  const target = state.heroes.find((h) => h.id === targetId);
+  const potion = getPotion(potionId);
+  // Wurftränke fliegen auf das Ziel des Angriffs – einen Mitspieler braucht es nicht
+  const target = potion.effect.kind === "throw" ? hero : state.heroes.find((h) => h.id === targetId);
   if (!hero || !target) return "Unbekannter Held.";
   if (hero.down) return "Du bist gefallen.";
-  if (hero.potionsUsed.includes(potionId)) return "Diese Sorte hast du in diesem Kampf schon getrunken.";
-  const potion = getPotion(potionId);
+  if (hero.potionsUsed.includes(potionId)) return "Diese Sorte hast du in diesem Kampf schon eingesetzt.";
+  if (potion.effect.kind === "throw") return null;
   if (target.id !== hero.id) {
     if (!target.down) return "Nur gefallene Mitspieler lassen sich wiederbeleben.";
     if (target.revived) return `${target.name} wurde schon einmal wiederbelebt.`;
@@ -998,8 +1009,9 @@ export function resolveRound(
     const skills = sourceSkills(sourceId);
     const damage = Math.max(1, Math.round(base * factor * ownDotFactor(skills, kind)));
     const length = ownDotRounds(skills, kind, rounds);
+    // Ein schwächeres Feuer, Gift oder Bluten – auch eines Mitspielers – überschreibt kein stärkeres
     if (kind !== "poison") {
-      foe.fx = { ...foe.fx, [kind]: { damage, roundsLeft: length, sourceId } };
+      foe.fx = { ...foe.fx, [kind]: strongerDot(foe.fx[kind], { damage, roundsLeft: length, sourceId }) };
       return;
     }
     const own = foe.fx.poison?.sourceId === sourceId ? foe.fx.poison : undefined;
@@ -1013,7 +1025,7 @@ export function resolveRound(
       addDown(foe);
       return;
     }
-    foe.fx = { ...foe.fx, poison: { ...poison, sourceId } };
+    foe.fx = { ...foe.fx, poison: strongerDot(foe.fx.poison, { ...poison, sourceId }) };
   };
   const foes = [boss, ...adds];
   let phase = state.phase;
@@ -1080,7 +1092,46 @@ export function resolveRound(
       const potion = getPotion(action.potion.potionId);
       const target = byId(action.potion.targetId);
       hero.potionsUsed = [...hero.potionsUsed, potion.id];
-      if (target.id !== hero.id) {
+      if (potion.effect.kind === "throw") {
+        // Wurftrank: fliegt vor der Aktion auf das Ziel des Angriffs – die Sprengflasche auf alle Gegner
+        const { effect } = potion;
+        const aim = adds.find((f) => f.id === action.target && f.c.hp > 0) ?? boss;
+        const base = buffed(hero).damage * effect.percent;
+        events.push({ type: "thrown", heroId: hero.id, target: aim.id, potionId: potion.id });
+        for (const foe of effect.throw === "blast" ? living() : [aim]) {
+          if (effect.throw === "burn" || effect.throw === "poison") {
+            applyDot(foe, effect.throw, base, effect.rounds, hero.id);
+          } else if (effect.throw === "freeze") {
+            frozenByItem.set(foe, hero);
+          } else if (effect.throw === "acid") {
+            foe.fx = { ...foe.fx, armorBreak: Math.max(foe.fx.armorBreak ?? 0, effect.percent) };
+            events.push({ type: "corroded", target: foe.id });
+            // Die Säure frisst zwei Panzerplatten des Erzkönigs weg
+            if (foe === boss && plates !== undefined && plates > 0) {
+              plates = Math.max(0, plates - 2);
+              if (plates === 0) events.push({ type: "platesBroken" });
+            }
+          } else if (effect.throw === "smoke") {
+            foe.fx = { ...foe.fx, weaken: { percent: effect.percent, roundsLeft: effect.rounds } };
+            events.push({ type: "smoked", target: foe.id });
+          } else {
+            // Sprengflasche: ignoriert Rüstung, der Schild des Schildträgers schluckt sie aber
+            const raw = Math.max(1, Math.round(base * (1 + (foe.fx.vulnerable?.percent ?? 0)) * takenBy(foe)));
+            const absorbed = foe === boss ? Math.min(bossShield, raw) : 0;
+            bossShield -= absorbed;
+            const damage = raw - absorbed;
+            foe.c.hp = Math.max(0, foe.c.hp - damage);
+            hero.threat += raw * (hero.heroClass === "paladin" ? PALADIN_THREAT : 1);
+            if (foe === boss) heroHitsOnBoss++;
+            else {
+              hitAdds.add(foe.id);
+              addHitters.set(foe.id, [...(addHitters.get(foe.id) ?? []), hero]);
+            }
+            events.push({ type: "blast", heroId: hero.id, target: foe.id, damage, ...(absorbed > 0 && { absorbed }) });
+            addDown(foe);
+          }
+        }
+      } else if (target.id !== hero.id) {
         // Wiederbeleben: steht mit der Heilwirkung des Tranks wieder auf
         target.down = false;
         target.revived = true;
@@ -1095,7 +1146,7 @@ export function resolveRound(
         hero.combatant.hp += heal;
         events.push({ type: "potion", heroId: hero.id, targetId: hero.id, potionId: potion.id, heal });
       } else {
-        const { kind, percent, rounds } = potion.effect;
+        const { kind, percent, rounds } = potion.effect as Extract<typeof potion.effect, { kind: BuffKind }>;
         hero.buffs = { ...hero.buffs, [kind]: { percent, roundsLeft: rounds } };
         events.push({ type: "potion", heroId: hero.id, targetId: hero.id, potionId: potion.id, heal: 0, buff: kind });
       }

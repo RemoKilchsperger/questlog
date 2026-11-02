@@ -124,7 +124,7 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     const prevLog = prev?.id === next.id && prev.state?.id === next.state?.id ? (prev.state?.log.length ?? 0) : null;
     if (next.state && prevLog !== null && next.state.log.length > prevLog) {
       for (const e of next.last_events) {
-        if (e.type === "potion" && e.heroId === myId) useGameStore.getState().consumePotion(e.potionId);
+        if ((e.type === "potion" || e.type === "thrown") && e.heroId === myId) useGameStore.getState().consumePotion(e.potionId);
       }
       EventBus.emit("coop:events", { state: next.state, events: next.last_events });
     }

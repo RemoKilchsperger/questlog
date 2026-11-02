@@ -38,7 +38,7 @@ import { getItemStats } from "../domain/items";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
-import { getPotion, POTIONS, potionHeal } from "../domain/potions";
+import { DRINK_POTIONS, getPotion, isThrowable, potionEffectText, potionHeal, THROW_POTIONS } from "../domain/potions";
 import { EventBus } from "../game/EventBus";
 import { useGameStore } from "../store/gameStore";
 import { BossDrops, IntentLine } from "./BattleScreen";
@@ -736,13 +736,13 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         </div>
       </ActionGroup>
 
-      <ActionGroup label="Trank dazu" hint="Wird vor deinem Angriff getrunken – erst wählen, dann angreifen.">
+      <ActionGroup label="Trank dazu" hint="Wird vor deinem Angriff getrunken oder auf dein Ziel geworfen – erst wählen, dann angreifen.">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          {POTIONS.map((p) => {
+          {[...DRINK_POTIONS, ...THROW_POTIONS.filter((p) => (stock[p.id] ?? 0) > 0)].map((p) => {
             const count = stock[p.id] ?? 0;
             const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, myId);
             const selected = potion?.potionId === p.id && potion.targetId === myId;
-            const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : p.name;
+            const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : `${p.name}: ${potionEffectText(p)}`;
             return (
               <button
                 key={p.id}
@@ -762,7 +762,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         <ActionGroup label="Wiederbeleben" hint="Ein Heiltrank holt einen gefallenen Mitspieler zurück.">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             {fallen.flatMap((target) =>
-              POTIONS.filter((p) => p.effect.kind === "heal").map((p) => {
+              DRINK_POTIONS.filter((p) => p.effect.kind === "heal").map((p) => {
                 const count = stock[p.id] ?? 0;
                 const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, target.id);
                 const selected = potion?.potionId === p.id && potion.targetId === target.id;
@@ -785,7 +785,9 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
       )}
       {potion && (
         <p className="text-xs text-gold">
-          {getPotion(potion.potionId).name} {potion.targetId === myId ? "für dich" : "zum Wiederbeleben"} gewählt – jetzt angreifen.
+          {getPotion(potion.potionId).name}{" "}
+          {isThrowable(getPotion(potion.potionId)) ? "zum Werfen" : potion.targetId === myId ? "für dich" : "zum Wiederbeleben"} gewählt –
+          jetzt angreifen.
         </p>
       )}
     </div>
@@ -941,6 +943,16 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return e.revive
         ? `${name(e.heroId)} belebt ${name(e.targetId)} mit ${getPotion(e.potionId).name} wieder.`
         : `${name(e.heroId)} trinkt ${getPotion(e.potionId).name}${e.heal > 0 ? ` (+${e.heal} LP)` : ""}.`;
+    case "thrown":
+      return e.potionId === "blast"
+        ? `${name(e.heroId)} wirft eine ${getPotion(e.potionId).name} mitten unter die Gegner.`
+        : `${name(e.heroId)} wirft eine ${getPotion(e.potionId).name} auf ${name(e.target)}.`;
+    case "blast":
+      return `💥 Die Explosion trifft ${name(e.target)} für ${e.damage} Schaden${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}.`;
+    case "corroded":
+      return `🫗 Die Säure frisst sich in die Rüstung von ${name(e.target)}.`;
+    case "smoked":
+      return `💨 ${name(e.target)} tappt im Rauch umher und trifft schlechter.`;
     case "ability":
       return e.echo
         ? `🔮 Echo! ${name(e.heroId)} setzt ${getAbility(e.ability).name} ohne Mana ein – es hallt nach.`

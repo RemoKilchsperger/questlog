@@ -42,7 +42,7 @@ import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { questsForCreature, trackedQuests } from "../domain/quests";
 import { skillPointsNote } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
-import { getPotion, POTIONS, potionEffectText, potionHeal } from "../domain/potions";
+import { DRINK_POTIONS, getPotion, isThrowable, potionEffectText, potionHeal, THROW_POTIONS } from "../domain/potions";
 import { materialEntries } from "../domain/village";
 import { MaterialGain } from "./materialUi";
 import { EventBus } from "../game/EventBus";
@@ -504,7 +504,7 @@ function HeroPanel() {
       <div className="w-full border-t border-night-700 pt-3 text-left">
         <h3 className="mb-1 text-xs uppercase tracking-wide text-muted">Tränke</h3>
         <ul className="text-sm">
-          {POTIONS.map((p) => (
+          {[...DRINK_POTIONS, ...THROW_POTIONS.filter((p) => (potions[p.id] ?? 0) > 0)].map((p) => (
             <li key={p.id} className="flex justify-between py-0.5">
               <span>
                 {p.icon} {p.name}
@@ -685,29 +685,39 @@ function Battle({ battle }: { battle: BattleState }) {
           <ActionGroup
             label="Tränke"
             hint={
-              battle.potionUsedThisRound
-                ? "Trank für diese Runde verbraucht – jetzt angreifen."
-                : "Vor dem Angriff · einer pro Runde, jede Sorte einmal pro Kampf"
+              battle.thrown
+                ? `${getPotion(battle.thrown).name} liegt bereit – sie fliegt mit deinem Zug.`
+                : battle.potionUsedThisRound
+                  ? "Trank für diese Runde verbraucht – jetzt angreifen."
+                  : "Vor dem Angriff · einer pro Runde (trinken oder werfen), jede Sorte einmal pro Kampf"
             }
           >
             <div className="flex flex-wrap items-center gap-2">
-              {POTIONS.map((p) => {
+              {[...DRINK_POTIONS, ...THROW_POTIONS.filter((p) => (potions[p.id] ?? 0) > 0 || battle.potionsUsed.includes(p.id))].map((p, i) => {
                 const count = potions[p.id] ?? 0;
                 const used = battle.potionsUsed.includes(p.id);
-                const blocker = count === 0 ? "Keine mehr im Vorrat – Nachschub beim Händler." : potionBlocker(battle, p);
+                const blocker = count === 0 && !used ? "Keine mehr im Vorrat – Nachschub beim Händler." : potionBlocker(battle, p);
                 const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, battle.hero.maxHp)} LP` : potionEffectText(p);
-                return (
+                // Wurftränke (nur die im Vorrat) stehen abgesetzt hinter den Trinktränken
+                const thrown = isThrowable(p);
+                const label = thrown ? `${p.name} werfen` : p.name;
+                return [
+                  thrown && i === DRINK_POTIONS.length && (
+                    <span key="throw" className="text-xs text-muted">
+                      🎯 Werfen:
+                    </span>
+                  ),
                   <button
                     key={p.id}
                     disabled={busy || blocker !== null}
                     onClick={() => act(() => drink(p.id))}
-                    title={blocker ? `${p.name}: ${effect}\n${blocker}` : `${p.name}: ${effect}`}
-                    className={`rounded-md border-2 px-2.5 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]}`}
+                    title={blocker ? `${label}: ${effect}\n${blocker}` : `${label}: ${effect}`}
+                    className={`rounded-md border-2 px-2.5 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${battle.thrown === p.id ? "ring-2 ring-gold" : ""}`}
                   >
                     {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
                     {used && <span className="ml-1 text-xs">✓</span>}
-                  </button>
-                );
+                  </button>,
+                ];
               })}
               <button
                 disabled={busy || !active}
@@ -1281,6 +1291,18 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return e.buff
         ? `Du trinkst ${getPotion(e.potionId).name}: ${potionEffectText(getPotion(e.potionId))}.`
         : `Du trinkst ${getPotion(e.potionId).name} und heilst ${e.heal} LP.`;
+    case "thrown":
+      return e.missed
+        ? `${getPotion(e.potionId).name} platscht ins Wasser – ${enemy} ist abgetaucht.`
+        : e.potionId === "blast"
+          ? `Du wirfst eine ${getPotion(e.potionId).name} mitten unter die Gegner.`
+          : `Du wirfst eine ${getPotion(e.potionId).name} auf ${enemy}.`;
+    case "blast":
+      return `💥 Die Explosion trifft ${enemy} für ${e.damage} Schaden${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}.`;
+    case "corroded":
+      return `🫗 Die Säure frisst sich in die Rüstung von ${enemy}.`;
+    case "smoked":
+      return `💨 ${enemy} tappt im Rauch umher und trifft schlechter.`;
     case "hit":
       return e.attacker === "hero"
         ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.grazed ? " – in der Luft streifst du ihn nur" : ""}.`

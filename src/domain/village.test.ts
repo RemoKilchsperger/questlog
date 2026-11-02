@@ -181,9 +181,9 @@ describe("Schmiede", () => {
 describe("Alchemist", () => {
   it("ohne Alchemist nur kleine Heiltränke, mit jeder Stufe mehr", () => {
     expect(potionsForSale(0).map((p) => p.id)).toEqual(["small"]);
-    expect(potionsForSale(1).map((p) => p.id)).toEqual(["small", "medium"]);
-    expect(potionsForSale(2).map((p) => p.id).sort()).toEqual(["armor", "attack", "medium", "small"]);
-    expect(potionsForSale(3)).toHaveLength(5);
+    expect(potionsForSale(1).map((p) => p.id)).toEqual(["small", "medium", "firebomb", "venom"]);
+    expect(potionsForSale(2).map((p) => p.id).sort()).toEqual(["acid", "armor", "attack", "firebomb", "frostbomb", "medium", "small", "smoke", "venom"]);
+    expect(potionsForSale(3)).toHaveLength(11);
     expect(() => buyPotion({}, 99_999, "medium", 0)).toThrow(/Alchemisten/);
     expect(buyPotion({}, 99_999, "attack", 2).stock.attack).toBe(1);
   });

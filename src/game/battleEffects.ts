@@ -462,3 +462,29 @@ export function iceShards(scene: Phaser.Scene, at: Point, count = 5): IceShards 
     },
   };
 }
+
+/** Farbe eines Wurftranks (potions.ts `ThrowKind`) – für Flug, Einschlag und Wolke. */
+export const THROW_COLORS: Record<string, number> = {
+  burn: 0xf08a2c,
+  poison: 0x7dd3a8,
+  freeze: 0xa9e4ff,
+  acid: 0xb8e04a,
+  smoke: 0x9a94a8,
+  blast: 0xf59e42,
+};
+
+/** Ein Wurftrank fliegt im Bogen und zerplatzt beim Ziel in einer Wolke seiner Farbe. */
+export function flask(scene: Phaser.Scene, from: Point, to: Point, icon: string, color: number, onArrive: () => void) {
+  const bottle = scene.add.text(0, 0, icon, { fontSize: "30px" }).setOrigin(0.5);
+  projectile(scene, from, to, bottle, {
+    duration: 420,
+    spin: 540,
+    arc: 90,
+    trail: color,
+    onArrive: () => {
+      burst(scene, to, color, 16, 70, 6);
+      ring(scene, to, color, 70, 380, true);
+      onArrive();
+    },
+  });
+}
