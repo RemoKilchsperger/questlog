@@ -7,7 +7,6 @@ import { createItem } from "./items";
 import { buyPotion, getPotion, potionsForSale } from "./potions";
 import {
   applyBoardEvent,
-  boardQuestTier,
   openBounty,
   questGoalText,
   rollDailyQuests,
@@ -23,6 +22,7 @@ import {
   EMPTY_VILLAGE,
   MATERIALS,
   materialForLevel,
+  maxTier,
   MERCHANT_RULES,
   missingForBuild,
   nextBuildCost,
@@ -82,9 +82,9 @@ describe("Material", () => {
 });
 
 describe("Bauen", () => {
-  it("jedes Gebäude hat Stufen 0–3, jede Stufe ab 1 kostet Gold und Material", () => {
+  it("jedes Gebäude hat Stufen 0–3 (die Anschlagtafel nur 0–1), jede Stufe ab 1 kostet Gold und Material", () => {
     for (const b of BUILDINGS) {
-      expect(b.tiers).toHaveLength(4);
+      expect(b.tiers, b.id).toHaveLength(b.id === "board" ? 2 : 4);
       expect(b.tiers[0].cost).toBeUndefined();
       for (const t of b.tiers.slice(1)) {
         expect(t.cost!.gold).toBeGreaterThan(0);
@@ -95,34 +95,43 @@ describe("Bauen", () => {
 
   it("kostet Gold und Material, wird sofort fertig", () => {
     const cost = nextBuildCost(EMPTY_VILLAGE, "merchant")!;
-    expect(cost).toEqual({ gold: 300, materials: { darkwood: 15 } });
-    const result = build(EMPTY_VILLAGE, "merchant", 500, { darkwood: 20, clay: 3 });
+    expect(cost).toEqual({ gold: 100, materials: { darkwood: 15 } });
+    const result = build(EMPTY_VILLAGE, "merchant", 300, { darkwood: 20, clay: 3 });
     expect(result.village.merchant).toBe(1);
     expect(result.gold).toBe(200);
     expect(result.materials).toEqual({ darkwood: 5, clay: 3 });
   });
 
   it("ohne genug Gold oder Material geht es nicht – und zeigt, was fehlt", () => {
-    expect(() => build(EMPTY_VILLAGE, "merchant", 299, { darkwood: 15 })).toThrow(/Gold/);
-    expect(() => build(EMPTY_VILLAGE, "merchant", 300, { darkwood: 14 })).toThrow(/Material/);
-    expect(canBuild(EMPTY_VILLAGE, "merchant", 300, { darkwood: 15 })).toBe(true);
-    expect(missingForBuild(nextBuildCost(EMPTY_VILLAGE, "merchant")!, 100, { darkwood: 12 })).toEqual({
-      gold: 200,
+    expect(() => build(EMPTY_VILLAGE, "merchant", 99, { darkwood: 15 })).toThrow(/Gold/);
+    expect(() => build(EMPTY_VILLAGE, "merchant", 100, { darkwood: 14 })).toThrow(/Material/);
+    expect(canBuild(EMPTY_VILLAGE, "merchant", 100, { darkwood: 15 })).toBe(true);
+    expect(missingForBuild(nextBuildCost(EMPTY_VILLAGE, "merchant")!, 40, { darkwood: 12 })).toEqual({
+      gold: 60,
       materials: { darkwood: 3 },
     });
   });
 
   it("höher als Stufe 3 geht nicht", () => {
-    const full: Village = { merchant: 3, smith: 3, board: 3, alchemist: 3, tavern: 3, training: 3, statue: 3 };
+    const full: Village = { merchant: 3, smith: 3, board: 1, alchemist: 3, tavern: 3, training: 3, statue: 3 };
     expect(nextBuildCost(full, "smith")).toBeNull();
     expect(canBuild(full, "smith", 1e9, { dragonOre: 999 })).toBe(false);
     expect(() => build(full, "smith", 1e9, {})).toThrow(/ausgebaut/);
   });
 
+  it("die Anschlagtafel ist schon mit Stufe 1 ganz ausgebaut", () => {
+    const village: Village = { ...EMPTY_VILLAGE, board: 1 };
+    expect(maxTier("board")).toBe(1);
+    expect(nextBuildCost(village, "board")).toBeNull();
+    expect(() => build(village, "board", 1e9, { darkwood: 999 })).toThrow(/ausgebaut/);
+  });
+
   it("höhere Stufen brauchen Material aus späteren Gebieten", () => {
     const order = MATERIALS.map((m) => m.id);
     const latest = (tier: number) =>
-      Math.max(...BUILDINGS.flatMap((b) => Object.keys(b.tiers[tier].cost!.materials).map((id) => order.indexOf(id as never))));
+      Math.max(
+        ...BUILDINGS.flatMap((b) => Object.keys(b.tiers[tier]?.cost?.materials ?? {}).map((id) => order.indexOf(id as never))),
+      );
     expect(latest(1)).toBeLessThan(latest(2));
     expect(latest(2)).toBeLessThan(latest(3));
   });
@@ -197,14 +206,12 @@ describe("Anschlagtafel", () => {
   const daily = rollDailyQuests("2026-10-08", 30);
   const weekly = rollWeeklyQuests("2026-10-05", 30);
 
-  it("Stufe 1: nur Tages-Jagden, Stufe 2: alles ausser Steckbriefen, Stufe 3: dazu zwei Steckbriefe", () => {
+  it("ohne Tafel keine Aufträge, ab Stufe 1 alle – auch die zwei Steckbriefe und die Wochenaufträge", () => {
     expect(visibleBoard(daily, 0).quests).toHaveLength(0);
-    expect(visibleBoard(daily, 1).quests.every((q) => q.def.goal.kind === "kill")).toBe(true);
-    expect(visibleBoard(daily, 1).quests).toHaveLength(3);
-    expect(visibleBoard(weekly, 1).quests).toHaveLength(0);
-    expect(visibleBoard(weekly, 2).quests).toHaveLength(weekly.quests.length);
-    expect(visibleBoard(daily, 2).quests.some((q) => q.def.goal.kind === "bounty")).toBe(false);
-    expect(visibleBoard(daily, 3).quests.filter((q) => q.def.goal.kind === "bounty")).toHaveLength(2);
+    expect(visibleBoard(weekly, 0).quests).toHaveLength(0);
+    expect(visibleBoard(daily, 1)).toBe(daily);
+    expect(visibleBoard(weekly, 1)).toBe(weekly);
+    expect(visibleBoard(daily, 1).quests.filter((q) => q.def.goal.kind === "bounty")).toHaveLength(2);
   });
 
   it("unsichtbare Aufträge kommen nicht voran", () => {
@@ -218,7 +225,6 @@ describe("Anschlagtafel", () => {
     const bounty = daily.quests.find((q) => q.def.goal.kind === "bounty")!;
     const goal = bounty.def.goal;
     if (goal.kind !== "bounty") throw new Error("kein Steckbrief");
-    expect(boardQuestTier(bounty.def)).toBe(3);
     expect(goal.affixes).toHaveLength(2);
     expect(questGoalText(bounty.def)).toContain(getCreature(goal.creatureId).creature.name);
     const index = daily.quests.indexOf(bounty);
@@ -226,14 +232,14 @@ describe("Anschlagtafel", () => {
     expect(applyBoardEvent(daily, { kind: "kill", creatureId: goal.creatureId, boss: false, elite: true }).quests[index].progress).toBe(1);
   });
 
-  it("offener Steckbrief: die Kreatur erscheint als genau dieser Elite-Gegner – nur mit Kopfgeld-Tafel", () => {
+  it("offener Steckbrief: die Kreatur erscheint als genau dieser Elite-Gegner – nur mit Anschlagtafel", () => {
     const bounty = daily.quests.find((q) => q.def.goal.kind === "bounty")!;
     const goal = bounty.def.goal;
     if (goal.kind !== "bounty") throw new Error("kein Steckbrief");
-    expect(openBounty(daily, goal.creatureId, 3)).toEqual(goal.affixes);
-    expect(openBounty(daily, goal.creatureId, 2)).toBeNull();
+    expect(openBounty(daily, goal.creatureId, 1)).toEqual(goal.affixes);
+    expect(openBounty(daily, goal.creatureId, 0)).toBeNull();
     const done = applyBoardEvent(daily, { kind: "kill", creatureId: goal.creatureId, boss: false, elite: true });
-    expect(openBounty(done, goal.creatureId, 3)).toBeNull();
+    expect(openBounty(done, goal.creatureId, 1)).toBeNull();
   });
 });
 
@@ -267,6 +273,6 @@ describe("Erfolge im Dorf", () => {
     expect(progress("foundation", EMPTY_VILLAGE)).toBe(0);
     expect(progress("foundation", { ...EMPTY_VILLAGE, board: 1 })).toBe(1);
     expect(progress("village-founder", { ...EMPTY_VILLAGE, merchant: 1, smith: 1, board: 1 })).toBe(3);
-    expect(progress("master-builder", { ...EMPTY_VILLAGE, merchant: 3, smith: 3, board: 3, alchemist: 2 })).toBe(3);
+    expect(progress("master-builder", { ...EMPTY_VILLAGE, merchant: 3, smith: 3, board: 1, alchemist: 2 })).toBe(3);
   });
 });

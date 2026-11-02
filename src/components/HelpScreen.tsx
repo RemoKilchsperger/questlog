@@ -130,9 +130,8 @@ export function HelpScreen() {
           />
           <p>XP und Gold hängen vom Level der Kreatur bzw. des Dungeons ab – je schwieriger, desto mehr.</p>
           <p>
-            Tages- und Wochenaufträge hängen an der Anschlagtafel im Dorf – ohne sie gibt es nur das Questbuch. Die
-            Anschlagtafel bringt die Tages-Jagden, das Auftragsbrett (Stufe 2) alle übrigen Aufträge und die
-            Kopfgeld-Tafel (Stufe 3) zusätzlich Steckbriefe.
+            Tages- und Wochenaufträge hängen an der Anschlagtafel im Dorf – ohne sie gibt es nur das Questbuch. Sobald
+            sie steht, gibt es alle Aufträge: Tages-Jagden, Händler- und Turm-Aufträge, Steckbriefe und Wochenaufträge.
           </p>
           <H>⭐ Tagesaufträge</H>
           <p>
@@ -144,7 +143,7 @@ export function HelpScreen() {
           </p>
           <H>🎯 Steckbriefe</H>
           <p>
-            Mit der Kopfgeld-Tafel hängen jeden Tag {DAILY_BOUNTY_COUNT} Steckbriefe aus: gesuchte Elite-Gegner mit{" "}
+            An der Anschlagtafel hängen jeden Tag {DAILY_BOUNTY_COUNT} Steckbriefe aus: gesuchte Elite-Gegner mit{" "}
             {BOUNTY_AFFIXES} festen Modifikatoren, zum Beispiel ein rasender, explosiver Schneewolf. Kämpfst du gegen die
             Kreatur, solange der Steckbrief offen ist, erscheint sie genau so. Ein Steckbrief gibt viel XP und Gold und
             immer ein Item.

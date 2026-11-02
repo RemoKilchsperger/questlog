@@ -11,7 +11,6 @@ import { AREAS, DUNGEONS, getCreature, isAreaUnlocked, type AreaDef, type Creatu
 import { ELITE_AFFIXES, getEliteAffix, type EliteAffix } from "./elites";
 import { TOWER_MIN_LEVEL } from "./tower";
 import type { Loot, Rarity } from "./types";
-import { BOARD_TIERS } from "./village";
 
 /** Händler und Schmied: Ausrüstung verkaufen, zerlegen oder verbessern. */
 export type TradeAction = "sell" | "salvage" | "upgrade";
@@ -27,7 +26,7 @@ export type QuestGoal =
   | { kind: "trade"; action: TradeAction; count: number }
   /** Im Endlos-Turm in einem Lauf dieses Stockwerk schaffen */
   | { kind: "towerFloor"; floor: number }
-  /** Steckbrief der Kopfgeld-Tafel: diese Kreatur als Elite mit genau diesen Modifikatoren besiegen */
+  /** Steckbrief der Anschlagtafel: diese Kreatur als Elite mit genau diesen Modifikatoren besiegen */
   | { kind: "bounty"; creatureId: string; affixes: EliteAffix[]; count: number };
 
 export interface QuestReward {
@@ -435,9 +434,9 @@ export function rollDailyQuests(date: string, heroLevel: number, rng: () => numb
   return { date, quests };
 }
 
-/* ───────────── Kopfgeld-Tafel ───────────── */
+/* ───────────── Steckbriefe ───────────── */
 
-/** Steckbriefe pro Tag (nur mit der Kopfgeld-Tafel, Stufe 3 der Anschlagtafel sichtbar). */
+/** Steckbriefe pro Tag (an der Anschlagtafel). */
 export const DAILY_BOUNTY_COUNT = 2;
 /** Modifikatoren eines gesuchten Elite-Gegners */
 export const BOUNTY_AFFIXES = 2;
@@ -482,22 +481,14 @@ export function openBounty(board: QuestBoard, creatureId: string, boardTier: num
   return quest && quest.def.goal.kind === "bounty" ? quest.def.goal.affixes : null;
 }
 
-/* ───────────── Anschlagtafel: was auf welcher Stufe sichtbar ist ───────────── */
+/* ───────────── Anschlagtafel: ohne sie keine Aufträge ───────────── */
 
-/**
- * Ab welcher Stufe der Anschlagtafel (village.ts) ein Auftrag erscheint:
- * Tages-Jagden ab 1, Steckbriefe ab 3, alles andere (Händler, Turm, Wochenaufträge) ab 2.
- */
-export function boardQuestTier(def: QuestDef): number {
-  if (def.goal.kind === "bounty") return BOARD_TIERS.bounties;
-  if (def.id.startsWith("daily-") && def.goal.kind === "kill") return BOARD_TIERS.hunts;
-  return BOARD_TIERS.all;
-}
+/** Ab Stufe 1 der Anschlagtafel (village.ts) hängen alle Tages- und Wochenaufträge. */
+export const boardBuilt = (boardTier: number) => boardTier >= 1;
 
-/** Nur die Aufträge, die die Anschlagtafel dieser Stufe zeigt – die übrigen zählen nicht und bleiben unsichtbar. */
+/** Die Aufträge, die die Anschlagtafel zeigt – ohne Tafel keine, sie zählen dann auch nicht. */
 export function visibleBoard(board: QuestBoard, boardTier: number): QuestBoard {
-  const quests = board.quests.filter((q) => boardQuestTier(q.def) <= boardTier);
-  return quests.length === board.quests.length ? board : { ...board, quests };
+  return boardBuilt(boardTier) || board.quests.length === 0 ? board : { ...board, quests: [] };
 }
 
 /** Wochenaufträge: so viele Siege, Bosse und Dungeons. */
@@ -544,10 +535,10 @@ export function rollWeeklyQuests(week: string, heroLevel: number): QuestBoard {
 }
 
 /** Wendet ein Ereignis auf die offenen Aufträge an. Ohne Änderung kommt dasselbe Objekt zurück. */
-export function applyBoardEvent(board: QuestBoard, event: QuestEvent, boardTier: number = BOARD_TIERS.bounties): QuestBoard {
+export function applyBoardEvent(board: QuestBoard, event: QuestEvent, boardTier = 1): QuestBoard {
   let changed = false;
   const quests = board.quests.map((q) => {
-    if (q.turnedIn || boardQuestTier(q.def) > boardTier) return q;
+    if (q.turnedIn || !boardBuilt(boardTier)) return q;
     const progress = advanceQuest(q.def, q.progress, event);
     if (progress === q.progress) return q;
     changed = true;
@@ -557,10 +548,10 @@ export function applyBoardEvent(board: QuestBoard, event: QuestEvent, boardTier:
 }
 
 /** Gibt einen erfüllten Auftrag ab. */
-export function turnInBoardQuest(board: QuestBoard, id: string, boardTier: number = BOARD_TIERS.bounties): QuestBoard {
+export function turnInBoardQuest(board: QuestBoard, id: string, boardTier = 1): QuestBoard {
   const quest = board.quests.find((q) => q.def.id === id);
   if (!quest || quest.turnedIn) throw new Error("Diesen Auftrag gibt es nicht (mehr).");
-  if (boardQuestTier(quest.def) > boardTier) throw new Error("Für diesen Auftrag fehlt die passende Anschlagtafel.");
+  if (!boardBuilt(boardTier)) throw new Error("Für diesen Auftrag fehlt die Anschlagtafel.");
   if (!isQuestComplete(quest.def, quest.progress)) throw new Error("Der Auftrag ist noch nicht erfüllt.");
   return { ...board, quests: board.quests.map((q) => (q.def.id === id ? { ...q, turnedIn: true } : q)) };
 }
@@ -585,7 +576,7 @@ export function trackedQuests(
   weekly: QuestBoard,
   today: string,
   week: string,
-  boardTier: number = BOARD_TIERS.bounties,
+  boardTier = 1,
 ): TrackedQuest[] {
   const open = (board: QuestBoard, date: string, source: QuestSource): TrackedQuest[] =>
     board.date === date

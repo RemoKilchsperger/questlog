@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { BUILDINGS, type BuildingTier } from "../domain/village";
+import { BUILDINGS, maxTier, type BuildingId, type BuildingTier } from "../domain/village";
 import { BG_HEIGHT, VILLAGE_WIDTH } from "./backgrounds";
 import { renderSprite } from "./sprites";
 import { getBuildingSprite, VILLAGE_SLOTS } from "./villageSprites";
 
-const TIERS: BuildingTier[] = [0, 1, 2, 3];
+/** Alle Stufen eines Gebäudes, von 0 bis zur höchsten. */
+const tiersOf = (id: BuildingId) => Array.from({ length: maxTier(id) + 1 }, (_, t) => t as BuildingTier);
 
 /** Linker und rechter Rand eines Gebäudes im Dorfbild (mit Umriss). */
 function span(slot: (typeof VILLAGE_SLOTS)[number], tier: BuildingTier) {
@@ -16,7 +17,7 @@ function span(slot: (typeof VILLAGE_SLOTS)[number], tier: BuildingTier) {
 describe("Dorfbild", () => {
   it("jedes Gebäude passt auf jeder Stufe ins Bild", () => {
     for (const slot of VILLAGE_SLOTS)
-      for (const tier of TIERS) {
+      for (const tier of tiersOf(slot.id)) {
         const { left, right, top } = span(slot, tier);
         expect(left, `${slot.id} ${tier}`).toBeGreaterThanOrEqual(0);
         expect(right, `${slot.id} ${tier}`).toBeLessThanOrEqual(VILLAGE_WIDTH);
@@ -26,8 +27,9 @@ describe("Dorfbild", () => {
   });
 
   it("voll ausgebaute Nachbarn überdecken sich nicht", () => {
+    const full = (slot: (typeof VILLAGE_SLOTS)[number]) => span(slot, maxTier(slot.id));
     for (let i = 1; i < VILLAGE_SLOTS.length; i++)
-      expect(span(VILLAGE_SLOTS[i - 1], 3).right).toBeLessThanOrEqual(span(VILLAGE_SLOTS[i], 3).left);
+      expect(full(VILLAGE_SLOTS[i - 1]).right).toBeLessThanOrEqual(full(VILLAGE_SLOTS[i]).left);
   });
 
   it("jedes Gebäude hat einen Platz im Dorfbild", () => {
@@ -36,8 +38,9 @@ describe("Dorfbild", () => {
 
   it("jede Stufe sieht anders aus", () => {
     for (const slot of VILLAGE_SLOTS) {
-      const grids = new Set(TIERS.map((t) => getBuildingSprite(slot.id, t).grid.join("\n")));
-      expect(grids.size).toBe(4);
+      const tiers = tiersOf(slot.id);
+      const grids = new Set(tiers.map((t) => getBuildingSprite(slot.id, t).grid.join("\n")));
+      expect(grids.size).toBe(tiers.length);
     }
   });
 });

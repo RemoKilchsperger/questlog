@@ -5,7 +5,7 @@ import {
   BUILDINGS,
   canBuild,
   MATERIALS,
-  MAX_BUILDING_TIER,
+  maxTier,
   missingForBuild,
   nextBuildCost,
   type BuildCost,
@@ -187,14 +187,15 @@ function BuildingCard({ def, onBuild }: { def: BuildingDef; onBuild: () => void 
   const materials = useGameStore((s) => s.materials);
   const village = useGameStore((s) => s.village);
   const current = def.tiers[tier];
-  const next = tier < MAX_BUILDING_TIER ? def.tiers[tier + 1] : null;
+  const max = maxTier(def.id);
+  const next = tier < max ? def.tiers[tier + 1] : null;
   const cost = nextBuildCost(village, def.id);
   const affordable = canBuild(village, def.id, gold, materials);
 
   return (
     <section
       id={`building-${def.id}`}
-      className={`panel flex scroll-mt-4 flex-col gap-3 p-4 ${tier === MAX_BUILDING_TIER ? "border-gold/60" : ""}`}
+      className={`panel flex scroll-mt-4 flex-col gap-3 p-4 ${tier === max ? "border-gold/60" : ""}`}
     >
       <div className="flex items-start gap-3">
         <motion.span
@@ -214,7 +215,7 @@ function BuildingCard({ def, onBuild }: { def: BuildingDef; onBuild: () => void 
             {def.icon} {def.name}
           </h3>
           <p className="text-sm text-gold">{tier === 0 && def.id !== "merchant" ? "Nicht gebaut" : current.name}</p>
-          <TierPips tier={tier} />
+          <TierPips tier={tier} max={max} />
         </div>
       </div>
       <p className="text-xs text-muted">{def.description}</p>
@@ -251,10 +252,10 @@ function BuildingCard({ def, onBuild }: { def: BuildingDef; onBuild: () => void 
   );
 }
 
-function TierPips({ tier }: { tier: number }) {
+function TierPips({ tier, max }: { tier: number; max: number }) {
   return (
-    <span className="mt-1 flex gap-1" aria-label={`Stufe ${tier} von ${MAX_BUILDING_TIER}`}>
-      {Array.from({ length: MAX_BUILDING_TIER }, (_, i) => (
+    <span className="mt-1 flex gap-1" aria-label={`Stufe ${tier} von ${max}`}>
+      {Array.from({ length: max }, (_, i) => (
         <span key={i} className={`h-2 w-6 rounded-sm ${i < tier ? "bg-gold" : "bg-night-700"}`} />
       ))}
     </span>

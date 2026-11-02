@@ -145,8 +145,7 @@ Stufe 2.
 - **Schmied** (`forge.ts`): Items ab „selten“ zu Essenz zerlegen. Mit Essenz den Hauptwert verbessern
   (Waffen Angriff, Rüstungen und Schilde Rüstung), +6 % pro Stufe bis +5.
   Beim Zerlegen gibt es 50 % der investierten Essenz zurück. Ohne Schmiede (Stufe 0) geht beides nicht.
-- **Anschlagtafel:** Stufe 1 bringt die Tages-Jagden, Stufe 2 die übrigen Aufträge, Stufe 3 die
-  Steckbriefe der Kopfgeld-Tafel.
+- **Anschlagtafel:** nur eine Stufe – sie bringt alle Tages- und Wochenaufträge samt Steckbriefen.
 - **Alchemist:** verkauft Tränke je nach Stufe, ohne ihn gibt es nur kleine Heiltränke.
 
 ### Kampf

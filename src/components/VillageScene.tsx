@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BUILDINGS, canBuild, MAX_BUILDING_TIER, type BuildingDef, type BuildingId } from "../domain/village";
+import { BUILDINGS, canBuild, maxTier, type BuildingDef, type BuildingId } from "../domain/village";
 import { BG_HEIGHT, paintVillage, VILLAGE_WIDTH } from "../game/backgrounds";
 import { sfx } from "../game/sfx";
 import { renderSprite } from "../game/sprites";
@@ -77,7 +77,7 @@ function BuildingSpot({
   const plot = tier === 0 && def.id !== "merchant";
   const name = plot ? `${def.name}: Bauplatz` : `${def.name}: ${current.name}`;
   const hint = [
-    tier === MAX_BUILDING_TIER ? "Ganz ausgebaut." : `Stufe ${tier} von ${MAX_BUILDING_TIER}.`,
+    tier === maxTier(def.id) ? "Ganz ausgebaut." : `Stufe ${tier} von ${maxTier(def.id)}.`,
     plot ? "Klicken zum Bauen." : `Klicken zum Öffnen${buildable ? ", 🔨 zum Ausbauen" : ""}.`,
   ].join(" ");
 

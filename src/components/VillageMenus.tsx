@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { FOODS, foodEffectText, foodPrice, getFood } from "../domain/food";
 import { getLevel } from "../domain/leveling";
 import { skillResetCost } from "../domain/skills";
-import { getBuilding, MAX_BUILDING_TIER, STATUE_XP_BONUS, type BuildingId } from "../domain/village";
+import { getBuilding, maxTier, STATUE_XP_BONUS, type BuildingId } from "../domain/village";
 import { getBuildingSprite } from "../game/villageSprites";
 import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
@@ -148,7 +148,7 @@ function BuildingIntro({ id, children }: { id: BuildingId; children: ReactNode }
               </span>
               <span className="min-w-0 flex-1">{t.effect}</span>
               {level > tier && <span className="shrink-0 text-xs text-muted">Stufe {level}</span>}
-              {level === tier && level === MAX_BUILDING_TIER && <span className="shrink-0 text-xs text-xp">✓</span>}
+              {level === tier && level === maxTier(id) && <span className="shrink-0 text-xs text-xp">✓</span>}
             </li>
           );
         })}
