@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { POTIONS, potionEffectText, type PotionDef } from "../domain/potions";
+import { DRINK_POTIONS, potionEffectText, THROW_POTIONS, type PotionDef } from "../domain/potions";
 import { getBuilding } from "../domain/village";
 import { getBuildingSprite } from "../game/villageSprites";
 import { useGameStore } from "../store/gameStore";
@@ -18,7 +18,7 @@ export function AlchemistScreen({ onOpenVillage }: { onOpenVillage: () => void }
         <PixelSprite sprite={getBuildingSprite("alchemist", 0)} size={80} className="grayscale" />
         <h2 className="font-pixel text-2xl">Noch kein Alchemist</h2>
         <p className="text-sm text-muted">
-          Im Dorf steht erst ein leerer Bauplatz. Baue den Alchemisten, um Heil- und Verstärkungstränke zu kaufen. Bis
+          Im Dorf steht erst ein leerer Bauplatz. Baue den Alchemisten, um Heil-, Verstärkungs- und Wurftränke zu kaufen. Bis
           dahin hat der Strassenhändler ein paar kleine Heiltränke.
         </p>
         <button
@@ -43,7 +43,13 @@ export function AlchemistScreen({ onOpenVillage }: { onOpenVillage: () => void }
         als Kampfbeute.
         {tier >= 3 && <span className="text-xp"> Beim Meisteralchemisten wirken alle Tränke 25 % stärker.</span>}
       </p>
-      <PotionList potions={POTIONS} />
+      <PotionList potions={DRINK_POTIONS} />
+      <h3 className="font-pixel mt-4 mb-1 text-lg">🎯 Wurftränke</h3>
+      <p className="mb-2 text-xs text-muted">
+        Wurftränke wirfst du auf dein Ziel. Sie zählen als Trank der Runde – du entscheidest also: heilen oder werfen.
+        Gegner mit Immunität gegen Feuer oder Gift lässt das kalt, wer schwach gegen Feuer ist, brennt dafür heftiger.
+      </p>
+      <PotionList potions={THROW_POTIONS} />
     </section>
   );
 }

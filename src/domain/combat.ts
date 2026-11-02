@@ -36,7 +36,7 @@ import {
 import { createItem, getBossItems, getItem, weaponAbilities } from "./items";
 import { getLevel } from "./leveling";
 import { rollDrop } from "./loot";
-import { BUFF_POTIONS, potionHeal, type BuffKind, type PotionDef } from "./potions";
+import { BUFF_POTIONS, getPotion, potionHeal, type BuffKind, type PotionDef } from "./potions";
 import { addMaterials, creatureMaterials, type MaterialStock } from "./village";
 import {
   bandageHeal,
@@ -240,6 +240,17 @@ export type BattleEvent =
   /** `heal` = geheilte LP (0 bei Verstärkungstränken), `buff` = welche Verstärkung beginnt */
   | { type: "potion"; potionId: string; heal: number; buff?: BuffKind }
   /**
+   * Der Held wirft einen Wurftrank (potions.ts) auf sein Ziel (`add`, fehlt: der Boss) –
+   * was er anrichtet, folgt als eigene Ereignisse. `missed`: Der Boss ist abgetaucht.
+   */
+  | { type: "thrown"; potionId: string; add?: string; missed?: boolean }
+  /** Die Sprengflasche trifft einen Gegner – `absorbed`: so viel hat der Schild des Schildträgers geschluckt */
+  | { type: "blast"; damage: number; add?: string; absorbed?: number }
+  /** Die Säure frisst die Rüstung des Ziels an */
+  | { type: "corroded"; add?: string }
+  /** Der Rauch nimmt dem Ziel die Sicht – es macht weniger Schaden */
+  | { type: "smoked"; add?: string }
+  /**
    * `add`: der beteiligte Begleiter – Ziel des Helden bzw. Angreifer (fehlt: der Boss).
    * `shielded`: Ein Schildträger hat den Treffer auf den Boss gemindert.
    */
@@ -408,6 +419,8 @@ export interface BattleState {
   potionUsedThisRound: boolean;
   /** Sorten, die in diesem Kampf schon getrunken wurden – jede nur einmal pro Kampf. */
   potionsUsed: string[];
+  /** Bereitgehaltener Wurftrank – er fliegt mit dem nächsten Zug auf das Ziel */
+  thrown?: string;
   /** Aktive Verstärkungen des Helden durch Tränke */
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
   mana: number;
@@ -603,6 +616,9 @@ export function potionBlocker(state: BattleState, potion: PotionDef): string | n
   if (state.potionsUsed.includes(potion.id)) return "Diese Sorte hast du in diesem Kampf schon getrunken.";
   if (state.potionUsedThisRound) return "Pro Runde ist nur ein Trank erlaubt.";
   if (potion.effect.kind === "heal" && state.hero.hp >= state.hero.maxHp) return "Deine Lebenspunkte sind schon voll.";
+  if (potion.effect.kind === "throw" && potion.effect.throw !== "blast" && !state.target && untouchable(bossTurnOf(state))) {
+    return "Der Gegner ist abgetaucht – wirf auf einen Begleiter oder warte.";
+  }
   return null;
 }
 
@@ -637,11 +653,18 @@ function assertActive(state: BattleState) {
 /**
  * Trank trinken – höchstens einer pro Runde, jede Sorte nur einmal pro Kampf,
  * Heiltränke nicht bei vollen Lebenspunkten. Verstärkungen gelten ab sofort.
+ * Ein Wurftrank zählt genauso, fliegt aber erst mit dem Zug des Helden (attackRound).
  */
 export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult {
   const blocker = potionBlocker(state, potion);
   if (blocker) throw new Error(blocker);
   const { effect } = potion;
+  if (effect.kind === "throw") {
+    return {
+      state: { ...state, thrown: potion.id, potionUsedThisRound: true, potionsUsed: [...state.potionsUsed, potion.id] },
+      events: [],
+    };
+  }
   // Meisteralchemist: alle Tränke wirken stärker
   const power = state.potionPower ?? 1;
   const factor =
@@ -742,6 +765,13 @@ export function stunLands(ability: AbilityDef | null, rng: () => number, skills?
   return ability.stunChance === undefined || rng() < skillStunChance(skills, ability.stunChance, !!ability.freeze);
 }
 
+/**
+ * Gift, Feuer oder Bluten trifft auf ein bestehendes derselben Art: Das mit mehr Schaden pro Runde
+ * bleibt. Bei Gleichstand gewinnt das neue – es läuft dann wieder volle Runden.
+ */
+export const strongerDot = <T extends { damage: number }>(current: T | undefined, next: T): T =>
+  current && current.damage > next.damage ? current : next;
+
 /** Eine Runde einer Markierung (betäubt, eingefroren) ist vorbei. */
 const tickMark = (rounds: number | undefined): number | undefined => (rounds && rounds > 1 ? rounds - 1 : undefined);
 
@@ -833,6 +863,7 @@ export function attackRound(
   /**
    * Gift, Feuer oder Bluten auf einen Gegner legen – mit Schwäche/Resistenz; bei Immunität wirkt es nicht.
    * Der Skilltree macht es stärker oder länger, Gift stapelt sich (Schleichendes Gift) und platzt (Fäulnis).
+   * Ein schwächeres Feuer, Gift oder Bluten überschreibt kein stärkeres.
    */
   const applyDot = (foe: Foe, kind: DotKind, base: number, rounds: number) => {
     const factor = matchupFactor(foe.creatureId, kind);
@@ -843,10 +874,10 @@ export function attackRound(
     const damage = Math.max(1, Math.round(base * factor * ownDotFactor(skills, kind)));
     const length = ownDotRounds(skills, kind, rounds);
     if (kind !== "poison") {
-      foe.fx = { ...foe.fx, [kind]: { damage, roundsLeft: length } };
+      foe.fx = { ...foe.fx, [kind]: strongerDot(foe.fx[kind], { damage, roundsLeft: length }) };
       return;
     }
-    const poison = stackPoison(skills, foe.fx.poison, damage, length);
+    const poison = strongerDot(foe.fx.poison, stackPoison(skills, foe.fx.poison, damage, length));
     const burst = rotBurst(skills, poison);
     if (burst > 0 && foe.c.hp > 0) {
       const dealt = Math.max(1, Math.round(burst * (1 + (foe.fx.vulnerable?.percent ?? 0))));
@@ -899,6 +930,46 @@ export function attackRound(
   const bossIsBoss = getCreature(state.creatureId).creature.boss;
   /** Vom Item-Effekt „Frostbiss“ eingefrorene Gegner – sie setzen diese Runde aus */
   const frozenByItem = new Set<Foe>();
+
+  // 0. Ein bereitgehaltener Wurftrank fliegt vor der Aktion – auch beim Abwehren (potions.ts)
+  const thrown = state.thrown ? getPotion(state.thrown) : null;
+  if (thrown?.effect.kind === "throw") {
+    const { effect } = thrown;
+    // Meisteralchemist: Wurftränke wirken stärker
+    const power = state.potionPower ?? 1;
+    const blast = effect.throw === "blast";
+    const missed = !blast && target === boss && hidden;
+    events.push({ type: "thrown", potionId: thrown.id, ...(!blast && foeTag(target)), ...(missed && { missed }) });
+    for (const foe of (blast ? living() : missed ? [] : [target]).filter((f) => !(f === boss && hidden))) {
+      if (effect.throw === "burn" || effect.throw === "poison") {
+        applyDot(foe, effect.throw, strong.damage * effect.percent * power, effect.rounds);
+      } else if (effect.throw === "freeze") {
+        frozenByItem.add(foe);
+      } else if (effect.throw === "acid") {
+        foe.fx = { ...foe.fx, armorBreak: Math.max(foe.fx.armorBreak ?? 0, effect.percent * power) };
+        events.push({ type: "corroded", ...foeTag(foe) });
+        // Die Säure frisst zwei Panzerplatten des Erzkönigs weg
+        if (foe === boss && plates !== undefined && plates > 0) {
+          plates = Math.max(0, plates - 2);
+          if (plates === 0) events.push({ type: "platesBroken" });
+        }
+      } else if (effect.throw === "smoke") {
+        foe.fx = { ...foe.fx, weaken: { percent: effect.percent * power, roundsLeft: effect.rounds } };
+        events.push({ type: "smoked", ...foeTag(foe) });
+      } else {
+        // Sprengflasche: ignoriert Rüstung, der Schild des Schildträgers schluckt sie aber
+        const raw = Math.max(1, Math.round(strong.damage * effect.percent * power * (1 + (foe.fx.vulnerable?.percent ?? 0)) * takenBy(foe)));
+        const absorbed = foe === boss ? Math.min(bossShield, raw) : 0;
+        bossShield -= absorbed;
+        const damage = raw - absorbed;
+        foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - damage) };
+        if (foe === boss) heroHitsOnBoss++;
+        else if (foe.add) hitAdds.add(foe.add);
+        events.push({ type: "blast", damage, ...foeTag(foe), ...(absorbed > 0 && { absorbed }) });
+        addDown(foe);
+      }
+    }
+  }
 
   // 1. Aktion des Helden
   if (defending) {
@@ -1574,6 +1645,7 @@ export function attackRound(
       status,
       round: status === "active" ? state.round + 1 : state.round,
       potionUsedThisRound: false,
+      thrown: undefined,
       buffs: tickBuffs(state.buffs),
       log: [...state.log, ...events.map((e) => ({ ...e, round: state.round }))],
     },

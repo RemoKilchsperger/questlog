@@ -9,6 +9,7 @@ import { ADD_SKILLS, getBossPhase, RITUAL_ROUNDS, SHIELD_EVERY } from "../domain
 import { STATIC_MAX } from "../domain/bossIntents";
 import { BOSS, coopBossTurn, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { getCreature } from "../domain/creatures";
+import { getPotion } from "../domain/potions";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
 import type { CoopMember } from "../coop/protocol";
@@ -434,7 +435,10 @@ export class CoopBattleScene extends Phaser.Scene {
         sideHit ||
         (aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked" || event.type === "manaBurn")) ||
         event.type === "drain" ||
-        event.type === "addDown";
+        event.type === "addDown" ||
+        event.type === "blast" ||
+        event.type === "corroded" ||
+        event.type === "smoked";
       const long = event.type === "bossPhase" || event.type === "explosion";
       // Steinschlag, Fluchkreis und Strudel treffen erst nach ihrer Animation – dafür Zeit lassen
       const slowImpact = event.type === "hit" && event.attacker === BOSS && special !== null && SLOW_IMPACT.has(special);
@@ -483,6 +487,39 @@ export class CoopBattleScene extends Phaser.Scene {
           else sfx.heal();
         }
         fx.rise(this, this.center(target), 0x9dffc8, 8, 30);
+        break;
+      }
+      case "thrown": {
+        // Der Wurftrank fliegt im Bogen zum Ziel
+        const potion = getPotion(event.potionId);
+        const kind = potion.effect.kind === "throw" ? potion.effect.throw : "blast";
+        sfx.whoosh(0.4);
+        fx.flask(this, this.center(this.unit(event.heroId)), this.center(this.unit(event.target)), potion.icon, fx.THROW_COLORS[kind], () => {
+          if (kind === "blast") sfx.explosion();
+          else if (kind === "burn") sfx.fire();
+          else if (kind === "poison" || kind === "acid") sfx.poison();
+          else sfx.magic();
+        });
+        break;
+      }
+      case "blast": {
+        const foe = this.unit(event.target);
+        this.impact(foe, event.damage, false);
+        fx.burst(this, this.center(foe), fx.THROW_COLORS.blast, 12, 50);
+        if (event.absorbed) this.float(foe, `🛡 ${event.absorbed}`, "#7aa7f0", 14, 30);
+        break;
+      }
+      case "corroded": {
+        const foe = this.unit(event.target);
+        this.float(foe, "RÜSTUNG ↓", "#b8e04a", 16, 30);
+        this.tint(foe, fx.THROW_COLORS.acid, 400);
+        fx.rise(this, this.center(foe), fx.THROW_COLORS.acid, 10);
+        break;
+      }
+      case "smoked": {
+        const foe = this.unit(event.target);
+        this.float(foe, "GESCHWÄCHT", "#a49cb8", 16, 30);
+        fx.burst(this, this.center(foe), fx.THROW_COLORS.smoke, 20, 70, 10);
         break;
       }
       case "ability": {

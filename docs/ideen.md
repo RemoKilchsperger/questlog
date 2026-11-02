@@ -64,3 +64,11 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 |---|---|---|
 | 32 | **Vier Pfade statt +2 % Schaden:** Klinge, Wehr, Arkan, Plage – aufeinander aufbauend mit Stufen, Gabelung und einer Meisterschaft. Enthält Idee 5 (Schmelzen, Gift platzen lassen) | ✅ `skills.ts`, docs/skilltree.md, solo und Koop |
 | 33 | **Mehr Gabelungen und Erfolge:** Gabelung auch auf Stufe 4, Erfolge für Meisterschaften, Stapel (Zorn, Gift) im Kampfbild sichtbar | 💡 |
+
+## Tränke (2026-11-02)
+
+| # | Idee | Status |
+|---|---|---|
+| 34 | **Wurftränke:** Brandflasche, Giftphiole, Frostbombe, Säureflasche, Rauchbombe, Sprengflasche. Teilen sich das Limit „ein Trank pro Runde“ mit den Trinktränken | ✅ `potions.ts`, docs/wurftraenke.md, solo und Koop |
+| 35 | **Mehr Trinktränke:** Gegengift (reinigt Gift/Feuer/Bluten, bricht Neferets Fluch), Manatrank | 💡 |
+| 36 | **Wurf-Limit pro Kampf:** höchstens ein oder zwei Wurftränke pro Kampf, falls der volle Satz zu stark ist (siehe Sim in docs/wurftraenke.md) | 💡 |

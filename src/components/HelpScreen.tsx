@@ -346,6 +346,11 @@ export function HelpScreen() {
             paar kleine Heiltränke. Der
             Meisteralchemist macht alle Tränke {pct(MASTER_POTION_BONUS)} stärker (nur solo, nicht im Koop).
           </p>
+          <p>
+            Wurftränke wirfst du auf dein Ziel, die Sprengflasche auf alle Gegner. Sie zählen als Trank der Runde und
+            fliegen mit deinem Zug. Feuer und Gift richten sich nach Schwächen und Immunitäten, die Frostbombe friert ein
+            (Bosse bleiben danach eine Weile immun), und die Säure frisst sogar Panzerplatten weg.
+          </p>
           <Table
             head={["Trank", "Wirkung", "Preis", "Zu kaufen ab"]}
             rows={POTIONS.map((p) => [

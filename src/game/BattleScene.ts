@@ -10,6 +10,7 @@ import { RAGE_MAX, STATIC_MAX } from "../domain/bossIntents";
 import { ADD_SKILLS, getBossPhase, RITUAL_ROUNDS, SHIELD_EVERY } from "../domain/bossMechanics";
 import { bossTurnOf, type BattleEvent, type BattleState, type Side } from "../domain/combat";
 import { getCreature } from "../domain/creatures";
+import { getPotion } from "../domain/potions";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
 import { creatureImage, lastOpaqueRow } from "./creatureImages";
@@ -443,13 +444,13 @@ export class BattleScene extends Phaser.Scene {
             : 900
           : event.type === "bossPhase" || event.type === "explosion"
             ? 1100
-            : event.type === "ability" || event.type === "bossAbility" || event.type === "stolen" || event.type === "risen" || event.type === "devoured"
+            : event.type === "ability" || event.type === "bossAbility" || event.type === "stolen" || event.type === "risen" || event.type === "devoured" || event.type === "thrown"
             ? 600
             : event.type === "immune" || event.type === "drumming" || event.type === "ritual" || event.type === "static" || event.type === "evaded"
               ? 300
             : event.type === "manaBurn" || event.type === "drain" || event.type === "addHeal" || event.type === "defend" || event.type === "interrupted"
               ? 500
-              : sideHit || event.type === "blocked" || (event.type === "stunned" && event.add)
+              : sideHit || event.type === "blocked" || (event.type === "stunned" && event.add) || event.type === "blast" || event.type === "corroded" || event.type === "smoked"
                 ? 300
                 : 750;
     }
@@ -484,6 +485,32 @@ export class BattleScene extends Phaser.Scene {
       for (const image of hero.images) image.setTint(look.tint);
       this.time.delayedCall(350, () => hero.images.forEach((image) => image.clearTint()));
       this.sparkles(hero.homeX, GROUND_Y - 60, Phaser.Display.Color.HexStringToColor(look.color).color);
+    } else if (event.type === "thrown") {
+      // Der Wurftrank fliegt im Bogen – abgetaucht platscht er ins Wasser
+      const potion = getPotion(event.potionId);
+      const kind = potion.effect.kind === "throw" ? potion.effect.throw : "blast";
+      const key = event.add ?? "enemy";
+      sfx.whoosh(0.4);
+      fx.flask(this, this.front("hero"), this.center(key), potion.icon, event.missed ? 0x7aa7f0 : fx.THROW_COLORS[kind], () => {
+        if (kind === "blast") sfx.explosion();
+        else if (kind === "burn") sfx.fire();
+        else if (kind === "poison" || kind === "acid") sfx.poison();
+        else sfx.magic();
+      });
+    } else if (event.type === "blast") {
+      const key = event.add ?? "enemy";
+      this.impact(key, event.damage, false, 0.008);
+      fx.burst(this, this.center(key), fx.THROW_COLORS.blast, 12, 60);
+      if (event.absorbed) this.floatText(this.fighters[key].homeX, GROUND_Y - 150, `🛡 ${event.absorbed}`, "#7aa7f0", 18);
+    } else if (event.type === "corroded") {
+      const key = event.add ?? "enemy";
+      this.floatText(this.fighters[key].homeX, GROUND_Y - 135, "RÜSTUNG ↓", "#b8e04a", 20);
+      this.tint(this.fighters[key], fx.THROW_COLORS.acid, 400);
+      fx.rise(this, this.center(key), fx.THROW_COLORS.acid, 10);
+    } else if (event.type === "smoked") {
+      const key = event.add ?? "enemy";
+      this.floatText(this.fighters[key].homeX, GROUND_Y - 135, "GESCHWÄCHT", "#a49cb8", 20);
+      fx.burst(this, this.center(key), fx.THROW_COLORS.smoke, 20, 80, 10);
     } else if (event.type === "fled") {
       music.stop(this, 0.3);
       this.showFlight(false);

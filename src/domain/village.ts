@@ -178,17 +178,17 @@ export const BUILDINGS: readonly BuildingDef[] = [
     description: "Verkauft Tränke – ohne ihn gibt es beim Händler nur kleine Heiltränke.",
     tiers: [
       { name: "Bauplatz", icon: "🪧", effect: "Nur kleine Heiltränke beim Händler" },
-      { name: "Kräuterhütte", icon: "🛖", effect: "Dazu Heiltränke", cost: cost(100, { clay: 15 }) },
+      { name: "Kräuterhütte", icon: "🛖", effect: "Dazu Heiltränke, Brandflaschen und Giftphiolen", cost: cost(100, { clay: 15 }) },
       {
         name: "Alchemistenlabor",
         icon: "🏠",
-        effect: "Angriffs- und Rüstungstränke kaufbar",
+        effect: "Angriffs- und Rüstungstränke, Frostbomben, Säureflaschen und Rauchbomben kaufbar",
         cost: cost(1000, { hardwood: 25, clay: 10 }),
       },
       {
         name: "Meisteralchemist",
         icon: "🏛️",
-        effect: "Grosse Heiltränke kaufbar, alle Tränke wirken 25 % stärker",
+        effect: "Grosse Heiltränke und Sprengflaschen kaufbar, alle Tränke wirken 25 % stärker",
         cost: cost(5000, { dragonOre: 30, hardwood: 15 }),
       },
     ],
