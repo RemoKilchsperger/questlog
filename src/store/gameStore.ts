@@ -42,7 +42,7 @@ import {
   type TowerRecord,
 } from "../domain/tower";
 import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopCombat";
-import { salvageItem, upgradeItem as forgeUpgrade } from "../domain/forge";
+import { forgeItem, salvageItem, upgradeItem as forgeUpgrade, type ForgeTarget } from "../domain/forge";
 import { createItem, ensureItemExtras, getItem, MAX_UPGRADE, weaponAbilities, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
 import { eatMeal, withMeal } from "../domain/food";
@@ -120,7 +120,7 @@ import {
   type MaterialStock,
   type Village,
 } from "../domain/village";
-import type { Character, EquipSlot, Equipment, Loot, OwnedItem, StatKey } from "../domain/types";
+import type { Character, EquipSlot, Equipment, Loot, OwnedItem, Rarity, StatKey } from "../domain/types";
 import { EventBus } from "../game/EventBus";
 
 export interface Cosmetics {
@@ -200,6 +200,8 @@ interface GameState {
   salvage: (uid: string) => void;
   /** Verbessert ein Item (Inventar oder angelegt) beim Schmied um eine Stufe. */
   upgrade: (uid: string) => void;
+  /** Schmiedet ein neues Item auf Heldenlevel und gibt es zurück (null, wenn es nicht geklappt hat). */
+  forge: (target: ForgeTarget, rarity: Rarity) => OwnedItem | null;
 
   potions: PotionStock;
   buyPotion: (potionId: string) => void;
@@ -1033,6 +1035,20 @@ export const useGameStore = create<GameState>()(
           });
           tradeEvent("upgrade", findItem(uid));
         }),
+
+      forge: (target, rarity) => {
+        let forged: OwnedItem | null = null;
+        attempt(() => {
+          const { inventory, character, village } = get();
+          const smith = SMITH_RULES[village.smith];
+          if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
+          const level = getLevel(character.totalXp);
+          const result = forgeItem(inventory, character.essence, target, rarity, level, newId(), smith.discount);
+          set({ inventory: result.inventory, character: { ...character, essence: result.essence } });
+          forged = result.item;
+        });
+        return forged;
+      },
 
       buyPotion: (potionId) =>
         attempt(() => {

@@ -6,12 +6,15 @@ import {
   ESSENCE_PER_RARITY,
   essenceFor,
   essenceYield,
+  FORGE_RARITIES,
+  forgeCost,
   investedEssence,
   upgradeCost,
+  type ForgeTarget,
 } from "../domain/forge";
-import { getItemStats, MAX_UPGRADE, RARITIES, UPGRADE_STEP } from "../domain/items";
+import { ARMOR_SLOTS, getItemStats, MAX_UPGRADE, RARITIES, SLOT_ICONS, SLOT_LABELS, UPGRADE_STEP } from "../domain/items";
 import { getLevel } from "../domain/leveling";
-import type { ItemStats, OwnedItem } from "../domain/types";
+import type { ItemStats, OwnedItem, Rarity } from "../domain/types";
 import { getBuilding, SMITH_RULES } from "../domain/village";
 import { useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -22,7 +25,7 @@ import { ItemRow } from "./ItemRow";
 import { itemName, mainStatText, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { Hint } from "./HoverCard";
 
-type View = "upgrade" | "salvage";
+type View = "upgrade" | "salvage" | "forge";
 
 /** Regeln der Schmiede auf ihrer aktuellen Ausbaustufe (village.ts). */
 function useSmithRules() {
@@ -47,8 +50,8 @@ export function SmithScreen({ onOpenVillage }: { onOpenVillage: () => void }) {
         </span>
         <h2 className="font-pixel text-2xl">Noch keine Schmiede</h2>
         <p className="text-sm text-muted">
-          Im Dorf steht erst ein leerer Bauplatz. Baue die Schmiede, um Ausrüstung in Essenz zu zerlegen und Waffen und
-          Rüstungen zu verbessern.
+          Im Dorf steht erst ein leerer Bauplatz. Baue die Schmiede, um Ausrüstung in Essenz zu zerlegen, Waffen und
+          Rüstungen zu verbessern und neue zu schmieden.
         </p>
         <button
           onClick={onOpenVillage}
@@ -78,11 +81,22 @@ export function SmithScreen({ onOpenVillage }: { onOpenVillage: () => void }) {
           <ViewChip active={view === "salvage"} onClick={() => setView("salvage")}>
             💠 Zerlegen
           </ViewChip>
+          <ViewChip active={view === "forge"} onClick={() => setView("forge")}>
+            🔥 Schmieden
+          </ViewChip>
         </div>
-        {view === "upgrade" ? <UpgradeInfo onUpgrade={upgradeButton} /> : <SalvageInfo />}
+        {view === "upgrade" ? (
+          <UpgradeInfo onUpgrade={upgradeButton} />
+        ) : view === "salvage" ? (
+          <SalvageInfo />
+        ) : (
+          <ForgeInfo essence={essence} />
+        )}
       </section>
 
-      {view === "upgrade" ? (
+      {view === "forge" ? (
+        <InventoryPanel title="Inventar" emptyText="Dein Inventar ist leer." actions={() => null} />
+      ) : view === "upgrade" ? (
         <InventoryPanel
           title="Inventar verbessern"
           emptyText="Dein Inventar ist leer. Angelegte Items kannst du links verbessern."
@@ -186,6 +200,92 @@ function SalvageInfo() {
           ))}
         </tbody>
       </table>
+    </>
+  );
+}
+
+const FORGE_TARGETS: readonly ForgeTarget[] = ["weapon", ...ARMOR_SLOTS];
+
+const forgeTargetLabel = (target: ForgeTarget) =>
+  target === "weapon" ? `${SLOT_ICONS.weapon1} Waffe` : `${SLOT_ICONS[target]} ${SLOT_LABELS[target]}`;
+
+/** Neues Item auf Heldenlevel: Waffe oder Rüstungsplatz wählen, dann die Seltenheit. */
+function ForgeInfo({ essence }: { essence: number }) {
+  const forge = useGameStore((s) => s.forge);
+  const equipment = useGameStore((s) => s.equipment);
+  const level = useGameStore((s) => getLevel(s.character.totalXp));
+  const { rules } = useSmithRules();
+  const [target, setTarget] = useState<ForgeTarget>("weapon");
+  const [pending, setPending] = useState<Rarity | null>(null);
+  const [forged, setForged] = useState<OwnedItem | null>(null);
+  const cost = (rarity: Rarity) => forgeCost(rarity, level, rules.discount);
+
+  return (
+    <>
+      <p className="text-sm text-muted">
+        Für Essenz schmiedet der Schmied ein neues Item auf deinem Level (Lv. {level}). Bei Waffen entscheidet der Zufall
+        über die Art, bei Rüstungen wählst du den Platz und die Rüstungsklasse ist zufällig.
+        {rules.discount > 0 && (
+          <span className="text-essence"> Die Meisterschmiede verlangt {Math.round(rules.discount * 100)} % weniger Essenz.</span>
+        )}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-1">
+        {FORGE_TARGETS.map((t) => (
+          <ViewChip key={t} active={target === t} onClick={() => setTarget(t)}>
+            {forgeTargetLabel(t)}
+          </ViewChip>
+        ))}
+      </div>
+      <ul className="mt-3 flex flex-col gap-2">
+        {FORGE_RARITIES.map((rarity) => (
+          <li key={rarity} className="flex items-center justify-between gap-2 rounded-md border-2 border-night-700 bg-night-800 px-3 py-1.5">
+            <span className={RARITY_TEXT[rarity]}>{rarityLabel(rarity)}</span>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              disabled={essence < cost(rarity)}
+              onClick={() => setPending(rarity)}
+              title={essence < cost(rarity) ? "Nicht genug Essenz" : undefined}
+              className="rounded-md border-2 border-essence/60 px-2 py-0.5 text-sm text-essence hover:bg-essence/15 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Schmieden <Essence amount={cost(rarity)} className="font-bold" />
+            </motion.button>
+          </li>
+        ))}
+      </ul>
+      {forged && (
+        <>
+          <h3 className="font-pixel mb-2 mt-4 text-lg">Frisch geschmiedet</h3>
+          <ul>
+            <ItemRow owned={forged} stats={getItemStats(forged)} equipment={equipment} tooLow={false}>
+              {null}
+            </ItemRow>
+          </ul>
+        </>
+      )}
+
+      <ConfirmDialog
+        open={pending !== null}
+        title="Item schmieden?"
+        confirmLabel="Schmieden"
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (pending) setForged(forge(target, pending));
+          setPending(null);
+        }}
+      >
+        {pending && (
+          <>
+            <p>
+              <span className={`font-semibold ${RARITY_TEXT[pending]}`}>{rarityLabel(pending)}</span> ·{" "}
+              {forgeTargetLabel(target)} · Lv. {level}
+            </p>
+            <p className="mt-2">
+              Kosten: <Essence amount={cost(pending)} className="font-bold text-essence" /> · danach übrig:{" "}
+              <Essence amount={essence - cost(pending)} />
+            </p>
+          </>
+        )}
+      </ConfirmDialog>
     </>
   );
 }

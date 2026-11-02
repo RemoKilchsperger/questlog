@@ -56,12 +56,22 @@ Jedes Gebäude hat die Stufen 0 bis 3. Stufe 0 heisst „nicht gebaut“ bzw. be
 
 | Stufe | Name | Wirkung |
 |---|---|---|
-| 0 | – | nicht vorhanden: kein Zerlegen, kein Verbessern |
-| 1 | Esse | Zerlegen, Verbessern bis +2 |
+| 0 | – | nicht vorhanden: kein Zerlegen, kein Verbessern, kein Schmieden |
+| 1 | Esse | Zerlegen, Schmieden, Verbessern bis +2 |
 | 2 | Schmiede | heutiger Stand: Verbessern bis +5 |
-| 3 | Meisterschmiede | Verbessern kostet 20 % weniger Essenz, beim Zerlegen 75 % statt 50 % Rückerstattung |
+| 3 | Meisterschmiede | Verbessern und Schmieden kosten 20 % weniger Essenz, beim Zerlegen 75 % statt 50 % Rückerstattung |
 
 Ohne Schmiede fehlt anfangs wenig, weil man zum Zerlegen ohnehin erst seltene Items braucht.
+
+**Schmieden** (`forgeItem` in `forge.ts`): Für Essenz ein neues Item genau auf Heldenlevel (gibt es
+den Typ auf diesem Level nicht, das höchste darunter), ohne Boss-Items.
+
+- Man wählt **Waffe** oder einen **Rüstungsplatz**. Bei Waffen ist die Art zufällig (alle Arten gleich
+  wahrscheinlich, Schilde zählen dazu wie bei der Beute), bei Rüstung die Klasse.
+- Man wählt die **Seltenheit**: selten, episch oder legendär. Gewöhnliche gibt es beim Händler.
+- **Preis:** 5 × die Essenz, die das Item beim Zerlegen bringt, also 5 × Grundwert × (1 + Level / 10).
+  Auf Level 30: selten 40, episch 120, legendär 400. Zum Vergleich: Begleiter bringen auf Level 30
+  etwa 43 Essenz am Tag. Schmieden und gleich wieder zerlegen lohnt sich nie.
 
 ### 📜 Anschlagtafel
 

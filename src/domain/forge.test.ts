@@ -5,6 +5,9 @@ import {
   canUpgrade,
   essenceFor,
   essenceYield,
+  forgeCost,
+  forgeItem,
+  forgePool,
   investedEssence,
   salvageItem,
   upgradeCost,
@@ -124,5 +127,46 @@ describe("Schmied: Verbessern", () => {
     expect(essenceYield(upgraded)).toBe(
       essenceYield(plain) + Math.floor(investedEssence(upgraded) * UPGRADE_REFUND),
     );
+  });
+});
+
+describe("Schmied: Schmieden", () => {
+  it("Waffen auf Heldenlevel, Art zufällig, keine Boss-Items", () => {
+    for (const level of [1, 17, 30, 60]) {
+      const pool = forgePool("weapon", level);
+      expect(pool.every((i) => i.kind === "weapon" && i.requiredLevel === level && !i.bossId)).toBe(true);
+      expect(new Set(pool.map((i) => i.type)).size).toBeGreaterThan(1);
+    }
+  });
+
+  it("Rüstung für den gewählten Platz, Klasse zufällig", () => {
+    const pool = forgePool("chest", 30);
+    expect(pool.every((i) => i.type === "chest" && i.requiredLevel <= 30)).toBe(true);
+    expect(new Set(pool.map((i) => i.armorClass)).size).toBe(3);
+  });
+
+  it("jedes Level findet für jeden Platz ein Item", () => {
+    for (let level = 1; level <= 60; level++) {
+      for (const target of ["weapon", "head", "chest", "arms", "legs", "feet"] as const) {
+        expect(forgePool(target, level).length, `${target} ${level}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("kostet Essenz und legt das Item ins Inventar", () => {
+    const result = forgeItem([], 1000, "legs", "epic", 30, "f");
+    expect(result.essence).toBe(1000 - forgeCost("epic", 30));
+    expect(result.inventory).toEqual([result.item]);
+    expect(result.item.rarity).toBe("epic");
+    expect(getItem(result.item.itemId).type).toBe("legs");
+    expect(() => forgeItem([], forgeCost("rare", 30) - 1, "weapon", "rare", 30, "g")).toThrow("Essenz");
+    expect(() => forgeItem([], 1000, "weapon", "common", 30, "h")).toThrow();
+  });
+
+  it("Schmieden und wieder zerlegen lohnt sich nie", () => {
+    for (const rarity of ["rare", "epic", "legendary"] as const) {
+      const { item } = forgeItem([], 100_000, "weapon", rarity, 30, "z");
+      expect(essenceYield(item, 0.75)).toBeLessThan(forgeCost(rarity, 30, 0.2));
+    }
   });
 });

@@ -1,10 +1,12 @@
-// Schmied: zerlegt Items ab der Seltenheit "selten" in Essenz und verbessert
-// mit Essenz den Hauptwert von Waffen (Angriff) und Rüstungen (Rüstung).
-// Essenz ist bewusst knapp: Verbesserungen kosten ein Vielfaches dessen,
-// was ein einzelnes zerlegtes Item einbringt.
+// Schmied: zerlegt Items ab der Seltenheit "selten" in Essenz, verbessert
+// mit Essenz den Hauptwert von Waffen (Angriff) und Rüstungen (Rüstung) und
+// schmiedet neue Items auf Heldenlevel.
+// Essenz ist bewusst knapp: Verbesserungen und neue Items kosten ein
+// Vielfaches dessen, was ein einzelnes zerlegtes Item einbringt.
 
-import { getItem, MAX_UPGRADE } from "./items";
-import type { EquipSlot, Gear, OwnedItem, Rarity } from "./types";
+import { createItem, getItem, ITEMS, MAX_UPGRADE } from "./items";
+import { pickFromPool } from "./loot";
+import type { ArmorSlot, EquipSlot, Gear, ItemDef, OwnedItem, Rarity } from "./types";
 
 /** Grundkosten einer Verbesserung – wachsen mit Item-Level und Stufe. */
 export const UPGRADE_COST_BASE = 5;
@@ -91,6 +93,54 @@ export function upgradeItem(
       : { ...gear, inventory: gear.inventory.map((i) => (i.uid === uid ? upgraded : i)) },
     essence: essence - cost,
   };
+}
+
+/* ───────────── Schmieden ───────────── */
+
+/** Was man schmieden lässt: eine Waffe (Typ zufällig) oder ein Rüstungsteil für diesen Platz (Klasse zufällig). */
+export type ForgeTarget = "weapon" | ArmorSlot;
+
+/** Gewöhnliche Items gibt es beim Händler – geschmiedet wird erst ab selten. */
+export const FORGE_RARITIES: readonly Rarity[] = ["rare", "epic", "legendary"];
+
+/** Ein neues Item kostet so viel wie diese Anzahl gleicher Items beim Zerlegen einbringt. */
+export const FORGE_COST_FACTOR = 5;
+
+/**
+ * Essenz für ein neues Item dieser Seltenheit auf diesem Level. Beispiel Lv. 30:
+ * selten 40, episch 120, legendär 400.
+ */
+export function forgeCost(rarity: Rarity, level: number, discount = 0): number {
+  return Math.round(essenceFor(rarity, level) * FORGE_COST_FACTOR * (1 - discount));
+}
+
+/** Items, die geschmiedet werden können: genau auf Heldenlevel, keine Boss-Items. */
+export function forgePool(target: ForgeTarget, level: number): ItemDef[] {
+  const fits = ITEMS.filter((i) => !i.bossId && (target === "weapon" ? i.kind === "weapon" : i.type === target));
+  const exact = fits.filter((i) => i.requiredLevel === level);
+  if (exact.length > 0) return exact;
+  // Nicht jedes Level hat jeden Typ – dann das höchste darunter
+  const best = Math.max(...fits.filter((i) => i.requiredLevel <= level).map((i) => i.requiredLevel));
+  return fits.filter((i) => i.requiredLevel === best);
+}
+
+/** Schmiedet ein neues Item ins Inventar. */
+export function forgeItem(
+  inventory: readonly OwnedItem[],
+  essence: number,
+  target: ForgeTarget,
+  rarity: Rarity,
+  level: number,
+  uid: string,
+  discount = 0,
+  rng: () => number = Math.random,
+): { inventory: OwnedItem[]; essence: number; item: OwnedItem } {
+  if (!FORGE_RARITIES.includes(rarity)) throw new Error("Der Schmied schmiedet erst ab der Seltenheit „selten“.");
+  const cost = forgeCost(rarity, level, discount);
+  if (essence < cost) throw new Error("Nicht genug Essenz.");
+  const def = pickFromPool(forgePool(target, level), rng);
+  const item = createItem(def.id, rarity, uid, rng);
+  return { inventory: [...inventory, item], essence: essence - cost, item };
 }
 
 /** Zerlegt ein Item aus dem Inventar (angelegte Items zuerst ablegen). */

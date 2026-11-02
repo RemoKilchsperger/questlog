@@ -23,7 +23,7 @@ import {
 } from "../domain/coopCombat";
 import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, getCreature, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
 import { FRAMES } from "../domain/achievements";
-import { UPGRADE_REFUND } from "../domain/forge";
+import { FORGE_COST_FACTOR, forgeCost, UPGRADE_REFUND } from "../domain/forge";
 import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
 import { MAX_UPGRADE, RARITIES, UPGRADE_STEP } from "../domain/items";
 import { MAX_LEVEL, POINTS_PER_LEVEL, xpForNextLevel } from "../domain/leveling";
@@ -369,8 +369,8 @@ export function HelpScreen() {
               und desto mehr und seltenere Traits.
             </li>
             <li>
-              <b>Ausrüsten:</b> Begleiter tragen Items aus deinem Inventar – passend zu ihrem Level, die Rüstungsklasse
-              spielt keine Rolle. Ihr Gearscore bestimmt die Erfolgschance.
+              <b>Ausrüsten:</b> Begleiter tragen jedes Item aus deinem Inventar – Level und Rüstungsklasse spielen
+              keine Rolle. Ihr Gearscore bestimmt die Erfolgschance.
             </li>
             <li>
               <b>Missionen:</b> Jeden Tag hängen neue Missionen aus. Sie laufen in Echtzeit (30 Min. bis 8 Std.), auch wenn
@@ -408,6 +408,12 @@ export function HelpScreen() {
               <b>Verbessern:</b> Mit Essenz steigerst du den Hauptwert (Angriff oder Rüstung) eines Items um{" "}
               {pct(UPGRADE_STEP)} pro Stufe – mit der Esse bis +{SMITH_RULES[1].maxUpgrade}, ab der Schmiede bis +
               {MAX_UPGRADE}. Jede Stufe kostet mehr als die vorige.
+            </li>
+            <li>
+              <b>Schmieden:</b> Für Essenz bekommst du ein neues Item auf deinem Level – selten, episch oder legendär, du
+              wählst. Bei Waffen ist die Art zufällig, bei Rüstungen wählst du den Platz, die Klasse ist zufällig. Ein neues
+              Item kostet {FORGE_COST_FACTOR}× so viel, wie es beim Zerlegen einbringt (auf Lv. 30: selten{" "}
+              {forgeCost("rare", 30)}, episch {forgeCost("epic", 30)}, legendär {forgeCost("legendary", 30)}).
             </li>
             <li>
               Zerlegst du ein verbessertes Item, bekommst du {pct(UPGRADE_REFUND)} der hineingesteckten Essenz zurück, bei der
