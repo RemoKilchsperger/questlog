@@ -8,6 +8,7 @@ import { ITEM_EFFECTS } from "../domain/itemEffects";
 import { BLESSING_EVERY, BLESSINGS, BOSS_EVERY, TOWER_MIN_LEVEL } from "../domain/tower";
 import { SET_GEAR_BONUS } from "../domain/bossSets";
 import { FOODS, foodEffectText, foodPrice } from "../domain/food";
+import { MAX_CHANCE, RECRUIT_LEVEL_GAP, RECRUITS_PER_DAY, TAVERN_RULES, TRAITS } from "../domain/companions";
 import { HEROIC_AFFIX, HEROIC_BOSS_LOOT_CHANCE, HEROIC_HP, HEROIC_REWARD_FACTOR } from "../domain/heroic";
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE } from "../domain/combat";
 import {
@@ -358,6 +359,43 @@ export function HelpScreen() {
               foodEffectText(f),
               <Gold amount={foodPrice(f, 1)} />,
               `${getBuilding("tavern").tiers[f.tavern].name} (Stufe ${f.tavern})`,
+            ])}
+          />
+          <H>🧑‍🤝‍🧑 Begleiter und Missionen</H>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <b>Anwerben:</b> In der Taverne sitzen jeden Tag {RECRUITS_PER_DAY} Kandidaten mit zufälligem Namen und
+              Traits. Sie starten {RECRUIT_LEVEL_GAP} Level unter dir. Je weiter die Taverne ausgebaut ist, desto mehr Plätze
+              und desto mehr und seltenere Traits.
+            </li>
+            <li>
+              <b>Ausrüsten:</b> Begleiter tragen Items aus deinem Inventar – passend zu ihrem Level, die Rüstungsklasse
+              spielt keine Rolle. Ihr Gearscore bestimmt die Erfolgschance.
+            </li>
+            <li>
+              <b>Missionen:</b> Jeden Tag hängen neue Missionen aus. Sie laufen in Echtzeit (30 Min. bis 8 Std.), auch wenn
+              das Spiel zu ist. Bei gleichem Gearscore wie gefordert ist die Chance 50 %, höchstens {pct(MAX_CHANCE)}. Bei
+              Erfolg gibt es Gold, Essenz, Material und vielleicht ein Item, bei Misserfolg nur etwas EP.
+            </li>
+            <li>Begleiter leveln nur über Missionen und werden höchstens so stark wie du. Sie kämpfen nicht mit.</li>
+          </ul>
+          <Table
+            head={["Taverne", "Plätze", "Traits"]}
+            rows={([1, 2, 3] as const).map((tier) => [
+              `${getBuilding("tavern").tiers[tier].name} (Stufe ${tier})`,
+              String(TAVERN_RULES[tier].slots),
+              TAVERN_RULES[tier].extraTraitChance > 0
+                ? `${TAVERN_RULES[tier].traits}, mit ${pct(TAVERN_RULES[tier].extraTraitChance)} einer mehr`
+                : String(TAVERN_RULES[tier].traits),
+            ])}
+          />
+          <Table
+            head={["Trait", "Wirkung", "Gewöhnlich / selten / episch / legendär"]}
+            rows={TRAITS.map((t) => [
+              `${t.icon} ${t.name}`,
+              t.text,
+              RARITIES.map((r) => `${t.id === "swift" ? "−" : "+"}${Math.round(t.values[r.key] * 100)}`).join(" / ") +
+                (t.id === "lucky" ? " Prozentpunkte" : " %"),
             ])}
           />
           <H>⚒️ Schmied</H>

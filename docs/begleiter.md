@@ -5,9 +5,10 @@ Inventar aus und schickt sie auf Missionen, die in Echtzeit laufen. Ob eine Miss
 Gearscore der Begleiter ab. Jeder Begleiter hat zufällige Eigenschaften (Traits), etwa mehr Beute oder
 mehr EP. Je weiter die Taverne ausgebaut ist, desto mehr und bessere Traits haben die Kandidaten.
 
-Status: **Konzept** (Idee #18 in docs/ideen.md). Geplanter Code: `src/domain/companions.ts`
-(Namen, Traits, Level, Gearscore, Missionen, Beute), Store `gameStore.ts`, Oberfläche in der Taverne
-(`VillageMenus.tsx`). Alle Zahlen sind Richtwerte und werden vor dem Merge durchgerechnet.
+Status: **umgesetzt** (Idee #18 in docs/ideen.md). Code: `src/domain/companions.ts` (Namen, Traits,
+Level, Gearscore, Missionen, Beute), Store `gameStore.ts` (`companions`, `recruitPool`, `missionBoard`,
+`activeMissions`), Oberfläche `CompanionScreen.tsx` in der Taverne (Tabs „Begleiter“ und „Missionen“).
+Die Zahlen sind durchgerechnet (siehe „Ertrag pro Tag“), aber noch nicht im echten Spiel erprobt.
 
 ## Ziele
 
@@ -162,9 +163,22 @@ bringt:
   Held erhält keine EP.
 - **Misserfolg:** 25 % der EP, sonst nichts.
 
-Zum Vergleich: Eine 8-Stunden-Mission mit 3 Begleitern bringt 60 Sieg-Äquivalente, also so viel wie 60
-eigene Siege. Missionen sollen ein Zubrot sein, kein Ersatz. Ob das Verhältnis stimmt, wird in Schritt 4
-durchgerechnet.
+### Ertrag pro Tag
+
+Durchgerechnet mit allen 4 Missionen der Tafel (Festhalle, also Truppstärke 1–3) und 60 % Erfolg,
+Durchschnitt über 2'000 ausgewürfelte Tafeln:
+
+| Heldenlevel | Sieg-Äquivalente | Gold | Essenz | Material | Items | EP aller Begleiter |
+|---|---|---|---|---|---|---|
+| 10 | 56 | 237 | 20 | 28 | 0,75 | 5'900 (ein Level braucht 447) |
+| 30 | 57 | 699 | 43 | 29 | 0,76 | 17'500 (ein Level braucht 2'087) |
+| 55 | 58 | 1'283 | 72 | 29 | 0,77 | 32'100 (ein Level braucht 5'824) |
+
+- Die Tafel bringt also am Tag so viel wie **knapp 60 eigene Siege**. Das ist ein Zubrot, kein Ersatz.
+- Pro Mission steigt ein Begleiter auf Level 30 etwa ein Level. Ein neuer Begleiter (5 Level unter dem
+  Helden) holt also in wenigen Tagen auf.
+- Weil es nur 4 Missionen am Tag gibt, sitzen Begleiter oft herum. Wird das langweilig, kann die Tafel
+  später mehr Missionen bekommen (z. B. abhängig von der Tavernen-Stufe).
 
 ## Spielstand
 
@@ -181,17 +195,13 @@ Begleiter und laufende Missionen auch auf anderen Geräten da.
 
 Im Koop zählen Begleiter nicht. Der Server muss nichts über sie wissen.
 
-## Umsetzung in Schritten
+## Oberfläche
 
-1. `companions.ts`: Namensgenerator, Traits, Anwerben, Level, Gearscore, Missionen, Erfolgschance,
-   Beute. Alles mit Tests und einem übergebenen Zufallsgenerator.
-2. Store: Zustand, Aktionen (anwerben, neu würfeln, entlassen, an- und ablegen, losschicken, abbrechen,
-   abholen) und Migration auf Version 19.
-3. Oberfläche: Bereich „Begleiter“ in der Taverne (Kandidaten, eigene Begleiter, Ausrüstung) und die
-   Missionstafel. Zeichen an der Taverne im Dorf, wenn eine Mission fertig ist.
-4. Zahlen durchrechnen: Erfolgschancen mit typischer Ausrüstung und Beute pro Stunde im Vergleich zum
-   Kämpfen.
-5. Hilfe-Seite und Tavernen-Beschreibung in `village.ts` und docs/dorf-ausbau.md ergänzen.
+Die Taverne hat drei Tabs: **Gerichte**, **Begleiter** (eigene Begleiter mit Ausrüsten und Entlassen,
+Kandidaten des Tages) und **Missionen** (laufende Missionen mit Countdown, Missionstafel). Auf der
+Tafel wählt man die Begleiter per Klick aus. Vorher zeigt jede Mission die Beute und die Erfolgschance
+mit den besten freien Begleitern. Ist eine Mission fertig, schwebt eine 📜 über der Taverne im Dorfbild,
+und der Tab „Missionen“ zeigt die Anzahl.
 
 ## Offen für später
 
