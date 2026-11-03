@@ -11,4 +11,5 @@ dist
 
 # Supabase: gebündelte Spiellogik (npm run functions:build) und CLI-Zwischenstände
 supabase/functions/_shared/coop-server.js
+supabase/functions/_shared/trade-server.js
 supabase/.temp

@@ -4,6 +4,7 @@
 -- saves            privat: der komplette Spielstand (inkl. Quest-Titel) – nur für den Besitzer
 -- public_profiles  öffentlich: nur Spielwerte (Level, Ausrüstung, Sammlung …) – für Profile und Rangliste
 -- coop_battles     Koop-Kämpfe – siehe supabase/migrations/20261006120000_coop_battles.sql
+-- trades           Item-Tausch und Besitzer-Register – siehe supabase/migrations/20261103120000_trades.sql
 --
 -- Stufe A: Der Browser rechnet und speichert, die Datenbank vertraut ihm.
 

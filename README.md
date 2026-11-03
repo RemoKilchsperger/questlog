@@ -58,6 +58,7 @@ src/
   store/             Zustand-Stores (Spielstand, Sound)
   cloud/             Supabase: Konto, Cloud-Spielstand, Rangliste, Profile
   coop/              Koop-Lobby, Protokoll und Server (Edge Function)
+  trade/             Item-Tausch: Protokoll, Server (Edge Function) und Backend
   game/              Phaser-Kampfszenen, Pixel-Grafiken, Musik und Effekte
   assets/creatures/  Gegner-Bilder (PNG 128×128, Blick nach links, Dateiname = Grafik-Schlüssel)
   components/        UI: HUD, Quests, Charakter, Skills, Ausrüstung, Dorf, Kampf, Rangliste, Hilfe
