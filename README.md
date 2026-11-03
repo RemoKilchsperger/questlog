@@ -54,6 +54,7 @@ src/
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse
     achievements.ts  Erfolge, Titel, Avatar-Rahmen
+    trade.ts         Item-Tausch zwischen zwei Spielern: was handelbar ist, Prüfung, Ausführen
   store/             Zustand-Stores (Spielstand, Sound)
   cloud/             Supabase: Konto, Cloud-Spielstand, Rangliste, Profile
   coop/              Koop-Lobby, Protokoll und Server (Edge Function)
