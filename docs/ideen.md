@@ -90,4 +90,4 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 
 | # | Idee | Status |
 |---|---|---|
-| 45 | **Item-Tausch zwischen zwei Spielern** statt Marktplatz: Code wie beim Koop, beide bestätigen, Server prüft gegen die Cloud-Spielstände. Alles handelbar ausser Boss-Items | ✅ Solo-Konto online, docs/item-tausch.md – noch nicht deployt |
+| 45 | **Item-Tausch zwischen zwei Spielern** statt Marktplatz: Code wie beim Koop, beide bestätigen, Server prüft gegen die Cloud-Spielstände. Alles handelbar ausser Boss-Items | ✅ alle vier Etappen, noch nicht deployt – docs/item-tausch.md |
