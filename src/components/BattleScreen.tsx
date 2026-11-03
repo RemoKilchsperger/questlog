@@ -580,6 +580,10 @@ function Battle({ battle }: { battle: BattleState }) {
   }
 
   const active = battle.status === "active";
+  // Nur Tränke im Vorrat (oder schon in diesem Kampf benutzt) – leere Sorten machen die Leiste nur voll
+  const battlePotions = [...DRINK_POTIONS, ...THROW_POTIONS].filter(
+    (p) => (potions[p.id] ?? 0) > 0 || battle.potionsUsed.includes(p.id),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -611,6 +615,15 @@ function Battle({ battle }: { battle: BattleState }) {
             <span className="font-pixel text-gold">
               Runde <span className="num">{battle.round}</span>
             </span>
+            {active && (
+              <button
+                disabled={busy}
+                onClick={() => setConfirmFlee(true)}
+                className="rounded-md border-2 border-night-600 px-2 py-0.5 text-sm text-muted hover:border-muted hover:text-parchment disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                🏃 Fliehen
+              </button>
+            )}
           </div>
         </div>
         {area.dungeon && !battle.towerFloor && <DungeonProgress area={area} />}
@@ -652,28 +665,35 @@ function Battle({ battle }: { battle: BattleState }) {
           {(battle.adds?.length ?? 0) > 0 && <BattleTargets battle={battle} disabled={!active} />}
           <PhaseWarning bossId={battle.creatureId} phase={battle.phase} boss={battle.enemy} />
 
-          <ActionGroup label="Angriff" hint="Danach schlägt der Gegner zurück.">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Hint heading="⚔️ Angreifen" text="Normaler Angriff mit deiner Waffe – danach schlägt der Gegner zurück." className="flex">
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 disabled={busy || !active}
                 onClick={() => act(() => attack())}
-                className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
+                className="font-pixel w-full rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:pointer-events-none disabled:opacity-40"
               >
                 ⚔️ Angreifen <MatchupBadge matchup={matchupAgainst(battle, battle.heroWeapon ? WEAPON_KIND[battle.heroWeapon] : null)} />
               </motion.button>
+            </Hint>
+            <Hint
+              heading="🛡️ Abwehren"
+              text={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(defendEffect(battle.skills).taken * 100)} % Schaden und bekommst ${defendEffect(battle.skills).mana} Mana zusätzlich.`}
+              className="flex"
+            >
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 disabled={busy || !active}
                 onClick={() => act(() => attack(DEFEND))}
-                title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(defendEffect(battle.skills).taken * 100)} % Schaden und bekommst ${defendEffect(battle.skills).mana} Mana zusätzlich.`}
-                className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="font-pixel w-full rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:pointer-events-none disabled:opacity-40"
               >
-                🛡️ Abwehren{" "}
-                <span className="font-sans text-xs">
-                  {Math.round(defendEffect(battle.skills).taken * 100)} % Schaden · +{defendEffect(battle.skills).mana} Mana
-                </span>
+                🛡️ Abwehren
               </motion.button>
+            </Hint>
+          </div>
+
+          <ActionGroup label="Fähigkeiten">
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
               {battle.abilities.map((id) => (
                 <AbilityButton
                   key={id}
@@ -699,11 +719,12 @@ function Battle({ battle }: { battle: BattleState }) {
                 ? `${getPotion(battle.thrown).name} liegt bereit – sie fliegt mit deinem Zug.`
                 : battle.potionUsedThisRound
                   ? "Trank für diese Runde verbraucht – jetzt angreifen."
-                  : "Vor dem Angriff · einer pro Runde (trinken oder werfen), jede Sorte einmal pro Kampf"
+                  : "1 pro Runde · jede Sorte 1× pro Kampf"
             }
           >
             <div className="flex flex-wrap items-center gap-2">
-              {[...DRINK_POTIONS, ...THROW_POTIONS.filter((p) => (potions[p.id] ?? 0) > 0 || battle.potionsUsed.includes(p.id))].map((p, i) => {
+              {battlePotions.length === 0 && <span className="text-xs text-muted">Keine Tränke im Vorrat.</span>}
+              {battlePotions.map((p, i) => {
                 const count = potions[p.id] ?? 0;
                 const used = battle.potionsUsed.includes(p.id);
                 const blocker = count === 0 && !used ? "Keine mehr im Vorrat – Nachschub beim Händler." : potionBlocker(battle, p);
@@ -712,30 +733,32 @@ function Battle({ battle }: { battle: BattleState }) {
                 const thrown = isThrowable(p);
                 const label = thrown ? `${p.name} werfen` : p.name;
                 return [
-                  thrown && i === DRINK_POTIONS.length && (
+                  thrown && (i === 0 || !isThrowable(battlePotions[i - 1])) && (
                     <span key="throw" className="text-xs text-muted">
                       🎯 Werfen:
                     </span>
                   ),
-                  <button
+                  <Hint
                     key={p.id}
-                    disabled={busy || blocker !== null}
-                    onClick={() => act(() => drink(p.id))}
-                    title={blocker ? `${label}: ${effect}\n${blocker}` : `${label}: ${effect}`}
-                    className={`rounded-md border-2 px-2.5 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${battle.thrown === p.id ? "ring-2 ring-gold" : ""}`}
+                    heading={`${p.icon} ${label}`}
+                    text={
+                      <>
+                        {effect}
+                        {blocker && <span className="mt-1 block text-xs text-danger">{blocker}</span>}
+                      </>
+                    }
                   >
-                    {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
-                    {used && <span className="ml-1 text-xs">✓</span>}
-                  </button>,
+                    <button
+                      disabled={busy || blocker !== null}
+                      onClick={() => act(() => drink(p.id))}
+                      className={`rounded-md border-2 px-2.5 py-1 text-sm disabled:pointer-events-none disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${battle.thrown === p.id ? "ring-2 ring-gold" : ""}`}
+                    >
+                      {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
+                      {used && <span className="ml-1 text-xs">✓</span>}
+                    </button>
+                  </Hint>,
                 ];
               })}
-              <button
-                disabled={busy || !active}
-                onClick={() => setConfirmFlee(true)}
-                className="ml-auto rounded-md border-2 border-night-600 px-3 py-1 text-sm text-muted hover:border-muted hover:text-parchment disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                🏃 Fliehen
-              </button>
             </div>
           </ActionGroup>
           <ConfirmDialog
@@ -1177,12 +1200,25 @@ export function BossDrops({ creature }: { creature: CreatureDef }) {
   );
 }
 
+/** So viele Einträge zeigt das Protokoll eingeklappt bzw. aufgeklappt. */
+const LOG_SHORT = 3;
+const LOG_LONG = 12;
+
 function BattleLog({ battle }: { battle: BattleState }) {
-  const entries = [...battle.log].reverse().slice(0, 10);
+  const [expanded, setExpanded] = useState(false);
+  const all = [...battle.log].reverse();
+  const entries = all.slice(0, expanded ? LOG_LONG : LOG_SHORT);
   if (entries.length === 0) return null;
   return (
     <section className="panel p-4">
-      <h3 className="mb-2 text-xs uppercase tracking-wide text-muted">Kampfprotokoll</h3>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h3 className="text-xs uppercase tracking-wide text-muted">Kampfprotokoll</h3>
+        {all.length > LOG_SHORT && (
+          <button onClick={() => setExpanded((v) => !v)} className="text-xs text-muted hover:text-parchment">
+            {expanded ? "▲ weniger" : "▼ mehr"}
+          </button>
+        )}
+      </div>
       <ol className="flex flex-col gap-1 text-sm">
         {entries.map((e, i) => (
           <li key={battle.log.length - i} className={i === 0 ? "" : "text-muted"}>

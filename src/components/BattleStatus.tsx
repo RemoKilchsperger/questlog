@@ -258,20 +258,18 @@ export function StatusSide({ title, chips, children }: { title: string; chips: S
     <div className="flex min-w-0 flex-col gap-1.5 rounded-md bg-night-800/70 p-2">
       <p className="text-xs uppercase tracking-wide text-muted">{title}</p>
       {children}
-      <div className="flex min-h-6 flex-wrap gap-1">
-        {chips.length === 0 ? (
-          <span className="text-xs text-muted/70">Keine Effekte</span>
-        ) : (
-          chips.map((chip) => (
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {chips.map((chip) => (
             <Hint key={chip.key} text={chip.title}>
               <span className={`rounded border px-1.5 py-0.5 text-xs ${TONES[chip.tone]}`}>
                 {chip.icon} {chip.text}
                 {chip.rounds !== undefined && <span className="num opacity-80"> · {chip.rounds}R</span>}
               </span>
             </Hint>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -381,7 +379,10 @@ export function ActionGroup({ label, hint, children }: { label: string; hint?: R
   );
 }
 
-/** Knopf einer Fähigkeit: Symbol, Name, Manakosten – und warum sie gerade nicht geht. */
+/**
+ * Knopf einer Fähigkeit: Symbol, Name, Manakosten – und warum sie gerade nicht geht.
+ * Die Beschreibung steht nur im Tooltip, damit die Leiste ruhig bleibt.
+ */
 export function AbilityButton({
   ability,
   blocker,
@@ -399,37 +400,44 @@ export function AbilityButton({
   // "Abklingzeit: noch 2 Runden." → "2 Runden"
   const cooling = blocker?.match(/^Abklingzeit: noch (.+)\.$/)?.[1] ?? null;
   return (
-    <motion.button
-      whileTap={{ scale: 0.95 }}
-      disabled={disabled || blocker !== null}
-      onClick={onClick}
-      title={blocker ? `${ability.description}\n${blocker}` : ability.description}
-      className="flex items-center gap-2 rounded-md border-2 border-intellect/70 bg-intellect/10 px-2 py-1.5 text-left hover:bg-intellect/20 disabled:cursor-not-allowed disabled:opacity-40"
+    <Hint
+      heading={`${ability.icon} ${ability.name}`}
+      text={
+        <>
+          {ability.description}
+          <span className="mt-1 block text-xs text-intellect">
+            💧 {ability.manaCost} Mana · ⏳ {ability.cooldown} Runden Abklingzeit
+          </span>
+          {blocker && <span className="mt-1 block text-xs text-danger">{blocker}</span>}
+        </>
+      }
+      className="flex"
     >
-      <span className="text-xl" aria-hidden>
-        {ability.icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="font-pixel truncate text-intellect">{ability.name}</span>
-          <MatchupBadge matchup={matchup} />
+      <motion.button
+        whileTap={{ scale: 0.95 }}
+        disabled={disabled || blocker !== null}
+        onClick={onClick}
+        // Gesperrte Knöpfe schlucken die Maus – so zeigt der Hinweis trotzdem, warum es nicht geht
+        className="flex w-full items-center gap-2 rounded-md border-2 border-intellect/70 bg-intellect/10 px-2 py-1.5 text-left hover:bg-intellect/20 disabled:pointer-events-none disabled:opacity-40"
+      >
+        <span className="text-xl" aria-hidden>
+          {ability.icon}
         </span>
-        <span className="block truncate text-xs text-muted">
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="font-pixel truncate text-intellect">{ability.name}</span>
+            <MatchupBadge matchup={matchup} />
+          </span>
           {cooling ? (
-            <span className="text-gold">⏳ wieder bereit in {cooling}</span>
-          ) : blocker?.startsWith("Nicht genug Mana") ? (
-            "zu wenig Mana"
+            <span className="block truncate text-xs text-gold">⏳ bereit in {cooling}</span>
           ) : (
-            ability.description
+            blocker?.startsWith("Nicht genug Mana") && <span className="block truncate text-xs text-danger">zu wenig Mana</span>
           )}
         </span>
-      </span>
-      <span className="flex shrink-0 flex-col items-end text-xs">
-        <span className="num text-intellect">{ability.manaCost} 💧</span>
-        <span className="num text-muted" title="Abklingzeit in Runden">
-          ⏳ {ability.cooldown}
+        <span className="num shrink-0 text-xs text-intellect">
+          {ability.manaCost} 💧
         </span>
-      </span>
-    </motion.button>
+      </motion.button>
+    </Hint>
   );
 }
