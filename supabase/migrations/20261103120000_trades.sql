@@ -115,6 +115,18 @@ create trigger saves_reject_foreign_items
   before insert or update on public.saves
   for each row execute function public.reject_foreign_items();
 
+-- Abgleich im Client: Welche dieser uids gehören laut Register jemand anderem?
+-- Damit räumt ein abgelehnter Spielstand weggetauschte Items weg – auch wenn sie
+-- inzwischen weitergetauscht wurden (dann steht der Spieler nicht mehr als from_id).
+create or replace function public.foreign_item_uids(uids text[]) returns setof text
+language sql stable security definer set search_path = public as $$
+  select o.uid from public.item_owners o
+  where o.uid = any (uids) and o.owner_id <> auth.uid();
+$$;
+
+revoke all on function public.foreign_item_uids(text[]) from public;
+grant execute on function public.foreign_item_uids(text[]) to authenticated;
+
 -- Änderungen live an die Beteiligten schicken (Supabase Realtime, beachtet RLS)
 do $$
 begin

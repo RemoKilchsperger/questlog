@@ -5,8 +5,8 @@ dem heutigen Spielstand (der Browser rechnet, die Cloud speichert nur) kaum gege
 lässt. Code: `src/domain/trade.ts` (Regeln), `src/trade/` (Server-Logik, Protokoll, Backend),
 `supabase/functions/trade` (Edge Function), `supabase/migrations/20261103120000_trades.sql`.
 
-Status: **Etappe 1 bis 3 fertig** auf Branch `feature/item-tausch` (Domain, Server, Datenbank, Oberfläche).
-Offen: Abgleich nach einem abgelehnten Upload (Etappe 4).
+Status: **alle vier Etappen fertig** auf Branch `feature/item-tausch`. Noch nicht online ausprobiert:
+Migration und Edge Function müssen erst eingespielt werden (siehe Deploy).
 
 ## Ablauf
 
@@ -85,9 +85,17 @@ Der Trigger `reject_foreign_items` sucht alle `uid` im ganzen Spielstand (`lax $
 auch angelegte Items und Begleiter-Ausrüstung. Fehler: `QL_FOREIGN_ITEM <uid>`.
 
 Wer offline geht, bevor sein Client den Tausch ausgeführt hat, wird beim nächsten Upload
-abgelehnt. Der Abgleich in `cloudStore.ts` holt dann die abgeschlossenen Tausche, die noch nicht
-in `appliedTrades` stehen, führt sie aus und lädt erneut hoch. Als Rückfall entfernt er Items, die
-laut `item_owners` (`from_id` = ich, `owner_id` ≠ ich) nicht mehr ihm gehören.
+abgelehnt. Dann greift der Abgleich (`src/trade/sync.ts`, `settleTrades`):
+
+1. Abgeschlossene Tausche der letzten 30 Tage holen und die ausführen, die noch nicht in
+   `appliedTrades` stehen.
+2. Alle uids des Spielstands an die RPC `foreign_item_uids` schicken. Sie antwortet mit denen, die
+   laut Register jemand anderem gehören – auch wenn sie inzwischen weitergetauscht wurden. Diese
+   Items entfernt `removeTradedItems` aus Inventar, Ausrüstung und Begleiter-Ausrüstung.
+3. Einmal erneut hochladen. Scheitert auch das, steht ein Hinweis im Cloud-Status.
+
+Derselbe Abgleich läuft nach jedem Login (`settleAfterLogin` in `cloudStore.ts`), damit ein
+Tausch, der auf einem anderen Gerät abgeschlossen wurde, sofort ankommt.
 
 Geprüft mit PGlite: Abschluss trägt Besitzer ein, alter Stand mit weggetauschtem Item wird
 abgelehnt, dasselbe Item in einem zweiten Tausch scheitert, Rücktausch funktioniert.
@@ -137,4 +145,5 @@ Ablauf, nicht für den Besitzerwechsel.
 3. ✅ Oberfläche: Dorf → 🤝 Tausch (`TradeScreen.tsx`), Store `src/trade/tradeStore.ts`, Sperre im
    Spielstand (`tradeLocked`, `appliedTrades`, `applyCompletedTrade` in `gameStore.ts`,
    `src/store/trade.test.ts`), Hinweis „🤝 im Tausch“ in jeder Item-Zeile, Thema 🔁 Tauschen in der Hilfe
-4. Abgleich: offene Tausche beim Login und nach abgelehntem Upload ausführen
+4. ✅ Abgleich: verpasste Tausche beim Login und nach abgelehntem Upload ausführen, weggetauschte
+   Items entfernen (`src/trade/sync.ts`, RPC `foreign_item_uids`, Tests in `src/store/trade.test.ts`)

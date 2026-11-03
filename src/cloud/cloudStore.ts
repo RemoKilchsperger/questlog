@@ -21,6 +21,8 @@ import {
   type PersistedSave,
 } from "./publicProfile";
 import { supabase } from "./supabase";
+import { getTradeBackend } from "../trade/backend";
+import { isForeignItemError, settleTrades } from "../trade/sync";
 
 type SyncStatus = "offline" | "loading" | "saving" | "saved" | "error";
 
@@ -62,6 +64,17 @@ async function applyCloudSave(save: PersistedSave) {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+const FOREIGN_ITEM_TEXT = "Der Spielstand enthält ein Item, das du weggetauscht hast – bitte neu laden.";
+
+/** Nach dem Abgleich beim Login: verpasste Tausche nachholen (z. B. auf einem anderen Gerät abgeschlossen). */
+async function settleAfterLogin(userId: string) {
+  try {
+    await settleTrades(userId, (id) => getTradeBackend("cloud").findDone(id));
+  } catch (e) {
+    console.warn("Tausch-Abgleich:", errorText(e));
+  }
+}
+
 /** Zuletzt hochgeladener Stand – gleiche Daten werden nicht erneut gesendet. */
 let lastUploaded = "";
 let uploadTimer: number | undefined;
@@ -70,7 +83,7 @@ let reconciledFor: string | null = null;
 
 export const useCloudStore = create<CloudState>()((set, get) => {
   /** Lädt Spielstand und öffentliches Profil hoch. */
-  async function upload() {
+  async function upload(retried = false): Promise<void> {
     const session = get().session;
     const save = localStorage.getItem(SAVE_KEY);
     if (!supabase || !session || !save || !get().ready) return;
@@ -79,7 +92,18 @@ export const useCloudStore = create<CloudState>()((set, get) => {
     const userId = session.user.id;
     const now = new Date().toISOString();
     const { error } = await supabase.from("saves").upsert({ user_id: userId, data: JSON.parse(save), updated_at: now });
-    if (error) return set({ status: "error", error: error.message });
+    if (error) {
+      // Abgelehnt, weil ein weggetauschtes Item drinsteckt: Tausche nachholen, nochmal versuchen
+      if (!retried && isForeignItemError(error.message)) {
+        try {
+          await settleTrades(userId, (id) => getTradeBackend("cloud").findDone(id));
+          return upload(true);
+        } catch (e) {
+          return set({ status: "error", error: errorText(e) });
+        }
+      }
+      return set({ status: "error", error: isForeignItemError(error.message) ? FOREIGN_ITEM_TEXT : error.message });
+    }
     const username = get().username;
     if (username) {
       const profile = buildPublicProfile(useGameStore.getState());
@@ -122,12 +146,14 @@ export const useCloudStore = create<CloudState>()((set, get) => {
     }
     if (JSON.stringify(cloudSave.state) === JSON.stringify(localSave?.state)) {
       lastUploaded = localStorage.getItem(SAVE_KEY) ?? "";
-      return set({ ready: true, status: "saved" });
+      set({ ready: true, status: "saved" });
+      return settleAfterLogin(userId);
     }
     if (isFreshSave(localSave)) {
       await applyCloudSave(cloudSave);
       lastUploaded = localStorage.getItem(SAVE_KEY) ?? "";
-      return set({ ready: true, status: "saved" });
+      set({ ready: true, status: "saved" });
+      return settleAfterLogin(userId);
     }
     set({ conflict: cloudSave, status: "saved" });
   }
@@ -207,8 +233,10 @@ export const useCloudStore = create<CloudState>()((set, get) => {
       lastUploaded = "";
       set({ conflict: null, ready: true });
       await upload();
+      const userId = get().session?.user.id;
+      if (userId) await settleAfterLogin(userId);
     },
 
-    uploadNow: upload,
+    uploadNow: () => upload(),
   };
 });

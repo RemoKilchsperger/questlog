@@ -263,6 +263,8 @@ interface GameState {
   appliedTrades: string[];
   /** Führt einen abgeschlossenen Tausch am Inventar aus. false = war schon ausgeführt. */
   applyCompletedTrade: (id: string, give: OwnedItem[], receive: OwnedItem[]) => boolean;
+  /** Entfernt weggetauschte Items (Inventar, Ausrüstung, Begleiter) – gibt zurück, wie viele es waren. */
+  removeTradedItems: (uids: string[]) => number;
   /** Würfelt Kandidaten und Missionstafel neu aus, sobald ein neuer Tag begonnen hat (nur mit Taverne). */
   refreshTavern: () => void;
   recruitCompanion: (id: string) => void;
@@ -1066,6 +1068,31 @@ export const useGameStore = create<GameState>()(
           tradeLocked: [],
         });
         return true;
+      },
+
+      removeTradedItems: (uids) => {
+        const gone = new Set(uids);
+        const { inventory, equipment, companions } = get();
+        let removed = 0;
+        const keep = (item: OwnedItem | null) => {
+          if (item && gone.has(item.uid)) {
+            removed++;
+            return null;
+          }
+          return item;
+        };
+        const stripped = (gear: Equipment) =>
+          Object.fromEntries(Object.entries(gear).map(([slot, item]) => [slot, keep(item)])) as Equipment;
+        const next = {
+          inventory: inventory.filter((item) => keep(item) !== null),
+          equipment: stripped(equipment),
+          companions: companions.map((c) => ({ ...c, equipment: stripped(c.equipment) })),
+        };
+        if (removed > 0) {
+          set(next);
+          EventBus.emit("equipment:changed", getCombatStats(next.equipment));
+        }
+        return removed;
       },
 
       resetGame: () =>
