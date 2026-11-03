@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "functions:build": "esbuild src/coop/edge.ts --bundle --format=esm --platform=neutral --target=es2022 --outfile=supabase/functions/_shared/coop-server.js",
-    "functions:deploy": "npm run functions:build && npx supabase functions deploy coop"
+    "functions:build": "esbuild src/coop/edge.ts --bundle --format=esm --platform=neutral --target=es2022 --outfile=supabase/functions/_shared/coop-server.js && esbuild src/trade/edge.ts --bundle --format=esm --platform=neutral --target=es2022 --outfile=supabase/functions/_shared/trade-server.js",
+    "functions:deploy": "npm run functions:build && npx supabase functions deploy coop && npx supabase functions deploy trade"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

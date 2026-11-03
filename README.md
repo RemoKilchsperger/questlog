@@ -54,12 +54,14 @@ src/
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse
     achievements.ts  Erfolge, Titel, Avatar-Rahmen
+    trade.ts         Item-Tausch zwischen zwei Spielern: was handelbar ist, Prüfung, Ausführen
   store/             Zustand-Stores (Spielstand, Sound)
   cloud/             Supabase: Konto, Cloud-Spielstand, Rangliste, Profile
   coop/              Koop-Lobby, Protokoll und Server (Edge Function)
+  trade/             Item-Tausch: Protokoll, Server (Edge Function) und Backend
   game/              Phaser-Kampfszenen, Pixel-Grafiken, Musik und Effekte
   assets/creatures/  Gegner-Bilder (PNG 128×128, Blick nach links, Dateiname = Grafik-Schlüssel)
-  components/        UI: HUD, Quests, Charakter, Skills, Ausrüstung, Dorf, Kampf, Rangliste, Hilfe
+  components/        UI: HUD, Quests, Charakter, Skills, Ausrüstung, Dorf, Tausch, Kampf, Rangliste, Hilfe
 docs/                Pläne und Notizen (Koop-Kampf, Bild-Prompts für Gegner)
 supabase/            Datenbankschema, Migrationen, Edge Functions
 ```

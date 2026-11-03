@@ -27,6 +27,7 @@ export function ItemRow({
 }) {
   const { def, rarity } = stats;
   const character = useGameStore((s) => s.character);
+  const inTrade = useGameStore((s) => s.tradeLocked.includes(owned.uid));
   const delta = compareToEquipped(owned, stats, equipment, character);
   const bonuses = bonusText(stats.bonuses);
   return (
@@ -44,6 +45,11 @@ export function ItemRow({
         <p className={`truncate font-semibold ${RARITY_TEXT[rarity]}`}>
           {itemName(stats)}
           {rarity !== "common" && <span className="ml-2 text-xs font-normal">{rarityLabel(rarity)}</span>}
+          {inTrade && (
+            <Hint text="Liegt in einem offenen Tausch – bis er vorbei ist, kannst du das Item nicht verkaufen, zerlegen, verbessern oder anlegen.">
+              <span className="ml-2 text-xs font-normal text-gold">🤝 im Tausch</span>
+            </Hint>
+          )}
         </p>
         <div className="flex flex-wrap gap-x-2 text-xs">
           <span className="text-muted">{typeText(def)}</span>

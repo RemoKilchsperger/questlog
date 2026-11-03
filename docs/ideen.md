@@ -85,3 +85,9 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 42 | **Gilden mit Gildenprojekt:** gemeinsam Material für ein Gebäude sammeln | 💡 |
 | 43 | **Komfort:** Ausrüstungs-Sets speichern, Schnellkampf gegen schwache Gegner, Statistik-Seite, Benachrichtigung bei fertiger Mission | 💡 |
 | 44 | **Geführter Einstiegskampf**, der Absichten, Abwehren und Wurftränke zeigt | 💡 |
+
+## Handel (2026-11-03)
+
+| # | Idee | Status |
+|---|---|---|
+| 45 | **Item-Tausch zwischen zwei Spielern** statt Marktplatz: Code wie beim Koop, beide bestätigen, Server prüft gegen die Cloud-Spielstände. Alles handelbar ausser Boss-Items | ✅ alle vier Etappen, noch nicht deployt – docs/item-tausch.md |

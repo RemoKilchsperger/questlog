@@ -13,6 +13,7 @@ import { AlchemistScreen } from "./components/AlchemistScreen";
 import { ShopScreen } from "./components/ShopScreen";
 import { SkillTree } from "./components/SkillTree";
 import { SmithScreen } from "./components/SmithScreen";
+import { TradeScreen } from "./components/TradeScreen";
 import { VillageScreen } from "./components/VillageScreen";
 import { unspentSkillPoints } from "./domain/skills";
 import { useGameStore } from "./store/gameStore";
@@ -21,7 +22,7 @@ import { isLobbyCode } from "./coop/protocol";
 
 type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard" | "help";
 /** Untermenü des Dorfs */
-type VillageView = "build" | "merchant" | "smith" | "alchemist";
+type VillageView = "build" | "merchant" | "smith" | "alchemist" | "trade";
 
 /** Einladungslink zu einer Koop-Lobby: #/koop/<code> – null, wenn die Adresse keiner ist. */
 function readCoopInvite(): string | null {
@@ -150,6 +151,9 @@ export default function App() {
           <SubTabButton active={villageView === "alchemist"} onClick={() => setVillageView("alchemist")}>
             ⚗️ Alchemist{!alchemistBuilt && " 🔒"}
           </SubTabButton>
+          <SubTabButton active={villageView === "trade"} onClick={() => setVillageView("trade")}>
+            🤝 Tausch
+          </SubTabButton>
         </nav>
       )}
 
@@ -165,6 +169,8 @@ export default function App() {
             <ShopScreen />
           ) : villageView === "smith" ? (
             <SmithScreen onOpenVillage={() => setVillageView("build")} />
+          ) : villageView === "trade" ? (
+            <TradeScreen />
           ) : (
             <AlchemistScreen onOpenVillage={() => setVillageView("build")} />
           ))}
