@@ -68,7 +68,7 @@ describe("Rüstungsklassen", () => {
     expect(new Set(armor.map((i) => i.armorClass))).toEqual(new Set(ARMOR_CLASSES.map((c) => c.key)));
   });
 
-  it("Beute bleibt ausgewogen: Rüstung kommt nicht häufiger als vor den Klassen", () => {
+  it("Beute bleibt ausgewogen: halb Rüstung, halb Waffen, alle Klassen gleich oft", () => {
     const pool = lootPool(30);
     let armor = 0;
     const classes = { light: 0, medium: 0, heavy: 0 };
@@ -79,9 +79,9 @@ describe("Rüstungsklassen", () => {
         classes[def.armorClass!]++;
       }
     }
-    // 5 von 16 Typen sind Rüstung
-    expect(armor / 8000).toBeGreaterThan(0.27);
-    expect(armor / 8000).toBeLessThan(0.36);
+    // Erst Rüstung oder Waffe (je 50 %), obwohl es mehr Waffen- als Rüstungstypen gibt
+    expect(armor / 8000).toBeGreaterThan(0.45);
+    expect(armor / 8000).toBeLessThan(0.55);
     for (const n of Object.values(classes)) expect(n / armor).toBeGreaterThan(0.28);
     expect(ITEMS.some((i) => i.armorClass === "light" && i.requiredLevel === 60)).toBe(true);
   });

@@ -15,12 +15,14 @@ export function lootPool(level: number): ItemDef[] {
 }
 
 /**
- * Ein Item aus dem Pool, ausgewogen nach Typ: erst ein Typ (alle gleich
- * wahrscheinlich), bei Rüstung dann eine Klasse, dann ein Item. Sonst kämen
- * Rüstungsteile dreimal so oft wie Waffen, weil es sie in drei Klassen gibt.
+ * Ein Item aus dem Pool, ausgewogen: erst Rüstung oder Waffe (je 50 %), dann
+ * ein Typ, bei Rüstung dann eine Klasse, dann ein Item. Sonst kämen Waffen
+ * mehr als doppelt so oft, weil es 11 Waffen- aber nur 5 Rüstungstypen gibt.
  */
 export function pickFromPool(pool: readonly ItemDef[], rng: () => number): ItemDef {
-  const types = [...new Set(pool.map((i) => i.type))];
+  const kinds = [...new Set(pool.map((i) => i.kind))];
+  const kind = kinds[Math.floor(rng() * kinds.length)];
+  const types = [...new Set(pool.filter((i) => i.kind === kind).map((i) => i.type))];
   const type = types[Math.floor(rng() * types.length)];
   const ofType = pool.filter((i) => i.type === type);
   const classes = [...new Set(ofType.map((i) => i.armorClass))];
