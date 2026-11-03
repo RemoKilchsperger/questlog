@@ -644,6 +644,8 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   const turn = coopBossTurn(battle);
   const fallen = battle.heroes.filter((h) => h.down && !h.revived);
   const bossIntent = coopIntent(battle, myId, Object.fromEntries((row?.members ?? []).map((m) => [m.id, m.name])));
+  // Nur Tränke im Vorrat – leere Sorten machen die Leiste nur voll
+  const myPotions = [...DRINK_POTIONS, ...THROW_POTIONS].filter((p) => (stock[p.id] ?? 0) > 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -696,28 +698,39 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         />
       )}
 
-      <ActionGroup label="Angriff" hint={battle.adds?.length ? "Alle Helden handeln, danach Boss und Begleiter." : "Alle Helden handeln, danach der Boss."}>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Hint
+          heading="⚔️ Angreifen"
+          text={`Normaler Angriff mit deiner Waffe auf dein Ziel. Alle Helden handeln, danach ${battle.adds?.length ? "Boss und Begleiter" : "der Boss"}.`}
+          className="flex"
+        >
           <motion.button
             whileTap={{ scale: 0.95 }}
             disabled={locked}
             onClick={() => send()}
-            className="font-pixel rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:cursor-not-allowed disabled:opacity-40"
+            className="font-pixel w-full rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:pointer-events-none disabled:opacity-40"
           >
             ⚔️ Angreifen <MatchupBadge matchup={against(me.weapon ? WEAPON_KIND[me.weapon] : null)} />
           </motion.button>
+        </Hint>
+        <Hint
+          heading="🛡️ Abwehren"
+          text={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(defendEffect(me.skills).taken * 100)} % Schaden und bekommst ${defendEffect(me.skills).mana} Mana zusätzlich.`}
+          className="flex"
+        >
           <motion.button
             whileTap={{ scale: 0.95 }}
             disabled={locked}
             onClick={defend}
-            title={`Kein Angriff – dafür erleidest du diese Runde nur ${Math.round(defendEffect(me.skills).taken * 100)} % Schaden und bekommst ${defendEffect(me.skills).mana} Mana zusätzlich.`}
-            className="font-pixel rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:cursor-not-allowed disabled:opacity-40"
+            className="font-pixel w-full rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:pointer-events-none disabled:opacity-40"
           >
-            🛡️ Abwehren{" "}
-            <span className="font-sans text-xs">
-              {Math.round(defendEffect(me.skills).taken * 100)} % Schaden · +{defendEffect(me.skills).mana} Mana
-            </span>
+            🛡️ Abwehren
           </motion.button>
+        </Hint>
+      </div>
+
+      <ActionGroup label="Fähigkeiten">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
           {me.abilities.map((id) => (
             <AbilityButton
               key={id}
@@ -729,27 +742,49 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
             />
           ))}
         </div>
+        {me.abilities.length === 0 && (
+          <p className="text-xs text-muted">
+            Fähigkeiten bringen deine Waffen mit – lege eine Waffe an, um ihre Fähigkeiten zu nutzen.
+          </p>
+        )}
       </ActionGroup>
 
-      <ActionGroup label="Trank dazu" hint="Wird vor deinem Angriff getrunken oder auf dein Ziel geworfen – erst wählen, dann angreifen.">
+      <ActionGroup label="Tränke" hint="Erst wählen, dann angreifen · wirkt vor deinem Zug">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          {[...DRINK_POTIONS, ...THROW_POTIONS.filter((p) => (stock[p.id] ?? 0) > 0)].map((p) => {
+          {myPotions.length === 0 && <span className="text-xs text-muted">Keine Tränke im Vorrat.</span>}
+          {myPotions.map((p, i) => {
             const count = stock[p.id] ?? 0;
-            const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, myId);
+            const blocker = coopPotionBlocker(battle, myId, p.id, myId);
             const selected = potion?.potionId === p.id && potion.targetId === myId;
-            const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : `${p.name}: ${potionEffectText(p)}`;
-            return (
-              <button
+            const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : potionEffectText(p);
+            // Wurftränke stehen abgesetzt hinter den Trinktränken
+            const thrown = isThrowable(p);
+            return [
+              thrown && (i === 0 || !isThrowable(myPotions[i - 1])) && (
+                <span key="throw" className="text-xs text-muted">
+                  🎯 Werfen:
+                </span>
+              ),
+              <Hint
                 key={p.id}
-                disabled={locked || blocker !== null}
-                onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: myId })}
-                aria-pressed={selected}
-                title={blocker ? `${effect}\n${blocker}` : effect}
-                className={`rounded-md border-2 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${selected ? "ring-2 ring-gold" : ""}`}
+                heading={`${p.icon} ${thrown ? `${p.name} werfen` : p.name}`}
+                text={
+                  <>
+                    {effect}
+                    {blocker && <span className="mt-1 block text-xs text-danger">{blocker}</span>}
+                  </>
+                }
               >
-                {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
-              </button>
-            );
+                <button
+                  disabled={locked || blocker !== null}
+                  onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: myId })}
+                  aria-pressed={selected}
+                  className={`rounded-md border-2 px-2 py-1 disabled:pointer-events-none disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${selected ? "ring-2 ring-gold" : ""}`}
+                >
+                  {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
+                </button>
+              </Hint>,
+            ];
           })}
         </div>
       </ActionGroup>
@@ -762,16 +797,25 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
                 const blocker = count === 0 ? "Keine mehr im Vorrat." : coopPotionBlocker(battle, myId, p.id, target.id);
                 const selected = potion?.potionId === p.id && potion.targetId === target.id;
                 return (
-                  <button
+                  <Hint
                     key={`${target.id}-${p.id}`}
-                    disabled={locked || blocker !== null}
-                    onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: target.id })}
-                    aria-pressed={selected}
-                    title={blocker ?? `${target.name} steht mit ${potionHeal(p, target.combatant.maxHp)} LP wieder auf`}
-                    className={`rounded-md border-2 border-xp/60 px-2 py-1 text-xp disabled:cursor-not-allowed disabled:opacity-40 ${selected ? "ring-2 ring-gold" : ""}`}
+                    heading={`${p.icon} ${target.name} wiederbeleben`}
+                    text={
+                      <>
+                        {target.name} steht mit {potionHeal(p, target.combatant.maxHp)} LP wieder auf.
+                        {blocker && <span className="mt-1 block text-xs text-danger">{blocker}</span>}
+                      </>
+                    }
                   >
-                    {p.icon} → {target.name}
-                  </button>
+                    <button
+                      disabled={locked || blocker !== null}
+                      onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: target.id })}
+                      aria-pressed={selected}
+                      className={`rounded-md border-2 border-xp/60 px-2 py-1 text-xp disabled:pointer-events-none disabled:opacity-40 ${selected ? "ring-2 ring-gold" : ""}`}
+                    >
+                      {p.icon} → {target.name}
+                    </button>
+                  </Hint>
                 );
               }),
             )}
@@ -1079,19 +1123,35 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
   }
 }
 
+/** So viele Einträge zeigt das Protokoll eingeklappt bzw. aufgeklappt (wie im Solo-Kampf). */
+const LOG_SHORT = 3;
+const LOG_LONG = 30;
+
 function CoopLog({ battle, names }: { battle: CoopBattleState; names: Record<string, string> }) {
   const bossName = getCoopEnemy(battle.bossId).name;
   const allNames = { ...names, ...Object.fromEntries((battle.adds ?? []).map((a) => [a.uid, a.combatant.name])) };
-  const lines = [...battle.log].reverse().slice(0, 30);
+  const [expanded, setExpanded] = useState(false);
+  const all = [...battle.log]
+    .reverse()
+    .map((e) => ({ round: e.round, text: describe(e, allNames, bossName) }))
+    .filter((line) => line.text !== null);
+  const lines = all.slice(0, expanded ? LOG_LONG : LOG_SHORT);
   if (lines.length === 0) return null;
   return (
     <section className="panel p-4">
-      <h3 className="mb-2 text-xs uppercase tracking-wider text-muted">Kampfprotokoll</h3>
-      <ol className="flex max-h-48 flex-col gap-0.5 overflow-y-auto text-sm">
-        {lines.map((e, i) => (
-          <li key={i}>
-            <span className="num mr-2 text-xs text-muted">R{e.round}</span>
-            {describe(e, allNames, bossName)}
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h3 className="text-xs uppercase tracking-wide text-muted">Kampfprotokoll</h3>
+        {all.length > LOG_SHORT && (
+          <button onClick={() => setExpanded((v) => !v)} className="text-xs text-muted hover:text-parchment">
+            {expanded ? "▲ weniger" : "▼ mehr"}
+          </button>
+        )}
+      </div>
+      <ol className="flex max-h-72 flex-col gap-1 overflow-y-auto text-sm">
+        {lines.map((line, i) => (
+          <li key={all.length - i} className={i === 0 ? "" : "text-muted"}>
+            <span className="num mr-2 text-xs text-muted">R{line.round}</span>
+            {line.text}
           </li>
         ))}
       </ol>
