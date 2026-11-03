@@ -5,7 +5,8 @@ dem heutigen Spielstand (der Browser rechnet, die Cloud speichert nur) kaum gege
 lässt. Code: `src/domain/trade.ts` (Regeln), `src/trade/` (Server-Logik, Protokoll, Backend),
 `supabase/functions/trade` (Edge Function), `supabase/migrations/20261103120000_trades.sql`.
 
-Status: **Etappe 1 und 2 fertig** auf Branch `feature/item-tausch` (Domain, Server, Datenbank). Oberfläche folgt.
+Status: **Etappe 1 bis 3 fertig** auf Branch `feature/item-tausch` (Domain, Server, Datenbank, Oberfläche).
+Offen: Abgleich nach einem abgelehnten Upload (Etappe 4).
 
 ## Ablauf
 
@@ -110,9 +111,30 @@ Ablauf, nicht für den Besitzerwechsel.
 1. Migration im SQL Editor ausführen (oder `supabase db push`).
 2. `npm run functions:deploy -- --project-ref <ref>` baut und deployt `coop` und `trade`.
 
+## Oberfläche
+
+- **Dorf → 🤝 Tausch:** ohne Konto bzw. unter Level 10 ein Hinweis. Sonst „Tausch eröffnen“ und ein
+  Feld für den Code des Partners.
+- **Tauschfenster:** Code (klicken kopiert), „Du gibst“ und „… gibt“ mit Bereit/Bestätigt, Status-Zeile,
+  „Bereit“, „Tauschen“, „Abbrechen“. Daneben das Inventar mit „Anbieten“/„Herausnehmen“, Boss-Items
+  mit „🔒 nicht tauschbar“.
+- **Sperre:** Items im eigenen Angebot (`tradeLocked`, nicht gespeichert) lassen sich nicht verkaufen
+  (auch nicht mit „alle gewöhnlichen verkaufen“), zerlegen, verbessern oder anlegen, auch nicht
+  bei Begleitern.
+- **Abschluss:** Sobald der Server „done“ meldet, führt der Client den Tausch aus
+  (`applyCompletedTrade`, jede Tausch-Id nur einmal), lädt sofort hoch und zeigt „Erhalten“ und
+  „Abgegeben“. Beim Öffnen des Tabs holt `resume` verpasste Abschlüsse der letzten 30 Tage nach
+  (`DONE_LOOKBACK_DAYS`; der Spielstand merkt sich die letzten 200 Ids) und nimmt einen offenen
+  Tausch wieder auf.
+- Vor jedem Befehl ausser Bereit und Abbrechen lädt der Client den Spielstand hoch, damit der
+  Server den aktuellen prüft.
+- Ausprobiert im lokalen Modus mit zwei Tabs (eröffnen, beitreten, anbieten, bereit, tauschen).
+
 ## Etappen
 
 1. ✅ Domain: `trade.ts` – handelbar, Prüfung, Angebot, Ausführen (`trade.test.ts`)
 2. ✅ Server: Migration (`trades`, `item_owners`, Trigger), Edge Function, lokales Backend (`src/trade/server.test.ts`)
-3. Oberfläche: Tauschfenster, Code, Bereit/Tauschen, Hilfe-Seite
+3. ✅ Oberfläche: Dorf → 🤝 Tausch (`TradeScreen.tsx`), Store `src/trade/tradeStore.ts`, Sperre im
+   Spielstand (`tradeLocked`, `appliedTrades`, `applyCompletedTrade` in `gameStore.ts`,
+   `src/store/trade.test.ts`), Hinweis „🤝 im Tausch“ in jeder Item-Zeile, Thema 🔁 Tauschen in der Hilfe
 4. Abgleich: offene Tausche beim Login und nach abgelehntem Upload ausführen

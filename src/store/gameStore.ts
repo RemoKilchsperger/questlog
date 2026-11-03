@@ -142,6 +142,7 @@ import {
   type MaterialStock,
   type Village,
 } from "../domain/village";
+import { applyTrade } from "../domain/trade";
 import type { Character, EquipSlot, Equipment, Loot, OwnedItem, Rarity, StatKey } from "../domain/types";
 import { EventBus } from "../game/EventBus";
 
@@ -254,6 +255,14 @@ interface GameState {
   missionBoard: MissionBoard;
   /** Laufende Missionen – das Ergebnis steht schon fest */
   activeMissions: ActiveMission[];
+
+  /** Item-Tausch: uids im eigenen Angebot eines offenen Tauschs – nicht verkaufen, zerlegen, verbessern, anlegen (nicht gespeichert) */
+  tradeLocked: string[];
+  setTradeLocked: (uids: string[]) => void;
+  /** Schon ausgeführte Tausche (Ids) – keiner wird doppelt ausgeführt */
+  appliedTrades: string[];
+  /** Führt einen abgeschlossenen Tausch am Inventar aus. false = war schon ausgeführt. */
+  applyCompletedTrade: (id: string, give: OwnedItem[], receive: OwnedItem[]) => boolean;
   /** Würfelt Kandidaten und Missionstafel neu aus, sobald ein neuer Tag begonnen hat (nur mit Taverne). */
   refreshTavern: () => void;
   recruitCompanion: (id: string) => void;
@@ -470,6 +479,7 @@ type SaveState = Pick<
   | "recruitPool"
   | "missionBoard"
   | "activeMissions"
+  | "appliedTrades"
 >;
 
 const createCharacter = (): Character => ({
@@ -548,6 +558,7 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     recruitPool: saved.recruitPool ?? EMPTY_RECRUIT_POOL,
     missionBoard: saved.missionBoard ?? EMPTY_MISSION_BOARD,
     activeMissions: saved.activeMissions ?? [],
+    appliedTrades: saved.appliedTrades ?? [],
   };
 }
 
@@ -784,6 +795,11 @@ export const useGameStore = create<GameState>()(
         return { levelBefore, levelAfter };
       };
 
+      /** Items im eigenen Angebot eines offenen Tauschs bleiben, wie sie sind – sonst passt das Angebot nicht mehr. */
+      const assertNotInTrade = (uid: string) => {
+        if (get().tradeLocked.includes(uid)) throw new Error("Das Item liegt in einem offenen Tausch.");
+      };
+
       /** Ändert die Ausrüstung eines Begleiters – nicht, solange er unterwegs ist. */
       const changeCompanionGear = (
         companionId: string,
@@ -924,6 +940,8 @@ export const useGameStore = create<GameState>()(
       recruitPool: EMPTY_RECRUIT_POOL,
       missionBoard: EMPTY_MISSION_BOARD,
       activeMissions: [],
+      tradeLocked: [],
+      appliedTrades: [],
 
       setTitle: (achievementId) =>
         set((s) => {
@@ -1035,6 +1053,21 @@ export const useGameStore = create<GameState>()(
 
       dismissReward: () => set({ lastReward: null }),
 
+      setTradeLocked: (uids) => set({ tradeLocked: uids }),
+
+      applyCompletedTrade: (id, give, receive) => {
+        const { inventory, appliedTrades } = get();
+        if (appliedTrades.includes(id)) return false;
+        // Fehlt ein abgegebenes Item schon (z. B. vom Abgleich entfernt), geht nur weg, was noch da ist
+        const present = give.filter((g) => inventory.some((i) => i.uid === g.uid));
+        set({
+          inventory: applyTrade(inventory, present, receive.map(ensureItemExtras)),
+          appliedTrades: [...appliedTrades, id].slice(-200),
+          tradeLocked: [],
+        });
+        return true;
+      },
+
       resetGame: () =>
         set({
           character: createCharacter(),
@@ -1069,10 +1102,13 @@ export const useGameStore = create<GameState>()(
           recruitPool: EMPTY_RECRUIT_POOL,
           missionBoard: EMPTY_MISSION_BOARD,
           activeMissions: [],
+          tradeLocked: [],
+          appliedTrades: [],
         }),
 
       equip: (uid, slot) =>
         attempt(() => {
+          assertNotInTrade(uid);
           const { inventory, equipment, character } = get();
           const gear = equipItem({ inventory, equipment }, uid, getLevel(character.totalXp), slot);
           set(gear);
@@ -1129,6 +1165,7 @@ export const useGameStore = create<GameState>()(
 
       sell: (uid) =>
         attempt(() => {
+          assertNotInTrade(uid);
           const { inventory, equipment, character, village } = get();
           const item = findItem(uid);
           const result = sellItem({ inventory, equipment }, character.gold, uid, MERCHANT_RULES[village.merchant].sellBonus);
@@ -1138,15 +1175,19 @@ export const useGameStore = create<GameState>()(
 
       sellCommon: () =>
         attempt(() => {
-          const { inventory, equipment, character, village } = get();
-          const result = sellCommonItems({ inventory, equipment }, character.gold, MERCHANT_RULES[village.merchant].sellBonus);
-          set({ inventory: result.gear.inventory, character: { ...character, gold: result.gold } });
+          const { inventory, equipment, character, village, tradeLocked } = get();
+          // Items im offenen Tausch bleiben liegen
+          const locked = inventory.filter((i) => tradeLocked.includes(i.uid));
+          const free = inventory.filter((i) => !tradeLocked.includes(i.uid));
+          const result = sellCommonItems({ inventory: free, equipment }, character.gold, MERCHANT_RULES[village.merchant].sellBonus);
+          set({ inventory: [...result.gear.inventory, ...locked], character: { ...character, gold: result.gold } });
           // Jedes Item zählt einzeln für Verkaufs-Aufträge
           for (const item of result.sold) tradeEvent("sell", item);
         }),
 
       salvage: (uid) =>
         attempt(() => {
+          assertNotInTrade(uid);
           const { inventory, equipment, character, village } = get();
           const smith = SMITH_RULES[village.smith];
           if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
@@ -1158,6 +1199,7 @@ export const useGameStore = create<GameState>()(
 
       upgrade: (uid) =>
         attempt(() => {
+          assertNotInTrade(uid);
           const { inventory, equipment, character, village } = get();
           const smith = SMITH_RULES[village.smith];
           if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
@@ -1251,7 +1293,10 @@ export const useGameStore = create<GameState>()(
         }),
 
       companionEquip: (companionId, uid, slot) =>
-        attempt(() => changeCompanionGear(companionId, (c, inv) => equipCompanion(c, inv, uid, slot))),
+        attempt(() => {
+          assertNotInTrade(uid);
+          changeCompanionGear(companionId, (c, inv) => equipCompanion(c, inv, uid, slot));
+        }),
       companionUnequip: (companionId, slot) =>
         attempt(() => changeCompanionGear(companionId, (c, inv) => unequipCompanion(c, inv, slot))),
       companionEquipBest: (companionId) => attempt(() => changeCompanionGear(companionId, equipBest)),
@@ -1736,6 +1781,7 @@ export const useGameStore = create<GameState>()(
         recruitPool: s.recruitPool,
         missionBoard: s.missionBoard,
         activeMissions: s.activeMissions,
+        appliedTrades: s.appliedTrades,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),

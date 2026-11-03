@@ -20,9 +20,17 @@ export interface TradeBackend {
   subscribe(id: string, onRow: (row: TradeRow) => void): () => void;
   /** Offener Tausch dieses Spielers (zum Wiederverbinden). */
   findOpen(userId: string): Promise<TradeRow | null>;
-  /** Abgeschlossene Tausche dieses Spielers – zum Ausführen am Spielstand (Etappe 4). */
+  /** Abgeschlossene Tausche dieses Spielers der letzten `DONE_LOOKBACK_DAYS` Tage – zum Ausführen am Spielstand. */
   findDone(userId: string): Promise<TradeRow[]>;
 }
+
+/**
+ * So weit zurück sucht der Abgleich abgeschlossene Tausche. Der Spielstand merkt sich die letzten
+ * 200 ausgeführten (`appliedTrades`) – mehr als 5 pro Tag × 30 Tage, also nie doppelt.
+ */
+export const DONE_LOOKBACK_DAYS = 30;
+
+const doneSince = () => new Date(Date.now() - DONE_LOOKBACK_DAYS * 24 * 3600_000).toISOString();
 
 /** Welche Verbindung gerade möglich ist – null = keine (kein Login, kein Dev-Server). */
 export function availableTradeBackend(loggedIn: boolean): TradeBackend["kind"] | null {
@@ -89,6 +97,7 @@ const cloudBackend: TradeBackend = {
       .select("*")
       .contains("player_ids", [userId])
       .eq("status", "done")
+      .gte("completed_at", doneSince())
       .order("completed_at", { ascending: true });
     if (error) throw new Error(error.message);
     return (data as TradeRow[] | null) ?? [];
@@ -166,7 +175,7 @@ const localBackend: TradeBackend = {
 
   async findDone(userId) {
     return Object.values(readLocal())
-      .filter((r) => r.player_ids.includes(userId) && r.status === "done")
+      .filter((r) => r.player_ids.includes(userId) && r.status === "done" && (r.completed_at ?? "") >= doneSince())
       .sort((a, b) => (a.completed_at ?? "").localeCompare(b.completed_at ?? ""));
   },
 };

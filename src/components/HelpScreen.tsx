@@ -58,6 +58,7 @@ import {
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
 import { earnedSkillPoints, SKILL_PATHS, TIER_POINTS } from "../domain/skills";
 import { formatNumber, Gold } from "./Gold";
+import { TRADE_DAILY_LIMIT, TRADE_MAX_ITEMS, TRADE_MIN_LEVEL } from "../domain/trade";
 
 /** 0.05 → "5 %" */
 const pct = (value: number) => `${formatNumber(Math.round(value * 1000) / 10)} %`;
@@ -75,6 +76,7 @@ const TOPICS = [
   "battle",
   "dungeons",
   "coop",
+  "trade",
   "achievements",
 ] as const;
 
@@ -660,6 +662,24 @@ export function HelpScreen() {
             </li>
             <li>Vor Zwischen- und Endboss entscheidet der Host: weiter oder mit der Truhe aussteigen – aussteigen kann er jederzeit.</li>
             <li>Jeder hat seine eigene Truhe mit der Beute wie solo. Fällt die ganze Gruppe, sind alle Truhen weg.</li>
+          </ul>
+        </Topic>
+
+        <Topic id="trade" title="🔁 Tauschen">
+          <p>
+            Im Dorf unter „Tausch“ tauschst du Items direkt mit einem anderen Spieler. Dafür brauchst du ein Cloud-Konto und
+            Level {TRADE_MIN_LEVEL}. Wer den Tausch eröffnet, bekommt einen Code, der andere tritt damit bei.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Jeder legt bis zu {TRADE_MAX_ITEMS} Items aus seinem Inventar hinein. Angelegte Items musst du erst ablegen.</li>
+            <li>Tauschbar sind alle Items, auch Beute aus Quests und Aufträgen und verbesserte Items. Boss-Items nicht.</li>
+            <li>
+              Beide klicken „Bereit“, dann „Tauschen“. Ändert jemand sein Angebot, ist niemand mehr bereit – so kann keiner
+              im letzten Moment etwas austauschen.
+            </li>
+            <li>Was im Angebot liegt, ist gesperrt: nicht verkaufen, zerlegen, verbessern oder anlegen.</li>
+            <li>Höchstens {TRADE_DAILY_LIMIT} Tausche in 24 Stunden und nur ein offener Tausch gleichzeitig.</li>
+            <li>Gold lässt sich nicht tauschen.</li>
           </ul>
         </Topic>
 

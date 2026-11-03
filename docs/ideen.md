@@ -90,4 +90,4 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 
 | # | Idee | Status |
 |---|---|---|
-| 45 | **Item-Tausch zwischen zwei Spielern** statt Marktplatz: Code wie beim Koop, beide bestätigen, Server prüft gegen die Cloud-Spielstände. Alles handelbar ausser Boss-Items | 🚧 Etappe 1 und 2 (Domain, Server) – docs/item-tausch.md |
+| 45 | **Item-Tausch zwischen zwei Spielern** statt Marktplatz: Code wie beim Koop, beide bestätigen, Server prüft gegen die Cloud-Spielstände. Alles handelbar ausser Boss-Items | 🚧 Etappe 1–3 (Domain, Server, Oberfläche) – docs/item-tausch.md |
