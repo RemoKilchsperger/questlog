@@ -1,3 +1,5 @@
+import { GameIcon } from "./GameIcon";
+
 const numberFormat = new Intl.NumberFormat("de-CH");
 
 /** 1250 → "1’250" */
@@ -13,7 +15,7 @@ export function Gold({ amount, sign = false, className = "" }: { amount: number;
   return (
     <span className={`font-sans whitespace-nowrap tabular-nums ${className}`}>
       {sign && amount >= 0 ? "+" : ""}
-      {formatNumber(amount)} <span aria-label="Gold">🪙</span>
+      {formatNumber(amount)} <span role="img" aria-label="Gold"><GameIcon icon="🪙" /></span>
     </span>
   );
 }
@@ -23,7 +25,7 @@ export function Essence({ amount, sign = false, className = "" }: { amount: numb
   return (
     <span className={`font-sans whitespace-nowrap tabular-nums ${className}`}>
       {sign && amount >= 0 ? "+" : ""}
-      {formatNumber(amount)} <span aria-label="Essenz">💠</span>
+      {formatNumber(amount)} <span role="img" aria-label="Essenz"><GameIcon icon="💠" /></span>
     </span>
   );
 }

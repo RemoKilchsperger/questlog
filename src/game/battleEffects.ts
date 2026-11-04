@@ -3,6 +3,7 @@
 // Die Fähigkeiten in BattleScene.ts setzen sich aus diesen Bausteinen zusammen.
 
 import Phaser from "phaser";
+import { iconTexture } from "./phaserIcons";
 
 export interface Point {
   x: number;
@@ -519,7 +520,8 @@ export const THROW_COLORS: Record<string, number> = {
 
 /** Ein Wurftrank fliegt im Bogen und zerplatzt beim Ziel in einer Wolke seiner Farbe. */
 export function flask(scene: Phaser.Scene, from: Point, to: Point, icon: string, color: number, onArrive: () => void) {
-  const bottle = scene.add.text(0, 0, icon, { fontSize: "30px" }).setOrigin(0.5);
+  const key = iconTexture(scene, icon);
+  const bottle = key ? scene.add.image(0, 0, key).setScale(2) : scene.add.text(0, 0, icon, { fontSize: "30px" }).setOrigin(0.5);
   projectile(scene, from, to, bottle, {
     duration: 420,
     spin: 540,

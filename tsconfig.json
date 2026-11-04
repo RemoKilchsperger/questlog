@@ -5,6 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
+    "jsxImportSource": "questlog-jsx",
+    "paths": { "questlog-jsx/*": ["./src/jsx/*"] },
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

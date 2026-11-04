@@ -22,6 +22,7 @@ import { CreatureSprite } from "./CreatureSprite";
 import { Gold } from "./Gold";
 import { Hint } from "./HoverCard";
 import { useNow } from "./useNow";
+import { GameIcon } from "./GameIcon";
 
 /** Quest-Tab: Tages- und Wochenaufträge sowie laufende Quests links, das Questbuch rechts. */
 export function QuestScreen() {
@@ -213,7 +214,7 @@ function QuestBook() {
                 a.id === areaId ? "border-gold text-gold" : "border-night-700 text-muted hover:text-parchment"
               } ${reachable ? "" : "opacity-50"}`}
             >
-              {reachable ? (finished ? "✓ " : a.dungeon ? "🏰 " : "") : "🔒 "}
+              {reachable ? (finished ? "✓ " : a.dungeon ? "🏰 " : "") : <GameIcon icon="🔒" className="mr-1" />}
               {a.name}
             </button>
           );
@@ -222,7 +223,7 @@ function QuestBook() {
       <p className="mb-2 text-sm text-muted">
         {area.description} <span className="text-xs">Lv. {area.minLevel === area.maxLevel ? area.minLevel : `${area.minLevel}–${area.maxLevel}`}</span>
       </p>
-      {!open && <p className="mb-2 text-sm text-danger">🔒 Ab Level {area.minLevel} – bis dahin kannst du die Quests nur ansehen.</p>}
+      {!open && <p className="mb-2 text-sm text-danger"><GameIcon icon="🔒" /> Ab Level {area.minLevel} – bis dahin kannst du die Quests nur ansehen.</p>}
       <ul className="flex flex-col gap-2">
         {quests.map((q) => (
           <QuestRow

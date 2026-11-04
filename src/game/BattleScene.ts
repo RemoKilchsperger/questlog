@@ -12,6 +12,7 @@ import { getCreature } from "../domain/creatures";
 import { getPotion } from "../domain/potions";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
+import { iconText } from "./phaserIcons";
 import { creatureImage, lastOpaqueRow } from "./creatureImages";
 import { getCreatureSprite } from "./creatureSprites";
 import { EventBus } from "./EventBus";
@@ -362,15 +363,15 @@ export class BattleScene extends Phaser.Scene {
   ): Fighter {
     const x = parts.body.x;
     const barY = small ? ADD_BAR_Y : BAR_Y;
-    this.add
-      .text(x, barY - 28, small ? name : `${name} · Lv. ${level}`, {
-        fontFamily: NUMBER_FONT,
-        fontSize: small ? "13px" : "17px",
-        fontStyle: "bold",
-        color: "#efe6d2",
-      })
-      .setOrigin(0.5, 0)
-      .setStroke("#0e0b16", 4);
+    iconText(
+      this,
+      x,
+      barY - 28,
+      small ? name : `${name} · Lv. ${level}`,
+      { fontFamily: NUMBER_FONT, fontSize: small ? "13px" : "17px", fontStyle: "bold", color: "#efe6d2" },
+      { color: "#0e0b16", width: 4 },
+      0,
+    );
     const bar = this.add.graphics();
     const hpText = this.add
       .text(x, barY + 14, "", { fontFamily: NUMBER_FONT, fontSize: small ? "11px" : "14px", fontStyle: "bold", color: "#efe6d2" })
@@ -2108,14 +2109,14 @@ export class BattleScene extends Phaser.Scene {
     sfx.roar();
     this.cameras.main.shake(350, 0.01);
     fx.flash(this, phase?.enrage ? 0xc23a3a : 0xf4c95d, 0.25, 250);
-    const banner = this.add
-      .text(SCENE_WIDTH / 2, 120, `${phase?.icon ?? ""} ${phase?.name ?? "Zweite Phase"}`.trim(), {
-        fontFamily: FONT,
-        fontSize: "40px",
-        color: phase?.enrage ? "#f0776a" : "#f4c95d",
-      })
-      .setOrigin(0.5)
-      .setStroke("#0e0b16", 7)
+    const banner = iconText(
+      this,
+      SCENE_WIDTH / 2,
+      120,
+      `${phase?.icon ?? ""} ${phase?.name ?? "Zweite Phase"}`.trim(),
+      { fontFamily: FONT, fontSize: "40px", color: phase?.enrage ? "#f0776a" : "#f4c95d" },
+      { color: "#0e0b16", width: 7 },
+    )
       .setScale(0.3)
       .setDepth(6);
     this.tweens.chain({
@@ -2206,10 +2207,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private floatText(x: number, y: number, text: string, color: string, size: number) {
-    const t = this.add
-      .text(x, y, text, { fontFamily: NUMBER_FONT, fontSize: `${size}px`, fontStyle: "bold", color })
-      .setOrigin(0.5)
-      .setStroke("#0e0b16", 5);
+    const t = iconText(this, x, y, text, { fontFamily: NUMBER_FONT, fontSize: `${size}px`, fontStyle: "bold", color }, { color: "#0e0b16", width: 5 });
     this.tweens.add({ targets: t, y: y - 40, alpha: 0, duration: 900, ease: "Cubic.easeOut", onComplete: () => t.destroy() });
   }
 

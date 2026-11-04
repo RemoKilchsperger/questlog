@@ -28,6 +28,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { Gold } from "./Gold";
 import { HoverCard } from "./HoverCard";
 import { ItemIcon } from "./ItemIcon";
+import { GameIcon } from "./GameIcon";
 
 /** Farbe pro Pfad – Rahmen, Linien und Ränge. */
 const PATH_COLOR: Record<SkillPath, { text: string; border: string; bg: string; stroke: string }> = {
@@ -319,7 +320,9 @@ export function SkillReset() {
         className="rounded-md border-2 border-danger/70 bg-danger/10 px-3 py-2 text-sm text-danger hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {training === 0 ? (
-          "🔒 Zurücksetzen"
+          <>
+            <GameIcon icon="🔒" /> Zurücksetzen
+          </>
         ) : (
           <>
             ↺ Zurücksetzen {cost > 0 ? <Gold amount={cost} className="font-bold" /> : "(gratis)"}

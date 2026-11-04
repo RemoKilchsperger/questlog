@@ -71,6 +71,7 @@ import { defendEffect } from "../domain/combat";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
+import { GameIcon } from "./GameIcon";
 
 // Phaser ist gross – erst laden, wenn tatsächlich gekämpft wird.
 const PhaserCoopBattle = lazy(() => import("../game/PhaserCoopBattle"));
@@ -249,7 +250,7 @@ export function CoopDungeonList({ heroLevel }: { heroLevel: number }) {
                 <CreatureSprite sprite={boss.sprite} size={56} />
                 <div className="min-w-0 flex-1">
                   <p className="font-pixel text-lg">
-                    {tooLow ? "🔒" : "🏰"} {dungeon.name}{" "}
+                    <GameIcon icon={tooLow ? "🔒" : "🏰"} /> {dungeon.name}{" "}
                     <span className="font-sans text-xs text-muted">ab Lv. {dungeon.minLevel}</span>
                   </p>
                   <p className="text-xs text-muted">

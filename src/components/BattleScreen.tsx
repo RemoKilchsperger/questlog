@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { GameIcon } from "./GameIcon";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { getAbility, MANA_REGEN } from "../domain/abilities";
 import { getBossAbilities, getBossAbilityById, roundsUntilBossAbility, upcomingBossAbility } from "../domain/bossAbilities";
@@ -181,7 +182,7 @@ function AreaSelect() {
                         a.id === areaId ? "border-gold text-gold" : "border-night-700 text-muted hover:text-parchment"
                       }`}
                     >
-                      {open ? "" : "🔒 "}
+                      {!open && <GameIcon icon="🔒" className="mr-1" />}
                       {a.name} <span className="text-xs opacity-70">Lv. {a.minLevel}–{a.maxLevel}</span>
                     </button>
                   );
@@ -300,7 +301,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-pixel text-lg">
-            {open ? "🏰" : "🔒"} {dungeon.name}{" "}
+            <GameIcon icon={open ? "🏰" : "🔒"} /> {dungeon.name}{" "}
             <span className="font-sans text-xs text-muted">ab Lv. {dungeon.minLevel}</span>
           </p>
           <p className="text-xs text-muted">{dungeon.description}</p>
@@ -536,7 +537,7 @@ function Value({ label, value, icon, accent }: { label: string; value: number | 
   return (
     <div className="rounded-md bg-night-800 p-2">
       <div className={`font-sans text-lg font-bold tabular-nums ${accent}`}>
-        <span aria-hidden>{icon}</span> {value}
+        <GameIcon icon={icon} /> {value}
       </div>
       <div className="text-xs text-muted">{label}</div>
     </div>

@@ -24,6 +24,7 @@ import { ItemIcon } from "./ItemIcon";
 import { ItemRow } from "./ItemRow";
 import { itemName, mainStatText, RARITY_TEXT, rarityLabel } from "./itemUi";
 import { Hint } from "./HoverCard";
+import { GameIcon } from "./GameIcon";
 
 type View = "upgrade" | "salvage" | "forge";
 
@@ -296,7 +297,7 @@ function UpgradeButton({ owned, essence, onClick }: { owned: OwnedItem; essence:
   if (!canUpgrade(owned, rules.maxUpgrade)) {
     return (
       <Hint text="Für höhere Stufen musst du die Schmiede im Dorf ausbauen.">
-        <span className="text-xs text-muted">🔒 +{(owned.upgrade ?? 0) + 1}</span>
+        <span className="text-xs text-muted"><GameIcon icon="🔒" /> +{(owned.upgrade ?? 0) + 1}</span>
       </Hint>
     );
   }
