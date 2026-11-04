@@ -1,4 +1,4 @@
-import { rollWeaponAbilities, type AbilityId } from "./abilities";
+import { isAbilityId, rollWeaponAbilities, type AbilityId } from "./abilities";
 import { effectOf, rollItemEffect, rollsEffect } from "./itemEffects";
 import { ARMOR_CLASSES, BOSS_ARMOR_CLASS, getArmorClass, METAL_PREFIXES } from "./armorClasses";
 import { MAX_LEVEL } from "./leveling";
@@ -475,7 +475,7 @@ export function createItem(
 export function weaponAbilities(owned: OwnedItem): AbilityId[] {
   const def = getItem(owned.itemId);
   if (def.kind !== "weapon") return [];
-  return owned.abilities ?? rollWeaponAbilities(owned.uid, def.type as WeaponType);
+  return knownAbilities(owned) ?? rollWeaponAbilities(owned.uid, def.type as WeaponType);
 }
 
 /** Höchste Verbesserungsstufe beim Schmied. */
@@ -534,6 +534,15 @@ export function ensureItemExtras(item: OwnedItem): OwnedItem {
   return {
     ...item,
     ...(!item.effect && rollsEffect(def, item.rarity) && { effect: rollItemEffect(item.uid, def.kind) }),
-    ...(!item.abilities && def.kind === "weapon" && { abilities: rollWeaponAbilities(item.uid, def.type as WeaponType) }),
+    ...(!knownAbilities(item) && def.kind === "weapon" && { abilities: rollWeaponAbilities(item.uid, def.type as WeaponType) }),
   };
+}
+
+/**
+ * Gespeicherte Fähigkeiten der Waffe – oder undefined, wenn keine da sind oder eine
+ * davon nicht mehr existiert (alter Spielstand nach einem Umbau). Dann gilt der
+ * normal gewürfelte Satz, statt dass der Kampf-Tab an der unbekannten Id abstürzt.
+ */
+function knownAbilities(owned: OwnedItem): AbilityId[] | undefined {
+  return owned.abilities?.every(isAbilityId) ? owned.abilities : undefined;
 }

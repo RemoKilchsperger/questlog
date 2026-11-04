@@ -4,13 +4,14 @@
   --font-pixel: "Pixelify Sans", ui-monospace, monospace;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  --color-night-950: #0e0b16;
-  --color-night-900: #16121f;
-  --color-night-800: #211b2e;
-  --color-night-700: #2e2640;
-  --color-night-600: #40355a;
+  /* Warme Dunkeltöne wie eine Taverne bei Kerzenlicht (die Namen sind von früher geblieben) */
+  --color-night-950: #110d0a;
+  --color-night-900: #1c1612;
+  --color-night-800: #271f19;
+  --color-night-700: #3b2e24;
+  --color-night-600: #524031;
   --color-parchment: #efe6d2;
-  --color-muted: #a49cb8;
+  --color-muted: #b0a38f;
   --color-gold: #f4c95d;
   --color-xp: #7dd3a8;
   --color-danger: #f0776a;
@@ -29,8 +30,23 @@
 @layer base {
   body {
     @apply bg-night-950 text-parchment font-sans antialiased;
-    background-image: radial-gradient(circle at 50% -20%, #2a1f45 0%, transparent 60%);
     min-height: 100dvh;
+  }
+  /* Seitenhintergrund als feste Ebene hinter allem (eigene Ebene, damit nur die Kachel
+     pixelig skaliert wird und er auch auf dem Handy stillsteht). Von oben nach unten:
+     Vignette, Kerzenschein und der gekachelte Steinboden (--page-tile, aus pageBackground.ts). */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(ellipse at 50% 40%, transparent 35%, #0a0806d9 100%),
+      radial-gradient(ellipse at 50% -10%, #f4c95d12 0%, transparent 50%),
+      var(--page-tile, none);
+    background-size: auto, auto, 192px 144px;
+    image-rendering: pixelated;
   }
   /* Pixel-Rahmen-Look für "Panels" */
   .panel {

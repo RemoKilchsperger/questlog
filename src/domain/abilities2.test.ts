@@ -74,6 +74,12 @@ describe("Fähigkeiten auf der Waffe", () => {
     expect(ensureItemExtras({ uid: "h", itemId: "head-10", rarity: "rare", bonuses: {} }).abilities).toBeUndefined();
   });
 
+  it("gespeicherte Fähigkeiten, die es nicht mehr gibt, werden neu gewürfelt statt abzustürzen", () => {
+    const stale = { uid: "old-dagger", itemId: "dagger-10", rarity: "rare" as const, bonuses: {}, abilities: ["dagger-finisher"] as unknown as AbilityId[] };
+    expect(weaponAbilities(stale)).toEqual(rollWeaponAbilities("old-dagger", "dagger"));
+    expect(ensureItemExtras(stale).abilities).toEqual(rollWeaponAbilities("old-dagger", "dagger"));
+  });
+
   it("im Kampf stehen die Fähigkeiten der angelegten Waffen bereit – ganz ohne Skillpunkte", () => {
     const sword = createItem("sword-30", "common", "s1");
     const axe = createItem("axe-30", "common", "a1");
