@@ -494,6 +494,8 @@ export type ClaimedChest = DungeonChest & {
   levelAfter: number;
   /** Endboss besiegt (sonst vorzeitig verlassen) */
   completed: boolean;
+  /** Quest-Gegenstände für Besucher, die dabei gefallen sind (nur im Koop – solo stehen sie in der Siegmeldung) */
+  questItems?: QuestItemFind[];
 };
 
 /** Schlüssel des Spielstands im localStorage (wird auch in die Cloud gespiegelt). */
@@ -1897,15 +1899,16 @@ export const useGameStore = create<GameState>()(
         const chest = addToChest(EMPTY_CHEST, reward);
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         set((s) => ({ coopStats: recordCoopWin(s.coopStats, bossId) }));
-        questEvent({ kind: "kill", creatureId: bossId, boss: true });
+        const questItems = questEvent({ kind: "kill", creatureId: bossId, boss: true });
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
-        return { ...chest, ...levels, completed: true };
+        return { ...chest, ...levels, completed: true, questItems };
       },
 
       grantCoopDungeon: (chest, dungeonId, completed, heroic = false) => {
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
+        const questItems: QuestItemFind[] = [];
         if (completed) {
           // Zählt wie ein Solo-Dungeon (Dungeonläufer, besiegter Boss) und als Koop-Sieg –
           // aber nicht für „Raidbezwinger“, der nur die Raid-Bosse zählt.
@@ -1922,13 +1925,13 @@ export const useGameStore = create<GameState>()(
             },
           }));
           // Im Koop zählt der Endboss als besiegter Boss, dazu der abgeschlossene Dungeon
-          questEvent({ kind: "kill", creatureId: bossId, boss: true });
+          questItems.push(...questEvent({ kind: "kill", creatureId: bossId, boss: true }));
           questEvent({ kind: "dungeon", dungeonId });
         }
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
-        return { ...chest, ...levels, completed };
+        return { ...chest, ...levels, completed, questItems };
       },
       };
     },
