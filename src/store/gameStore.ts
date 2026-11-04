@@ -67,7 +67,20 @@ import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopC
 import { forgeItem, salvageItem, upgradeItem as forgeUpgrade, type ForgeTarget } from "../domain/forge";
 import { createItem, ensureItemExtras, getItem, MAX_UPGRADE, weaponAbilities, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
-import { eatMeal, withMeal } from "../domain/food";
+import { addToPantry, eatFromPantry, eatMeal, withMeal, type Pantry } from "../domain/food";
+import { rollDrop } from "../domain/loot";
+import { totalXpForLevel } from "../domain/leveling";
+import {
+  acceptVisitor,
+  applyVisitorEvent,
+  dismissWanderer,
+  EMPTY_VISITORS,
+  refreshVisitors,
+  turnInStory,
+  turnInWanderer,
+  type VisitorGift,
+  type VisitorState,
+} from "../domain/visitors";
 import {
   applyMissionXp,
   dismissCompanion,
@@ -168,6 +181,19 @@ export interface RewardEvent {
   levelAfter: number;
 }
 
+/** Ergebnis beim Abgeben bei einem Besucher – für das Gespräch. */
+export interface VisitorOutcome {
+  title: string;
+  /** Was der Besucher sagt */
+  text: string;
+  xp: number;
+  gold: number;
+  gift: VisitorGift | null;
+  /** Item aus dem Geschenk (Unikat oder Beute) */
+  item: OwnedItem | null;
+  finished: boolean;
+}
+
 /** Kampfbelohnung samt Level vorher/nachher – für die Level-up-Anzeige im Siegbildschirm. */
 export type BattleRewardEvent = BattleReward & { levelBefore: number; levelAfter: number };
 
@@ -239,6 +265,21 @@ interface GameState {
   coopMeal: string | null;
   /** Ein Koop-Kampf hat begonnen: das Gericht ist aufgegessen (der Server hat es schon eingerechnet). */
   finishMealInCoop: () => void;
+
+  /** Vorrat an besonderem Essen von Besuchern (food.ts) */
+  pantry: Pantry;
+  /** Isst eine Portion aus dem Vorrat. */
+  eatFromPantry: (foodId: string) => void;
+
+  /** Besucher im Dorf (visitors.ts) */
+  visitors: VisitorState;
+  /** Lässt Besucher kommen und gehen – beim Öffnen des Dorfs und regelmässig. */
+  refreshVisitors: () => void;
+  acceptVisitor: (who: "story" | "wanderer") => void;
+  /** Schickt den Durchreisenden weg (der feste Besucher wartet einfach weiter). */
+  dismissWanderer: () => void;
+  /** Gibt beim Besucher ab – im letzten Kapitel mit Entscheidung braucht es `choiceId`. */
+  turnInVisitor: (who: "story" | "wanderer", choiceId?: string) => VisitorOutcome | null;
 
   /** Ausbaustufen der Gebäude im Dorf (village.ts) */
   village: Village;
@@ -482,6 +523,8 @@ type SaveState = Pick<
   | "missionBoard"
   | "activeMissions"
   | "appliedTrades"
+  | "pantry"
+  | "visitors"
 >;
 
 const createCharacter = (): Character => ({
@@ -561,6 +604,8 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     missionBoard: saved.missionBoard ?? EMPTY_MISSION_BOARD,
     activeMissions: saved.activeMissions ?? [],
     appliedTrades: saved.appliedTrades ?? [],
+    pantry: saved.pantry ?? {},
+    visitors: { ...EMPTY_VISITORS, ...saved.visitors },
   };
 }
 
@@ -698,6 +743,7 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
     };
   }
   // v18 → v19: Begleiter und Missionen – die leeren Listen ergänzt repairSave.
+  // v19 → v20: Besucher und Vorrat – ebenfalls repairSave.
   return state;
 }
 
@@ -724,11 +770,61 @@ export const useGameStore = create<GameState>()(
         get().refreshQuestBoards(); // Aufträge von gestern bzw. letzter Woche zählen nicht mehr
         const { questLog, dailyQuests, weeklyQuests, village } = get();
         const nextLog = applyQuestEvent(questLog, event);
+        const { visitors } = get();
+        const nextVisitors = applyVisitorEvent(visitors, event);
+        if (nextVisitors !== visitors) set({ visitors: nextVisitors });
         // Nur Aufträge, die die Anschlagtafel schon zeigt, kommen voran
         const nextDaily = applyBoardEvent(dailyQuests, event, village.board);
         const nextWeekly = applyBoardEvent(weeklyQuests, event, village.board);
         if (nextLog !== questLog || nextDaily !== dailyQuests || nextWeekly !== weeklyQuests) {
           set({ questLog: nextLog, dailyQuests: nextDaily, weeklyQuests: nextWeekly });
+        }
+      };
+
+      /** Legt das Geschenk eines Besuchers (`visitorId`) in den Spielstand – gibt das Item zurück, falls es eines war. */
+      const grantGift = (gift: VisitorGift, level: number, visitorId: string): OwnedItem | null => {
+        const { inventory, companions, pantry, potions, materials, character, bossCollection } = get();
+        switch (gift.kind) {
+          case "companion":
+            set({
+              companions: [
+                ...companions,
+                {
+                  id: newId(),
+                  name: gift.name,
+                  // Er stösst ein paar Level unter dem Helden dazu, wie neue Begleiter aus der Taverne
+                  totalXp: totalXpForLevel(Math.max(1, level - 2)),
+                  traits: gift.traits,
+                  equipment: EMPTY_EQUIPMENT,
+                  visitorId,
+                },
+              ],
+            });
+            return null;
+          case "unique": {
+            const item = createItem(gift.itemId, "legendary", newId());
+            set({ inventory: [...inventory, item] });
+            return item;
+          }
+          case "recipe":
+            return null; // steht schon im Besucher-Zustand
+          case "food":
+            set({ pantry: addToPantry(pantry, gift.foodId, gift.count) });
+            return null;
+          case "potions":
+            set({ potions: addPotions(potions, ...Object.entries(gift.potions)) });
+            return null;
+          case "materials":
+            set({ materials: addMaterials(materials, gift.materials) });
+            return null;
+          case "loot": {
+            const item = rollDrop(1, gift.weights, level, newId());
+            if (item) set({ inventory: [...inventory, item], bossCollection: addToCollection(bossCollection, item) });
+            return item;
+          }
+          case "gold":
+            set({ character: { ...character, gold: character.gold + gift.gold } });
+            return null;
         }
       };
 
@@ -944,6 +1040,8 @@ export const useGameStore = create<GameState>()(
       activeMissions: [],
       tradeLocked: [],
       appliedTrades: [],
+      pantry: {},
+      visitors: EMPTY_VISITORS,
 
       setTitle: (achievementId) =>
         set((s) => {
@@ -1131,6 +1229,8 @@ export const useGameStore = create<GameState>()(
           activeMissions: [],
           tradeLocked: [],
           appliedTrades: [],
+          pantry: {},
+          visitors: EMPTY_VISITORS,
         }),
 
       equip: (uid, slot) =>
@@ -1262,10 +1362,51 @@ export const useGameStore = create<GameState>()(
 
       eat: (foodId) =>
         attempt(() => {
-          const { meal, character, village } = get();
-          const result = eatMeal(meal, character.gold, foodId, getLevel(character.totalXp), village.tavern);
+          const { meal, character, village, visitors } = get();
+          const result = eatMeal(meal, character.gold, foodId, getLevel(character.totalXp), village.tavern, visitors.recipes);
           set({ meal: result.meal, character: { ...character, gold: result.gold } });
         }),
+
+      eatFromPantry: (foodId) =>
+        attempt(() => {
+          const { meal, pantry } = get();
+          set(eatFromPantry(meal, pantry, foodId));
+        }),
+
+      refreshVisitors: () => {
+        const { visitors, character } = get();
+        const next = refreshVisitors(visitors, getLevel(character.totalXp), Date.now());
+        if (next !== visitors) set({ visitors: next });
+      },
+
+      acceptVisitor: (who) => attempt(() => set({ visitors: acceptVisitor(get().visitors, who) })),
+
+      dismissWanderer: () => set((s) => ({ visitors: dismissWanderer(s.visitors, Date.now()) })),
+
+      turnInVisitor: (who, choiceId) => {
+        let outcome: VisitorOutcome | null = null;
+        attempt(() => {
+          const { visitors, character, village, records } = get();
+          const result = who === "story" ? turnInStory(visitors, choiceId) : turnInWanderer(visitors, Date.now());
+          const xp = statueXp(result.reward.xp, village.statue);
+          const levelBefore = getLevel(character.totalXp);
+          const totalXp = character.totalXp + xp;
+          const levelAfter = getLevel(totalXp);
+          set({
+            visitors: result.state,
+            character: { ...character, totalXp, gold: character.gold + result.reward.gold },
+            records: { ...records, questsCompleted: records.questsCompleted + 1 },
+          });
+          const item = result.gift ? grantGift(result.gift, levelAfter, visitors.story?.id ?? "wanderer") : null;
+          const gold = result.reward.gold + (result.gift?.kind === "gold" ? result.gift.gold : 0);
+          set({
+            lastReward: { id: newId(), questTitle: result.title, source: "visitor", xp, gold, loot: item, levelBefore, levelAfter },
+          });
+          if (levelAfter > levelBefore) EventBus.emit("character:levelup", { from: levelBefore, to: levelAfter });
+          outcome = { title: result.title, text: result.text, xp, gold, gift: result.gift, item, finished: result.finished };
+        });
+        return outcome;
+      },
 
       finishMealInCoop: () => set((s) => ({ meal: null, coopMeal: s.meal })),
 
@@ -1782,7 +1923,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 19,
+      version: 20,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,
@@ -1809,6 +1950,8 @@ export const useGameStore = create<GameState>()(
         missionBoard: s.missionBoard,
         activeMissions: s.activeMissions,
         appliedTrades: s.appliedTrades,
+        pantry: s.pantry,
+        visitors: s.visitors,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),
