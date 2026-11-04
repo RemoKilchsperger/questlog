@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attackRound, drinkPotion, getHeroCombatProfile, potionBlocker, startBattle, type BattleState } from "./combat";
+import { attackRound, drinkPotion, getHeroCombatProfile, potionBlocker, setTarget, startBattle, type BattleState } from "./combat";
 import { BOSS, resolveRound, startCoopBattle, type CoopPlayer } from "./coopCombat";
 import { getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
@@ -48,6 +48,19 @@ describe("Wurftränke: Grundregeln", () => {
     expect(next.thrown).toBeUndefined();
     expect(() => drinkPotion(next, getPotion("firebomb"))).toThrow(/einmal|schon/);
     expect(() => drinkPotion(next, getPotion("venom"))).not.toThrow();
+  });
+
+  it("fliegt auf das Ziel beim Bereitlegen – angreifen lässt sich danach ein anderes", () => {
+    const battle = fight("goblin-chief");
+    const drummer = battle.adds!.find((a) => a.role === "drummer")!;
+    const drumming: BattleState = { ...battle, adds: battle.adds!.map((a) => (a === drummer ? { ...a, cast: 2 } : a)) };
+    const ready = setTarget(drinkPotion(setTarget(drumming, drummer.uid), getPotion("frostbomb")).state, undefined);
+    const { events, state } = attackRound(ready, rng(0.5));
+    expect(events[0]).toEqual({ type: "thrown", potionId: "frostbomb", add: drummer.uid });
+    expect(events).toContainEqual({ type: "interrupted", add: drummer.uid });
+    expect(events.some((e) => e.type === "hit" && e.attacker === "hero" && !e.add)).toBe(true);
+    expect(state.enemy.hp).toBeLessThan(battle.enemy.hp);
+    expect(state.thrownAt).toBeUndefined();
   });
 
   it("fliegt auch, wenn der Held abwehrt", () => {

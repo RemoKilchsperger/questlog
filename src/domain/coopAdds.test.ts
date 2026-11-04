@@ -118,4 +118,14 @@ describe("Koop: Begleiter der Dungeon-Bosse", () => {
     expect(events.some((e) => e.type === "hit" && e.target === "a")).toBe(false);
     expect(after.heroes[0].effects.bulwark).toBeUndefined();
   });
+
+  it("ein Wurftrank fliegt auf sein eigenes Ziel – angreifen lässt sich ein anderes", () => {
+    const state = tough(atBoss());
+    const drummer = state.adds!.find((a) => a.role === "drummer")!;
+    const drumming = { ...state, adds: state.adds!.map((a) => (a === drummer ? { ...a, cast: 2 } : a)) };
+    const { events } = round(drumming, { a: { potion: { potionId: "frostbomb", targetId: drummer.uid } } });
+    expect(events).toContainEqual({ type: "thrown", heroId: "a", target: drummer.uid, potionId: "frostbomb" });
+    expect(events).toContainEqual({ type: "interrupted", add: drummer.uid });
+    expect(hits(events, "a", BOSS)).toHaveLength(1);
+  });
 });

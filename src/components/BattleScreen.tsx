@@ -717,10 +717,12 @@ function Battle({ battle }: { battle: BattleState }) {
             label="Tränke"
             hint={
               battle.thrown
-                ? `${getPotion(battle.thrown).name} liegt bereit – sie fliegt mit deinem Zug.`
+                ? `${getPotion(battle.thrown).name} liegt bereit – sie fliegt mit deinem Zug auf ${
+                    battle.adds?.find((a) => a.uid === battle.thrownAt)?.combatant.name ?? battle.enemy.name
+                  }. Angreifen kannst du ein anderes Ziel.`
                 : battle.potionUsedThisRound
                   ? "Trank für diese Runde verbraucht – jetzt angreifen."
-                  : "1 pro Runde · jede Sorte 1× pro Kampf"
+                  : "1 pro Runde · jede Sorte 1× pro Kampf · Wurftränke fliegen auf das gewählte Ziel"
             }
           >
             <div className="flex flex-wrap items-center gap-2">

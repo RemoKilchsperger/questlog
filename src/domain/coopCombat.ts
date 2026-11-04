@@ -729,7 +729,8 @@ function foeStats(enemy: CoopEnemy, players: number, elite: readonly EliteAffix[
 /**
  * Was ein Spieler in einer Runde tut: optional ein Trank (Ziel: er selbst oder
  * ein gefallener Mitspieler), dann ein Angriff – mit `ability` als Fähigkeit.
- * Ein Wurftrank fliegt auf das Ziel des Angriffs (`target`), `potion.targetId` zählt dann nicht.
+ * Ein Wurftrank fliegt auf `potion.targetId` (uid eines Begleiters oder BOSS) – so lässt sich
+ * ein anderes Ziel bewerfen als angreifen. Steht dort ein Held, fliegt er auf das Ziel des Angriffs.
  */
 export interface CoopAction {
   potion?: { potionId: string; targetId: string };
@@ -961,7 +962,7 @@ function buffed(hero: CoopHero): Combatant {
 export function coopPotionBlocker(state: CoopBattleState, heroId: string, potionId: string, targetId: string): string | null {
   const hero = state.heroes.find((h) => h.id === heroId);
   const potion = getPotion(potionId);
-  // Wurftränke fliegen auf das Ziel des Angriffs – einen Mitspieler braucht es nicht
+  // Wurftränke fliegen auf einen Gegner – einen Mitspieler braucht es nicht
   const target = potion.effect.kind === "throw" ? hero : state.heroes.find((h) => h.id === targetId);
   if (!hero || !target) return "Unbekannter Held.";
   if (hero.down) return "Du bist gefallen.";
@@ -1203,9 +1204,11 @@ export function resolveRound(
       const target = byId(action.potion.targetId);
       hero.potionsUsed = [...hero.potionsUsed, potion.id];
       if (potion.effect.kind === "throw") {
-        // Wurftrank: fliegt vor der Aktion auf das Ziel des Angriffs – die Sprengflasche auf alle Gegner
+        // Wurftrank: fliegt vor der Aktion auf sein Ziel – die Sprengflasche auf alle Gegner
         const { effect } = potion;
-        const aim = adds.find((f) => f.id === action.target && f.c.hp > 0) ?? boss;
+        const { targetId } = action.potion;
+        const at = heroes.some((h) => h.id === targetId) ? action.target : targetId;
+        const aim = adds.find((f) => f.id === at && f.c.hp > 0) ?? boss;
         const base = buffed(hero).damage * effect.percent;
         events.push({ type: "thrown", heroId: hero.id, target: aim.id, potionId: potion.id });
         for (const foe of effect.throw === "blast" ? living() : [aim]) {

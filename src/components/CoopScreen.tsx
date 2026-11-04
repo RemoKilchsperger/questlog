@@ -12,6 +12,7 @@ import {
   COOP_MIN_PLAYERS,
   COOP_REWARD_FACTOR,
   coopBossCreature,
+  BOSS,
   coopAbilityBlocker,
   coopAbilityCost,
   coopAbilityDue,
@@ -750,16 +751,16 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         )}
       </ActionGroup>
 
-      <ActionGroup label="Tränke" hint="Erst wählen, dann angreifen · wirkt vor deinem Zug">
+      <ActionGroup label="Tränke" hint="Erst wählen, dann angreifen · wirkt vor deinem Zug · Wurftränke fliegen auf das gewählte Ziel">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {myPotions.length === 0 && <span className="text-xs text-muted">Keine Tränke im Vorrat.</span>}
           {myPotions.map((p, i) => {
             const count = stock[p.id] ?? 0;
             const blocker = coopPotionBlocker(battle, myId, p.id, myId);
-            const selected = potion?.potionId === p.id && potion.targetId === myId;
-            const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : potionEffectText(p);
             // Wurftränke stehen abgesetzt hinter den Trinktränken
             const thrown = isThrowable(p);
+            const selected = potion?.potionId === p.id && (thrown || potion.targetId === myId);
+            const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, me.combatant.maxHp)} LP` : potionEffectText(p);
             return [
               thrown && (i === 0 || !isThrowable(myPotions[i - 1])) && (
                 <span key="throw" className="text-xs text-muted">
@@ -778,7 +779,8 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               >
                 <button
                   disabled={locked || blocker !== null}
-                  onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: myId })}
+                  // Ein Wurftrank fliegt auf das jetzt gewählte Ziel – angreifen lässt sich danach ein anderes
+                  onClick={() => setPotion(selected ? undefined : { potionId: p.id, targetId: thrown ? (target ?? BOSS) : myId })}
                   aria-pressed={selected}
                   className={`rounded-md border-2 px-2 py-1 disabled:pointer-events-none disabled:opacity-40 ${POTION_BUTTONS[p.effect.kind]} ${selected ? "ring-2 ring-gold" : ""}`}
                 >
@@ -826,8 +828,12 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
       {potion && (
         <p className="text-xs text-gold">
           {getPotion(potion.potionId).name}{" "}
-          {isThrowable(getPotion(potion.potionId)) ? "zum Werfen" : potion.targetId === myId ? "für dich" : "zum Wiederbeleben"} gewählt –
-          jetzt angreifen.
+          {isThrowable(getPotion(potion.potionId))
+            ? `zum Werfen auf ${battle.adds?.find((a) => a.uid === potion.targetId)?.combatant.name ?? battle.boss.name}`
+            : potion.targetId === myId
+              ? "für dich"
+              : "zum Wiederbeleben"}{" "}
+          gewählt – jetzt angreifen{isThrowable(getPotion(potion.potionId)) ? ", gern auch ein anderes Ziel" : ""}.
         </p>
       )}
     </div>
