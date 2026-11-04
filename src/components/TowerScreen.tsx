@@ -16,6 +16,7 @@ import {
 import { useGameStore } from "../store/gameStore";
 import { DungeonChest } from "./DungeonChest";
 import { Hint } from "./HoverCard";
+import { GameIcon } from "./GameIcon";
 
 /** Eingang im Kampf-Tab: Beschreibung, Rekorde, Start. */
 export function TowerPanel({ heroLevel }: { heroLevel: number }) {
@@ -47,7 +48,13 @@ export function TowerPanel({ heroLevel }: { heroLevel: number }) {
         title={open ? undefined : `Ab Level ${TOWER_MIN_LEVEL}`}
         className="font-pixel rounded-md border-2 border-legendary bg-legendary/15 px-4 py-1.5 text-legendary hover:bg-legendary/25 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {open ? "Turm betreten" : `🔒 ab Level ${TOWER_MIN_LEVEL}`}
+        {open ? (
+          "Turm betreten"
+        ) : (
+          <>
+            <GameIcon icon="🔒" /> ab Level {TOWER_MIN_LEVEL}
+          </>
+        )}
       </motion.button>
     </section>
   );

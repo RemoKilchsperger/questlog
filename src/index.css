@@ -56,6 +56,25 @@
   .pixelated {
     image-rendering: pixelated;
   }
+  /* Pixel-Icons statt Emojis (iconText.ts): so gross wie die Schrift, aber immer ein
+     ganzes Vielfaches von 14 px, damit jeder Bildpixel gleich breit bleibt. */
+  .game-icon {
+    display: inline-block;
+    width: 1.25em;
+    height: 1.25em;
+    width: max(14px, round(nearest, 1.3em, 14px));
+    height: max(14px, round(nearest, 1.3em, 14px));
+    vertical-align: -0.28em;
+    image-rendering: pixelated;
+    user-select: none;
+  }
+  /* Feste Grösse über width/height (GameIcon mit scale) */
+  .game-icon-fixed {
+    display: inline-block;
+    vertical-align: -0.28em;
+    image-rendering: pixelated;
+    user-select: none;
+  }
   /* Seltene Items leuchten, epische und legendäre funkeln zusätzlich (ItemIcon). */
   .glow-rare {
     filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-rare) 70%, transparent));

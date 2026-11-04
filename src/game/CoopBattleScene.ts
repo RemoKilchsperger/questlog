@@ -14,6 +14,7 @@ import type { ItemType } from "../domain/types";
 import type { CoopMember } from "../coop/protocol";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
+import { iconText } from "./phaserIcons";
 import { creatureImage, lastOpaqueRow } from "./creatureImages";
 import { getCreatureSprite } from "./creatureSprites";
 import { EventBus } from "./EventBus";
@@ -211,10 +212,7 @@ export class CoopBattleScene extends Phaser.Scene {
     }
     const body = this.add.container(x, GROUND_Y + 4, [object]).setScale(scale);
     const idle = this.tweens.add({ targets: body, y: body.y - 3, duration: 1000 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    this.add
-      .text(x, ADD_BAR_Y - 22, name, { fontFamily: NUMBER_FONT, fontSize: "12px", fontStyle: "bold", color: "#efe6d2" })
-      .setOrigin(0.5, 0)
-      .setStroke("#0e0b16", 4);
+    iconText(this, x, ADD_BAR_Y - 22, name, { fontFamily: NUMBER_FONT, fontSize: "12px", fontStyle: "bold", color: "#efe6d2" }, { color: "#0e0b16", width: 4 }, 0);
     const unit: Unit = {
       body,
       images: [object],
@@ -1768,11 +1766,7 @@ export class CoopBattleScene extends Phaser.Scene {
 
   private float(unit: Unit, text: string, color: string, size: number, lift = 0) {
     const y = GROUND_Y - (unit === this.boss ? 120 : 95) - lift;
-    const t = this.add
-      .text(unit.homeX, y, text, { fontFamily: NUMBER_FONT, fontSize: `${size}px`, fontStyle: "bold", color })
-      .setOrigin(0.5)
-      .setStroke("#0e0b16", 5)
-      .setDepth(30);
+    const t = iconText(this, unit.homeX, y, text, { fontFamily: NUMBER_FONT, fontSize: `${size}px`, fontStyle: "bold", color }, { color: "#0e0b16", width: 5 }).setDepth(30);
     this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 1000, ease: "Cubic.easeOut", onComplete: () => t.destroy() });
   }
 
@@ -1785,14 +1779,14 @@ export class CoopBattleScene extends Phaser.Scene {
     sfx.roar();
     this.cameras.main.shake(350, 0.01);
     fx.flash(this, phase?.enrage ? 0xc23a3a : 0xf4c95d, 0.25, 250);
-    const banner = this.add
-      .text(COOP_SCENE_WIDTH / 2, 120, `${phase?.icon ?? ""} ${phase?.name ?? "Zweite Phase"}`.trim(), {
-        fontFamily: FONT,
-        fontSize: "40px",
-        color: phase?.enrage ? "#f0776a" : "#f4c95d",
-      })
-      .setOrigin(0.5)
-      .setStroke("#0e0b16", 7)
+    const banner = iconText(
+      this,
+      COOP_SCENE_WIDTH / 2,
+      120,
+      `${phase?.icon ?? ""} ${phase?.name ?? "Zweite Phase"}`.trim(),
+      { fontFamily: FONT, fontSize: "40px", color: phase?.enrage ? "#f0776a" : "#f4c95d" },
+      { color: "#0e0b16", width: 7 },
+    )
       .setScale(0.3)
       .setDepth(40);
     this.tweens.chain({

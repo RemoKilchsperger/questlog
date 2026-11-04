@@ -4,6 +4,7 @@ import { CharacterSheet, type CharacterView } from "./components/CharacterSheet"
 import { CloudDialogs } from "./components/CloudAccount";
 import { Leaderboard } from "./components/Leaderboard";
 import { EquipmentScreen } from "./components/EquipmentScreen";
+import { GameIcon } from "./components/GameIcon";
 import { HelpScreen } from "./components/HelpScreen";
 import { Hud } from "./components/Hud";
 import { QuestScreen, useReadyQuestCount } from "./components/QuestScreen";
@@ -94,68 +95,68 @@ export default function App() {
       <Hud onOpenCharacter={() => setTab("character")} />
 
       <nav className="mt-6 flex flex-wrap gap-2" aria-label="Bereiche">
-        <TabButton active={tab === "quests"} onClick={() => setTab("quests")}>
-          📜 Quests
+        <TabButton active={tab === "quests"} onClick={() => setTab("quests")} icon="📜">
+          Quests
           {readyQuests > 0 && (
             <span className="num ml-1.5 rounded-full bg-xp px-1.5 text-sm text-night-950">{readyQuests}</span>
           )}
         </TabButton>
-        <TabButton active={tab === "character"} onClick={() => setTab("character")}>
-          🧙 Charakter
+        <TabButton active={tab === "character"} onClick={() => setTab("character")} icon="🧙">
+          Charakter
         </TabButton>
-        <TabButton active={tab === "skills"} onClick={() => setTab("skills")}>
-          🌳 Skills
+        <TabButton active={tab === "skills"} onClick={() => setTab("skills")} icon="🌳">
+          Skills
           {skillPoints > 0 && (
             <span className="num ml-1.5 rounded-full bg-xp px-1.5 text-sm text-night-950">{skillPoints}</span>
           )}
         </TabButton>
-        <TabButton active={tab === "equipment"} onClick={() => setTab("equipment")}>
-          🎒 Ausrüstung
+        <TabButton active={tab === "equipment"} onClick={() => setTab("equipment")} icon="🎒">
+          Ausrüstung
         </TabButton>
-        <TabButton active={tab === "village"} onClick={() => setTab("village")}>
-          🏘️ Dorf
+        <TabButton active={tab === "village"} onClick={() => setTab("village")} icon="🏘️">
+          Dorf
         </TabButton>
-        <TabButton active={tab === "battle"} onClick={() => setTab("battle")}>
-          ⚔️ Kampf
+        <TabButton active={tab === "battle"} onClick={() => setTab("battle")} icon="⚔️">
+          Kampf
         </TabButton>
-        <TabButton active={tab === "leaderboard"} onClick={() => setTab("leaderboard")}>
-          🏆 Rangliste
+        <TabButton active={tab === "leaderboard"} onClick={() => setTab("leaderboard")} icon="🏆">
+          Rangliste
         </TabButton>
-        <TabButton active={tab === "help"} onClick={() => setTab("help")}>
-          ❓ Hilfe
+        <TabButton active={tab === "help"} onClick={() => setTab("help")} icon="❓">
+          Hilfe
         </TabButton>
       </nav>
 
       {tab === "character" && (
         <nav className="mt-3 flex flex-wrap gap-2 border-l-4 border-gold/40 pl-3" aria-label="Charakter">
-          <SubTabButton active={characterView === "details"} onClick={() => setCharacterView("details")}>
-            🧙 Details
+          <SubTabButton active={characterView === "details"} onClick={() => setCharacterView("details")} icon="🧙">
+            Details
           </SubTabButton>
-          <SubTabButton active={characterView === "achievements"} onClick={() => setCharacterView("achievements")}>
-            🏆 Erfolge{newAchievements > 0 && <span className="ml-1 text-legendary">●</span>}
+          <SubTabButton active={characterView === "achievements"} onClick={() => setCharacterView("achievements")} icon="🏆">
+            Erfolge{newAchievements > 0 && <span className="ml-1 text-legendary">●</span>}
           </SubTabButton>
-          <SubTabButton active={characterView === "collection"} onClick={() => setCharacterView("collection")}>
-            👑 Boss-Sammlung
+          <SubTabButton active={characterView === "collection"} onClick={() => setCharacterView("collection")} icon="👑">
+            Boss-Sammlung
           </SubTabButton>
         </nav>
       )}
 
       {tab === "village" && (
         <nav className="mt-3 flex flex-wrap gap-2 border-l-4 border-gold/40 pl-3" aria-label="Dorf">
-          <SubTabButton active={villageView === "build"} onClick={() => setVillageView("build")}>
-            🏗️ Ausbau
+          <SubTabButton active={villageView === "build"} onClick={() => setVillageView("build")} icon="🏗️">
+            Ausbau
           </SubTabButton>
-          <SubTabButton active={villageView === "merchant"} onClick={() => setVillageView("merchant")}>
-            🏪 Händler
+          <SubTabButton active={villageView === "merchant"} onClick={() => setVillageView("merchant")} icon="🏪">
+            Händler
           </SubTabButton>
-          <SubTabButton active={villageView === "smith"} onClick={() => setVillageView("smith")}>
-            ⚒️ Schmied{!smithBuilt && " 🔒"}
+          <SubTabButton active={villageView === "smith"} onClick={() => setVillageView("smith")} icon="⚒️">
+            Schmied{!smithBuilt && <GameIcon icon="🔒" className="ml-1" />}
           </SubTabButton>
-          <SubTabButton active={villageView === "alchemist"} onClick={() => setVillageView("alchemist")}>
-            ⚗️ Alchemist{!alchemistBuilt && " 🔒"}
+          <SubTabButton active={villageView === "alchemist"} onClick={() => setVillageView("alchemist")} icon="⚗️">
+            Alchemist{!alchemistBuilt && <GameIcon icon="🔒" className="ml-1" />}
           </SubTabButton>
-          <SubTabButton active={villageView === "trade"} onClick={() => setVillageView("trade")}>
-            🤝 Tausch
+          <SubTabButton active={villageView === "trade"} onClick={() => setVillageView("trade")} icon="🤝">
+            Tausch
           </SubTabButton>
         </nav>
       )}
@@ -192,22 +193,25 @@ export default function App() {
 function TabButton({
   active,
   onClick,
+  icon,
   children,
 }: {
   active: boolean;
   onClick: () => void;
+  icon: string;
   children: ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`font-pixel rounded-md border-2 px-4 py-2 text-lg transition ${
+      className={`font-pixel inline-flex items-center gap-2 rounded-md border-2 px-3 py-1.5 text-lg transition ${
         active
           ? "border-gold bg-night-800 text-gold"
           : "border-night-700 bg-night-900 text-muted hover:text-parchment"
       }`}
     >
+      <GameIcon icon={icon} scale={2} />
       {children}
     </button>
   );
@@ -216,20 +220,23 @@ function TabButton({
 function SubTabButton({
   active,
   onClick,
+  icon,
   children,
 }: {
   active: boolean;
   onClick: () => void;
+  icon: string;
   children: ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`font-pixel rounded-md border-2 px-3 py-1 transition ${
+      className={`font-pixel inline-flex items-center gap-1.5 rounded-md border-2 px-3 py-1 transition ${
         active ? "border-gold/70 bg-night-800 text-gold" : "border-night-700 bg-night-900 text-muted hover:text-parchment"
       }`}
     >
+      <GameIcon icon={icon} />
       {children}
     </button>
   );

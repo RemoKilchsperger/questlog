@@ -6,6 +6,7 @@ import { useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { PixelSprite } from "./PixelSprite";
 import { POTION_COLORS } from "./potionUi";
+import { GameIcon } from "./GameIcon";
 
 /** Der Alchemist verkauft alle Tränke – je weiter ausgebaut, desto mehr Sorten. */
 export function AlchemistScreen({ onOpenVillage }: { onOpenVillage: () => void }) {
@@ -83,7 +84,7 @@ export function PotionList({ potions: offers }: { potions: readonly PotionDef[] 
             </div>
             {locked ? (
               <span className="text-right text-xs text-muted">
-                🔒 {alchemistTiers[p.alchemist].name}
+                <GameIcon icon="🔒" /> {alchemistTiers[p.alchemist].name}
                 <br />
                 (Alchemist Stufe {p.alchemist})
               </span>

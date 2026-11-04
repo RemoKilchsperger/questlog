@@ -12,6 +12,7 @@ import { Gold } from "./Gold";
 import { PixelSprite } from "./PixelSprite";
 import { SkillReset } from "./SkillTree";
 import { useNow } from "./useNow";
+import { GameIcon } from "./GameIcon";
 
 // Menüs der kleineren Gebäude im Dorf: Taverne, Trainingsplatz und Statue.
 
@@ -104,7 +105,7 @@ function FoodMenu() {
               </div>
               {locked ? (
                 <span className="text-right text-xs text-muted">
-                  🔒 {tavernTiers[food.tavern].name}
+                  <GameIcon icon="🔒" /> {tavernTiers[food.tavern].name}
                   <br />
                   (Taverne Stufe {food.tavern})
                 </span>

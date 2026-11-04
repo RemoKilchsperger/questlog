@@ -17,6 +17,7 @@ import {
 } from "../domain/achievements";
 import { useGameStore } from "../store/gameStore";
 import { Hint } from "./HoverCard";
+import { GameIcon } from "./GameIcon";
 
 /** Rahmen um einen Avatar – \`frame\` ist die Id aus FRAMES. */
 export function AvatarFrame({ frame, className = "", children }: { frame?: string; className?: string; children: ReactNode }) {
@@ -75,7 +76,7 @@ export function CosmeticsPicker() {
                   f.id === "none" ? "border-2 border-dashed border-night-600" : `frame frame-${f.id}`
                 } ${active ? "ring-2 ring-parchment ring-offset-2 ring-offset-night-900" : ""}`}
               >
-                {!unlocked && <span aria-hidden>🔒</span>}
+                {!unlocked && <GameIcon icon="🔒" />}
               </button>
             );
           })}

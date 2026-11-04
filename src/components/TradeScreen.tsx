@@ -15,6 +15,7 @@ import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { itemName, RARITY_TEXT } from "./itemUi";
+import { GameIcon } from "./GameIcon";
 
 /** Dorf → Tausch: Items mit einem anderen Spieler tauschen (docs/item-tausch.md). */
 export function TradeScreen() {
@@ -51,9 +52,7 @@ export function TradeScreen() {
 function Notice({ icon, title, children }: { icon: string; title: string; children: ReactNode }) {
   return (
     <section className="panel mx-auto flex max-w-lg flex-col items-center gap-3 p-6 text-center">
-      <span className="text-5xl" aria-hidden>
-        {icon}
-      </span>
+      <GameIcon icon={icon} scale={3} />
       <h2 className="font-pixel text-2xl">{title}</h2>
       <p className="text-sm text-muted">{children}</p>
     </section>
@@ -268,7 +267,7 @@ function OfferButton({ owned, offered, full, busy, onClick }: { owned: OwnedItem
   if (blocked) {
     return (
       <Hint text={blocked}>
-        <span className="text-xs text-muted">🔒 nicht tauschbar</span>
+        <span className="text-xs text-muted"><GameIcon icon="🔒" /> nicht tauschbar</span>
       </Hint>
     );
   }
