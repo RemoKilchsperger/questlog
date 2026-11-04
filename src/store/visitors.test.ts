@@ -5,7 +5,7 @@ import { getItem } from "../domain/items";
 import { effectOf } from "../domain/itemEffects";
 import { totalXpForLevel } from "../domain/leveling";
 import { EMPTY_VISITORS, type VisitorState } from "../domain/visitors";
-import { repairSave, useGameStore } from "./gameStore";
+import { migrateSave, repairSave, useGameStore } from "./gameStore";
 
 const store = useGameStore.getState;
 
@@ -35,10 +35,24 @@ const atLevel = (level: number, visitors: VisitorState = EMPTY_VISITORS) =>
 describe("Besucher im Spielstand", () => {
   beforeEach(() => store().resetGame());
 
-  it("alte Spielstände bekommen leere Besucher und Vorrat", () => {
+  it("alte Spielstände bekommen leere Besucher", () => {
     const merged = repairSave({ character: store().character });
     expect(merged.visitors).toEqual(EMPTY_VISITORS);
-    expect(merged.pantry).toEqual({});
+  });
+
+  it("v20: Portionen im Vorrat werden zum Rezept", () => {
+    const saved = { character: store().character, pantry: { hunterRoast: 2, honeyCake: 1 }, visitors: { ...EMPTY_VISITORS, recipes: ["lilyStew"] } };
+    const migrated = migrateSave(saved, 20) as ReturnType<typeof migrateSave> & { pantry?: unknown };
+    expect(migrated.pantry).toBeUndefined();
+    expect(migrated.visitors.recipes).toEqual(["lilyStew", "hunterRoast", "honeyCake"]);
+  });
+
+  it("die Siegmeldung nennt den gefundenen Quest-Gegenstand", () => {
+    atLevel(20, { ...EMPTY_VISITORS, story: { id: "bram", chapter: 2, accepted: true, progress: 0 } });
+    win("goblin-chief");
+    expect(store().battleReward?.questItems).toEqual([{ item: "Banner der Grauen Lanzen", icon: "🏳️", progress: 1, count: 1 }]);
+    win("goblin-chief");
+    expect(store().battleReward?.questItems).toEqual([]);
   });
 
   it("Bram kommt, Siege zählen nach dem Annehmen, beim Abgeben gibt es EP und Gold", () => {
@@ -74,7 +88,7 @@ describe("Besucher im Spielstand", () => {
     expect(effectOf(item, getItem(item.itemId))).toBe("runeblade");
   });
 
-  it("Rezept und Vorrat: kochen lassen bzw. aus dem Vorrat essen", () => {
+  it("Rezepte: erst mit dem Rezept kochen lassen", () => {
     atLevel(20, { ...EMPTY_VISITORS, story: { id: "mirla", chapter: 2, accepted: true, progress: 1 } });
     useGameStore.setState((s) => ({ village: { ...s.village, tavern: 1 }, character: { ...s.character, gold: 10_000 } }));
     store().eat("lilyStew");
@@ -84,11 +98,10 @@ describe("Besucher im Spielstand", () => {
     expect(store().meal).toBe("lilyStew");
 
     useGameStore.setState({ meal: null, visitors: { ...EMPTY_VISITORS, story: { id: "yrla", chapter: 2, accepted: true, progress: 1 } } });
-    store().turnInVisitor("story");
-    expect(store().pantry).toEqual({ hunterRoast: 3 });
-    store().eatFromPantry("hunterRoast");
+    const outcome = store().turnInVisitor("story");
+    expect(outcome?.recipeKnown).toBe(false);
+    store().eat("hunterRoast");
     expect(store().meal).toBe("hunterRoast");
-    expect(store().pantry).toEqual({ hunterRoast: 2 });
   });
 
   it("Durchreisende: Quest-Gegenstand bringen, Geschenk bekommen, weiterziehen", () => {

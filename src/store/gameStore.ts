@@ -67,7 +67,7 @@ import { EMPTY_COOP_STATS, recordCoopWin, type CoopStats } from "../domain/coopC
 import { forgeItem, salvageItem, upgradeItem as forgeUpgrade, type ForgeTarget } from "../domain/forge";
 import { createItem, ensureItemExtras, getItem, MAX_UPGRADE, weaponAbilities, migrateLegacyItemId, rescaleBonuses, STARTER_ITEM_IDS } from "../domain/items";
 import { buyPotion, getPotion, STARTER_POTIONS, type PotionStock } from "../domain/potions";
-import { addToPantry, eatFromPantry, eatMeal, withMeal, type Pantry } from "../domain/food";
+import { eatMeal, withMeal } from "../domain/food";
 import { rollDrop } from "../domain/loot";
 import { totalXpForLevel } from "../domain/leveling";
 import {
@@ -78,6 +78,8 @@ import {
   refreshVisitors,
   turnInStory,
   turnInWanderer,
+  foundQuestItems,
+  type QuestItemFind,
   type VisitorGift,
   type VisitorState,
 } from "../domain/visitors";
@@ -192,10 +194,17 @@ export interface VisitorOutcome {
   /** Item aus dem Geschenk (Unikat oder Beute) */
   item: OwnedItem | null;
   finished: boolean;
+  /** Das geschenkte Rezept kannte man schon – dafür gab es mehr EP */
+  recipeKnown: boolean;
 }
 
 /** Kampfbelohnung samt Level vorher/nachher – für die Level-up-Anzeige im Siegbildschirm. */
-export type BattleRewardEvent = BattleReward & { levelBefore: number; levelAfter: number };
+export type BattleRewardEvent = BattleReward & {
+  levelBefore: number;
+  levelAfter: number;
+  /** Quest-Gegenstände für Besucher, die in diesem Kampf gefallen sind */
+  questItems?: QuestItemFind[];
+};
 
 interface GameState {
   character: Character;
@@ -265,11 +274,6 @@ interface GameState {
   coopMeal: string | null;
   /** Ein Koop-Kampf hat begonnen: das Gericht ist aufgegessen (der Server hat es schon eingerechnet). */
   finishMealInCoop: () => void;
-
-  /** Vorrat an besonderem Essen von Besuchern (food.ts) */
-  pantry: Pantry;
-  /** Isst eine Portion aus dem Vorrat. */
-  eatFromPantry: (foodId: string) => void;
 
   /** Besucher im Dorf (visitors.ts) */
   visitors: VisitorState;
@@ -523,7 +527,6 @@ type SaveState = Pick<
   | "missionBoard"
   | "activeMissions"
   | "appliedTrades"
-  | "pantry"
   | "visitors"
 >;
 
@@ -604,7 +607,6 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     missionBoard: saved.missionBoard ?? EMPTY_MISSION_BOARD,
     activeMissions: saved.activeMissions ?? [],
     appliedTrades: saved.appliedTrades ?? [],
-    pantry: saved.pantry ?? {},
     visitors: { ...EMPTY_VISITORS, ...saved.visitors },
   };
 }
@@ -744,6 +746,13 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
   }
   // v18 → v19: Begleiter und Missionen – die leeren Listen ergänzt repairSave.
   // v19 → v20: Besucher und Vorrat – ebenfalls repairSave.
+  // v20 → v21: Essen von Besuchern gibt es nur noch als Rezept – wer Portionen im Vorrat hatte, bekommt das Rezept.
+  if (version < 21 && "pantry" in state) {
+    const { pantry = {}, ...rest } = state as SaveState & { pantry?: Record<string, number> };
+    const visitors = { ...EMPTY_VISITORS, ...rest.visitors };
+    const recipes = [...visitors.recipes, ...Object.keys(pantry).filter((id) => !visitors.recipes.includes(id))];
+    state = { ...rest, visitors: { ...visitors, recipes } };
+  }
   return state;
 }
 
@@ -765,8 +774,11 @@ function attempt(action: () => void) {
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => {
-      /** Ein Sieg oder ein abgeschlossener Dungeon bringt Questbuch und Tagesaufträge voran. */
-      const questEvent = (event: QuestEvent) => {
+      /**
+       * Ein Sieg oder ein abgeschlossener Dungeon bringt Questbuch und Tagesaufträge voran.
+       * Gibt die Quest-Gegenstände für Besucher zurück, die dabei gefallen sind.
+       */
+      const questEvent = (event: QuestEvent): QuestItemFind[] => {
         get().refreshQuestBoards(); // Aufträge von gestern bzw. letzter Woche zählen nicht mehr
         const { questLog, dailyQuests, weeklyQuests, village } = get();
         const nextLog = applyQuestEvent(questLog, event);
@@ -779,11 +791,12 @@ export const useGameStore = create<GameState>()(
         if (nextLog !== questLog || nextDaily !== dailyQuests || nextWeekly !== weeklyQuests) {
           set({ questLog: nextLog, dailyQuests: nextDaily, weeklyQuests: nextWeekly });
         }
+        return foundQuestItems(visitors, nextVisitors);
       };
 
       /** Legt das Geschenk eines Besuchers (`visitorId`) in den Spielstand – gibt das Item zurück, falls es eines war. */
       const grantGift = (gift: VisitorGift, level: number, visitorId: string): OwnedItem | null => {
-        const { inventory, companions, pantry, potions, materials, character, bossCollection } = get();
+        const { inventory, companions, potions, materials, character, bossCollection } = get();
         switch (gift.kind) {
           case "companion":
             set({
@@ -808,9 +821,6 @@ export const useGameStore = create<GameState>()(
           }
           case "recipe":
             return null; // steht schon im Besucher-Zustand
-          case "food":
-            set({ pantry: addToPantry(pantry, gift.foodId, gift.count) });
-            return null;
           case "potions":
             set({ potions: addPotions(potions, ...Object.entries(gift.potions)) });
             return null;
@@ -1040,7 +1050,6 @@ export const useGameStore = create<GameState>()(
       activeMissions: [],
       tradeLocked: [],
       appliedTrades: [],
-      pantry: {},
       visitors: EMPTY_VISITORS,
 
       setTitle: (achievementId) =>
@@ -1229,7 +1238,6 @@ export const useGameStore = create<GameState>()(
           activeMissions: [],
           tradeLocked: [],
           appliedTrades: [],
-          pantry: {},
           visitors: EMPTY_VISITORS,
         }),
 
@@ -1367,12 +1375,6 @@ export const useGameStore = create<GameState>()(
           set({ meal: result.meal, character: { ...character, gold: result.gold } });
         }),
 
-      eatFromPantry: (foodId) =>
-        attempt(() => {
-          const { meal, pantry } = get();
-          set(eatFromPantry(meal, pantry, foodId));
-        }),
-
       refreshVisitors: () => {
         const { visitors, character } = get();
         const next = refreshVisitors(visitors, getLevel(character.totalXp), Date.now());
@@ -1403,7 +1405,16 @@ export const useGameStore = create<GameState>()(
             lastReward: { id: newId(), questTitle: result.title, source: "visitor", xp, gold, loot: item, levelBefore, levelAfter },
           });
           if (levelAfter > levelBefore) EventBus.emit("character:levelup", { from: levelBefore, to: levelAfter });
-          outcome = { title: result.title, text: result.text, xp, gold, gift: result.gift, item, finished: result.finished };
+          outcome = {
+            title: result.title,
+            text: result.text,
+            xp,
+            gold,
+            gift: result.gift,
+            item,
+            finished: result.finished,
+            recipeKnown: result.recipeKnown,
+          };
         });
         return outcome;
       },
@@ -1777,7 +1788,7 @@ export const useGameStore = create<GameState>()(
                 towerBosses: records.towerBosses + (creature.boss ? 1 : 0),
               },
             });
-            if (!creature.boss) questEvent({ kind: "kill", creatureId: creature.id, boss: false });
+            const questItems = creature.boss ? [] : questEvent({ kind: "kill", creatureId: creature.id, boss: false });
             questEvent({ kind: "towerFloor", floor: tower.floor });
             const elite = (result.state.elite?.length ?? 0) > 0;
             const rolled = rollBattleReward(creature, hero, newId(), Math.random, defeatedAdds(result.state), elite);
@@ -1785,7 +1796,7 @@ export const useGameStore = create<GameState>()(
             const scaled = towerReward(reward, tower.floor, tower.blessings, elite);
             const level = getLevel(character.totalXp);
             set({
-              battleReward: { ...scaled, levelBefore: level, levelAfter: level },
+              battleReward: { ...scaled, levelBefore: level, levelAfter: level, questItems },
               tower: {
                 ...tower,
                 chest: addToChest(tower.chest, scaled),
@@ -1821,10 +1832,10 @@ export const useGameStore = create<GameState>()(
           });
           // Die Zusatzmechanik eines heroischen Bosses macht ihn nicht zum Elite-Gegner
           const elite = (result.state.elite?.length ?? 0) > 0 && !heroic;
-          questEvent({ kind: "kill", creatureId: creature.id, boss: creature.boss, elite });
+          const questItems = questEvent({ kind: "kill", creatureId: creature.id, boss: creature.boss, elite });
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
-          for (const add of adds) questEvent({ kind: "kill", creatureId: add.id, boss: false });
+          for (const add of adds) questItems.push(...questEvent({ kind: "kill", creatureId: add.id, boss: false }));
           const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
           const rolled = { ...raw, xp: statueXp(raw.xp, get().village.statue) };
@@ -1838,7 +1849,7 @@ export const useGameStore = create<GameState>()(
               secondWindUsed: !!result.state.secondWindUsed,
             };
             set({
-              battleReward: { ...reward, levelBefore: level, levelAfter: level },
+              battleReward: { ...reward, levelBefore: level, levelAfter: level, questItems },
               dungeon: { ...run, doors: nextDoors(getDungeon(dungeon.dungeonId), run) },
             });
             if (dungeon.stage === getDungeon(dungeon.dungeonId).creatures.length - 1) claimChest(true);
@@ -1850,7 +1861,7 @@ export const useGameStore = create<GameState>()(
           if (reward.buffPotion) potionDrops[reward.buffPotion] = (potionDrops[reward.buffPotion] ?? 0) + 1;
           const items = [reward.loot, reward.bossLoot].filter((i) => i !== null);
           const levels = grantRewards(reward.xp, reward.gold, items, potionDrops, reward.materials);
-          set({ battleReward: { ...reward, ...levels } });
+          set({ battleReward: { ...reward, ...levels, questItems } });
           if (levels.levelAfter > levels.levelBefore) {
             EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
           }
@@ -1923,7 +1934,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 20,
+      version: 21,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,
@@ -1950,7 +1961,6 @@ export const useGameStore = create<GameState>()(
         missionBoard: s.missionBoard,
         activeMissions: s.activeMissions,
         appliedTrades: s.appliedTrades,
-        pantry: s.pantry,
         visitors: s.visitors,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
