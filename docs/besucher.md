@@ -67,7 +67,7 @@ Später möglich: Bei der Fremden führt „verweigern“ zu einem Kampf gegen s
 - Neues Ziel `fetch`: „Bringe 3 Moorlilien“. Jeder Sieg gegen die genannte Kreatur lässt den
   Gegenstand mit einer Chance fallen (normal 40 %, Elite 100 %, Boss immer).
 - Quest-Gegenstände liegen nicht im Inventar. Sie zählen nur als Fortschritt der Quest, wie die Kills.
-- Fällt einer, sagt es die Siegmeldung: „Quest-Gegenstand: 🌱 Moorlilie (2/4)“ – auch im Dungeon und im Turm.
+- Fällt einer, sagt es die Siegmeldung: „Quest-Gegenstand: 🌱 Moorlilie (2/4)“ – auch im Dungeon, im Turm und beim Koop-Ergebnis.
 - Später möglich: eine eigene Tür in den Dungeon-Wegen („Verschüttete Kammer“), hinter der ein
   Quest-Gegenstand liegt.
 

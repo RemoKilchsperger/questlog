@@ -49,6 +49,7 @@ import { coopDoors, openRoom } from "../domain/coopDungeonPaths";
 import { ROOMS } from "../domain/dungeonPaths";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DungeonChest } from "./DungeonChest";
+import { QuestItemFinds } from "./QuestItemFinds";
 import { MaterialGain } from "./materialUi";
 import { PixelAvatar } from "./PixelAvatar";
 import { CreatureSprite } from "./CreatureSprite";
@@ -998,7 +999,10 @@ function CoopResultPanel({ battle, onLeave }: { battle: CoopBattleState; onLeave
     >
       <h2 className={`font-pixel text-3xl ${won ? "text-gold" : "text-danger"}`}>{title}</h2>
       {won && result?.chest ? (
-        <DungeonChest chest={result.chest} />
+        <>
+          <DungeonChest chest={result.chest} />
+          {result.chest.questItems && <QuestItemFinds finds={result.chest.questItems} />}
+        </>
       ) : won ? (
         <p className="max-w-md text-sm text-muted">Beute bekommt nur, wer beim Ende dabei war.</p>
       ) : (

@@ -37,7 +37,7 @@ import {
 import { dateKey, weekKey } from "../domain/calendar";
 import { dungeonMobs, ROOMS } from "../domain/dungeonPaths";
 import { foodEffectText, getFood, withMeal } from "../domain/food";
-import { trackedVisitorQuests, type QuestItemFind } from "../domain/visitors";
+import { trackedVisitorQuests } from "../domain/visitors";
 import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked } from "../domain/heroic";
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
@@ -81,6 +81,7 @@ import { ADD_SKILLS, addIntentText, getBossPhase } from "../domain/bossMechanics
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
+import { QuestItemFinds } from "./QuestItemFinds";
 import { QuestProgressChips } from "./QuestScreen";
 import { useNow } from "./useNow";
 
@@ -885,31 +886,6 @@ function SoundControl() {
   );
 }
 
-/** Gefundene Quest-Gegenstände für Besucher – mehrere vom selben Gegenstand zusammengefasst. */
-function QuestItemFinds({ finds }: { finds: readonly QuestItemFind[] }) {
-  const byItem = new Map<string, QuestItemFind & { found: number }>();
-  for (const find of finds) byItem.set(find.item, { ...find, found: (byItem.get(find.item)?.found ?? 0) + 1 });
-  return (
-    <>
-      {[...byItem.values()].map((find) => (
-        <motion.p
-          key={find.item}
-          initial={{ scale: 0.6 }}
-          animate={{ scale: 1 }}
-          className="rounded-md border-2 border-gold/60 bg-gold/10 px-3 py-1 font-bold text-gold"
-        >
-          Quest-Gegenstand: {find.found > 1 && `${find.found}× `}
-          {find.icon} {find.item}{" "}
-          <span className={`num text-xs font-normal ${find.progress >= find.count ? "text-xp" : "text-muted"}`}>
-            ({find.progress}/{find.count}
-            {find.progress >= find.count && " ✓"})
-          </span>
-        </motion.p>
-      ))}
-    </>
-  );
-}
-
 function BattleResult({ battle }: { battle: BattleState }) {
   const reward = useGameStore((s) => s.battleReward);
   const startBattle = useGameStore((s) => s.startBattle);
@@ -1026,7 +1002,7 @@ function BattleResult({ battle }: { battle: BattleState }) {
           Du wurdest besiegt. Bessere Ausrüstung, mehr Ausdauer oder ein paar Heiltränke helfen beim nächsten Versuch.
         </p>
       )}
-      {won && reward?.questItems && reward.questItems.length > 0 && <QuestItemFinds finds={reward.questItems} />}
+      {won && reward?.questItems && <QuestItemFinds finds={reward.questItems} />}
       {won && quests.length > 0 && (
         <p className="flex flex-wrap items-center justify-center gap-2 text-sm text-muted">
           Quest-Fortschritt <QuestProgressChips quests={quests} />

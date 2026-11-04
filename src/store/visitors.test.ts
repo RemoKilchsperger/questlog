@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { startBattle, type HeroCombatProfile } from "../domain/combat";
+import { EMPTY_CHEST, startBattle, type HeroCombatProfile } from "../domain/combat";
 import { getCreature } from "../domain/creatures";
 import { getItem } from "../domain/items";
 import { effectOf } from "../domain/itemEffects";
@@ -53,6 +53,15 @@ describe("Besucher im Spielstand", () => {
     expect(store().battleReward?.questItems).toEqual([{ item: "Banner der Grauen Lanzen", icon: "🏳️", progress: 1, count: 1 }]);
     win("goblin-chief");
     expect(store().battleReward?.questItems).toEqual([]);
+  });
+
+  it("auch im Koop steht der Quest-Gegenstand beim Ergebnis", () => {
+    atLevel(20, { ...EMPTY_VISITORS, story: { id: "bram", chapter: 2, accepted: true, progress: 0 } });
+    const reward = { xp: 10, gold: 5, loot: null, bossLoot: null, potions: null, buffPotion: null };
+    expect(store().grantCoopReward(reward, "goblin-chief").questItems).toEqual([
+      { item: "Banner der Grauen Lanzen", icon: "🏳️", progress: 1, count: 1 },
+    ]);
+    expect(store().grantCoopDungeon(EMPTY_CHEST, "abandoned-mine", false).questItems).toEqual([]);
   });
 
   it("Bram kommt, Siege zählen nach dem Annehmen, beim Abgeben gibt es EP und Gold", () => {
