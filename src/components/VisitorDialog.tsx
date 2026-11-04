@@ -7,7 +7,7 @@ import { effectOf, getItemEffect } from "../domain/itemEffects";
 import { getPotion } from "../domain/potions";
 import { isQuestComplete, questGoalText, questTarget, type QuestDef } from "../domain/quests";
 import { materialEntries } from "../domain/village";
-import { chapterQuest, getFixedVisitor, wandererTemplate, type VisitorGift } from "../domain/visitors";
+import { chapterQuest, getFixedVisitor, RECIPE_KNOWN_XP_FACTOR, wandererTemplate, type VisitorGift } from "../domain/visitors";
 import { getVisitorSprite } from "../game/visitorSprites";
 import { useGameStore, type VisitorOutcome } from "../store/gameStore";
 import { Gold } from "./Gold";
@@ -115,7 +115,11 @@ function VisitorBody({ who, onOutcome, onClose }: { who: VisitorKind; onOutcome:
         <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
           <span className="text-xp tabular-nums">+{quest.reward.xp} XP</span>
           <Gold amount={quest.reward.gold} sign className="text-gold" />
-          {wanderer && <span className="text-epic">🎁 {giftLabel(wanderer.gift, null)}</span>}
+          {wanderer && (
+            <span className="text-epic">
+              🎁 {giftLabel(wanderer.gift, null, wanderer.gift.kind === "recipe" && visitors.recipes.includes(wanderer.gift.foodId))}
+            </span>
+          )}
           {def && last && <span className="text-epic">🎁 Zum Abschied: ???</span>}
         </div>
         {wanderer && (
@@ -188,7 +192,7 @@ function OutcomeView({ outcome, onDone }: { outcome: VisitorOutcome; onDone: () 
           <span className="text-xp tabular-nums">+{outcome.xp} XP</span>
           <Gold amount={outcome.gold} sign className="text-gold" />
         </div>
-        {outcome.gift && <p className="mt-1 font-semibold">🎁 {giftLabel(outcome.gift, outcome)}</p>}
+        {outcome.gift && <p className="mt-1 font-semibold">🎁 {giftLabel(outcome.gift, outcome, outcome.recipeKnown)}</p>}
       </div>
       <div className="flex justify-end">
         <ActionButton onClick={onDone}>{outcome.finished ? "Lebe wohl" : "Weiter"}</ActionButton>
@@ -197,8 +201,8 @@ function OutcomeView({ outcome, onDone }: { outcome: VisitorOutcome; onDone: () 
   );
 }
 
-/** Ausführlicher Text für ein Geschenk – mit Namen von Item, Gericht oder Begleiter. */
-function giftLabel(gift: VisitorGift, outcome: VisitorOutcome | null) {
+/** Ausführlicher Text für ein Geschenk – mit Namen von Item, Gericht oder Begleiter. `known`: das Rezept hat man schon. */
+function giftLabel(gift: VisitorGift, outcome: VisitorOutcome | null, known: boolean) {
   switch (gift.kind) {
     case "companion":
       return `${gift.name} schliesst sich dir an – du findest ihn in der Taverne. Er belegt keinen Platz.`;
@@ -212,10 +216,12 @@ function giftLabel(gift: VisitorGift, outcome: VisitorOutcome | null) {
         </>
       );
     }
-    case "recipe":
-      return `Rezept: ${getFood(gift.foodId).name} – ab jetzt in der Taverne`;
-    case "food":
-      return `${gift.count}× ${getFood(gift.foodId).name} für den Vorrat in der Taverne`;
+    case "recipe": {
+      const food = getFood(gift.foodId);
+      return known
+        ? `Rezept: ${food.name} – kennst du schon, dafür ${RECIPE_KNOWN_XP_FACTOR}× EP`
+        : `Rezept: ${food.name} – ab jetzt in der Taverne`;
+    }
     case "potions":
       return Object.entries(gift.potions)
         .map(([id, count]) => `${count}× ${getPotion(id).name}`)

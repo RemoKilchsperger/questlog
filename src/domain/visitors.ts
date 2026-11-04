@@ -6,7 +6,7 @@
 // UI, der Zufall kommt über `rng` herein.
 
 import { getCreature, AREAS, DUNGEONS, isAreaUnlocked, type CreatureDef } from "./creatures";
-import { SPECIAL_FOODS } from "./food";
+import { FOODS } from "./food";
 import { BUFF_POTIONS } from "./potions";
 import {
   BOSS_WEIGHTS,
@@ -34,8 +34,6 @@ export type VisitorGift =
   | { kind: "unique"; itemId: string }
   /** Schaltet ein Gericht in der Taverne frei (food.ts, `recipe`) */
   | { kind: "recipe"; foodId: string }
-  /** Portionen besonderes Essen für den Vorrat */
-  | { kind: "food"; foodId: string; count: number }
   | { kind: "potions"; potions: Record<string, number> }
   | { kind: "materials"; materials: MaterialStock }
   /** Ein ausgewürfeltes Item mit diesen Seltenheits-Gewichten */
@@ -214,10 +212,10 @@ export const FIXED_VISITORS: readonly FixedVisitorDef[] = [
         title: "Graufrost",
         story: "„Ich wusste es. Niemand jagt Graufrost. Heute schon.“",
         goal: kill("primal-mammoth", 1),
-        thanks: "Yrla zieht ihr Messer und schneidet ein Stück aus der Flanke des Mammuts. „Bei uns isst der Jäger zuerst. Heute isst du. Und morgen. Und übermorgen.“",
+        thanks: "Yrla zieht ihr Messer und schneidet ein Stück aus der Flanke des Mammuts. „Bei uns isst der Jäger zuerst. Und damit du nicht für jeden Braten ein Mammut erlegen musst: So macht man ihn bei uns. Gib das dem Wirt.“",
       },
     ],
-    gift: { kind: "food", foodId: "hunterRoast", count: 3 },
+    gift: { kind: "recipe", foodId: "hunterRoast" },
     farewell: "„Mein Dorf baue ich wieder auf. Wenn du vorbeikommst, gibt es Braten.“",
   },
   {
@@ -389,7 +387,7 @@ const WANDERER_TEMPLATES: Readonly<Record<WandererKind, WandererTemplate>> = {
     role: "fahrender Koch",
     icon: "🍲",
     intro: "„Ich koche auf jedem Markt zwischen hier und dem Meer. Für mein bestes Gericht fehlt mir Fleisch aus dem Gebiet ‚{area}‘. {creature} – sagt man – schmeckt am besten.“",
-    thanks: "„Herrlich! Hier, für unterwegs. Mehr kann ich nicht tragen.“",
+    thanks: "„Herrlich! Dafür bekommst du mein Rezept – der Wirt soll es dir kochen, so oft du willst.“",
   },
   preacher: {
     kind: "preacher",
@@ -457,10 +455,21 @@ export const WANDERER_STAY_MS = 24 * 3_600_000;
 /** … und der nächste kommt 12 bis 36 Stunden, nachdem der letzte gegangen ist. */
 export const WANDERER_GAP_MS: readonly [number, number] = [12 * 3_600_000, 36 * 3_600_000];
 
-/** Portionen besonderes Essen vom Koch, Tränke vom Lehrling, Material von der Baumeisterin. */
-export const COOK_PORTIONS = 2;
+/** Tränke vom Lehrling, Material von der Baumeisterin. */
 export const APPRENTICE_POTIONS = 3;
 export const BUILDER_MATERIALS = 15;
+
+/** Rezepte, die der fahrende Koch verrät – alle, die kein fester Besucher schenkt. */
+export const COOK_RECIPES: readonly string[] = FOODS.filter(
+  (food) =>
+    food.recipe &&
+    !FIXED_VISITORS.some((v) =>
+      [v.gift, ...(v.choice?.options.map((o) => o.gift) ?? [])].some((g) => g?.kind === "recipe" && g.foodId === food.id),
+    ),
+).map((food) => food.id);
+
+/** Kennt man ein geschenktes Rezept schon, gibt es stattdessen so viel mehr EP. */
+export const RECIPE_KNOWN_XP_FACTOR = 2;
 
 const pick = <T>(list: readonly T[], rng: () => number): T => list[Math.floor(rng() * list.length)];
 
@@ -502,7 +511,7 @@ export function rollWanderer(heroLevel: number, arrives: number, rng: () => numb
     switch (kind) {
       case "cook":
         goal = bring(creature.id, 3, "Wildfleisch", "🍖");
-        gift = { kind: "food", foodId: pick(SPECIAL_FOODS.filter((f) => f.id !== "hunterRoast"), rng).id, count: COOK_PORTIONS };
+        gift = { kind: "recipe", foodId: pick(COOK_RECIPES, rng) };
         break;
       case "preacher":
         goal = bring(creature.id, 1, "Reliquie des Ordens", "🔔");
@@ -631,6 +640,28 @@ export function applyVisitorEvent(state: VisitorState, event: QuestEvent, rng: (
   return next;
 }
 
+/** Ein Quest-Gegenstand, der in einem Kampf gefallen ist – für die Siegmeldung. */
+export interface QuestItemFind {
+  item: string;
+  icon: string;
+  progress: number;
+  count: number;
+}
+
+/** Welche Quest-Gegenstände zwischen zwei Ständen gefallen sind. */
+export function foundQuestItems(before: VisitorState, after: VisitorState): QuestItemFind[] {
+  const finds: QuestItemFind[] = [];
+  const check = (goal: QuestGoal, from: number, to: number) => {
+    if (goal.kind === "fetch" && to > from) finds.push({ item: goal.item, icon: goal.icon, progress: Math.min(to, goal.count), count: goal.count });
+  };
+  const { story, wanderer } = before;
+  if (story && after.story?.id === story.id && after.story.chapter === story.chapter) {
+    check(getFixedVisitor(story.id).chapters[story.chapter].goal, story.progress, after.story.progress);
+  }
+  if (wanderer && after.wanderer?.arrives === wanderer.arrives) check(wanderer.quest.goal, wanderer.progress, after.wanderer.progress);
+  return finds;
+}
+
 export interface VisitorTurnIn {
   state: VisitorState;
   /** EP und Gold (ohne Item-Chance) */
@@ -642,6 +673,17 @@ export interface VisitorTurnIn {
   /** Die Geschichte ist zu Ende, der Besucher geht */
   finished: boolean;
   title: string;
+  /** Das geschenkte Rezept kannte man schon – dafür gab es mehr EP */
+  recipeKnown: boolean;
+}
+
+/** Lernt ein geschenktes Rezept – kennt man es schon, gibt es stattdessen mehr EP. */
+function learnRecipe(state: VisitorState, gift: VisitorGift | null, reward: QuestReward): Pick<VisitorTurnIn, "state" | "reward" | "recipeKnown"> {
+  if (gift?.kind !== "recipe") return { state, reward, recipeKnown: false };
+  if (state.recipes.includes(gift.foodId)) {
+    return { state, reward: { ...reward, xp: Math.round(reward.xp * RECIPE_KNOWN_XP_FACTOR) }, recipeKnown: true };
+  }
+  return { state: { ...state, recipes: [...state.recipes, gift.foodId] }, reward, recipeKnown: false };
 }
 
 /** Ist das aktuelle Kapitel des festen Besuchers erfüllt? */
@@ -669,6 +711,7 @@ export function turnInStory(state: VisitorState, choiceId?: string): VisitorTurn
       text: def.chapters[story.chapter].thanks,
       finished: false,
       title: quest.title,
+      recipeKnown: false,
     };
   }
   let gift = def.gift ?? null;
@@ -683,10 +726,8 @@ export function turnInStory(state: VisitorState, choiceId?: string): VisitorTurn
     text = option.reply;
     choices[def.id] = option.id;
   }
-  const recipes = gift?.kind === "recipe" && !state.recipes.includes(gift.foodId) ? [...state.recipes, gift.foodId] : state.recipes;
   return {
-    state: { ...state, story: null, done: [...state.done, def.id], choices, recipes },
-    reward,
+    ...learnRecipe({ ...state, story: null, done: [...state.done, def.id], choices }, gift, reward),
     gift,
     text,
     finished: true,
@@ -701,8 +742,7 @@ export function turnInWanderer(state: VisitorState, now: number, rng: () => numb
   if (!wanderer.accepted || !isQuestComplete(wanderer.quest, wanderer.progress)) throw new Error("Die Bitte ist noch nicht erfüllt.");
   const [min, max] = WANDERER_GAP_MS;
   return {
-    state: { ...state, wanderer: null, nextWanderer: now + min + Math.floor(rng() * (max - min)) },
-    reward: wanderer.quest.reward,
+    ...learnRecipe({ ...state, wanderer: null, nextWanderer: now + min + Math.floor(rng() * (max - min)) }, wanderer.gift, wanderer.quest.reward),
     gift: wanderer.gift,
     text: WANDERER_TEMPLATES[wanderer.kind].thanks,
     finished: true,
@@ -745,8 +785,6 @@ export function giftText(gift: VisitorGift): string {
       return "ein Unikat";
     case "recipe":
       return "ein Rezept für die Taverne";
-    case "food":
-      return `${gift.count} Portionen besonderes Essen`;
     case "potions":
       return `${Object.values(gift.potions).reduce((a, b) => a + b, 0)} Tränke`;
     case "materials":

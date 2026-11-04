@@ -7,10 +7,13 @@ import {
   acceptVisitor,
   applyVisitorEvent,
   chapterQuest,
+  COOK_RECIPES,
   dismissWanderer,
   EMPTY_VISITORS,
   FIXED_VISITORS,
+  foundQuestItems,
   getFixedVisitor,
+  RECIPE_KNOWN_XP_FACTOR,
   refreshVisitors,
   rollWanderer,
   storyChapterComplete,
@@ -49,7 +52,6 @@ describe("Feste Besucher", () => {
       for (const gift of gifts) {
         if (gift.kind === "unique") expect(getItem(gift.itemId).visitorId).toBe(def.id);
         if (gift.kind === "recipe") expect(getFood(gift.foodId).recipe).toBe(true);
-        if (gift.kind === "food") expect(getFood(gift.foodId)).toBeDefined();
       }
     }
   });
@@ -109,6 +111,31 @@ describe("Feste Besucher", () => {
     expect(FOODS.some((f) => f.id === "lilyStew")).toBe(true);
   });
 
+  it("gibt für ein bekanntes Rezept mehr EP statt nochmal dasselbe Rezept", () => {
+    const state: VisitorState = { ...EMPTY_VISITORS, story: { id: "yrla", chapter: 2, accepted: true, progress: 1 } };
+    const fresh = turnInStory(state);
+    expect(fresh.gift).toEqual({ kind: "recipe", foodId: "hunterRoast" });
+    expect(fresh.state.recipes).toEqual(["hunterRoast"]);
+    expect(fresh.recipeKnown).toBe(false);
+    const known = turnInStory({ ...state, recipes: ["hunterRoast"] });
+    expect(known.state.recipes).toEqual(["hunterRoast"]);
+    expect(known.recipeKnown).toBe(true);
+    expect(known.reward.xp).toBe(Math.round(fresh.reward.xp * RECIPE_KNOWN_XP_FACTOR));
+    expect(known.reward.gold).toBe(fresh.reward.gold);
+  });
+
+  it("meldet gefallene Quest-Gegenstände", () => {
+    const before: VisitorState = { ...EMPTY_VISITORS, story: { id: "mirla", chapter: 0, accepted: true, progress: 1 } };
+    const event = { kind: "kill" as const, creatureId: "marsh-toad", boss: false };
+    expect(foundQuestItems(before, applyVisitorEvent(before, event, never))).toEqual([]);
+    expect(foundQuestItems(before, applyVisitorEvent(before, event, always))).toEqual([
+      { item: "Moorlilie", icon: "🌱", progress: 2, count: 4 },
+    ]);
+    // Reine Kill-Ziele bringen keinen Gegenstand
+    const bram: VisitorState = { ...EMPTY_VISITORS, story: { id: "bram", chapter: 0, accepted: true, progress: 0 } };
+    expect(foundQuestItems(bram, applyVisitorEvent(bram, { kind: "kill", creatureId: "grey-wolf", boss: false }))).toEqual([]);
+  });
+
   it("verlangt im letzten Kapitel eine Entscheidung und merkt sie sich", () => {
     const state: VisitorState = { ...EMPTY_VISITORS, story: { id: "stranger", chapter: 2, accepted: true, progress: 1 } };
     expect(() => turnInStory(state)).toThrow(/Entscheidung/);
@@ -159,5 +186,21 @@ describe("Durchreisende", () => {
     expect(result.state.wanderer).toBeNull();
     expect(result.state.nextWanderer).toBeGreaterThan(5 * HOUR);
     expect(dismissWanderer(state, 0).wanderer).toBeNull();
+  });
+
+  it("der Koch verrät ein Rezept, das kein fester Besucher schenkt", () => {
+    expect(COOK_RECIPES).toEqual(["kingsBroth", "spicedPie", "honeyCake"]);
+    for (let i = 0; i < 20; i++) {
+      const seed = (i + 0.5) / 20;
+      const wanderer = rollWanderer(20, 0, () => seed);
+      if (wanderer.kind !== "cook") continue;
+      expect(wanderer.gift.kind).toBe("recipe");
+      let state: VisitorState = { ...EMPTY_VISITORS, wanderer: { ...wanderer, accepted: true, progress: 99 } };
+      const result = turnInWanderer(state, 0);
+      if (wanderer.gift.kind !== "recipe") throw new Error(wanderer.gift.kind);
+      expect(result.state.recipes).toEqual([wanderer.gift.foodId]);
+      state = { ...state, recipes: [wanderer.gift.foodId] };
+      expect(turnInWanderer(state, 0).recipeKnown).toBe(true);
+    }
   });
 });
