@@ -75,6 +75,10 @@ export interface ItemDef {
   requiredLevel: number;
   /** Einzigartiges Boss-Item: nur als Beute dieses Bosses erhältlich (nie beim Händler oder als Quest-Belohnung). */
   bossId?: string;
+  /** Unikat eines Besuchers (visitors.ts): nur als Belohnung seiner Geschichte, mit festem Effekt */
+  visitorId?: string;
+  /** Unikate: sieht aus wie dieses Katalog-Item */
+  lookId?: string;
 }
 
 /** Seltenheitsstufe eines Exemplars – bestimmt Grundwert-Bonus und Attributboni. */

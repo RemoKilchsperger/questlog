@@ -16,6 +16,7 @@ import {
   TAVERN_RULES,
   getTrait,
   traitText,
+  usedSlots,
   type ActiveMission,
   type Companion,
   type CompanionTrait,
@@ -89,7 +90,7 @@ export function CompanionsPanel() {
   const closeOutfit = useCallback(() => setOutfitting(null), []);
   const closeDismiss = useCallback(() => setDismissing(null), []);
   const slots = TAVERN_RULES[tier].slots;
-  const full = companions.length >= slots;
+  const full = usedSlots(companions) >= slots;
   const rerollPrice = rerollRecruitsPrice(level);
 
   return (
@@ -101,7 +102,7 @@ export function CompanionsPanel() {
 
       <section className="flex flex-col gap-2">
         <h3 className="font-pixel text-lg">
-          Deine Begleiter <span className="text-sm text-muted">({companions.length} / {slots} Plätze)</span>
+          Deine Begleiter <span className="text-sm text-muted">({usedSlots(companions)} / {slots} Plätze)</span>
         </h3>
         {companions.length === 0 ? (
           <p className="rounded-md border-2 border-dashed border-night-700 p-3 text-center text-sm text-muted">

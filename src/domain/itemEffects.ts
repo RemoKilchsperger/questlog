@@ -129,6 +129,13 @@ export const BOSS_EFFECTS: Record<string, ItemEffectId> = {
   "world-eater": "vortex",
 };
 
+/** Feste Effekte der Unikate von Besuchern (visitors.ts). */
+export const VISITOR_EFFECTS: Record<string, ItemEffectId> = {
+  "unique-torbin-axe": "runeblade",
+  "unique-stranger-scepter": "soulDrain",
+  "unique-aldric-greatsword": "dragonfire",
+};
+
 export function getItemEffect(id: ItemEffectId): ItemEffectDef {
   const def = ITEM_EFFECTS.find((e) => e.id === id);
   if (!def) throw new Error(`Unbekannter Effekt: ${id}`);
@@ -141,14 +148,15 @@ export function rollItemEffect(uid: string, kind: ItemDef["kind"]): ItemEffectId
   return pool[hash(`${uid}|effect`) % pool.length];
 }
 
-/** Effekt eines Exemplars: gespeichert (legendär) oder der feste seines Bosses. */
+/** Effekt eines Exemplars: gespeichert (legendär) oder der feste seines Bosses bzw. Unikats. */
 export function effectOf(item: OwnedItem, def: ItemDef): ItemEffectId | null {
   if (item.effect) return item.effect;
+  if (def.visitorId) return VISITOR_EFFECTS[def.id] ?? null;
   return def.bossId ? (BOSS_EFFECTS[def.bossId] ?? null) : null;
 }
 
 /** Hat ein Item dieser Art und Seltenheit einen eigenen, gewürfelten Effekt? */
-export const rollsEffect = (def: ItemDef, rarity: OwnedItem["rarity"]) => rarity === "legendary" && !def.bossId;
+export const rollsEffect = (def: ItemDef, rarity: OwnedItem["rarity"]) => rarity === "legendary" && !def.bossId && !def.visitorId;
 
 /* ───────────── Wirkung im Kampf (gemeinsam für Solo und Koop) ───────────── */
 

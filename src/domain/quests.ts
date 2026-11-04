@@ -27,7 +27,12 @@ export type QuestGoal =
   /** Im Endlos-Turm in einem Lauf dieses Stockwerk schaffen */
   | { kind: "towerFloor"; floor: number }
   /** Steckbrief der Anschlagtafel: diese Kreatur als Elite mit genau diesen Modifikatoren besiegen */
-  | { kind: "bounty"; creatureId: string; affixes: EliteAffix[]; count: number };
+  | { kind: "bounty"; creatureId: string; affixes: EliteAffix[]; count: number }
+  /**
+   * Quest-Gegenstand eines Besuchers (visitors.ts): fällt mit einer Chance bei Siegen gegen
+   * diese Kreatur. Er liegt nicht im Inventar, er zählt nur als Fortschritt.
+   */
+  | { kind: "fetch"; creatureId: string; count: number; item: string; icon: string };
 
 export interface QuestReward {
   xp: number;
@@ -89,7 +94,7 @@ export const KILL_QUEST_DROP_CHANCE = 0.5;
 /** Tagesaufträge sind kleiner – 35 % auf ein Item. */
 export const DAILY_DROP_CHANCE = 0.35;
 
-function questReward(level: number, units: number, dropChance: number, weights: Record<Rarity, number>): QuestReward {
+export function questReward(level: number, units: number, dropChance: number, weights: Record<Rarity, number>): QuestReward {
   return {
     xp: Math.round(xpRewardBase(level) * XP_PER_UNIT * units),
     gold: Math.round((3 + level) * GOLD_PER_UNIT * units),
@@ -237,6 +242,11 @@ export function questGoalText(def: QuestDef): string {
       return `Schaffe im Endlos-Turm Stockwerk ${goal.floor} in einem Lauf`;
     case "bounty":
       return `Besiege den gesuchten ${getCreature(goal.creatureId).creature.name} (${bountyAffixText(goal.affixes)})`;
+    case "fetch": {
+      const { creature } = getCreature(goal.creatureId);
+      const what = goal.count > 1 ? `${goal.count}× ${goal.item}` : goal.item;
+      return creature.boss ? `Bring ${what} von ${creature.name}` : `Bring ${what} (von: ${creature.name})`;
+    }
   }
 }
 
@@ -271,6 +281,9 @@ function matchesGoal(goal: QuestGoal, event: QuestEvent): boolean {
       return event.kind === "towerFloor";
     case "bounty":
       return event.kind === "kill" && event.creatureId === goal.creatureId && !!event.elite;
+    // Ob der Gegenstand fällt, würfelt visitors.ts – hier zählt nur, ob es die richtige Kreatur war
+    case "fetch":
+      return event.kind === "kill" && event.creatureId === goal.creatureId;
   }
 }
 
@@ -558,7 +571,7 @@ export function turnInBoardQuest(board: QuestBoard, id: string, boardTier = 1): 
 
 /* ───────────── Übersicht ───────────── */
 
-export type QuestSource = "story" | "daily" | "weekly";
+export type QuestSource = "story" | "daily" | "weekly" | "visitor";
 
 export interface TrackedQuest {
   def: QuestDef;
@@ -590,5 +603,7 @@ export function trackedQuests(
 
 /** Laufende Quests, die ein Sieg gegen genau diese Kreatur voranbringt (ohne allgemeine Wochenaufträge). */
 export function questsForCreature(tracked: readonly TrackedQuest[], creatureId: string): TrackedQuest[] {
-  return tracked.filter((q) => (q.def.goal.kind === "kill" || q.def.goal.kind === "bounty") && q.def.goal.creatureId === creatureId);
+  return tracked.filter(
+    (q) => (q.def.goal.kind === "kill" || q.def.goal.kind === "bounty" || q.def.goal.kind === "fetch") && q.def.goal.creatureId === creatureId,
+  );
 }

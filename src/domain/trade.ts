@@ -20,9 +20,11 @@ const STAT_KEYS: readonly StatKey[] = ["strength", "intellect", "endurance", "ch
 /** Regelverstoss mit lesbarer Meldung für den Spieler. */
 export class TradeError extends Error {}
 
-/** Warum ein Item nicht getauscht werden kann – null = handelbar. Gesperrt sind nur Boss-Items. */
+/** Warum ein Item nicht getauscht werden kann – null = handelbar. Gesperrt sind Boss-Items und Unikate von Besuchern. */
 export function tradeBlockReason(item: OwnedItem): string | null {
-  if (getItem(item.itemId).bossId) return "Boss-Items können nicht getauscht werden.";
+  const def = getItem(item.itemId);
+  if (def.bossId) return "Boss-Items können nicht getauscht werden.";
+  if (def.visitorId) return "Geschenke von Besuchern können nicht getauscht werden.";
   return null;
 }
 

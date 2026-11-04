@@ -31,6 +31,8 @@ export interface FoodDef {
   price: number;
   /** Ab dieser Stufe der Taverne zu kaufen */
   tavern: number;
+  /** Rezept eines Besuchers (visitors.ts): erst zu kaufen, wenn man es bekommen hat */
+  recipe?: boolean;
 }
 
 export const FOODS: readonly FoodDef[] = [
@@ -48,10 +50,31 @@ export const FOODS: readonly FoodDef[] = [
   { id: "festRoast", name: "Festbraten", icon: "🥘", effect: { hp: 0.2, damage: 0.1 }, price: 40, tavern: 3 },
   { id: "wizardPie", name: "Zauberpastete", icon: "🥧", effect: { mana: 0.25, crit: 0.05, damage: 0.08 }, price: 40, tavern: 3 },
   { id: "luckyCake", name: "Glückskuchen", icon: "🎂", effect: { gold: 0.3, hp: 0.1 }, price: 40, tavern: 3 },
+  // Rezepte von Besuchern: ab der Schankstube, sobald man das Rezept hat
+  { id: "lilyStew", name: "Moorlilien-Eintopf", icon: "🌱", effect: { hp: 0.15, mana: 0.3, armor: 0.1 }, price: 30, tavern: 1, recipe: true },
 ];
 
+/**
+ * Besonderes Essen von Besuchern – nicht zu kaufen, es liegt als Vorrat in der
+ * Taverne. Etwas stärker als die Festmahle.
+ */
+export const SPECIAL_FOODS: readonly FoodDef[] = [
+  { id: "hunterRoast", name: "Jägerbraten", icon: "🦌", effect: { damage: 0.2, hp: 0.2 }, price: 0, tavern: 0 },
+  { id: "kingsBroth", name: "Königsbrühe", icon: "🍽️", effect: { hp: 0.25, armor: 0.25 }, price: 0, tavern: 0 },
+  { id: "spicedPie", name: "Gewürzpastete", icon: "🌶️", effect: { damage: 0.15, crit: 0.08 }, price: 0, tavern: 0 },
+  { id: "honeyCake", name: "Honigkuchen", icon: "🍯", effect: { gold: 0.4, hp: 0.15, mana: 0.15 }, price: 0, tavern: 0 },
+];
+
+/** Vorrat an besonderem Essen: Id → Portionen. */
+export type Pantry = Record<string, number>;
+
+/** Ist das besonderes Essen aus dem Vorrat (nicht zu kaufen)? */
+export const isSpecialFood = (id: string) => SPECIAL_FOODS.some((f) => f.id === id);
+
+const findFood = (id: string) => FOODS.find((f) => f.id === id) ?? SPECIAL_FOODS.find((f) => f.id === id);
+
 export function getFood(id: string): FoodDef {
-  const food = FOODS.find((f) => f.id === id);
+  const food = findFood(id);
   if (!food) throw new Error(`Unbekanntes Gericht: ${id}`);
   return food;
 }
@@ -63,7 +86,7 @@ export function foodPrice(food: FoodDef, level: number): number {
 
 /** Kampfwerte mit einem gegessenen Gericht – ohne Gericht unverändert. */
 export function withMeal<T extends HeroCombatProfile>(profile: T, mealId: string | null | undefined): T {
-  const food = mealId ? FOODS.find((f) => f.id === mealId) : undefined;
+  const food = mealId ? findFood(mealId) : undefined;
   if (!food) return profile;
   const { hp = 0, damage = 0, armor = 0, crit = 0, mana = 0, gold = 0 } = food.effect;
   return {
@@ -95,7 +118,7 @@ export function foodEffectText(food: FoodDef): string {
 
 /**
  * Isst ein Gericht. Es gibt nur eines auf einmal: Wer noch satt ist, muss erst
- * kämpfen. `tavernTier`: Ausbaustufe der Taverne.
+ * kämpfen. `tavernTier`: Ausbaustufe der Taverne, `recipes`: Rezepte von Besuchern.
  */
 export function eatMeal(
   meal: string | null,
@@ -103,11 +126,30 @@ export function eatMeal(
   id: string,
   level: number,
   tavernTier: number,
+  recipes: readonly string[] = [],
 ): { meal: string; gold: number } {
   const food = getFood(id);
+  if (isSpecialFood(id)) throw new Error(`${food.name} gibt es nur aus dem Vorrat.`);
+  if (food.recipe && !recipes.includes(id)) throw new Error(`Für ${food.name} fehlt dir das Rezept.`);
   if (food.tavern > tavernTier) throw new Error(`${food.name} gibt es erst in der Taverne der Stufe ${food.tavern}.`);
   if (meal) throw new Error(`Du bist noch satt von ${getFood(meal).name}.`);
   const price = foodPrice(food, level);
   if (gold < price) throw new Error("Nicht genug Gold.");
   return { meal: id, gold: gold - price };
+}
+
+/** Isst eine Portion aus dem Vorrat – auch hier nur, wenn man nicht mehr satt ist. */
+export function eatFromPantry(meal: string | null, pantry: Pantry, id: string): { meal: string; pantry: Pantry } {
+  const food = getFood(id);
+  if (meal) throw new Error(`Du bist noch satt von ${getFood(meal).name}.`);
+  const left = pantry[id] ?? 0;
+  if (left <= 0) throw new Error(`Von ${food.name} ist nichts mehr da.`);
+  const { [id]: _, ...rest } = pantry;
+  return { meal: id, pantry: left > 1 ? { ...rest, [id]: left - 1 } : rest };
+}
+
+/** Legt Portionen in den Vorrat. */
+export function addToPantry(pantry: Pantry, id: string, count: number): Pantry {
+  getFood(id);
+  return { ...pantry, [id]: (pantry[id] ?? 0) + count };
 }
