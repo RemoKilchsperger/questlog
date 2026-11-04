@@ -714,3 +714,57 @@ export function paintBackground(ctx: CanvasRenderingContext2D, areaId: string): 
   if (!painter) throw new Error(`Kein Hintergrund für ${areaId}`);
   painter(new Canvas(ctx, areaId));
 }
+
+/* ───────────── Seitenhintergrund ───────────── */
+
+export const FLOOR_TILE_WIDTH = 64;
+export const FLOOR_TILE_HEIGHT = 48;
+
+/**
+ * Kachel für den Seitenhintergrund: dunkle Steinplatten im Versatz, mit Fugen,
+ * Kanten, Rissen und etwas Moos. Läuft an allen Rändern nahtlos weiter – Platten,
+ * die rechts hinausragen, werden links fortgesetzt.
+ */
+export function paintFloorTile(ctx: CanvasRenderingContext2D): void {
+  const w = FLOOR_TILE_WIDTH;
+  const p = new Canvas(ctx, "floor", w);
+  const rowHeight = 8;
+  const stones = ["#211a14", "#1d1712", "#241c15", "#1f1813"];
+  p.rect(0, 0, w, FLOOR_TILE_HEIGHT, "#110d0a"); // Fugen
+  const at = (x: number) => ((x % w) + w) % w;
+  for (let row = 0; row * rowHeight < FLOOR_TILE_HEIGHT; row++) {
+    const y = row * rowHeight;
+    let x = p.int(0, w - 1);
+    const end = x + w;
+    while (x < end) {
+      const width = Math.min(p.int(9, 17), end - x);
+      const face = stones[p.int(0, stones.length - 1)];
+      for (let dx = 0; dx < width - 1; dx++) {
+        const cx = at(x + dx);
+        p.rect(cx, y, 1, rowHeight - 1, face);
+        p.px(cx, y, "#2b2219"); // Lichtkante oben
+        p.px(cx, y + rowHeight - 2, "#18120e"); // Schatten unten
+        // Körnung: ein paar hellere und dunklere Pixel auf der Fläche
+        for (let dy = 1; dy < rowHeight - 2; dy++) {
+          const r = p.rnd();
+          if (r < 0.06) p.px(cx, y + dy, "#2a2119");
+          else if (r < 0.1) p.px(cx, y + dy, "#17110d");
+        }
+      }
+      // Gelegentlich ein Riss oder Moos in der Fuge
+      if (p.rnd() < 0.25) {
+        let cx = x + p.int(2, Math.max(2, width - 4));
+        for (let cy = y + 1; cy < y + rowHeight - 2; cy++) {
+          p.px(at(cx), cy, "#120e0a");
+          cx += p.int(-1, 1);
+        }
+      }
+      if (p.rnd() < 0.2) {
+        const mx = x + width - 1;
+        p.px(at(mx), y + p.int(2, rowHeight - 3), "#24301c");
+        p.px(at(mx), y + rowHeight - 1, "#2c3a21");
+      }
+      x += width;
+    }
+  }
+}

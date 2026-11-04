@@ -87,7 +87,10 @@ export default function App() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-24 pt-4 sm:pt-8">
+    <div className="mx-auto max-w-5xl px-4 pb-24 pt-4 sm:pt-6">
+      <button onClick={() => setTab("quests")} className="mx-auto mb-4 block" aria-label="Questlog – zu den Quests">
+        <img src="/logo.svg" alt="Questlog" width={336} height={96} className="pixelated h-16 w-auto sm:h-24" />
+      </button>
       <Hud onOpenCharacter={() => setTab("character")} />
 
       <nav className="mt-6 flex flex-wrap gap-2" aria-label="Bereiche">

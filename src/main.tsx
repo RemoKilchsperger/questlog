@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { initPageBackground } from "./game/pageBackground";
 import { unlockAudio } from "./game/sfx";
 import "./index.css";
 
@@ -10,6 +11,8 @@ window.addEventListener("pointerdown", unlockAudio, { once: true });
 
 // Nur im Dev-Server: Testhelden per Adresse (?dev=testheld, ?dev=zurueck) – siehe src/dev/testHero.ts
 if (import.meta.env.DEV) void import("./dev/testHero").then((m) => m.runDevCommand());
+
+initPageBackground();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
