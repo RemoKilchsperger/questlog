@@ -13,6 +13,7 @@ const SOURCE_TEXT: Record<QuestSource, string> = {
   story: "📜 Quest abgegeben",
   daily: "⭐ Tagesauftrag abgegeben",
   weekly: "📅 Wochenauftrag abgegeben",
+  visitor: "🧍 Bitte erfüllt",
 };
 
 /** Belohnungs-Popup nach dem Abgeben einer Quest, mit grossem Level-up-Banner. */

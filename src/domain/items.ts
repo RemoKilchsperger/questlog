@@ -138,6 +138,7 @@ function nounsFor(info: ItemTypeInfo, armorClass?: ArmorClass): readonly string[
 
 /** Woraus ein Item besteht – Grundlage für seine Grafik (z. B. Kupfer- vs. Eisenbeinschienen). */
 export function getItemParts(def: ItemDef): ItemParts {
+  if (def.lookId) return getItemParts(getItem(def.lookId));
   if (def.bossId) throw new Error(`${def.name} ist ein Boss-Item und hat kein Material.`);
   // IDs: "chest-12" (schwer bzw. Waffe), "chest-light-12", "chest-medium-12"
   const index = Number(def.id.slice(def.id.lastIndexOf("-") + 1));
@@ -346,7 +347,48 @@ export function getBossItems(bossId: string): ItemDef[] {
   return BOSS_ITEMS.filter((i) => i.bossId === bossId);
 }
 
-const ITEMS_BY_ID = new Map([...ITEMS, ...BOSS_ITEMS].map((i) => [i.id, i]));
+interface VisitorItemSpec {
+  id: string;
+  visitorId: string;
+  level: number;
+  type: ItemType;
+  name: string;
+}
+
+/** Unikate der Besucher (visitors.ts) – Werte wie ein Boss-Item gleichen Levels. */
+const VISITOR_ITEM_SPECS: readonly VisitorItemSpec[] = [
+  { id: "unique-torbin-axe", visitorId: "torbin", level: 30, type: "axe", name: "Torbins Kristallhacke" },
+  { id: "unique-stranger-scepter", visitorId: "stranger", level: 50, type: "scepter", name: "Seelenfänger" },
+  { id: "unique-aldric-greatsword", visitorId: "aldric", level: 60, type: "greatsword", name: "Aldrics Drachentöter" },
+];
+
+function buildVisitorItem(spec: VisitorItemSpec): ItemDef {
+  const info = getItemType(spec.type);
+  // Das stärkste Katalog-Item gleichen Typs und Levels gibt die Grafik und die Grundwerte vor
+  const peers = ITEMS.filter((i) => i.type === spec.type && i.requiredLevel === spec.level);
+  const look = peers.reduce((a, b) => (b.attack + b.armor > a.attack + a.armor ? b : a));
+  const attack = info.baseAttack > 0 ? Math.round(look.attack * BOSS_WEAPON_FACTOR) : 0;
+  const armorValue = info.baseArmor > 0 ? Math.round(look.armor * BOSS_ARMOR_FACTOR) : 0;
+  return {
+    id: spec.id,
+    kind: info.kind,
+    type: spec.type,
+    name: spec.name,
+    icon: info.icon,
+    armor: armorValue,
+    attack,
+    twoHanded: info.twoHanded,
+    price: Math.round((armorValue + attack) * 4 * (1 + spec.level / 10)),
+    requiredLevel: spec.level,
+    visitorId: spec.visitorId,
+    lookId: look.id,
+  };
+}
+
+/** Unikate – wie die Boss-Items nicht Teil von ITEMS, damit Händler und Quests sie nie anbieten. */
+export const VISITOR_ITEMS: readonly ItemDef[] = VISITOR_ITEM_SPECS.map(buildVisitorItem);
+
+const ITEMS_BY_ID = new Map([...ITEMS, ...BOSS_ITEMS, ...VISITOR_ITEMS].map((i) => [i.id, i]));
 
 /** Startausrüstung für neue Spielstände. */
 export const STARTER_ITEM_IDS: readonly string[] = ["sword-0", "chest-0"];

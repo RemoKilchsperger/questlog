@@ -1,14 +1,19 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isQuestComplete } from "../domain/quests";
 import { BUILDINGS, canBuild, maxTier, type BuildingDef, type BuildingId } from "../domain/village";
+import { chapterQuest, getFixedVisitor, wandererTemplate } from "../domain/visitors";
 import { BG_HEIGHT, paintVillage, VILLAGE_WIDTH } from "../game/backgrounds";
 import { sfx } from "../game/sfx";
 import { renderSprite } from "../game/sprites";
 import { getBuildingSprite, VILLAGE_SLOTS } from "../game/villageSprites";
+import { getVisitorSprite } from "../game/visitorSprites";
 import { useGameStore } from "../store/gameStore";
 import { useReadyMissions } from "./CompanionScreen";
 import { Hint } from "./HoverCard";
 import { spriteUrl } from "./spriteImage";
+import { useNow } from "./useNow";
+import { VisitorDialog, type VisitorKind } from "./VisitorDialog";
 
 /** Anteil am Dorfbild in Prozent – das Bild wächst mit der Breite mit. */
 const pctX = (px: number) => `${(px / VILLAGE_WIDTH) * 100}%`;
@@ -30,6 +35,7 @@ export function VillageScene({
   const village = useGameStore((s) => s.village);
   const progress = Object.values(village).reduce<number>((sum, tier) => sum + tier, 0);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const [talking, setTalking] = useState<VisitorKind | null>(null);
 
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
@@ -51,6 +57,8 @@ export function VillageScene({
           onBuild={onBuild}
         />
       ))}
+      <Visitors onTalk={setTalking} />
+      <VisitorDialog who={talking} onClose={() => setTalking(null)} />
     </section>
   );
 }
@@ -125,6 +133,95 @@ function BuildingSpot({
       {def.id === "tavern" && <MissionsReady />}
       <AnimatePresence>{built && <Dust key={tier} />}</AnimatePresence>
     </div>
+  );
+}
+
+/** Plätze der Besucher im Dorfbild: der feste vor dem Händler, der Durchreisende am anderen Ende. */
+const VISITOR_SPOTS: Record<VisitorKind, number> = { story: 45, wanderer: 256 };
+/** Unterkante der Figuren – vor den Gebäuden auf der Strasse. */
+const VISITOR_BASE = 78;
+
+/** Die Besucher im Dorf – sie kommen und gehen auch, während das Dorf offen ist. */
+function Visitors({ onTalk }: { onTalk: (who: VisitorKind) => void }) {
+  const visitors = useGameStore((s) => s.visitors);
+  const refresh = useGameStore((s) => s.refreshVisitors);
+  const minute = Math.floor(useNow(60_000).getTime() / 60_000);
+  useEffect(() => refresh(), [refresh, minute]);
+
+  const { story, wanderer } = visitors;
+  return (
+    <>
+      {story && (
+        <VisitorSpot
+          who="story"
+          spriteKey={story.id}
+          name={`${getFixedVisitor(story.id).name}, ${getFixedVisitor(story.id).role}`}
+          marker={!story.accepted ? "!" : isQuestComplete(chapterQuest(getFixedVisitor(story.id), story.chapter), story.progress) ? "?" : null}
+          onTalk={onTalk}
+        />
+      )}
+      {wanderer && (
+        <VisitorSpot
+          who="wanderer"
+          spriteKey={wanderer.kind}
+          name={`${wandererTemplate(wanderer.kind).name}, ${wandererTemplate(wanderer.kind).role}`}
+          marker={!wanderer.accepted ? "!" : isQuestComplete(wanderer.quest, wanderer.progress) ? "?" : null}
+          onTalk={onTalk}
+        />
+      )}
+    </>
+  );
+}
+
+function VisitorSpot({
+  who,
+  spriteKey,
+  name,
+  marker,
+  onTalk,
+}: {
+  who: VisitorKind;
+  spriteKey: string;
+  name: string;
+  /** „!“: hat etwas zu erzählen, „?“: wartet auf die Abgabe */
+  marker: "!" | "?" | null;
+  onTalk: (who: VisitorKind) => void;
+}) {
+  const sprite = getVisitorSprite(spriteKey);
+  const { width, height } = useMemo(() => renderSprite(sprite), [sprite]);
+  const x = VISITOR_SPOTS[who];
+  const hint = marker === "!" ? "Hat dir etwas zu erzählen." : marker === "?" ? "Wartet auf dich – erfüllt!" : "Klicken zum Reden.";
+  return (
+    <motion.div
+      className="absolute"
+      style={{ left: pctX(x - width / 2), top: pctY(VISITOR_BASE - height), width: pctX(width), height: pctY(height) }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <Hint heading={name} text={hint} className="block h-full w-full">
+        <button
+          type="button"
+          onClick={() => onTalk(who)}
+          aria-label={`${name} – ${hint}`}
+          className="group block h-full w-full cursor-pointer focus-visible:outline-2 focus-visible:outline-gold"
+        >
+          <img src={spriteUrl(sprite)} alt="" draggable={false} className="pixelated block h-full w-full group-hover:brightness-125" />
+        </button>
+      </Hint>
+      {marker && (
+        <motion.span
+          aria-hidden
+          className={`font-pixel pointer-events-none absolute left-1/2 -top-5 text-xl font-bold drop-shadow sm:-top-8 sm:text-4xl ${
+            marker === "?" ? "text-xp" : "text-gold"
+          }`}
+          style={{ x: "-50%" }}
+          animate={{ y: [0, -5, 0] }}
+          transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+        >
+          {marker}
+        </motion.span>
+      )}
+    </motion.div>
   );
 }
 

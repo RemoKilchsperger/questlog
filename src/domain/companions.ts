@@ -71,6 +71,13 @@ export interface Companion {
   traits: CompanionTrait[];
   /** Items aus dem Inventar des Helden – solange sie hier liegen, gehören sie dem Begleiter */
   equipment: Equipment;
+  /** Kam mit einem Besucher (visitors.ts) – belegt keinen Platz in der Taverne */
+  visitorId?: string;
+}
+
+/** Begleiter, die einen Platz in der Taverne belegen – die von Besuchern zählen nicht. */
+export function usedSlots(companions: readonly Companion[]): number {
+  return companions.filter((c) => !c.visitorId).length;
 }
 
 export function companionLevel(companion: Companion): number {
@@ -234,7 +241,7 @@ export function recruit(
   if (tier === 0) throw new Error("Baue zuerst eine Taverne.");
   const candidate = pool.recruits.find((r) => r.id === id);
   if (!candidate) throw new Error("Dieser Kandidat ist nicht mehr da.");
-  if (companions.length >= TAVERN_RULES[tier].slots) throw new Error("Alle Plätze in der Taverne sind belegt.");
+  if (usedSlots(companions) >= TAVERN_RULES[tier].slots) throw new Error("Alle Plätze in der Taverne sind belegt.");
   const price = recruitPrice(candidate);
   if (gold < price) throw new Error("Nicht genug Gold.");
   return {

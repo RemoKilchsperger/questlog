@@ -17,6 +17,7 @@ import {
   type TradeAction,
   type TrackedQuest,
 } from "../domain/quests";
+import { trackedVisitorQuests } from "../domain/visitors";
 import { useGameStore } from "../store/gameStore";
 import { CreatureSprite } from "./CreatureSprite";
 import { Gold } from "./Gold";
@@ -156,7 +157,8 @@ function BoardPanel({ now }: { now: Date }) {
 
 function ActiveQuestPanel() {
   const questLog = useGameStore((s) => s.questLog);
-  const active = trackedQuests(questLog, EMPTY_BOARD, EMPTY_BOARD, "", "");
+  const visitors = useGameStore((s) => s.visitors);
+  const active = [...trackedVisitorQuests(visitors), ...trackedQuests(questLog, EMPTY_BOARD, EMPTY_BOARD, "", "")];
 
   return (
     <section className="panel p-4">
@@ -170,7 +172,7 @@ function ActiveQuestPanel() {
         <ul className="mt-2 flex flex-col gap-2">
           <AnimatePresence initial={false}>
             {active.map((q) => (
-              <QuestRow key={q.def.id} def={q.def} progress={q.progress} state="active" />
+              <QuestRow key={q.def.id} def={q.def} progress={q.progress} state="active" visitor={q.source === "visitor"} />
             ))}
           </AnimatePresence>
         </ul>
@@ -250,6 +252,7 @@ function QuestRow({
   state,
   board = false,
   compact = false,
+  visitor = false,
 }: {
   def: QuestDef;
   progress: number;
@@ -258,6 +261,8 @@ function QuestRow({
   board?: boolean;
   /** Im Questbuch: laufende Quests nur als Hinweis, ohne Abgabe */
   compact?: boolean;
+  /** Bitte eines Besuchers – abgegeben wird bei ihm im Dorf */
+  visitor?: boolean;
 }) {
   const accept = useGameStore((s) => s.acceptQuest);
   const abandon = useGameStore((s) => s.abandonQuest);
@@ -285,11 +290,14 @@ function QuestRow({
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className="text-xp tabular-nums">+{reward.xp} XP</span>
           <Gold amount={reward.gold} sign className="text-gold" />
-          <Hint text="Chance auf ein Item beim Abgeben – auf deinem Level.">
-            <span className="text-epic tabular-nums">
-              🎁 {reward.dropChance >= 1 ? "garantiert" : `${Math.round(reward.dropChance * 100)} %`}
-            </span>
-          </Hint>
+          {!visitor && (
+            <Hint text="Chance auf ein Item beim Abgeben – auf deinem Level.">
+              <span className="text-epic tabular-nums">
+                🎁 {reward.dropChance >= 1 ? "garantiert" : `${Math.round(reward.dropChance * 100)} %`}
+              </span>
+            </Hint>
+          )}
+          {visitor && <span className={complete ? "text-xp" : "text-muted"}>{complete ? "✓ Erfüllt – im Dorf abgeben" : "🧍 Besucher im Dorf"}</span>}
           {compact && state === "active" && (
             <span className={complete ? "text-xp" : "text-muted"}>
               {complete ? "✓ Erfüllt – links abgeben" : `Läuft: ${progress}/${target}`}
@@ -307,7 +315,7 @@ function QuestRow({
             Annehmen
           </motion.button>
         )}
-        {state === "active" && !compact && (
+        {state === "active" && !compact && !visitor && (
           <>
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -347,6 +355,16 @@ function QuestIcon({ def }: { def: QuestDef }) {
         <CreatureSprite sprite={getCreature(goal.creatureId).creature.sprite} size={40} />
         <span className="absolute -right-1 -top-1 text-sm" aria-hidden>
           🎯
+        </span>
+      </span>
+    );
+  }
+  if (goal.kind === "fetch") {
+    return (
+      <span className="relative shrink-0">
+        <CreatureSprite sprite={getCreature(goal.creatureId).creature.sprite} size={40} />
+        <span className="absolute -right-1 -top-1 text-sm" aria-hidden>
+          {goal.icon}
         </span>
       </span>
     );

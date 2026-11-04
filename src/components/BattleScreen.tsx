@@ -37,6 +37,7 @@ import {
 import { dateKey, weekKey } from "../domain/calendar";
 import { dungeonMobs, ROOMS } from "../domain/dungeonPaths";
 import { foodEffectText, getFood, withMeal } from "../domain/food";
+import { trackedVisitorQuests } from "../domain/visitors";
 import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked } from "../domain/heroic";
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
@@ -468,7 +469,11 @@ function useCreatureQuests(creatureId: string) {
   const dailyQuests = useGameStore((s) => s.dailyQuests);
   const weeklyQuests = useGameStore((s) => s.weeklyQuests);
   const boardTier = useGameStore((s) => s.village.board);
-  return questsForCreature(trackedQuests(questLog, dailyQuests, weeklyQuests, dateKey(), weekKey(), boardTier), creatureId);
+  const visitors = useGameStore((s) => s.visitors);
+  return questsForCreature(
+    [...trackedQuests(questLog, dailyQuests, weeklyQuests, dateKey(), weekKey(), boardTier), ...trackedVisitorQuests(visitors)],
+    creatureId,
+  );
 }
 
 function HeroPanel() {

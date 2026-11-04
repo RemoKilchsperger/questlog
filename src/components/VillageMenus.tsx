@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { dateKey } from "../domain/calendar";
-import { FOODS, foodEffectText, foodPrice, getFood } from "../domain/food";
+import { FOODS, foodEffectText, foodPrice, getFood, SPECIAL_FOODS } from "../domain/food";
 import { getLevel } from "../domain/leveling";
 import { skillResetCost } from "../domain/skills";
 import { getBuilding, maxTier, STATUE_XP_BONUS, type BuildingId } from "../domain/village";
@@ -67,6 +67,7 @@ function FoodMenu() {
   const level = useGameStore((s) => getLevel(s.character.totalXp));
   const meal = useGameStore((s) => s.meal);
   const eat = useGameStore((s) => s.eat);
+  const recipes = useGameStore((s) => s.visitors.recipes);
   const tavernTiers = getBuilding("tavern").tiers;
   const eaten = meal ? getFood(meal) : null;
 
@@ -87,8 +88,9 @@ function FoodMenu() {
           🍽️ Du bist hungrig – such dir etwas aus.
         </p>
       )}
+      <Pantry />
       <ul className="flex flex-col gap-2">
-        {FOODS.map((food) => {
+        {FOODS.filter((food) => !food.recipe || recipes.includes(food.id)).map((food) => {
           const locked = food.tavern > tier;
           const price = foodPrice(food, level);
           return (
@@ -100,7 +102,10 @@ function FoodMenu() {
                 {food.icon}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">{food.name}</p>
+                <p className="font-semibold">
+                  {food.name}
+                  {food.recipe && <span className="ml-2 text-xs text-epic">📜 Rezept</span>}
+                </p>
                 <p className="text-xs text-xp">{foodEffectText(food)}</p>
               </div>
               {locked ? (
@@ -125,6 +130,45 @@ function FoodMenu() {
         })}
       </ul>
     </>
+  );
+}
+
+/** Besonderes Essen von Besuchern – kostet nichts, ist aber nach den Portionen weg. */
+function Pantry() {
+  const pantry = useGameStore((s) => s.pantry);
+  const meal = useGameStore((s) => s.meal);
+  const eat = useGameStore((s) => s.eatFromPantry);
+  const stock = SPECIAL_FOODS.filter((f) => (pantry[f.id] ?? 0) > 0);
+  if (stock.length === 0) return null;
+  return (
+    <div>
+      <h3 className="font-pixel text-lg text-epic">🧺 Vorrat</h3>
+      <p className="mb-1 text-xs text-muted">Geschenke von Besuchern – zu kaufen gibt es das nicht.</p>
+      <ul className="flex flex-col gap-2">
+        {stock.map((food) => (
+          <li key={food.id} className="flex items-center gap-3 rounded-md border-2 border-epic/50 bg-night-800 p-2">
+            <span className="text-2xl" aria-hidden>
+              {food.icon}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">
+                {food.name} <span className="num text-sm text-muted">×{pantry[food.id]}</span>
+              </p>
+              <p className="text-xs text-xp">{foodEffectText(food)}</p>
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              disabled={meal !== null}
+              onClick={() => eat(food.id)}
+              title={meal !== null ? "Du bist noch satt" : "Essen"}
+              className="rounded-md border-2 border-epic bg-epic/15 px-2 py-0.5 text-sm text-epic hover:bg-epic/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Essen
+            </motion.button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -8,7 +8,7 @@ import type { AbilityDef, Guard } from "../domain/abilities";
 import { ADD_SKILLS, DRUM_BONUS, getBossPhase, type AddRole, type AddRoleDef } from "../domain/bossMechanics";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
 import { getEliteAffix, type EliteAffix } from "../domain/elites";
-import { FOODS, foodEffectText } from "../domain/food";
+import { foodEffectText, getFood } from "../domain/food";
 import { getMatchups, MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR, type Matchup } from "../domain/matchups";
 import { BUFF_LABELS, type BuffKind } from "../domain/potions";
 import { Hint } from "./HoverCard";
@@ -53,7 +53,7 @@ export function heroStatusChips(
   meal?: string | null,
 ): StatusChip[] {
   const chips: StatusChip[] = [];
-  const food = meal ? FOODS.find((f) => f.id === meal) : undefined;
+  const food = meal ? getFood(meal) : undefined;
   if (food) {
     chips.push({
       key: "meal",
