@@ -421,8 +421,10 @@ export interface BattleState {
   potionUsedThisRound: boolean;
   /** Sorten, die in diesem Kampf schon getrunken wurden – jede nur einmal pro Kampf. */
   potionsUsed: string[];
-  /** Bereitgehaltener Wurftrank – er fliegt mit dem nächsten Zug auf das Ziel */
+  /** Bereitgehaltener Wurftrank – er fliegt mit dem nächsten Zug … */
   thrown?: string;
+  /** … auf das Ziel beim Bereitlegen (uid eines Begleiters, sonst der Boss) – angreifen lässt sich danach ein anderes */
+  thrownAt?: string;
   /** Aktive Verstärkungen des Helden durch Tränke */
   buffs: Partial<Record<BuffKind, ActiveBuff>>;
   mana: number;
@@ -659,7 +661,8 @@ function assertActive(state: BattleState) {
 /**
  * Trank trinken – höchstens einer pro Runde, jede Sorte nur einmal pro Kampf,
  * Heiltränke nicht bei vollen Lebenspunkten. Verstärkungen gelten ab sofort.
- * Ein Wurftrank zählt genauso, fliegt aber erst mit dem Zug des Helden (attackRound).
+ * Ein Wurftrank zählt genauso, fliegt aber erst mit dem Zug des Helden (attackRound) –
+ * auf das jetzt gewählte Ziel, auch wenn der Held danach ein anderes angreift.
  */
 export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult {
   const blocker = potionBlocker(state, potion);
@@ -667,7 +670,7 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
   const { effect } = potion;
   if (effect.kind === "throw") {
     return {
-      state: { ...state, thrown: potion.id, potionUsedThisRound: true, potionsUsed: [...state.potionsUsed, potion.id] },
+      state: { ...state, thrown: potion.id, thrownAt: state.target, potionUsedThisRound: true, potionsUsed: [...state.potionsUsed, potion.id] },
       events: [],
     };
   }
@@ -963,9 +966,10 @@ export function attackRound(
     // Meisteralchemist: Wurftränke wirken stärker
     const power = state.potionPower ?? 1;
     const blast = effect.throw === "blast";
-    const missed = !blast && target === boss && hidden;
-    events.push({ type: "thrown", potionId: thrown.id, ...(!blast && foeTag(target)), ...(missed && { missed }) });
-    for (const foe of (blast ? living() : missed ? [] : [target]).filter((f) => !(f === boss && hidden))) {
+    const aim = adds.find((f) => f.add === state.thrownAt && f.c.hp > 0) ?? boss;
+    const missed = !blast && aim === boss && hidden;
+    events.push({ type: "thrown", potionId: thrown.id, ...(!blast && foeTag(aim)), ...(missed && { missed }) });
+    for (const foe of (blast ? living() : missed ? [] : [aim]).filter((f) => !(f === boss && hidden))) {
       if (effect.throw === "burn" || effect.throw === "poison") {
         applyDot(foe, effect.throw, strong.damage * effect.percent * power, effect.rounds);
       } else if (effect.throw === "freeze") {
@@ -1694,6 +1698,7 @@ export function attackRound(
       round: status === "active" ? state.round + 1 : state.round,
       potionUsedThisRound: false,
       thrown: undefined,
+      thrownAt: undefined,
       buffs: tickBuffs(state.buffs),
       log: [...state.log, ...events.map((e) => ({ ...e, round: state.round }))],
     },
