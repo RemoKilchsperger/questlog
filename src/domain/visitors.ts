@@ -388,7 +388,7 @@ const WANDERER_TEMPLATES: Readonly<Record<WandererKind, WandererTemplate>> = {
     name: "Benno",
     role: "fahrender Koch",
     icon: "🍲",
-    intro: "„Ich koche auf jedem Markt zwischen hier und dem Meer. Für mein bestes Gericht fehlt mir Fleisch vom {creature} – das gibt es nur im {area}.“",
+    intro: "„Ich koche auf jedem Markt zwischen hier und dem Meer. Für mein bestes Gericht fehlt mir Fleisch aus dem Gebiet ‚{area}‘. {creature} – sagt man – schmeckt am besten.“",
     thanks: "„Herrlich! Hier, für unterwegs. Mehr kann ich nicht tragen.“",
   },
   preacher: {
@@ -396,7 +396,7 @@ const WANDERER_TEMPLATES: Readonly<Record<WandererKind, WandererTemplate>> = {
     name: "Bruder Anselm",
     role: "Wanderprediger",
     icon: "🕯️",
-    intro: "„Ein {creature} hat die Reliquie meines Ordens gestohlen. Ich habe ihn bis in den {area} verfolgt, weiter tragen mich meine Füsse nicht.“",
+    intro: "„Die Reliquie meines Ordens wurde gestohlen. Ich bin dem Dieb bis ins Gebiet ‚{area}‘ gefolgt – es war ein Biest, das ihr hier {creature} nennt. Weiter tragen mich meine Füsse nicht.“",
     thanks: "„Der Orden wird sich erkenntlich zeigen. Nimm das – es lag zu lange in unserer Schatzkammer.“",
   },
   apprentice: {
@@ -404,7 +404,7 @@ const WANDERER_TEMPLATES: Readonly<Record<WandererKind, WandererTemplate>> = {
     name: "Pia",
     role: "Alchemistenlehrling",
     icon: "🧪",
-    intro: "„Mein Meister will Drüsen vom {creature} für ein Experiment. Ich habe ihm gesagt, dass ich das kann. Kann ich nicht.“",
+    intro: "„Mein Meister will Drüsen für ein Experiment, und zwar genau von diesem Biest: {creature}. Ich habe ihm gesagt, dass ich das kann. Kann ich nicht.“",
     thanks: "„Du rettest mir die Lehre! Ich habe ein paar Flaschen abgezweigt – nicht verraten.“",
   },
   builder: {
@@ -412,7 +412,7 @@ const WANDERER_TEMPLATES: Readonly<Record<WandererKind, WandererTemplate>> = {
     name: "Hedwig",
     role: "Baumeisterin auf Reisen",
     icon: "🪵",
-    intro: "„Im {area} haben mich {creature} überfallen und meinen Wagen umgeworfen. Vertreib sie, dann gehört dir die Ladung.“",
+    intro: "„Im Gebiet ‚{area}‘ haben mich Bestien überfallen und meinen Wagen umgeworfen – {creature}, ein ganzes Rudel. Vertreib sie, dann gehört dir die Ladung.“",
     thanks: "„Der Wagen ist hin, aber die Ladung ist heil. Bau etwas Schönes damit.“",
   },
   minstrel: {
@@ -420,7 +420,7 @@ const WANDERER_TEMPLATES: Readonly<Record<WandererKind, WandererTemplate>> = {
     name: "Fidelius",
     role: "Spielmann",
     icon: "🎵",
-    intro: "„Ich schreibe ein Lied über den Sieg gegen {creature}. Mir fehlt nur noch … der Sieg. Und ein Held.“",
+    intro: "„Mein neues Lied heisst ‚Der Held und {creature}‘. Mir fehlt nur noch … der Sieg. Und ein Held.“",
     thanks: "„Was für eine Strophe! Die Wirtshäuser werden zahlen, um das zu hören – und du bekommst deinen Anteil im Voraus.“",
   },
   cartographer: {
@@ -428,7 +428,7 @@ const WANDERER_TEMPLATES: Readonly<Record<WandererKind, WandererTemplate>> = {
     name: "Elske",
     role: "Kartografin",
     icon: "🗺️",
-    intro: "„Auf meiner Karte ist der Dungeon {area} ein weisser Fleck. Geh hinein und komm wieder heraus – den Rest zeichne ich.“",
+    intro: "„Auf meiner Karte ist der Dungeon ‚{area}‘ ein weisser Fleck. Geh hinein und komm wieder heraus – den Rest zeichne ich.“",
     thanks: "„Jetzt ist die Karte vollständig. Das habe ich am Grund einer alten Kiste gefunden – du kannst es eher brauchen als ich.“",
   },
 };
@@ -501,7 +501,7 @@ export function rollWanderer(heroLevel: number, arrives: number, rng: () => numb
     areaName = area.name;
     switch (kind) {
       case "cook":
-        goal = bring(creature.id, 3, `Fleisch vom ${creature.name}`, "🍖");
+        goal = bring(creature.id, 3, "Wildfleisch", "🍖");
         gift = { kind: "food", foodId: pick(SPECIAL_FOODS.filter((f) => f.id !== "hunterRoast"), rng).id, count: COOK_PORTIONS };
         break;
       case "preacher":
@@ -509,7 +509,7 @@ export function rollWanderer(heroLevel: number, arrives: number, rng: () => numb
         gift = { kind: "loot", weights: BOSS_WEIGHTS };
         break;
       case "apprentice": {
-        goal = bring(creature.id, 4, `Drüse vom ${creature.name}`, "🧪");
+        goal = bring(creature.id, 4, "Drüse", "🧪");
         const potions: Record<string, number> = {};
         for (let i = 0; i < APPRENTICE_POTIONS; i++) {
           const potion = pick(BUFF_POTIONS, rng).id;

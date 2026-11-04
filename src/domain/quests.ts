@@ -245,7 +245,7 @@ export function questGoalText(def: QuestDef): string {
     case "fetch": {
       const { creature } = getCreature(goal.creatureId);
       const what = goal.count > 1 ? `${goal.count}× ${goal.item}` : goal.item;
-      return creature.boss ? `Bring ${what} von ${creature.name}` : `Bring ${what} (von: ${creature.name})`;
+      return `Bring ${what} (${creature.boss ? "Beute" : "fällt bei"}: ${creature.name})`;
     }
   }
 }

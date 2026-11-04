@@ -5,7 +5,9 @@ Es gibt zwei Arten von Besuchern: **feste Besucher** mit einer Geschichte, die z
 **Durchreisende**, die nach Zeit kommen und nach einem Tag wieder weiterziehen.
 Code: `src/domain/visitors.ts`, Store `gameStore.ts` (`visitors`), Oberfläche `src/components/VisitorDialog.tsx`.
 
-Status: **Konzept.** Zuerst solo. Kills im Koop zählen trotzdem mit, weil sie dieselben Quest-Ereignisse auslösen.
+Status: **Etappen 1–3 umgesetzt** (Spiellogik, Spielstand v20, Oberfläche). Kills im Koop zählen mit, weil sie dieselben
+Quest-Ereignisse auslösen. Nach dem Merge Edge Functions deployen (`npm run functions:deploy`): Der Tausch-Server muss die
+Unikate kennen.
 
 ## Entschiedene Regeln
 
@@ -36,10 +38,10 @@ Status: **Konzept.** Zuerst solo. Kills im Koop zählen trotzdem mit, weil sie d
 |---|---|---|---|---|
 | Düsterwald | **Bram**, verwundeter Söldner | Krummzahns Goblins haben seine Truppe zerschlagen. Erst die Plünderer vertreiben, dann das Banner der Truppe zurückholen, das Krummzahn als Trophäe trägt. | – | Bram als **Begleiter** (fester Name, zwei Traits) |
 | Nebelsümpfe | **Mirla**, Kräuterfrau | Sie braucht Moorlilien und Schlangengift für ein altes Rezept ihrer Grossmutter. | – | **Rezept:** „Moorlilien-Eintopf“ in der Taverne |
-| Kristallhöhlen | **Torbin**, Zwergenprospektor | Seine Spitzhacke und sein Bruder sind in den Höhlen verschollen. Er findet den Bruder nicht, nur dessen Hacke. | – | **Unikat:** „Torbins Kristallhacke“ (Axt) |
+| Kristallhöhlen | **Torbin**, Zwergenprospektor | Seine Spitzhacke und sein Bruder sind in den Höhlen verschollen. Er findet den Bruder nicht, nur dessen Hacke. | – | **Unikat:** „Torbins Kristallhacke“ (Axt, Runenklinge) |
 | Frostgipfel | **Yrla**, Jägerin | Sie jagt das Tier, das ihr Dorf verwüstet hat: Erst die Spur aufnehmen, dann Frosttrolle befragen, dann Graufrost stellen. | – | **Festmahl:** 3× „Jägerbraten“ |
 | Schattenruinen | **Die Fremde** | Sie will Seelensplitter aus den Ruinen. Im letzten Kapitel zeigt sich: Sie ist Nekromantin. | Splitter übergeben **oder** verweigern | Übergeben: Unikat „Seelenfänger“ (Zepter). Verweigern: viel Gold, EP und ein Item mit Boss-Chancen |
-| Drachenhort | **Aldric**, alter Drachentöter | Er will Ignaroth ein letztes Mal sehen. Man bringt ihm Drachenschuppen und besiegt den Drachen. | Ihn mitnehmen **oder** ihm die Lanze abnehmen | Begleiter Aldric **oder** Unikat „Aldrics Drachenlanze“ |
+| Drachenhort | **Aldric**, alter Drachentöter | Er will Ignaroth ein letztes Mal sehen. Man bringt ihm Drachenschuppen und besiegt den Drachen. | Ihn mitnehmen **oder** ihm die Lanze abnehmen | Begleiter Aldric **oder** Unikat „Aldrics Drachentöter“ (Zweihandschwert) |
 
 Später möglich: Bei der Fremden führt „verweigern“ zu einem Kampf gegen sie. Dafür braucht es einen neuen Gegner.
 
@@ -77,9 +79,22 @@ Später möglich: Bei der Fremden führt „verweigern“ zu einem Kampf gegen s
 | Begleiter | Fester Name und zwei Traits, legendär bzw. episch. Er belegt keinen Platz in der Taverne. Ohne Taverne wartet er, bis sie gebaut ist |
 | Unikat | Eigenes Item mit festem Namen und festem Effekt, wie ein Boss-Item. Level = Gebiet des Besuchers |
 
+## Zahlen
+
+| Was | Wert |
+|---|---|
+| Ankunft der festen Besucher | Bram Lv. 3, Mirla 12, Torbin 22, Yrla 32, Die Fremde 42, Aldric 52 |
+| Durchreisende | ab Level 5, bleiben 24 Std, der nächste 12–36 Std später. Wegschicken = er geht sofort |
+| Quest-Gegenstand | 40 % pro Sieg, Elite und Boss immer |
+| EP und Gold pro Kapitel | 1,5× so viel wie eine Questbuch-Quest gleichen Umfangs. Verweigern bei der Fremden: doppelt |
+| Unikate | legendär, Werte wie ein Boss-Item gleichen Levels, fester Effekt, nicht tauschbar. Torbin Lv. 30 (Runenklinge), Seelenfänger Lv. 50 (Seelenraub), Drachentöter Lv. 60 (Drachenfeuer) |
+| Besonderes Essen | Jägerbraten +20 % Schaden/LP, Königsbrühe +25 % LP/Rüstung, Gewürzpastete +15 % Schaden/+8 % Krit, Honigkuchen +40 % Gold/+15 % LP/Mana |
+| Rezept | Moorlilien-Eintopf: +15 % LP, +30 % Mana, +10 % Rüstung, ab Schankstube |
+| Begleiter | Bram: Kampferprobt (legendär), Glückspilz (episch). Aldric: Lehrmeister und Plünderer (legendär). Starten 2 Level unter dem Helden |
+
 ## Etappen
 
-1. Domain `visitors.ts` mit Tests: feste Besucher, Durchreisende, Ziel `fetch`, Belohnungen
-2. Store (Spielstand v20) und Quest-Ereignisse
-3. Oberfläche: Besucher im Dorfbild, Gespräch, Questbuch-Abschnitt „Besucher“, Vorrat in der Taverne
-4. Erfolge („Hilfsbereit“: 6 feste Besucher), Entscheidungen mit Kampf
+1. ✅ Domain `visitors.ts` mit Tests: feste Besucher, Durchreisende, Ziel `fetch`, Belohnungen
+2. ✅ Store (Spielstand v20) und Quest-Ereignisse
+3. ✅ Oberfläche: Besucher im Dorfbild (❗ neu, ❓ erfüllt), Gespräch, laufende Quests im Questbuch und im Kampf, Vorrat in der Taverne, Abzeichen am Dorf-Tab
+4. 💡 Erfolge („Hilfsbereit“: 6 feste Besucher), Entscheidungen mit Kampf

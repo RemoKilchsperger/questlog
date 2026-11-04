@@ -16,7 +16,9 @@ import { SkillTree } from "./components/SkillTree";
 import { SmithScreen } from "./components/SmithScreen";
 import { TradeScreen } from "./components/TradeScreen";
 import { VillageScreen } from "./components/VillageScreen";
+import { useNow } from "./components/useNow";
 import { unspentSkillPoints } from "./domain/skills";
+import { visitorNeedsAttention } from "./domain/visitors";
 import { useGameStore } from "./store/gameStore";
 import { useCoopStore } from "./coop/coopStore";
 import { isLobbyCode } from "./coop/protocol";
@@ -50,6 +52,11 @@ export default function App() {
   const newAchievements = useGameStore((s) => s.achievementQueue.length);
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
   const readyQuests = useReadyQuestCount();
+  const visitorWaiting = useGameStore((s) => visitorNeedsAttention(s.visitors));
+  const refreshVisitors = useGameStore((s) => s.refreshVisitors);
+  const minute = Math.floor(useNow(60_000).getTime() / 60_000);
+  // Besucher kommen und gehen auch, während man woanders ist – für das Abzeichen am Dorf-Tab
+  useEffect(() => refreshVisitors(), [refreshVisitors, minute]);
 
   // Einladungslink: der Lobby beitreten und die Adresse wieder aufräumen
   useEffect(() => {
@@ -115,6 +122,11 @@ export default function App() {
         </TabButton>
         <TabButton active={tab === "village"} onClick={() => setTab("village")} icon="🏘️">
           Dorf
+          {visitorWaiting && (
+            <span className="ml-1.5 rounded-full bg-gold px-1.5 text-sm text-night-950" title="Ein Besucher wartet auf dich">
+              !
+            </span>
+          )}
         </TabButton>
         <TabButton active={tab === "battle"} onClick={() => setTab("battle")} icon="⚔️">
           Kampf

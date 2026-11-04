@@ -10,6 +10,7 @@ import { BossSetInfo } from "./BossSetInfo";
 import { HoverCard } from "./HoverCard";
 import { ItemIcon } from "./ItemIcon";
 import { getItemEffect, type ItemEffectId } from "../domain/itemEffects";
+import { getFixedVisitor } from "../domain/visitors";
 import { armorClassPerkText, bonusText, itemName, MAIN_STAT_TEXT, mainStatParts, RARITY_BORDER, RARITY_TEXT, rarityLabel, typeText } from "./itemUi";
 
 /** Zeigt beim Überfahren (oder Fokussieren) ein grosses Symbol mit allen Werten des Items. */
@@ -70,6 +71,7 @@ function ItemCard({ stats, hint }: { stats: ItemStats; hint?: string }) {
           </div>
         </>
       )}
+      {def.visitorId && <p className="text-xs text-legendary">👑 Unikat – Geschenk von {getFixedVisitor(def.visitorId).name}</p>}
       <p className="text-xs text-muted">benötigt Level {def.requiredLevel}</p>
       {hint && <p className="mt-1 text-xs text-gold">{hint}</p>}
     </>
