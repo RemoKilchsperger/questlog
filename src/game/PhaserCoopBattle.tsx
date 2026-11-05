@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { useEffect, useRef } from "react";
+import { SCENE_FRAME } from "../components/battleLayout";
 import { useCoopStore } from "../coop/coopStore";
 import { COOP_SCENE_HEIGHT, COOP_SCENE_WIDTH, CoopBattleScene, type CoopSceneData } from "./CoopBattleScene";
 
@@ -32,7 +33,7 @@ export default function PhaserCoopBattle({ battleId }: { battleId: string }) {
   return (
     <div
       ref={parent}
-      className="aspect-[9/4] w-full overflow-hidden rounded-md border-2 border-night-700 bg-night-950"
+      className={`${SCENE_FRAME} overflow-hidden rounded-md border-2 border-night-700 bg-night-950`}
     />
   );
 }

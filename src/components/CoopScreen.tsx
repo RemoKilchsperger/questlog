@@ -48,6 +48,7 @@ import { BlessingChip } from "./TowerScreen";
 import { coopDoors, openRoom } from "../domain/coopDungeonPaths";
 import { ROOMS } from "../domain/dungeonPaths";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { SCENE_FRAME, useScrollToBattle } from "./battleLayout";
 import { DungeonChest } from "./DungeonChest";
 import { QuestItemFinds } from "./QuestItemFinds";
 import { MaterialGain } from "./materialUi";
@@ -449,6 +450,7 @@ function CoopBattle() {
     const t = window.setTimeout(() => setAnimated((n) => Math.max(n, logLength)), 8000);
     return () => window.clearTimeout(t);
   }, [logLength]);
+  const top = useScrollToBattle<HTMLElement>(battle?.id ?? "");
   if (!battle || !row) return null;
   const boss = getCoopEnemy(battle.bossId);
   const animating = animated < battle.log.length;
@@ -460,7 +462,7 @@ function CoopBattle() {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="panel p-4">
+      <section ref={top} className="panel scroll-mt-2 p-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-pixel text-2xl">
             Koop · {dungeon && <span className="text-muted">{dungeon.name} · </span>}
@@ -488,7 +490,7 @@ function CoopBattle() {
         </div>
         <Suspense
           fallback={
-            <div className="flex aspect-[9/4] w-full items-center justify-center rounded-md bg-night-950 text-muted">
+            <div className={`${SCENE_FRAME} flex items-center justify-center rounded-md bg-night-950 text-muted`}>
               Kampfszene wird geladen …
             </div>
           }
