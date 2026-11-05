@@ -6,22 +6,23 @@ import { getLevel } from "../domain/leveling";
 import { skillResetCost } from "../domain/skills";
 import { getBuilding, maxTier, STATUE_XP_BONUS, type BuildingId } from "../domain/village";
 import { getBuildingSprite } from "../game/villageSprites";
-import { useGameStore } from "../store/gameStore";
+import { activeVillage, useGameStore } from "../store/gameStore";
 import { CompanionsPanel, MissionsPanel, useReadyMissions } from "./CompanionScreen";
 import { Gold } from "./Gold";
 import { PixelSprite } from "./PixelSprite";
+import { RaidPanel } from "./RaidPanel";
 import { SkillReset } from "./SkillTree";
 import { useNow } from "./useNow";
 import { GameIcon } from "./GameIcon";
 
-// Menüs der kleineren Gebäude im Dorf: Taverne, Trainingsplatz und Statue.
+// Menüs der kleineren Gebäude im Dorf: Taverne, Trainingsplatz, Statue und Wehranlage.
 
 type TavernView = "food" | "companions" | "missions";
 
 /** Die Taverne – Buff-Food, Begleiter und Missionen (CompanionScreen.tsx). */
 export function TavernScreen() {
   const [view, setView] = useState<TavernView>("food");
-  const tier = useGameStore((s) => s.village.tavern);
+  const tier = useGameStore((s) => activeVillage(s).tavern);
   const refreshTavern = useGameStore((s) => s.refreshTavern);
   const ready = useReadyMissions();
   const today = dateKey(useNow());
@@ -62,7 +63,7 @@ function TabChip({ active, onClick, children }: { active: boolean; onClick: () =
 
 /** Buff-Food für den nächsten Kampf, Dungeon, Turm-Lauf oder Koop-Kampf. */
 function FoodMenu() {
-  const tier = useGameStore((s) => s.village.tavern);
+  const tier = useGameStore((s) => activeVillage(s).tavern);
   const gold = useGameStore((s) => s.character.gold);
   const level = useGameStore((s) => getLevel(s.character.totalXp));
   const meal = useGameStore((s) => s.meal);
@@ -134,7 +135,7 @@ function FoodMenu() {
 
 /** Der Trainingsplatz – hier werden die Skillpunkte zurückgesetzt. */
 export function TrainingScreen() {
-  const tier = useGameStore((s) => s.village.training);
+  const tier = useGameStore((s) => activeVillage(s).training);
   const level = useGameStore((s) => getLevel(s.character.totalXp));
   const fullCost = skillResetCost(level, 1);
 
@@ -161,7 +162,7 @@ export function TrainingScreen() {
 
 /** Die Statue – zeigt den XP-Bonus. */
 export function StatueScreen() {
-  const tier = useGameStore((s) => s.village.statue);
+  const tier = useGameStore((s) => activeVillage(s).statue);
   return (
     <BuildingIntro id="statue">
       <p className="text-sm text-muted">
@@ -169,6 +170,20 @@ export function StatueScreen() {
         <span className="font-bold text-xp">+{Math.round(STATUE_XP_BONUS[tier] * 100)} % XP</span> aus allen Kämpfen,
         Dungeons, dem Turm und abgegebenen Quests. Im Koop gilt das Dorf nicht.
       </p>
+    </BuildingIntro>
+  );
+}
+
+/** Die Wehranlage – zeigt die angekündigte Bande und was die Anlage gegen Überfälle bringt. */
+export function WallsScreen({ onDefend }: { onDefend: () => void }) {
+  return (
+    <BuildingIntro id="walls">
+      <p className="text-sm text-muted">
+        Ab und zu kündigt sich eine Bande an. Bis zur Frist kannst du das Dorf verteidigen: mehrere Wellen und ein
+        Anführer, ohne Heilung dazwischen. Verlierst du oder verpasst du die Frist, beschädigt sie ein Gebäude – es wirkt
+        eine Stufe tiefer, bis du es reparierst. Begleiter, die nicht auf Mission sind, stehen Wache.
+      </p>
+      <RaidPanel onDefend={onDefend} quiet />
     </BuildingIntro>
   );
 }

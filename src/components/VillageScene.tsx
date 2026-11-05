@@ -58,6 +58,7 @@ export function VillageScene({
         />
       ))}
       <Visitors onTalk={setTalking} />
+      <RaidWarning />
       <VisitorDialog who={talking} onClose={() => setTalking(null)} />
     </section>
   );
@@ -81,14 +82,18 @@ function BuildingSpot({
   const sprite = getBuildingSprite(def.id, tier);
   const { width, height } = useMemo(() => renderSprite(sprite), [sprite]);
   const built = useJustBuilt(def.id, tier);
+  const damaged = useGameStore((s) => s.raids.damaged.includes(def.id));
 
   const current = def.tiers[tier];
   const plot = tier === 0 && def.id !== "merchant";
   const name = plot ? `${def.name}: Bauplatz` : `${def.name}: ${current.name}`;
   const hint = [
     tier === maxTier(def.id) ? "Ganz ausgebaut." : `Stufe ${tier} von ${maxTier(def.id)}.`,
+    damaged && "🔥 Beschädigt – wirkt eine Stufe tiefer, bis du es reparierst.",
     plot ? "Klicken zum Bauen." : `Klicken zum Öffnen${buildable ? ", 🔨 zum Ausbauen" : ""}.`,
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
@@ -131,6 +136,7 @@ function BuildingSpot({
         </motion.button>
       )}
       {def.id === "tavern" && <MissionsReady />}
+      {damaged && <Flames />}
       <AnimatePresence>{built && <Dust key={tier} />}</AnimatePresence>
     </div>
   );
@@ -240,6 +246,39 @@ function MissionsReady() {
     >
       📜
     </motion.span>
+  );
+}
+
+/** Flackernde Flammen auf einem Gebäude, das ein Überfall beschädigt hat. */
+function Flames() {
+  return (
+    <motion.span
+      aria-hidden
+      className="pointer-events-none absolute -top-1 left-0 text-base drop-shadow sm:-top-3 sm:text-2xl"
+      animate={{ scale: [1, 1.15, 0.95, 1], opacity: [0.9, 1, 0.8, 0.9] }}
+      transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
+    >
+      🔥
+    </motion.span>
+  );
+}
+
+/** Gekreuzte Schwerter am Dorfrand, solange eine Bande anrückt – ein Klick führt zur Ankündigung. */
+function RaidWarning() {
+  const coming = useGameStore((s) => s.raids.current !== null);
+  if (!coming) return null;
+  return (
+    <motion.button
+      type="button"
+      onClick={() => document.getElementById("raid")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+      aria-label="Eine Bande zieht aufs Dorf zu"
+      title="Eine Bande zieht aufs Dorf zu"
+      className="absolute left-1 top-1 cursor-pointer rounded-md bg-danger/80 px-1 text-base drop-shadow sm:left-2 sm:top-2 sm:px-2 sm:text-2xl"
+      animate={{ scale: [1, 1.12, 1] }}
+      transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
+    >
+      ⚔️
+    </motion.button>
   );
 }
 

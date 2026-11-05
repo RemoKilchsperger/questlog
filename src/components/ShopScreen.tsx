@@ -8,7 +8,7 @@ import { POTIONS } from "../domain/potions";
 import { rerollCost, rerollsLeft, SHOP_ROTATION_HOURS, shopPrice, shopSlot } from "../domain/shop";
 import type { OwnedItem, Rarity } from "../domain/types";
 import { getBuilding, MERCHANT_RULES } from "../domain/village";
-import { useGameStore } from "../store/gameStore";
+import { activeVillage, useGameStore } from "../store/gameStore";
 import { PotionList } from "./AlchemistScreen";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Gold } from "./Gold";
@@ -20,7 +20,7 @@ import { useNow } from "./useNow";
 
 /** Regeln des Händlers auf seiner aktuellen Ausbaustufe (village.ts). */
 function useMerchant() {
-  const tier = useGameStore((s) => s.village.merchant);
+  const tier = useGameStore((s) => activeVillage(s).merchant);
   return { tier, rules: MERCHANT_RULES[tier], name: getBuilding("merchant").tiers[tier].name };
 }
 

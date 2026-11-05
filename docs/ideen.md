@@ -97,3 +97,9 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | # | Idee | Status |
 |---|---|---|
 | 46 | **Besucher mit Story-Quests:** Ab und zu kommt eine Person ins Dorf und erzählt ihre Geschichte. Sie vergibt eine kleine Questreihe (2–4 Schritte), z. B. ein Erbstück aus einem Dungeon holen, das ein bestimmter Gegner fallen lässt. Am Ende eine Entscheidung mit Folgen, als Belohnung etwas Einzigartiges (Item, Rezept, Begleiter, Titel) | ✅ `visitors.ts`, docs/besucher.md – Erfolge und Kampf gegen die Fremde noch offen |
+
+## Überfälle (2026-11-05)
+
+| # | Idee | Status |
+|---|---|---|
+| 47 | **Überfälle aufs Dorf:** Ab und zu kündigt sich eine Bande an. Bis zur Frist verteidigt man das Dorf (Wellen und Anführer), sonst wird ein Gebäude beschädigt und wirkt eine Stufe tiefer, bis man es repariert. Neues Gebäude Wehranlage, Begleiter im Dorf stehen Wache | ✅ `raids.ts`, docs/ueberfaelle.md |

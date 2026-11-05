@@ -590,6 +590,89 @@ const STATUE_3 = stamp(
   piece(0, ["o.o.o"], 10),
 );
 
+/* ───────────── Wehranlage ───────────── */
+
+/** Palisade aus angespitzten Pfählen mit einem Tor. */
+const WALLS_1 = sym(
+  [
+    "........1111",
+    "........2222",
+    "1..1..1..2..",
+    "121121121233",
+    "121121121233",
+    "222222222233",
+    "121121121233",
+    "121121121233",
+    "121121121233",
+    "555555555555",
+  ],
+  12,
+);
+
+/** Hölzerner Wachturm mit Laterne, auf Stelzen mit Kreuzstreben. */
+const WALLS_2 = sym(
+  [
+    ".......R",
+    ".....RRr",
+    "...RRrrr",
+    ".RRrrrrr",
+    "RRRRRRRR",
+    ".2......",
+    ".2.....y",
+    ".2.....y",
+    "22222222",
+    "21.21.21",
+    "33333333",
+    "..2.....",
+    "..23....",
+    "..2.3...",
+    "..2..3..",
+    "..2...3.",
+    "..2....3",
+    "..2...3.",
+    "..2..3..",
+    "..2.3...",
+    "..23....",
+    "..2.....",
+    ".555....",
+  ],
+  8,
+);
+
+/** Steinerner Turm mit Zinnen, erleuchteten Fenstern und Wimpel. */
+const WALLS_3 = stamp(
+  sym(
+    [
+      "........2",
+      "........2",
+      "........2",
+      "........2",
+      "44.44.444",
+      "444444444",
+      "555555555",
+      ".44444444",
+      ".44544444",
+      ".4444444y",
+      ".4444444y",
+      ".44444444",
+      ".45444444",
+      ".44444544",
+      ".4y44444y",
+      ".4y44444y",
+      ".44444444",
+      ".44445444",
+      ".44444433",
+      ".44444333",
+      ".44445333",
+      ".44444333",
+      "555555555",
+    ],
+    9,
+  ),
+  // Wimpel an der Fahnenstange
+  piece(0, ["CCCC", "CCC.", "C..."], 10),
+);
+
 const SPRITES: Readonly<Record<BuildingId, readonly (readonly string[])[]>> = {
   merchant: [MERCHANT_0, MERCHANT_1, MERCHANT_2, MERCHANT_3],
   smith: [PLOT, SMITH_1, SMITH_2, SMITH_3],
@@ -598,10 +681,16 @@ const SPRITES: Readonly<Record<BuildingId, readonly (readonly string[])[]>> = {
   tavern: [PLOT, TAVERN_1, TAVERN_2, TAVERN_3],
   training: [PLOT, TRAINING_1, TRAINING_2, TRAINING_3],
   statue: [PLOT, STATUE_1, STATUE_2, STATUE_3],
+  walls: [PLOT, WALLS_1, WALLS_2, WALLS_3],
 };
 
-/** Plätze im Dorfbild (Pixel im Raster VILLAGE_WIDTH × BG_HEIGHT): Mitte und Unterkante jedes Gebäudes. */
-export const VILLAGE_SLOTS: readonly { id: BuildingId; x: number; base: number }[] = [
+/**
+ * Plätze im Dorfbild (Pixel im Raster VILLAGE_WIDTH × BG_HEIGHT): Mitte und Unterkante jedes Gebäudes.
+ * `back`: steht hinten auf dem Hügel, zwischen den Gebäuden der Strasse hindurch sichtbar – kommt zuerst,
+ * damit die Strasse davor liegt.
+ */
+export const VILLAGE_SLOTS: readonly { id: BuildingId; x: number; base: number; back?: true }[] = [
+  { id: "walls", x: 168, base: 53, back: true },
   { id: "merchant", x: 24, base: 69 },
   { id: "smith", x: 66, base: 69 },
   { id: "tavern", x: 108, base: 69 },

@@ -52,6 +52,8 @@ export interface Records {
   abilitiesSeen: AbilityId[];
   /** Ids heroisch besiegter Bosse (heroic.ts) */
   heroicDefeated: string[];
+  /** Erfolgreich verteidigte Überfälle aufs Dorf (raids.ts) */
+  raidsDefended: number;
 }
 
 export const EMPTY_RECORDS: Records = {
@@ -72,6 +74,7 @@ export const EMPTY_RECORDS: Records = {
   towerBlessings: 0,
   abilitiesSeen: [],
   heroicDefeated: [],
+  raidsDefended: 0,
 };
 
 /** Alles, woraus sich der Fortschritt berechnet. */
@@ -192,6 +195,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: "foundation", name: "Grundstein", icon: "🧱", category: "village", description: "Das erste Gebäude im Dorf gebaut", tiers: [1], title: "Siedler", progress: (i) => Math.min(1, buildingsAtLeast(i.village, 1)) },
   { id: "village-founder", name: "Dorfgründer", icon: "🏘️", category: "village", description: "Alle {n} Gebäude mindestens auf Stufe 1", tiers: [BUILDINGS.length], title: "Dorfgründer", progress: (i) => buildingsAtLeast(i.village, 1) },
   { id: "master-builder", name: "Baumeister", icon: "🏛️", category: "village", description: "Alle {n} Gebäude ganz ausgebaut", tiers: [BUILDINGS.length], title: "Baumeister", progress: (i) => buildingsMaxed(i.village) },
+  { id: "defender", name: "Verteidiger", icon: "🏰", category: "village", description: "{n} Überfälle aufs Dorf abgewehrt", tiers: [1, 10, 30], title: "Torwächter", progress: (i) => i.records.raidsDefended },
   // Sammeln
   { id: "treasure-hunter", name: "Schatzjäger", icon: "💎", category: "collection", description: "{n} legendäre Items gefunden", tiers: [1, 10, 30], title: "Schatzjäger", progress: (i) => i.records.legendarySeen.length },
   { id: "boss-collector", name: "Boss-Sammler", icon: "👑", category: "collection", description: "{n} Boss-Items gesammelt", tiers: [5, 20, BOSS_ITEMS.length], title: "Sammler", progress: (i) => i.bossCollection.length },

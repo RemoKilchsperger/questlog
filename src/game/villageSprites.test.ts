@@ -26,10 +26,10 @@ describe("Dorfbild", () => {
       }
   });
 
-  it("voll ausgebaute Nachbarn überdecken sich nicht", () => {
+  it("voll ausgebaute Nachbarn an der Strasse überdecken sich nicht", () => {
     const full = (slot: (typeof VILLAGE_SLOTS)[number]) => span(slot, maxTier(slot.id));
-    for (let i = 1; i < VILLAGE_SLOTS.length; i++)
-      expect(full(VILLAGE_SLOTS[i - 1]).right).toBeLessThanOrEqual(full(VILLAGE_SLOTS[i]).left);
+    const street = VILLAGE_SLOTS.filter((s) => !s.back);
+    for (let i = 1; i < street.length; i++) expect(full(street[i - 1]).right).toBeLessThanOrEqual(full(street[i]).left);
   });
 
   it("jedes Gebäude hat einen Platz im Dorfbild", () => {

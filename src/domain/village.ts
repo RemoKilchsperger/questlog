@@ -1,6 +1,6 @@
 // Dorf-Ausbau: Das Dorf baut der Spieler selbst auf. Am Anfang gibt es nur einen
-// Strassenhändler – Schmiede, Anschlagtafel, Alchemist, Taverne, Trainingsplatz
-// und Statue muss man bauen und kann
+// Strassenhändler – Schmiede, Anschlagtafel, Alchemist, Taverne, Trainingsplatz,
+// Statue und Wehranlage muss man bauen und kann
 // sie in Stufen ausbauen (0 = nicht gebaut, höchstens 3; die Anschlagtafel hat nur
 // Stufe 1, die gleich alle Aufträge bringt). Bauen kostet Gold und
 // Material, das Monster im jeweiligen Gebiet sicher fallen lassen. Stufe 2
@@ -81,14 +81,14 @@ export function materialEntries(stock: MaterialStock | undefined): { def: Materi
 
 /* ───────────── Gebäude ───────────── */
 
-export type BuildingId = "merchant" | "smith" | "board" | "alchemist" | "tavern" | "training" | "statue";
+export type BuildingId = "merchant" | "smith" | "board" | "alchemist" | "tavern" | "training" | "statue" | "walls";
 export type BuildingTier = 0 | 1 | 2 | 3;
 
 /** Stufe jedes Gebäudes – wird gespeichert. */
 export type Village = Record<BuildingId, BuildingTier>;
 
 /** Neue (und alle bestehenden) Spielstände beginnen mit einem leeren Dorf. */
-export const EMPTY_VILLAGE: Village = { merchant: 0, smith: 0, board: 0, alchemist: 0, tavern: 0, training: 0, statue: 0 };
+export const EMPTY_VILLAGE: Village = { merchant: 0, smith: 0, board: 0, alchemist: 0, tavern: 0, training: 0, statue: 0, walls: 0 };
 
 export interface BuildCost {
   gold: number;
@@ -262,6 +262,28 @@ export const BUILDINGS: readonly BuildingDef[] = [
         icon: "🏆",
         effect: "+15 % XP aus Kämpfen und Quests",
         cost: cost(5000, { dragonOre: 30, obsidian: 15 }),
+      },
+    ],
+  },
+  {
+    id: "walls",
+    name: "Wehranlage",
+    icon: "🏰",
+    description: "Schützt das Dorf vor Überfällen: Die Angreifer kommen geschwächt an, später mit weniger Wellen.",
+    tiers: [
+      { name: "Bauplatz", icon: "🪧", effect: "Überfälle kommen mit voller Stärke" },
+      { name: "Palisade", icon: "🪵", effect: "Angreifer 10 % schwächer", cost: cost(150, { darkwood: 15, clay: 10 }) },
+      {
+        name: "Wachturm",
+        icon: "🗼",
+        effect: "Angreifer 15 % schwächer, eine Welle weniger",
+        cost: cost(1000, { hardwood: 25, crystalShard: 10 }),
+      },
+      {
+        name: "Festung",
+        icon: "🏰",
+        effect: "Angreifer 20 % schwächer, eine Welle weniger. Kein Überfall beschädigt mehr ein Gebäude",
+        cost: cost(5000, { obsidian: 30, hardwood: 15 }),
       },
     ],
   },

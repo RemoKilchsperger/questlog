@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { useCallback, useState } from "react";
 import { AREAS } from "../domain/creatures";
+import { repairCost } from "../domain/raids";
 import {
   BUILDINGS,
   canBuild,
@@ -25,14 +26,16 @@ import { PixelSprite } from "./PixelSprite";
 import { BoardScreen } from "./QuestScreen";
 import { ShopScreen } from "./ShopScreen";
 import { SmithScreen } from "./SmithScreen";
-import { StatueScreen, TavernScreen, TrainingScreen } from "./VillageMenus";
+import { RaidPanel } from "./RaidPanel";
+import { StatueScreen, TavernScreen, TrainingScreen, WallsScreen } from "./VillageMenus";
 import { VillageScene } from "./VillageScene";
 
 /**
  * Dorf-Ausbau: das Dorfbild, der Materialvorrat und alle Gebäude mit ihrer
  * nächsten Stufe. Ein Klick auf ein Gebäude öffnet sein Menü (Händler, Schmied …) als Popup.
+ * `onDefend`: Man stellt sich einer Bande – weiter zum Kampf.
  */
-export function VillageScreen() {
+export function VillageScreen({ onDefend }: { onDefend: () => void }) {
   const [pending, setPending] = useState<BuildingDef | null>(null);
   const close = useCallback(() => setPending(null), []);
   const [opened, setOpened] = useState<BuildingDef | null>(null);
@@ -54,6 +57,7 @@ export function VillageScreen() {
   return (
     <div className="flex flex-col gap-4">
       <VillageScene onSelect={select} onBuild={setPending} />
+      <RaidPanel onDefend={onDefend} />
       <MaterialPanel />
       <div className="grid gap-4 sm:grid-cols-2">
         {BUILDINGS.map((def) => (
@@ -66,7 +70,7 @@ export function VillageScreen() {
         onClose={closeMenu}
         wide
       >
-        {opened && <BuildingMenu id={opened.id} onClose={closeMenu} />}
+        {opened && <BuildingMenu id={opened.id} onClose={closeMenu} onDefend={onDefend} />}
       </Modal>
       <ConfirmDialog
         open={pending !== null}
@@ -98,7 +102,7 @@ export function VillageScreen() {
 }
 
 /** Das Menü eines Gebäudes im Popup. */
-function BuildingMenu({ id, onClose }: { id: BuildingId; onClose: () => void }) {
+function BuildingMenu({ id, onClose, onDefend }: { id: BuildingId; onClose: () => void; onDefend: () => void }) {
   switch (id) {
     case "merchant":
       return <ShopScreen />;
@@ -114,6 +118,8 @@ function BuildingMenu({ id, onClose }: { id: BuildingId; onClose: () => void }) 
       return <TrainingScreen />;
     case "statue":
       return <StatueScreen />;
+    case "walls":
+      return <WallsScreen onDefend={onDefend} />;
   }
 }
 
@@ -223,6 +229,7 @@ function BuildingCard({ def, onBuild }: { def: BuildingDef; onBuild: () => void 
         <span className="text-muted">Jetzt: </span>
         {current.effect}
       </p>
+      <RepairBox def={def} />
       {next && cost ? (
         <div className="mt-auto rounded-md border-2 border-night-700 bg-night-900 p-3">
           <p className="text-sm">
@@ -249,6 +256,38 @@ function BuildingCard({ def, onBuild }: { def: BuildingDef; onBuild: () => void 
         <p className="mt-auto text-sm text-xp">✓ Ganz ausgebaut</p>
       )}
     </section>
+  );
+}
+
+/** Beschädigt bei einem Überfall: wirkt eine Stufe tiefer, bis es repariert ist. */
+function RepairBox({ def }: { def: BuildingDef }) {
+  const damaged = useGameStore((s) => s.raids.damaged.includes(def.id));
+  const village = useGameStore((s) => s.village);
+  const gold = useGameStore((s) => s.character.gold);
+  const materials = useGameStore((s) => s.materials);
+  const repair = useGameStore((s) => s.repairBuilding);
+  if (!damaged) return null;
+  const cost = repairCost(village, def.id);
+  const missing = missingForBuild(cost, gold, materials);
+  const affordable = missing.gold === 0 && Object.keys(missing.materials).length === 0;
+  return (
+    <div className="rounded-md border-2 border-danger/70 bg-danger/10 p-3">
+      <p className="text-sm text-danger">
+        🔥 Beschädigt – wirkt wie {def.tiers[village[def.id] - 1].name}, bis du es reparierst.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <CostList cost={cost} gold={gold} materials={materials} />
+        <motion.button
+          whileTap={{ scale: 0.92 }}
+          disabled={!affordable}
+          onClick={() => repair(def.id)}
+          title={affordable ? undefined : "Es fehlt noch Gold oder Material"}
+          className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-3 py-1 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          🔨 Reparieren
+        </motion.button>
+      </div>
+    </div>
   );
 }
 
