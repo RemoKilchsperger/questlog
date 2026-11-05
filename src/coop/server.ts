@@ -23,6 +23,7 @@ import {
   awaitsDecision,
   COOP_DECIDE_SECONDS,
   coopBuy,
+  coopChest,
   coopDoors,
   coopRiddle,
   coopShrine,
@@ -139,6 +140,8 @@ export function applyCommand(row: CoopRow | null, command: CoopCommand, ctx: Ser
       return decide(row, ctx, (state, d) => coopTrap(state, ctx.userId, command.choice, armorOf(row, ctx.userId), d, ctx.rng, ctx.now));
     case "riddle":
       return decide(row, ctx, (state, d) => coopRiddle(state, ctx.userId, command.answer, d, ctx.rng, ctx.newId, ctx.now));
+    case "chest":
+      return decide(row, ctx, (state, d) => coopChest(state, ctx.userId, command.choice, d, ctx.rng, ctx.newId, ctx.now));
   }
 }
 

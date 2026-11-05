@@ -1,13 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { DUNGEONS } from "./creatures";
+import { getBossAbilities } from "./bossAbilities";
+import { getCreature, getCreatureStats, DUNGEONS } from "./creatures";
+import { CREATURE_SPRITES } from "../game/creatureSprites";
 import {
+  chestReward,
   dungeonMobs,
   eliteRoomAffixes,
   forkDoors,
+  getMimic,
   isCalm,
+  isMimic,
+  isMimicChest,
   mainArmorClass,
   merchantHealPotion,
   merchantOffers,
+  MIMIC_CHANCE,
+  mimicReward,
   pickRiddle,
   pickTrap,
   RIDDLES,
@@ -58,7 +66,7 @@ describe("Wege durch die Dungeons", () => {
         hidden += doors.filter((d) => d.hidden).length;
       }
     }
-    expect([...seen].sort()).toEqual(["elite", "fight", "merchant", "riddle", "shrine", "trap"]);
+    expect([...seen].sort()).toEqual(["chest", "elite", "fight", "merchant", "riddle", "shrine", "trap"]);
     expect(hidden).toBeGreaterThan(0);
     expect(forkDoors("a", 2, true)).toEqual(forkDoors("a", 2, true));
   });
@@ -103,5 +111,41 @@ describe("Wege durch die Dungeons", () => {
     const { riddle, options } = pickRiddle("s", 1, seenRiddles);
     expect(riddle.id).toBe(RIDDLES[0].id);
     expect([...options].sort()).toEqual([riddle.answer, ...riddle.wrong].sort());
+  });
+
+  it("Truhe: etwa 30 % sind Mimics – fest pro Lauf und Schritt", () => {
+    let mimics = 0;
+    for (let i = 0; i < 2000; i++) if (isMimicChest(`seed-${i}`, 1 + (i % 6))) mimics++;
+    expect(mimics / 2000).toBeGreaterThan(MIMIC_CHANCE - 0.05);
+    expect(mimics / 2000).toBeLessThan(MIMIC_CHANCE + 0.05);
+    expect(isMimicChest("a", 2)).toBe(isMimicChest("a", 2));
+  });
+
+  it("jeder Dungeon hat einen Mimic: kein Schritt des Wegs, zäher als die Gegner, mit Biss und Grafik", () => {
+    for (const dungeon of DUNGEONS) {
+      const mimic = getMimic(dungeon);
+      expect(dungeon.creatures.map((c) => c.id)).not.toContain(mimic.id);
+      expect(getCreature(mimic.id).area).toBe(dungeon);
+      expect(isMimic(mimic.id)).toBe(true);
+      expect(mimic.level).toBe(dungeon.maxLevel);
+      expect(mimic.boss).toBe(false);
+      const mob = dungeonMobs(dungeon).at(-1)!;
+      expect(getCreatureStats(mimic).maxHp).toBeGreaterThan(getCreatureStats(mob).maxHp);
+      expect(getBossAbilities(mimic.id)).toHaveLength(1);
+      expect(CREATURE_SPRITES).toHaveProperty([mimic.sprite]);
+    }
+    expect(isMimic(dungeonMobs(DUNGEONS[0])[0].id)).toBe(false);
+  });
+
+  it("ein Mimic gibt mehr als die Truhe: sicheres Item, Erfahrung und mehr Gold", () => {
+    const dungeon = DUNGEONS[1];
+    const hero = { level: 27, goldBonus: 0 } as Parameters<typeof chestReward>[1];
+    const chest = chestReward(dungeonMobs(dungeon)[0], hero, "c", () => 0.99);
+    expect(chest.xp).toBe(0);
+    expect(chest.loot).toBeNull();
+    const mimic = mimicReward(getMimic(dungeon), hero, "m", () => 0.5);
+    expect(mimic.xp).toBeGreaterThan(0);
+    expect(mimic.loot).not.toBeNull();
+    expect(mimic.gold).toBeGreaterThan(0);
   });
 });

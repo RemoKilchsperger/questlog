@@ -22,7 +22,7 @@ import {
   THREAT_DECAY,
 } from "../domain/coopCombat";
 import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, getCreature, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
-import { FORK_ROOMS } from "../domain/dungeonPaths";
+import { FORK_ROOMS, MIMIC_CHANCE } from "../domain/dungeonPaths";
 import { COOP_DECIDE_SECONDS } from "../domain/coopDungeonPaths";
 import { FRAMES } from "../domain/achievements";
 import { FORGE_COST_FACTOR, forgeCost, UPGRADE_REFUND } from "../domain/forge";
@@ -650,6 +650,12 @@ export function HelpScreen() {
             ))}
           </ul>
           <p>
+            📦 Nicht jede <b>alte Truhe</b> ist eine: Etwa {pct(MIMIC_CHANCE)} sind <b>Mimics</b>, die zuschnappen, sobald du
+            den Deckel hebst. Der Mimic ist zäher als die übrigen Gegner, sein Biss lässt dich bluten. Dafür gibt er Elite-Beute
+            mit Erfahrung und noch mehr Gold. Eine echte Truhe enthält Beute wie von einem Gegner, aber ohne Erfahrung. Wer
+            nichts riskieren will, geht einfach weiter.
+          </p>
+          <p>
             🗺️ Ganz selten fällt nach einem Sieg eine <b>Schatzkarte</b>, nach Elite-Gegnern und Bossen etwas öfter. Sie
             steht bei den laufenden Quests und führt in einen Dungeon: An der ersten Gabelung hinter dem Zwischenboss gibt es
             dann eine Tür mehr, den <b>Schatzraum</b>. Darin liegt garantiert ein legendäres Item auf deinem Level oder ein
@@ -695,8 +701,8 @@ export function HelpScreen() {
             </li>
             <li>
               An den Gabelungen stimmt die Gruppe über die Tür ab, bei Gleichstand zählt der Host. Im Schrein wählt jeder
-              seinen eigenen Segen, bei der Falle reagiert jeder selbst, beim Händler kauft jeder mit seinem Gold, beim
-              Rätsel entscheidet die Mehrheit. Wer nach {COOP_DECIDE_SECONDS} Sekunden noch nicht gewählt hat, bekommt eine
+              seinen eigenen Segen, bei der Falle reagiert jeder selbst, beim Händler kauft jeder mit seinem Gold, bei
+              Rätsel und alter Truhe entscheidet die Mehrheit. Wer nach {COOP_DECIDE_SECONDS} Sekunden noch nicht gewählt hat, bekommt eine
               Vorgabe.
             </li>
             <li>Vor Zwischen- und Endboss entscheidet der Host: weiter oder mit der Truhe aussteigen – aussteigen kann er jederzeit.</li>

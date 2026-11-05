@@ -204,6 +204,19 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     drain: 1,
     manaBurn: 15,
   },
+  // Mimics (Truhen im Dungeon, dungeonPaths.ts): kein Boss, aber mit eigenem Biss
+  ...["mimic-mine", "mimic-temple", "mimic-storm", "mimic-void"].map(
+    (id): BossAbilityDef => ({
+      id,
+      bossId: id,
+      name: "Zuschnappen",
+      icon: "🦷",
+      description: "Der Deckel klappt zu: 1,8-facher Schaden, die Bisswunde blutet 2 Runden lang.",
+      every: 3,
+      multiplier: 1.8,
+      bleed: { percent: 0.3, rounds: 2 },
+    }),
+  ),
 ];
 
 /** Alle Fähigkeiten eines Bosses im festen Takt, in Einsatzreihenfolge – leer für normale Kreaturen. */

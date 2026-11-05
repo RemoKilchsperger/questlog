@@ -1,6 +1,6 @@
 // Wege durch die Koop-Dungeons (docs/dungeon-wege.md): An Gabelungen stimmt die Gruppe über
 // die Tür ab (bei Gleichstand zählt der Host). In Schrein und Falle entscheidet jeder für sich,
-// beim Händler kauft jeder mit seinem Gold, beim Rätsel antwortet die Mehrheit. Wer zu lange
+// beim Händler kauft jeder mit seinem Gold, bei Rätsel und Truhe entscheidet die Mehrheit. Wer zu lange
 // braucht, bekommt nach COOP_DECIDE_SECONDS eine Vorgabe – so blockiert niemand die Gruppe.
 // Reine Logik auf dem Kampfzustand – der Server (src/coop/server.ts) ruft sie auf.
 
@@ -20,6 +20,7 @@ import {
   forkDoors,
   getRiddle,
   isCalm,
+  isMimicChest,
   merchantOffers,
   pickRiddle,
   pickTrap,
@@ -28,6 +29,7 @@ import {
   shrineOffer,
   stepKind,
   trapOutcome,
+  type ChestChoice,
   type Door,
   type TrapChoice,
 } from "./dungeonPaths";
@@ -144,6 +146,8 @@ function enterDoor(state: CoopBattleState, door: Door, now: number, newId: () =>
     const trap = pickTrap(run.runId, stage, seen);
     seen = [...seen, trap.id];
     room = { kind: "trap", done: false, trapId: trap.id, outcomes: {} };
+  } else if (door.kind === "chest") {
+    room = { kind: "chest", done: false, votes: {} };
   } else {
     const { riddle, options } = pickRiddle(run.runId, stage, seen);
     seen = [...seen, riddle.id];
@@ -272,10 +276,27 @@ export function coopRiddle(
   return settleRoom(withRun(state, { ...state.dungeon!, room: { ...room, votes } }), deciders, now, false, rng, newId);
 }
 
+/** Truhe: Stimme für Öffnen oder Liegenlassen. Haben alle gewählt, zählt die Mehrheit. */
+export function coopChest(
+  state: CoopBattleState,
+  heroId: string,
+  choice: ChestChoice,
+  deciders: Deciders,
+  rng: () => number,
+  newId: () => string,
+  now: number,
+): CoopBattleState {
+  const room = roomOf(state, "chest");
+  if (room.done) throw new Error("Über die Truhe ist schon entschieden.");
+  const votes = { ...room.votes, [heroId]: choice };
+  return settleRoom(withRun(state, { ...state.dungeon!, room: { ...room, votes } }), deciders, now, false, rng, newId);
+}
+
 /**
  * Raum abschliessen, wenn alle Anwesenden gehandelt haben – oder zur Deadline (`force`): Wer keinen
  * Segen gewählt hat, bekommt den ersten, wer nicht auf die Falle reagiert hat, steckt ein, beim Rätsel
- * zählen die abgegebenen Stimmen. Danach läuft die Frist für die nächste Tür.
+ * und bei der Truhe zählen die abgegebenen Stimmen (ohne Stimme bleibt die Truhe zu). Danach läuft
+ * die Frist für die nächste Tür.
  */
 export function settleRoom(
   state: CoopBattleState,
@@ -338,6 +359,22 @@ export function settleRoom(
     const damage = Math.max(0, ...state.heroes.map(damageOf));
     const next = withRun(state, { ...run, riddles: { ...run.riddles, [run.stage]: "wrong" }, room: { ...room, outcome: { answer, correct: false, damage } } }, { heroes });
     return done(next);
+  }
+
+  if (room.kind === "chest") {
+    if (!force && missing(room.votes).length > 0) return state;
+    // Bei Gleichstand ohne Stimme des Hosts bleibt die Truhe lieber zu
+    const choice = majority(room.votes, ["leave", "open"] as const, deciders.hostId);
+    const run = state.dungeon!;
+    const mimic = choice === "open" && isMimicChest(run.runId, run.stage);
+    const outcome = { choice, mimic };
+    if (mimic) {
+      // Die Truhe beisst zurück: ein Kampf gegen den Mimic an diesem Schritt
+      const fightRun = { ...run, chests: { ...run.chests, [run.stage]: "mimic" as const }, room: { ...room, done: true, outcome } };
+      return startDungeonFight(state, fightRun, newId(), now);
+    }
+    const result = choice === "open" ? ("opened" as const) : ("left" as const);
+    return done(withRun(state, { ...run, chests: { ...run.chests, [run.stage]: result }, room: { ...room, outcome } }));
   }
   return state;
 }

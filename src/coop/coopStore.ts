@@ -55,7 +55,7 @@ interface CoopState {
   continueDungeon: () => Promise<void>;
   exitDungeon: () => Promise<void>;
   /** Dungeon-Wege: Stimme für eine Tür, Segen, Kauf beim Händler, Falle oder Rätsel */
-  dungeonCommand: (command: Extract<CoopCommand, { type: "door" | "blessing" | "buy" | "trap" | "riddle" }>) => Promise<void>;
+  dungeonCommand: (command: Extract<CoopCommand, { type: "door" | "blessing" | "buy" | "trap" | "riddle" | "chest" }>) => Promise<void>;
   /** Lobby verlassen bzw. Kampf verlassen (der Held greift dann automatisch an) */
   leave: () => void;
   /** Nachsehen, ob ein laufender Koop-Kampf auf einen wartet */
