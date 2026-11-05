@@ -57,6 +57,7 @@ import { DungeonChest } from "./DungeonChest";
 import { ChestDeposit, DungeonOnward, DungeonProgress, DungeonRoomView } from "./DungeonPath";
 import { TowerPanel, TowerProgress, TowerResultActions } from "./TowerScreen";
 import { RaidProgress, RaidResultActions } from "./RaidPanel";
+import { SCENE_FRAME, useScrollToBattle } from "./battleLayout";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
@@ -561,6 +562,7 @@ function Battle({ battle }: { battle: BattleState }) {
   const gold = useGameStore((s) => s.character.gold);
   const mealInUse = useGameStore((s) => s.mealInUse);
   const raidFightCount = useGameStore((s) => s.raid?.lineup.length ?? 0);
+  const top = useScrollToBattle<HTMLElement>(battle.id);
   const { creature, area } = getCreature(battle.creatureId);
   const fleePrice = fleeCost(creature, gold);
   const [confirmFlee, setConfirmFlee] = useState(false);
@@ -596,7 +598,7 @@ function Battle({ battle }: { battle: BattleState }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="panel p-4">
+      <section ref={top} className="panel scroll-mt-2 p-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-pixel text-2xl">
             {battle.towerFloor ? (
@@ -644,7 +646,7 @@ function Battle({ battle }: { battle: BattleState }) {
         {battle.towerFloor && <TowerProgress floor={battle.towerFloor} />}
         <Suspense
           fallback={
-            <div className="flex aspect-[9/4] w-full items-center justify-center rounded-md bg-night-950 text-muted">
+            <div className={`${SCENE_FRAME} flex items-center justify-center rounded-md bg-night-950 text-muted`}>
               Kampfszene wird geladen …
             </div>
           }

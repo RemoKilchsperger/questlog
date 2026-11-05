@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { useEffect, useRef } from "react";
 import { getCreature } from "../domain/creatures";
+import { SCENE_FRAME } from "../components/battleLayout";
 import { useGameStore } from "../store/gameStore";
 import { BattleScene, SCENE_HEIGHT, SCENE_WIDTH, type BattleSceneData } from "./BattleScene";
 import { getHeroGlowSprite, getHeroSprite, getMainWeapon, getMainWeaponGlow } from "./heroSprite";
@@ -49,7 +50,7 @@ export default function PhaserBattle({ battleId }: { battleId: string }) {
   return (
     <div
       ref={parent}
-      className="aspect-[9/4] w-full overflow-hidden rounded-md border-2 border-night-700 bg-night-950"
+      className={`${SCENE_FRAME} overflow-hidden rounded-md border-2 border-night-700 bg-night-950`}
     />
   );
 }
