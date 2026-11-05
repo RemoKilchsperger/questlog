@@ -344,14 +344,16 @@ export interface DurationInfo {
   minutes: number;
   /** Beute pro Begleiter: so viel wie diese Anzahl normaler Siege auf Missionslevel */
   wins: number;
-  /** Chance auf ein Item pro Mission */
+  /** So viele Items sind höchstens drin … */
+  items: number;
+  /** … jedes mit dieser Chance */
   itemChance: number;
 }
 
 export const MISSION_DURATIONS: Readonly<Record<MissionDuration, DurationInfo>> = {
-  short: { label: "30 Min.", minutes: 30, wins: 3, itemChance: 0.1 },
-  medium: { label: "2 Std.", minutes: 120, wins: 8, itemChance: 0.25 },
-  long: { label: "8 Std.", minutes: 480, wins: 20, itemChance: 0.6 },
+  short: { label: "30 Min.", minutes: 30, wins: 3, items: 1, itemChance: 0.1 },
+  medium: { label: "2 Std.", minutes: 120, wins: 8, items: 2, itemChance: 0.2 },
+  long: { label: "8 Std.", minutes: 480, wins: 20, items: 3, itemChance: 0.35 },
 };
 
 export type MissionDifficulty = "normal" | "hard" | "heroic";
@@ -375,7 +377,7 @@ export const MISSION_DIFFICULTIES: Readonly<Record<MissionDifficulty, Difficulty
   heroic: { label: "Heroisch", gearFactor: 1.45, rewardFactor: 1.5, weights: BOSS_WEIGHTS, share: 0.15 },
 };
 
-/** Missionen auf der Tafel – ihr Level liegt so weit vom Heldenlevel entfernt. */
+/** Missionen auf der Tafel – ihr Level liegt so weit vom Grundlevel (missionBaseLevel) entfernt. */
 export const MISSION_LEVEL_OFFSETS = [-8, -4, 0, 2] as const;
 /** Begleiter leveln nur über Missionen – deshalb schneller als der Held pro Sieg. */
 export const COMPANION_XP_FACTOR = 3;
@@ -410,7 +412,7 @@ export interface MissionOutcome {
   gold: number;
   essence: number;
   materials: MaterialStock;
-  item: OwnedItem | null;
+  items: OwnedItem[];
   /** EP pro Begleiter (Id → EP) */
   xp: Record<string, number>;
 }
@@ -454,11 +456,21 @@ function rollMission(id: string, level: number, maxSize: number, rng: () => numb
   return { id, title, areaId: area.id, level, duration, size, difficulty };
 }
 
-/** Neue Tafel: eine Mission pro Abstand in MISSION_LEVEL_OFFSETS, Truppstärke höchstens so gross wie die Plätze. */
-export function rollMissionBoard(date: string, heroLevel: number, tier: BuildingTier, rng: () => number = Math.random): MissionBoard {
+/**
+ * Grundlevel der Tafel: Gearscore des stärksten Begleiters, höchstens das Heldenlevel
+ * (sonst gäbe es Beute über dem Helden). Ohne Begleiter das Heldenlevel.
+ */
+export function missionBaseLevel(heroLevel: number, companions: readonly Companion[]): number {
+  if (companions.length === 0) return heroLevel;
+  const best = Math.max(...companions.map(companionGearScore));
+  return Math.min(heroLevel, Math.max(1, best));
+}
+
+/** Neue Tafel: eine Mission pro Abstand in MISSION_LEVEL_OFFSETS um `baseLevel`, Truppstärke höchstens so gross wie die Plätze. */
+export function rollMissionBoard(date: string, baseLevel: number, tier: BuildingTier, rng: () => number = Math.random): MissionBoard {
   const maxSize = Math.max(1, TAVERN_RULES[tier].slots);
   const missions = MISSION_LEVEL_OFFSETS.map((offset, i) =>
-    rollMission(`${date}-${i}`, Math.min(MAX_LEVEL, Math.max(1, heroLevel + offset)), maxSize, rng),
+    rollMission(`${date}-${i}`, Math.min(MAX_LEVEL, Math.max(1, baseLevel + offset)), maxSize, rng),
   );
   return { date, missions, taken: [] };
 }
@@ -501,35 +513,67 @@ export function missionXp(mission: MissionDef, companion: Companion, group: read
   return Math.round(base * (1 + traitValue(companion, "eager") + mentor));
 }
 
+/** Grenzen des Beutefaktors (missionLootFactor) */
+export const MIN_LOOT_FACTOR = 0.2;
+export const MAX_LOOT_FACTOR = 1.25;
+
 /**
- * Beute bei Erfolg – Gold, Material und Essenz, ohne das Item. Gerechnet mit der Truppstärke,
+ * Beutefaktor: Missionslevel / Heldenlevel, zwischen 0,2 und 1,25. Je höher die Mission
+ * im Vergleich zum Helden, desto mehr Beute und desto eher ein Item – das Item hat ja
+ * immer Heldenlevel, tiefe Missionen sollen es also seltener bringen.
+ */
+export function missionLootFactor(mission: MissionDef, heroLevel: number): number {
+  return Math.min(MAX_LOOT_FACTOR, Math.max(MIN_LOOT_FACTOR, mission.level / Math.max(1, heroLevel)));
+}
+
+/**
+ * Beute bei Erfolg – Gold, Material, Essenz und die Chance pro Item (bis zu `items` Stück). Gerechnet mit der Truppstärke,
  * die Traits kommen von `companions` (für die Vorschau auch weniger als die volle Gruppe).
  */
-export function missionLoot(mission: MissionDef, companions: readonly Companion[]): { gold: number; essence: number; materials: MaterialStock; itemChance: number } {
-  const wins = missionWins(mission) * mission.size;
+export function missionLoot(
+  mission: MissionDef,
+  companions: readonly Companion[],
+  heroLevel: number,
+): { gold: number; essence: number; materials: MaterialStock; items: number; itemChance: number } {
+  const factor = missionLootFactor(mission, heroLevel);
+  const wins = missionWins(mission) * mission.size * factor;
   const level = mission.level;
   return {
     // Ein normaler Sieg gibt mit 40 % Gold, im Schnitt 3 + Level (getCreatureGoldDrop)
     gold: Math.round(wins * 0.4 * (3 + level) * (1 + traitSum(companions, "treasure"))),
     essence: Math.round(wins * ESSENCE_PER_WIN * (1 + level / 10) * (1 + traitSum(companions, "essence"))),
     materials: { [materialForLevel(level)]: Math.round(wins * MATERIAL_PER_WIN * (1 + traitSum(companions, "gatherer"))) },
-    itemChance: Math.min(1, MISSION_DURATIONS[mission.duration].itemChance * (1 + traitSum(companions, "plunder"))),
+    items: MISSION_DURATIONS[mission.duration].items,
+    itemChance: Math.min(1, MISSION_DURATIONS[mission.duration].itemChance * factor * (1 + traitSum(companions, "plunder"))),
   };
 }
 
 export function rollMissionOutcome(
   mission: MissionDef,
   companions: readonly Companion[],
+  heroLevel: number,
   uid: string,
   rng: () => number = Math.random,
 ): MissionOutcome {
   const success = rng() < missionChance(mission, companions);
   const xpShare = success ? 1 : FAILED_XP_SHARE;
   const xp = Object.fromEntries(companions.map((c) => [c.id, Math.round(missionXp(mission, c, companions) * xpShare)]));
-  if (!success) return { success, gold: 0, essence: 0, materials: {}, item: null, xp };
-  const { gold, essence, materials, itemChance } = missionLoot(mission, companions);
-  const item = rollDrop(itemChance, MISSION_DIFFICULTIES[mission.difficulty].weights, mission.level, uid, rng);
-  return { success, gold, essence, materials, item, xp };
+  if (!success) return { success, gold: 0, essence: 0, materials: {}, items: [], xp };
+  const loot = missionLoot(mission, companions, heroLevel);
+  // Die Items haben das Level des Helden, nicht das der Mission – sonst wären sie oft nutzlos
+  const items: OwnedItem[] = [];
+  for (let i = 0; i < loot.items; i++) {
+    const item = rollDrop(loot.itemChance, MISSION_DIFFICULTIES[mission.difficulty].weights, heroLevel, i === 0 ? uid : `${uid}-${i + 1}`, rng);
+    if (item) items.push(item);
+  }
+  return { success, gold: loot.gold, essence: loot.essence, materials: loot.materials, items, xp };
+}
+
+/** Alte Spielstände: höchstens ein Item als `item` statt der Liste `items`. */
+export function migrateActiveMission(active: ActiveMission): ActiveMission {
+  if (Array.isArray(active.outcome.items)) return active;
+  const { item, ...outcome } = active.outcome as MissionOutcome & { item?: OwnedItem | null };
+  return { ...active, outcome: { ...outcome, items: item ? [item] : [] } };
 }
 
 export function isBusy(active: readonly ActiveMission[], companionId: string): boolean {
@@ -545,6 +589,7 @@ export function startMission(
   companionIds: readonly string[],
   today: string,
   now: number,
+  heroLevel: number,
   uid: string,
   rng: () => number = Math.random,
 ): { board: MissionBoard; active: ActiveMission[] } {
@@ -566,7 +611,7 @@ export function startMission(
     start: now,
     end: now + missionDurationMs(mission, group),
     chance: missionChance(mission, group),
-    outcome: rollMissionOutcome(mission, group, uid, rng),
+    outcome: rollMissionOutcome(mission, group, heroLevel, uid, rng),
   };
   return { board: { ...board, taken: [...board.taken, missionId] }, active: [...active, started] };
 }

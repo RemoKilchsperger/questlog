@@ -92,6 +92,8 @@ import {
   equipCompanion,
   isBusy,
   isMissionDone,
+  migrateActiveMission,
+  missionBaseLevel,
   recruit,
   rerollRecruits,
   rollMissionBoard,
@@ -607,7 +609,7 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     companions: saved.companions ?? [],
     recruitPool: saved.recruitPool ?? EMPTY_RECRUIT_POOL,
     missionBoard: saved.missionBoard ?? EMPTY_MISSION_BOARD,
-    activeMissions: saved.activeMissions ?? [],
+    activeMissions: (saved.activeMissions ?? []).map(migrateActiveMission),
     appliedTrades: saved.appliedTrades ?? [],
     visitors: { ...EMPTY_VISITORS, ...saved.visitors },
   };
@@ -1442,7 +1444,9 @@ export const useGameStore = create<GameState>()(
         if (recruitPool.date !== today) {
           set({ recruitPool: rollRecruitPool(today, village.tavern, level, companions.map((c) => c.name), newId) });
         }
-        if (missionBoard.date !== today) set({ missionBoard: rollMissionBoard(today, level, village.tavern) });
+        if (missionBoard.date !== today) {
+          set({ missionBoard: rollMissionBoard(today, missionBaseLevel(level, companions), village.tavern) });
+        }
       },
 
       recruitCompanion: (id) =>
@@ -1484,8 +1488,9 @@ export const useGameStore = create<GameState>()(
 
       startMission: (missionId, companionIds) =>
         attempt(() => {
-          const { missionBoard, activeMissions, companions } = get();
-          const result = startMission(missionBoard, activeMissions, companions, missionId, companionIds, dateKey(), Date.now(), newId());
+          const { missionBoard, activeMissions, companions, character } = get();
+          const heroLevel = getLevel(character.totalXp);
+          const result = startMission(missionBoard, activeMissions, companions, missionId, companionIds, dateKey(), Date.now(), heroLevel, newId());
           set({ missionBoard: result.board, activeMissions: result.active });
         }),
 
@@ -1500,7 +1505,7 @@ export const useGameStore = create<GameState>()(
           activeMissions: activeMissions.filter((a) => a !== active),
           companions: applyMissionXp(companions, outcome, getLevel(character.totalXp)),
           character: { ...character, gold: character.gold + outcome.gold, essence: character.essence + outcome.essence },
-          inventory: outcome.item ? [...inventory, outcome.item] : inventory,
+          inventory: [...inventory, ...outcome.items],
           materials: addMaterials(materials, outcome.materials),
         });
         return outcome;

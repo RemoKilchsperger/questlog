@@ -76,7 +76,7 @@ describe("Begleiter im Spielstand", () => {
     expect(store().character.gold).toBe(before.character.gold + outcome.gold);
     expect(store().character.essence).toBe(before.character.essence + outcome.essence);
     expect(store().companions[0].totalXp).toBeGreaterThan(candidate.totalXp);
-    if (outcome.item) expect(store().inventory).toContainEqual(outcome.item);
+    for (const item of outcome.items) expect(store().inventory).toContainEqual(item);
   });
 
   it("Entlassen gibt die Items zurück", () => {
