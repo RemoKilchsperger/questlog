@@ -174,6 +174,7 @@ import {
   type RaidState,
 } from "../domain/raids";
 import { applyTrade } from "../domain/trade";
+import { rollTreasure, rollTreasureMap, treasureStep, type TreasureFind, type TreasureMap } from "../domain/treasureMaps";
 import type { Character, EquipSlot, Equipment, Loot, OwnedItem, Rarity, StatKey } from "../domain/types";
 import { EventBus } from "../game/EventBus";
 
@@ -220,6 +221,8 @@ export type BattleRewardEvent = BattleReward & {
   levelAfter: number;
   /** Quest-Gegenstände für Besucher, die in diesem Kampf gefallen sind */
   questItems?: QuestItemFind[];
+  /** Gefundene Schatzkarte (treasureMaps.ts) */
+  treasureMap?: TreasureMap;
 };
 
 interface GameState {
@@ -396,6 +399,8 @@ interface GameState {
 
   /** Laufender Dungeon (wird wie der Kampf nicht gespeichert). */
   dungeon: DungeonRun | null;
+  /** Schatzkarten: je ein verborgener Raum in einem Solo-Dungeon (treasureMaps.ts) */
+  treasureMaps: TreasureMap[];
   /** Betritt einen Dungeon und startet den ersten Kampf. */
   startDungeon: (dungeonId: string, heroic?: boolean) => void;
   /** Nach einem Sieg oder Raum: Zwischen- bzw. Endboss, mit den übrigen Lebenspunkten (nicht an einer Gabelung). */
@@ -465,10 +470,12 @@ export interface DungeonRun {
   claimed: ClaimedChest | null;
   /** Heroischer Dungeon: der Endboss kämpft auf heroischer Stufe */
   heroic?: boolean;
+  /** Schatzkarte für diesen Dungeon – hinter dem Zwischenboss wartet der Schatzraum, bis man ihn betritt */
+  treasureMap?: string;
 }
 
 /** Frischer Dungeon-Lauf am Eingang (Schritt 0, ein Kampf). */
-export function newDungeonRun(dungeonId: string, seed: string, heroic = false): DungeonRun {
+export function newDungeonRun(dungeonId: string, seed: string, heroic = false, treasureMap?: string): DungeonRun {
   return {
     dungeonId,
     stage: 0,
@@ -483,6 +490,7 @@ export function newDungeonRun(dungeonId: string, seed: string, heroic = false): 
     chest: EMPTY_CHEST,
     claimed: null,
     ...(heroic && { heroic: true }),
+    ...(treasureMap && { treasureMap }),
   };
 }
 
@@ -496,12 +504,14 @@ export type DungeonRoom =
       riddleId: string;
       options: string[];
       outcome: { answer: string; correct: boolean; damage: number; reward: BattleReward | null } | null;
-    };
+    }
+  /** Schatzraum: der Fund ist beim Eintreten schon gutgeschrieben */
+  | { kind: "treasure"; find: TreasureFind };
 
 /** Ist der Raum erledigt? Beim Händler kann man jederzeit weiter. */
 export function isRoomDone(room: DungeonRoom): boolean {
   if (room.kind === "shrine") return room.chosen !== null;
-  if (room.kind === "merchant") return true;
+  if (room.kind === "merchant" || room.kind === "treasure") return true;
   return room.outcome !== null;
 }
 
@@ -541,6 +551,8 @@ export type ClaimedChest = DungeonChest & {
   completed: boolean;
   /** Quest-Gegenstände für Besucher, die dabei gefallen sind (nur im Koop – solo stehen sie in der Siegmeldung) */
   questItems?: QuestItemFind[];
+  /** Gefundene Schatzkarte (nur im Koop – solo steht sie in der Siegmeldung) */
+  treasureMap?: TreasureMap;
 };
 
 /** Schlüssel des Spielstands im localStorage (wird auch in die Cloud gespiegelt). */
@@ -576,6 +588,7 @@ type SaveState = Pick<
   | "appliedTrades"
   | "visitors"
   | "raids"
+  | "treasureMaps"
 >;
 
 const createCharacter = (): Character => ({
@@ -657,6 +670,7 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     appliedTrades: saved.appliedTrades ?? [],
     visitors: { ...EMPTY_VISITORS, ...saved.visitors },
     raids: { ...EMPTY_RAIDS, ...saved.raids },
+    treasureMaps: saved.treasureMaps ?? [],
   };
 }
 
@@ -803,6 +817,7 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
     state = { ...rest, visitors: { ...visitors, recipes } };
   }
   // v21 → v22: Überfälle und Wehranlage – `raids` und `village.walls` ergänzt repairSave.
+  // v22 → v23: Schatzkarten – die leere Liste ergänzt repairSave.
   return state;
 }
 
@@ -847,6 +862,15 @@ export const useGameStore = create<GameState>()(
           set({ questLog: nextLog, dailyQuests: nextDaily, weeklyQuests: nextWeekly });
         }
         return foundQuestItems(visitors, nextVisitors);
+      };
+
+      /** Nach einem Sieg: Fällt eine Schatzkarte? `strong`: Elite, Boss oder Koop-Sieg. */
+      const findTreasureMap = (strong: boolean): TreasureMap | undefined => {
+        const { treasureMaps, character } = get();
+        const map = rollTreasureMap(treasureMaps, getLevel(character.totalXp), strong, newId(), Date.now());
+        if (!map) return undefined;
+        set({ treasureMaps: [...treasureMaps, map] });
+        return map;
       };
 
       /** Legt das Geschenk eines Besuchers (`visitorId`) in den Spielstand – gibt das Item zurück, falls es eines war. */
@@ -1092,7 +1116,9 @@ export const useGameStore = create<GameState>()(
       const nextDoors = (dungeon: AreaDef, run: DungeonRun): Door[] | null => {
         const step = run.stage + 1;
         if (step >= dungeon.creatures.length || stepKind(dungeon, step) !== "fork") return null;
-        return forkDoors(run.seed, step, !run.calm[sectionOf(dungeon, step)]);
+        const doors = forkDoors(run.seed, step, !run.calm[sectionOf(dungeon, step)]);
+        // Mit Schatzkarte: an der ersten Gabelung hinter dem Zwischenboss eine Tür mehr
+        return run.treasureMap && step === treasureStep(dungeon) ? [...doors, { kind: "treasure", hidden: false }] : doors;
       };
 
       /** Beute aus Kampf oder Raum für die Dungeon-Truhe: Material doppelt, „Schatzsucher“ gibt mehr Erfahrung und Gold. */
@@ -1135,6 +1161,7 @@ export const useGameStore = create<GameState>()(
       battle: null,
       battleReward: null,
       dungeon: null,
+      treasureMaps: [],
       tower: null,
       towerRecord: EMPTY_TOWER_RECORD,
       village: EMPTY_VILLAGE,
@@ -1342,6 +1369,7 @@ export const useGameStore = create<GameState>()(
           visitors: EMPTY_VISITORS,
           raids: EMPTY_RAIDS,
           raid: null,
+          treasureMaps: [],
         }),
 
       equip: (uid, slot) =>
@@ -1703,7 +1731,8 @@ export const useGameStore = create<GameState>()(
           if (heroic && !isHeroicUnlocked(boss.id, get().records.bossesDefeated)) {
             throw new Error(`Besiege ${boss.name} zuerst, dann kannst du den Dungeon heroisch betreten.`);
           }
-          const run = newDungeonRun(dungeonId, newId(), heroic);
+          const map = get().treasureMaps.find((m) => m.dungeonId === dungeonId);
+          const run = newDungeonRun(dungeonId, newId(), heroic, map?.id);
           // Das Gericht gilt ab dem ersten Kampf (soloHero liest mealInUse)
           set({ mealInUse: meal });
           const battle = dungeonBattle(run, stepCreature(dungeon, run.seed, 0), null);
@@ -1792,6 +1821,21 @@ export const useGameStore = create<GameState>()(
           const stage = dungeon.stage + 1;
           const { seed } = dungeon;
           const moved: DungeonRun = { ...dungeon, stage, path: [...dungeon.path, door.kind], doors: null, room: null };
+
+          if (door.kind === "treasure") {
+            // Der Schatz gehört sofort dir – auch wenn du danach fällst. Er zählt nicht als Raum ohne Kampf.
+            const { treasureMaps, inventory, bossCollection, visitors, character } = get();
+            const find = rollTreasure(getLevel(character.totalXp), visitors.recipes, newId());
+            if (find.kind === "item") set({ inventory: [...inventory, find.item], bossCollection: addToCollection(bossCollection, find.item) });
+            else set({ visitors: { ...visitors, recipes: [...visitors.recipes, find.foodId] } });
+            const run: DungeonRun = { ...moved, treasureMap: undefined, room: { kind: "treasure", find } };
+            set({
+              treasureMaps: treasureMaps.filter((m) => m.id !== dungeon.treasureMap),
+              dungeon: { ...run, doors: nextDoors(area, run) },
+              battleReward: null,
+            });
+            return;
+          }
 
           if (!isCalm(door.kind)) {
             const creature = stepCreature(area, seed, stage);
@@ -1953,11 +1997,12 @@ export const useGameStore = create<GameState>()(
             });
             const elite = (result.state.elite?.length ?? 0) > 0;
             const questItems = questEvent({ kind: "kill", creatureId: creature.id, boss: false, elite });
+            const treasureMap = findTreasureMap(elite);
             const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, [], elite);
             const reward = { ...raw, xp: statueXp(raw.xp, tiers().statue) };
             const level = getLevel(character.totalXp);
             set({
-              battleReward: { ...reward, levelBefore: level, levelAfter: level, questItems },
+              battleReward: { ...reward, levelBefore: level, levelAfter: level, questItems, treasureMap },
               raid: { ...raid, chest: addToChest(raid.chest, reward) },
             });
             if (raid.wave === raid.lineup.length - 1) claimRaid();
@@ -1986,9 +2031,10 @@ export const useGameStore = create<GameState>()(
             const rolled = rollBattleReward(creature, hero, newId(), Math.random, defeatedAdds(result.state), elite);
             const reward = { ...rolled, xp: statueXp(rolled.xp, tiers().statue) };
             const scaled = towerReward(reward, tower.floor, tower.blessings, elite);
+            const treasureMap = findTreasureMap(elite || !!creature.boss);
             const level = getLevel(character.totalXp);
             set({
-              battleReward: { ...scaled, levelBefore: level, levelAfter: level, questItems },
+              battleReward: { ...scaled, levelBefore: level, levelAfter: level, questItems, treasureMap },
               tower: {
                 ...tower,
                 chest: addToChest(tower.chest, scaled),
@@ -2028,6 +2074,7 @@ export const useGameStore = create<GameState>()(
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
           for (const add of adds) questItems.push(...questEvent({ kind: "kill", creatureId: add.id, boss: false }));
+          const treasureMap = findTreasureMap(elite || heroic || !!creature.boss || !!creature.midBoss);
           const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
           const rolled = { ...raw, xp: statueXp(raw.xp, tiers().statue) };
@@ -2041,7 +2088,7 @@ export const useGameStore = create<GameState>()(
               secondWindUsed: !!result.state.secondWindUsed,
             };
             set({
-              battleReward: { ...reward, levelBefore: level, levelAfter: level, questItems },
+              battleReward: { ...reward, levelBefore: level, levelAfter: level, questItems, treasureMap },
               dungeon: { ...run, doors: nextDoors(getDungeon(dungeon.dungeonId), run) },
             });
             if (dungeon.stage === getDungeon(dungeon.dungeonId).creatures.length - 1) claimChest(true);
@@ -2053,7 +2100,7 @@ export const useGameStore = create<GameState>()(
           if (reward.buffPotion) potionDrops[reward.buffPotion] = (potionDrops[reward.buffPotion] ?? 0) + 1;
           const items = [reward.loot, reward.bossLoot].filter((i) => i !== null);
           const levels = grantRewards(reward.xp, reward.gold, items, potionDrops, reward.materials);
-          set({ battleReward: { ...reward, ...levels, questItems } });
+          set({ battleReward: { ...reward, ...levels, questItems, treasureMap } });
           if (levels.levelAfter > levels.levelBefore) {
             EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
           }
@@ -2099,10 +2146,11 @@ export const useGameStore = create<GameState>()(
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         set((s) => ({ coopStats: recordCoopWin(s.coopStats, bossId) }));
         const questItems = questEvent({ kind: "kill", creatureId: bossId, boss: true });
+        const treasureMap = findTreasureMap(true);
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
-        return { ...chest, ...levels, completed: true, questItems };
+        return { ...chest, ...levels, completed: true, questItems, treasureMap };
       },
 
       grantCoopDungeon: (chest, dungeonId, completed, heroic = false) => {
@@ -2127,16 +2175,18 @@ export const useGameStore = create<GameState>()(
           questItems.push(...questEvent({ kind: "kill", creatureId: bossId, boss: true }));
           questEvent({ kind: "dungeon", dungeonId });
         }
+        // Wer bis zum Endboss dabei war, hat die Chance eines Bosssiegs – wer vorher aussteigt, die eines gewöhnlichen
+        const treasureMap = findTreasureMap(completed);
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
-        return { ...chest, ...levels, completed, questItems };
+        return { ...chest, ...levels, completed, questItems, treasureMap };
       },
       };
     },
     {
       name: SAVE_KEY,
-      version: 22,
+      version: 23,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,
@@ -2165,6 +2215,7 @@ export const useGameStore = create<GameState>()(
         appliedTrades: s.appliedTrades,
         visitors: s.visitors,
         raids: s.raids,
+        treasureMaps: s.treasureMaps,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),

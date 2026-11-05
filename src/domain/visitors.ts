@@ -459,10 +459,11 @@ export const WANDERER_GAP_MS: readonly [number, number] = [12 * 3_600_000, 36 * 
 export const APPRENTICE_POTIONS = 3;
 export const BUILDER_MATERIALS = 15;
 
-/** Rezepte, die der fahrende Koch verrät – alle, die kein fester Besucher schenkt. */
+/** Rezepte, die der fahrende Koch verrät – alle, die kein fester Besucher schenkt (und keine Schatz-Rezepte). */
 export const COOK_RECIPES: readonly string[] = FOODS.filter(
   (food) =>
     food.recipe &&
+    !food.treasure &&
     !FIXED_VISITORS.some((v) =>
       [v.gift, ...(v.choice?.options.map((o) => o.gift) ?? [])].some((g) => g?.kind === "recipe" && g.foodId === food.id),
     ),

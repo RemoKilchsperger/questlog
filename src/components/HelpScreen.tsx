@@ -22,7 +22,7 @@ import {
   THREAT_DECAY,
 } from "../domain/coopCombat";
 import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, getCreature, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
-import { ROOMS } from "../domain/dungeonPaths";
+import { FORK_ROOMS } from "../domain/dungeonPaths";
 import { COOP_DECIDE_SECONDS } from "../domain/coopDungeonPaths";
 import { FRAMES } from "../domain/achievements";
 import { FORGE_COST_FACTOR, forgeCost, UPGRADE_REFUND } from "../domain/forge";
@@ -643,12 +643,19 @@ export function HelpScreen() {
             Türen sind verschlossen: Was dahinter liegt, siehst du erst drinnen.
           </p>
           <ul className="list-disc space-y-1 pl-5">
-            {Object.values(ROOMS).map((r) => (
+            {FORK_ROOMS.map((r) => (
               <li key={r.kind}>
                 {r.icon} <b>{r.name}:</b> {r.description}
               </li>
             ))}
           </ul>
+          <p>
+            🗺️ Ganz selten fällt nach einem Sieg eine <b>Schatzkarte</b>, nach Elite-Gegnern und Bossen etwas öfter. Sie
+            steht bei den laufenden Quests und führt in einen Dungeon: An der ersten Gabelung hinter dem Zwischenboss gibt es
+            dann eine Tür mehr, den <b>Schatzraum</b>. Darin liegt garantiert ein legendäres Item auf deinem Level oder ein
+            Rezept, das es nur dort gibt. Der Fund gehört dir sofort, auch wenn du danach fällst. Du trägst höchstens drei
+            Karten bei dir.
+          </p>
           <p>
             Die Beute sammelt sich in einer <b>Truhe</b> und wird erst am Ende gutgeschrieben. Du kannst zwischen zwei
             Kämpfen aussteigen und behältst, was drin ist. Verlierst du, ist die Truhe weg.

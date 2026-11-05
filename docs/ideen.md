@@ -103,3 +103,22 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | # | Idee | Status |
 |---|---|---|
 | 47 | **Überfälle aufs Dorf:** Ab und zu kündigt sich eine Bande an. Bis zur Frist verteidigt man das Dorf (Wellen und Anführer), sonst wird ein Gebäude beschädigt und wirkt eine Stufe tiefer, bis man es repariert. Neues Gebäude Wehranlage, Begleiter im Dorf stehen Wache | ✅ `raids.ts`, docs/ueberfaelle.md |
+
+## Fünfte Runde (2026-11-05)
+
+| # | Idee | Status |
+|---|---|---|
+| 48 | **Gebiete befreien:** Bedrohung pro Gebiet sinkt mit Kills, bei 0 % das Lager der Bande – danach keine Überfälle mehr aus diesem Gebiet | 💡 |
+| 49 | **Ruf bei Fraktionen:** Besucher-Entscheidungen und Quests geben Ruf (Händlergilde, Jägerbund, Orden) – Rabatte, eigene Kopfgelder, Fraktions-Items | 💡 |
+| 50 | **Jahreszeiten und Feste:** Erntefest, Wintersonnenwende mit Saisonboss und begrenzter Questreihe | 💡 |
+| 51 | **Schatzkarten:** sehr seltene Beute, führt zu einem Schatzraum im Solo-Dungeon mit garantiert legendärem Item oder Schatz-Rezept, bei den laufenden Quests aufgelistet | ✅ `treasureMaps.ts`, docs/schatzkarten.md – Koop-Schatzraum noch offen |
+| 52 | **Einwohner und Zufriedenheit:** Gebäude ziehen Einwohner an, die Gold und Material abgeben; Überfälle senken die Zufriedenheit | 💡 |
+| 53 | **Kräutergarten:** Beete wachsen in Echtzeit und liefern Zutaten, seltene Samen als Beute | 💡 |
+| 54 | **Persönliche Begleiter-Quest:** ab einem Level erzählt ein Begleiter seine Geschichte, am Ende ein einzigartiger Trait | 💡 |
+| 55 | **Verletzungen und Lazarett:** misslungene Missionen verletzen Begleiter für ein paar Stunden | 💡 |
+| 56 | **Verfluchte Items:** starke Werte mit Nachteil, eine Besucher-Quest löst den Fluch | 💡 |
+| 57 | **Absichten für Elite-Gegner:** leichte Version der Boss-Absichten für den Modifikator-Angriff | 💡 |
+| 58 | **Mimik-Truhen** auf dem Dungeon-Weg | 💡 |
+| 59 | **Geister-Arena:** asynchrones PvP gegen die Kopie eines anderen Helden aus dem Cloud-Spielstand | 💡 |
+| 60 | **Koop-Dorfverteidigung:** einen Freund per Code zur Überfall-Abwehr holen | 💡 |
+| 61 | **Heldenchronik:** das Questbuch schreibt automatisch ein Tagebuch der wichtigen Momente | 💡 |
