@@ -120,6 +120,11 @@ export const CREATURE_MATCHUPS: Record<string, CreatureMatchups> = {
   "soul-eater": { weak: ["blunt"], resist: ["magic"], immune: ["poison"] },
   "abyss-tyrant": { weak: ["burn"], resist: ["magic"] },
   "void-lord": { weak: ["pierce"], resist: ["magic"] },
+  // Mimics (Truhen im Dungeon): Holz brennt, Eisenbeschläge halten Klingen ab
+  "mimic-mine": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
+  "mimic-temple": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
+  "mimic-storm": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
+  "mimic-void": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
   // Raid-Bosse
   "swamp-hydra": { weak: ["burn", "blade"], immune: ["poison"] },
   "frost-giant": { weak: ["burn", "blunt"], resist: ["blade"] },

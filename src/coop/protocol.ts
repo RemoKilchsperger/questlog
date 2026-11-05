@@ -4,7 +4,7 @@
 
 import type { HeroCombatProfile } from "../domain/combat";
 import type { CoopAction, CoopBattleState, CoopEvent } from "../domain/coopCombat";
-import type { TrapChoice } from "../domain/dungeonPaths";
+import type { ChestChoice, TrapChoice } from "../domain/dungeonPaths";
 import type { BlessingId } from "../domain/tower";
 import type { Equipment } from "../domain/types";
 
@@ -62,12 +62,13 @@ export type CoopCommand =
   | { type: "act"; round: number; action: CoopAction }
   /** Zeit abgelaufen? Dann löst der Server die Runde auf – im Dungeon auch die Tür oder den Raum. */
   | { type: "tick" }
-  /** Dungeon-Wege (coopDungeonPaths.ts): Stimme für eine Tür, Segen im Schrein, Kauf beim Händler, Falle, Rätsel */
+  /** Dungeon-Wege (coopDungeonPaths.ts): Stimme für eine Tür, Segen im Schrein, Kauf beim Händler, Falle, Rätsel, Truhe */
   | { type: "door"; index: number }
   | { type: "blessing"; blessing: BlessingId }
   | { type: "buy"; index: number }
   | { type: "trap"; choice: TrapChoice }
-  | { type: "riddle"; answer: string };
+  | { type: "riddle"; answer: string }
+  | { type: "chest"; choice: ChestChoice };
 
 /** Kurzer Lobby-Code ohne leicht verwechselbare Zeichen (0/O, 1/I/L). */
 export function newLobbyCode(rng: () => number = Math.random): string {

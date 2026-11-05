@@ -54,6 +54,8 @@ export interface AreaDef {
   creatures: readonly CreatureDef[];
   /** Dungeon: Gegner nacheinander, ohne Heilung dazwischen, Boss am Ende */
   dungeon?: boolean;
+  /** Nur Dungeons: der Mimic, der sich in einer Truhe versteckt (dungeonPaths.ts) – kein Schritt des Wegs */
+  mimic?: CreatureDef;
 }
 
 /**
@@ -239,6 +241,11 @@ export const AREAS: readonly AreaDef[] = [
  */
 const DUNGEON_POWER = 1.1;
 const ABYSS_POWER = 1.1;
+/** Mimics sind zäher als die übrigen Gegner eines Dungeons – dafür lohnt sich die Beute (dungeonPaths.ts). */
+const MIMIC_POWER = 1.25;
+
+/** Mimic eines Dungeons: kämpft auf dessen höchstem Level, mit eigener Fähigkeit (bossAbilities.ts). */
+const mimic = (id: string, level: number): CreatureDef => d(id, "Mimic", "mimic", level, MIMIC_POWER);
 
 /**
  * Dungeons: acht Gegner hintereinander, zwischen den Kämpfen keine Heilung, in der
@@ -253,6 +260,7 @@ export const DUNGEONS: readonly AreaDef[] = [
     minLevel: 10,
     maxLevel: 12,
     dungeon: true,
+    mimic: mimic("mimic-mine", 12),
     colors: { sky: 0x1a1612, ground: 0x3a2e22 },
     creatures: dungeonRun(
       [
@@ -271,6 +279,7 @@ export const DUNGEONS: readonly AreaDef[] = [
     minLevel: 25,
     maxLevel: 27,
     dungeon: true,
+    mimic: mimic("mimic-temple", 27),
     colors: { sky: 0x3a2a14, ground: 0x8a6a3a },
     creatures: dungeonRun(
       [
@@ -289,6 +298,7 @@ export const DUNGEONS: readonly AreaDef[] = [
     minLevel: 40,
     maxLevel: 42,
     dungeon: true,
+    mimic: mimic("mimic-storm", 42),
     colors: { sky: 0x141e36, ground: 0x3a4258 },
     creatures: dungeonRun(
       [
@@ -307,6 +317,7 @@ export const DUNGEONS: readonly AreaDef[] = [
     minLevel: 60,
     maxLevel: 60,
     dungeon: true,
+    mimic: mimic("mimic-void", 60),
     colors: { sky: 0x0e0816, ground: 0x2a1a40 },
     creatures: dungeonRun(
       [
@@ -417,7 +428,7 @@ export function getCreatureGold(creature: CreatureDef): number {
 /** Kreatur samt Gebiet bzw. Dungeon, in dem sie lebt. */
 export function getCreature(id: string): { creature: CreatureDef; area: AreaDef } {
   for (const area of [...AREAS, ...DUNGEONS]) {
-    const creature = area.creatures.find((cr) => cr.id === id);
+    const creature = area.creatures.find((cr) => cr.id === id) ?? (area.mimic?.id === id ? area.mimic : undefined);
     if (creature) return { creature, area };
   }
   throw new Error(`Unbekannte Kreatur: ${id}`);

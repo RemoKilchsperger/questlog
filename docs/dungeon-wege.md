@@ -1,7 +1,7 @@
 # Dungeon-Wege
 
 Dungeons sind kein fester Ablauf von acht Kämpfen mehr – solo und im Koop. An Gabelungen wählt man seinen Weg:
-Kampf, Elite-Raum, Schrein, Händler, Falle oder Rätsel. So fühlt sich jeder Durchgang anders an, und
+Kampf, Elite-Raum, Schrein, Händler, Falle, Rätsel oder eine alte Truhe. So fühlt sich jeder Durchgang anders an, und
 die Segen aus dem Endlos-Turm gibt es auch im Dungeon (Idee #8 und #37 in `ideen.md`).
 Code: `src/domain/dungeonPaths.ts`, Store `gameStore.ts` (`dungeon`), Oberfläche `src/components/DungeonPath.tsx`.
 Koop: `src/domain/coopDungeonPaths.ts` (Türen, Räume, Abstimmung), Server `src/coop/server.ts`, Oberfläche
@@ -44,6 +44,7 @@ Acht Schritte wie bisher, ohne Heilung dazwischen:
 | 🛒 Händler | Mit eigenem Gold, jedes Angebot einmal: Heiltrank des Dungeons (Mine klein, Tempel/Turm normal, Abgrund gross) und ein zufälliger Wurftrank zum 1,5-fachen Dorfpreis. Dazu Wundversorgung (heilt 40 %, 2× Trankpreis) und ein Segen (5× Trankpreis) |
 | 🪤 Falle | Ausweichen oder Einstecken. Dahinter liegt Beute wie von einem Gegner, aber ohne XP |
 | 🧩 Rätsel | Richtig: Elite-Beute ohne XP. Falsch: je nach Rätsel 20 % Schaden oder ein Wächter erwacht (Kampf) |
+| 📦 Alte Truhe | Öffnen oder weitergehen. Echte Truhe: Beute wie von einem Gegner, ohne XP. 30 % sind ein Mimic (Kampf, siehe unten) |
 
 ### Falle: die Rüstung entscheidet
 
@@ -65,6 +66,29 @@ Acht Rätsel mit fester Lösung, die Reihenfolge der Antworten ist gemischt. Kei
 doppelt vor (Fallen ebenso). Man kann sie mit der Zeit lernen. Das ist gewollt, die Belohnung ist darum
 nur Beute ohne XP.
 
+### Alte Truhe und Mimic
+
+Ein Raum ohne sicheren Kampf, zählt also als Ruheraum (höchstens einer pro Abschnitt), Gewicht 12 wie Schrein und
+Händler. Man sieht nur die Truhe und entscheidet:
+
+- **Weitergehen:** nichts passiert.
+- **Öffnen:** Mit 30 % (`MIMIC_CHANCE`) ist sie ein **Mimic**. Ob, steht mit Startwert und Schritt fest
+  (`isMimicChest`), Neuladen ändert nichts. Sonst liegt darin Beute wie von einem Gegner des Dungeons, ohne XP.
+
+Der Mimic ist ein eigener Gegner pro Dungeon (`AreaDef.mimic`, Ids `mimic-mine`, `mimic-temple`, `mimic-storm`,
+`mimic-void`). Er ist kein Schritt des Wegs, darum taucht er nicht in Turm, Aufträgen oder Bestiarium auf.
+
+| | Mimic |
+|---|---|
+| Level | Höchstes Level des Dungeons |
+| Stärke | ×1,25 auf LP und Schaden (übrige Dungeon-Gegner ×1,1), kein Elite-Modifikator |
+| Fähigkeit | 🦷 Zuschnappen alle 3 Runden: 1,8-facher Schaden, Bluten 2 Runden (30 %). Wird angekündigt wie bei Bossen |
+| Schwächen | Schwach gegen Feuer und Wucht, resistent gegen Klingen, immun gegen Gift |
+| Beute | Elite-Beute (sicheres Item mit Boss-Seltenheiten, doppelte XP) und das Elite-Gold ×1,5 (`MIMIC_GOLD_FACTOR`). Zählt für Schatzkarten wie ein Elite |
+
+Grafik: Bild `src/assets/creatures/mimic.png` (Prompt in `gegner-prompts.md`), als Rückfall das Pixel-Sprite
+`mimic` in `creatureSprites.ts`.
+
 ## Abstimmung (Simulation)
 
 Simuliert mit dem Champion bzw. Wächter aus dem Balance-Test (Boss-Level, Heiltränke unter 40 % LP),
@@ -85,7 +109,7 @@ Ablauf mit drei Arten, die Türen zu wählen. Angegeben ist der Anteil der Läuf
 
 ## Koop
 
-Der Server kennt den Weg (`CoopDungeonRun`: `path`, `calm`, `seen`, `votes`, `room`, `riddles`, `treasure`). Türen,
+Der Server kennt den Weg (`CoopDungeonRun`: `path`, `calm`, `seen`, `votes`, `room`, `riddles`, `chests`, `treasure`). Türen,
 Gegner und Räume würfelt er aus der `runId` – wie die Beute. So bleibt die Truhe jedes Spielers wiederholbar.
 
 | Entscheidung | Wer |
@@ -95,17 +119,20 @@ Gegner und Räume würfelt er aus der `runId` – wie die Beute. So bleibt die T
 | Falle | Jeder weicht aus oder steckt ein – mit seiner eigenen Rüstung |
 | Händler | Jeder kauft mit seinem Gold. Gold und Tränke bucht sein Browser, Wundversorgung und Segen der Server |
 | Rätsel | Mehrheit, bei Gleichstand zählt der Host |
+| Alte Truhe | Mehrheit, bei Gleichstand zählt der Host. Ist sie ein Mimic, kämpft die ganze Gruppe |
 | Weiter vor Zwischen- und Endboss, Aussteigen | Der Host |
 
 - **Frist:** 60 Sekunden (`COOP_DECIDE_SECONDS`). Danach gilt eine Vorgabe: die abgegebenen Stimmen, beim
-  Schrein der erste Segen, bei der Falle Einstecken. So blockiert niemand die Gruppe.
+  Schrein der erste Segen, bei der Falle Einstecken. Bei der Truhe zählen die abgegebenen Stimmen; ohne Stimme
+  (oder bei Gleichstand ohne Host-Stimme) bleibt sie zu. So blockiert niemand die Gruppe.
 - Wer den Kampf verlassen hat, stimmt nicht mit.
 - Beim Betreten eines Raums stehen Gefallene mit 25 % LP wieder auf, wie vor einem Kampf.
 - Beim Händler ist der Raum sofort erledigt: Man kauft, während die Gruppe über die nächste Tür abstimmt.
 - **Segen im Koop-Kampf:** Alle 12 Segen wirken auch im Koop (`CoopHero.blessings`). Kraft, Ahnen, Vitalität und
   Präzision ändern die Werte direkt, die übrigen wirken in `resolveRound` (Fokus, Blutdurst, Henker, Dornen,
   Alchemie, Zweiter Atem). Schatzsucher zählt für die Beute der Schritte danach.
-- **Truhe:** Kämpfe und Elite-Räume wie bisher, Fallen und gelöste Rätsel ohne XP, ein Wächter-Kampf wie ein Kampf.
+- **Truhe:** Kämpfe und Elite-Räume wie bisher, Fallen, gelöste Rätsel und geöffnete alte Truhen ohne XP, ein
+  Wächter-Kampf wie ein Kampf, ein Mimic mit seiner Beute (siehe oben). Jeder würfelt seine eigene Beute.
 - Ältere Läufe ohne `path` zählen jeden bisherigen Schritt als Kampf.
 
 ## Offen / später

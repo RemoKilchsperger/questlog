@@ -1,9 +1,10 @@
 // Wege durch die Dungeons (docs/dungeon-wege.md): Nach dem Eingangskampf wählt man an
-// jeder Gabelung eine Tür – Kampf, Elite-Raum, Schrein, Händler, Falle oder Rätsel.
+// jeder Gabelung eine Tür – Kampf, Elite-Raum, Schrein, Händler, Falle, Rätsel oder Truhe.
 // Zwischenboss und Endboss bleiben an ihrem Platz. Reine Logik – der Lauf steht im
 // Store (`dungeon`), gekämpft wird mit combat.ts.
 
-import type { AreaDef, CreatureDef } from "./creatures";
+import { rollBattleReward, type BattleReward, type HeroCombatProfile } from "./combat";
+import { DUNGEONS, type AreaDef, type CreatureDef } from "./creatures";
 import { ELITE_AFFIXES, type EliteAffix } from "./elites";
 import { getPotion, THROW_POTIONS } from "./potions";
 import { hash, seededRng } from "./random";
@@ -11,7 +12,7 @@ import { blessingOffer, type BlessingId } from "./tower";
 import type { ArmorClass } from "./types";
 
 /** `treasure`: verborgener Raum einer Schatzkarte (treasureMaps.ts) – nie an einer gewöhnlichen Gabelung */
-export type RoomKind = "fight" | "elite" | "shrine" | "merchant" | "trap" | "riddle" | "treasure";
+export type RoomKind = "fight" | "elite" | "shrine" | "merchant" | "trap" | "riddle" | "chest" | "treasure";
 
 export interface RoomDef {
   kind: RoomKind;
@@ -28,6 +29,7 @@ export const ROOMS: Record<RoomKind, RoomDef> = {
   merchant: { kind: "merchant", name: "Händler", icon: "🛒", description: "Ein wandernder Händler – teuer, aber er hat, was man unterwegs braucht." },
   trap: { kind: "trap", name: "Falle", icon: "🪤", description: "Ein Gang voller Fallen. Dahinter liegt etwas Wertvolles." },
   riddle: { kind: "riddle", name: "Rätsel", icon: "🧩", description: "Eine Inschrift stellt eine Frage. Wer richtig antwortet, wird belohnt." },
+  chest: { kind: "chest", name: "Alte Truhe", icon: "📦", description: "Eine alte Truhe, ganz allein im Raum. Öffnen – oder lieber liegen lassen?" },
   treasure: { kind: "treasure", name: "Schatzraum", icon: "🗺️", description: "Deine Schatzkarte führt hierher. Ein legendäres Item oder ein Rezept wartet." },
 };
 
@@ -35,11 +37,11 @@ export const ROOMS: Record<RoomKind, RoomDef> = {
 export const FORK_ROOMS: readonly RoomDef[] = Object.values(ROOMS).filter((r) => r.kind !== "treasure");
 
 /** Räume ohne (sicheren) Kampf – höchstens einer pro Abschnitt */
-export const CALM_ROOMS: readonly RoomKind[] = ["shrine", "merchant", "trap", "riddle"];
+export const CALM_ROOMS: readonly RoomKind[] = ["shrine", "merchant", "trap", "riddle", "chest"];
 export const isCalm = (kind: RoomKind) => CALM_ROOMS.includes(kind);
 
 /** Gewichte beim Auslosen der Türen */
-const ROOM_WEIGHTS: Record<Exclude<RoomKind, "treasure">, number> = { fight: 30, elite: 20, shrine: 12, merchant: 12, trap: 13, riddle: 13 };
+const ROOM_WEIGHTS: Record<Exclude<RoomKind, "treasure">, number> = { fight: 30, elite: 20, shrine: 12, merchant: 12, trap: 13, riddle: 13, chest: 12 };
 
 /** Chance, dass eine Tür verschlossen ist (❓) – man sieht erst drinnen, was dahinter liegt. */
 export const HIDDEN_DOOR_CHANCE = 0.2;
@@ -279,4 +281,37 @@ export function pickRiddle(seed: string, step: number, seen: readonly string[]):
     [options[i], options[j]] = [options[j], options[i]];
   }
   return { riddle, options };
+}
+
+/* ───────────── Truhe ───────────── */
+
+export type ChestChoice = "open" | "leave";
+
+/** Chance, dass die Truhe ein Mimic ist – öffnet man sie, beginnt ein Kampf. */
+export const MIMIC_CHANCE = 0.3;
+/** Ein Mimic gibt Elite-Beute und hat dazu noch Münzen verschluckt: so viel mal das Elite-Gold. */
+export const MIMIC_GOLD_FACTOR = 1.5;
+
+/** Ist die Truhe an diesem Schritt ein Mimic? Steht mit dem Lauf fest – Neuladen ändert nichts. */
+export function isMimicChest(seed: string, step: number): boolean {
+  return stepRng(seed, step, "mimic")() < MIMIC_CHANCE;
+}
+
+/** Der Mimic dieses Dungeons. */
+export function getMimic(dungeon: AreaDef): CreatureDef {
+  if (!dungeon.mimic) throw new Error(`Kein Mimic in ${dungeon.name}`);
+  return dungeon.mimic;
+}
+
+export const isMimic = (creatureId: string) => DUNGEONS.some((d) => d.mimic?.id === creatureId);
+
+/** Inhalt einer echten Truhe: Beute wie von einem Gegner des Dungeons, aber ohne Erfahrung. */
+export function chestReward(creature: CreatureDef, hero: HeroCombatProfile, uid: string, rng: () => number = Math.random): BattleReward {
+  return { ...rollBattleReward(creature, hero, uid, rng), xp: 0 };
+}
+
+/** Beute eines besiegten Mimics: Elite-Beute (sicheres Item, doppelte Erfahrung) und noch mehr Gold. */
+export function mimicReward(mimic: CreatureDef, hero: HeroCombatProfile, uid: string, rng: () => number = Math.random): BattleReward {
+  const reward = rollBattleReward(mimic, hero, uid, rng, [], true);
+  return { ...reward, gold: Math.round(reward.gold * MIMIC_GOLD_FACTOR) };
 }

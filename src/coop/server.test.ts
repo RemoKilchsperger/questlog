@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { clearedStages, COOP_TURN_SECONDS, getCoopBoss, rollCoopDungeonChest } from "../domain/coopCombat";
 import { COOP_DECIDE_SECONDS, coopDoors } from "../domain/coopDungeonPaths";
 import { getDungeon } from "../domain/creatures";
-import { forkDoors, getRiddle, type RoomKind } from "../domain/dungeonPaths";
+import { forkDoors, getMimic, getRiddle, isMimicChest, type RoomKind } from "../domain/dungeonPaths";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import { createItem } from "../domain/items";
 import { xpForNextLevel } from "../domain/leveling";
@@ -181,9 +181,9 @@ describe("Koop-Server: Dungeons", () => {
   const runWithDoor = (kind: RoomKind) => {
     for (let i = 0; ; i++) if (forkDoors(`r${i}`, 1, true).some((d) => d.kind === kind)) return `r${i}`;
   };
-  /** Nach dem Eingangskampf gemeinsam durch die Tür dieser Art. */
-  const enterRoom = (kind: RoomKind) => {
-    const row = winFight(dungeonRow(runWithDoor(kind)));
+  /** Nach dem Eingangskampf gemeinsam durch die Tür dieser Art (`runId`: Startwert mit dieser Tür an der ersten Gabelung). */
+  const enterRoom = (kind: RoomKind, runId = runWithDoor(kind)) => {
+    const row = winFight(dungeonRow(runId));
     const index = coopDoors(row.state!)!.findIndex((d) => d.kind === kind);
     return run(run(row, { type: "door", index }, "a")!, { type: "door", index }, "b")!;
   };
@@ -282,6 +282,50 @@ describe("Koop-Server: Dungeons", () => {
     const done = run(run(row, { type: "riddle", answer }, "a")!, { type: "riddle", answer }, "b")!;
     expect(done.state!.dungeon!.riddles).toEqual({ 1: "solved" });
     expect(done.state!.dungeon!.room!.done).toBe(true);
+  });
+
+  /** Startwert mit einer Truhe an der ersten Gabelung, die (k)ein Mimic ist. */
+  const chestRun = (mimic: boolean) => {
+    for (let i = 0; ; i++) {
+      const id = `c${i}`;
+      if (forkDoors(id, 1, true).some((d) => d.kind === "chest") && isMimicChest(id, 1) === mimic) return id;
+    }
+  };
+
+  it("Truhe: die Mehrheit entscheidet – bei Gleichstand der Host, ohne Stimmen bleibt sie zu", () => {
+    const row = enterRoom("chest", chestRun(false));
+    const room = row.state!.dungeon!.room!;
+    expect(room.kind).toBe("chest");
+    // a will öffnen, b nicht: der Host (a) gibt den Ausschlag
+    const tie = run(run(row, { type: "chest", choice: "leave" }, "b")!, { type: "chest", choice: "open" }, "a")!;
+    expect(tie.state!.dungeon!.chests).toEqual({ 1: "opened" });
+    expect(tie.state!.dungeon!.room!.done).toBe(true);
+    // Geöffnet: Beute ohne Erfahrung
+    const before = rollCoopDungeonChest(row.state!, member("a").profile, "a");
+    const after = rollCoopDungeonChest(tie.state!, member("a").profile, "a");
+    expect(after.xp).toBe(before.xp);
+    // Niemand stimmt, die Zeit läuft ab: die Truhe bleibt zu
+    const forced = run(row, { type: "tick" }, "a", { now: clock + COOP_DECIDE_SECONDS * 1000 + 1 })!;
+    expect(forced.state!.dungeon!.chests).toEqual({ 1: "left" });
+  });
+
+  it("Truhe als Mimic: ein Kampf, danach Elite-Beute mit Erfahrung für jeden", () => {
+    const row = enterRoom("chest", chestRun(true));
+    const both = run(run(row, { type: "chest", choice: "open" }, "a", { newId: () => "mimic" })!, { type: "chest", choice: "open" }, "b", {
+      newId: () => "mimic",
+    })!;
+    expect(both.state!.id).toBe("mimic");
+    expect(both.state!.status).toBe("active");
+    expect(both.state!.bossId).toBe(getMimic(getDungeon("abandoned-mine")).id);
+    expect(both.state!.elite).toBeUndefined();
+    expect(both.state!.dungeon!.chests).toEqual({ 1: "mimic" });
+    const won = winFight(both);
+    expect(won.state!.status).toBe("won");
+    const before = rollCoopDungeonChest(row.state!, member("a").profile, "a");
+    const after = rollCoopDungeonChest(won.state!, member("a").profile, "a");
+    expect(after.xp).toBeGreaterThan(before.xp);
+    expect(after.items.length).toBe(before.items.length + 1);
+    expect(coopDoors(won.state!)).not.toBeNull();
   });
 
   it("Händler: jeder kauft für sich, Wundversorgung heilt", () => {

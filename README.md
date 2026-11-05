@@ -50,7 +50,7 @@ src/
     bossAbilities.ts Fähigkeiten der Solo-Bosse
     bossIntents.ts   Absichten der Bosse: was sie jede Runde vorhaben, eigene Abläufe aller Bosse (Wut, Ansturm, Abtauchen, Panzer, Fluch …)
     heroic.ts        Heroische Bosse: mehr LP, Zusatzmechanik, mehr Boss-Beute
-    dungeonPaths.ts  Wege durch die Dungeons: Gabelungen, Türen, Schrein, Händler, Falle, Rätsel
+    dungeonPaths.ts  Wege durch die Dungeons: Gabelungen, Türen, Schrein, Händler, Falle, Rätsel, Truhe (Mimic)
     treasureMaps.ts  Schatzkarten: seltener Fund, Schatzraum im Solo-Dungeon, Schatz-Rezepte
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse
@@ -186,7 +186,7 @@ Frostgipfel (31–40), Schattenruinen (41–50), Drachenhort (51–60). Je 4 Kre
 **Dungeons:** Verlassene Mine (ab 10), Versunkener Tempel (ab 25), Gewitterturm (ab 40),
 Abgrund der Leere (ab 60). Acht Schritte ohne Heilung dazwischen: Eingangskampf, Gabelungen, ein
 Zwischenboss (Elite mit zwei Modifikatoren), wieder Gabelungen, Endboss. An den Gabelungen wählt man
-zwischen Kampf, Elite-Raum, Schrein, Händler, Falle und Rätsel (`dungeonPaths.ts`, `docs/dungeon-wege.md`,
+zwischen Kampf, Elite-Raum, Schrein, Händler, Falle, Rätsel und alter Truhe, die ein Mimic sein kann (`dungeonPaths.ts`, `docs/dungeon-wege.md`,
 auch im Koop mit Abstimmung). Beute in einer Truhe, die bei einer Niederlage verloren geht.
 
 **Heroische Bosse** (`heroic.ts`): Besiegte Gebiets- und Dungeon-Bosse lassen sich heroisch erneut fordern –

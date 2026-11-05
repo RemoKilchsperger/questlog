@@ -1,5 +1,5 @@
 // Wege durch die Koop-Dungeons (docs/dungeon-wege.md): Abstimmung über die Tür und die Räume
-// ohne Kampf – Schrein und Falle für jeden selbst, Händler mit eigenem Gold, Rätsel per Mehrheit.
+// ohne Kampf – Schrein und Falle für jeden selbst, Händler mit eigenem Gold, Rätsel und Truhe per Mehrheit.
 
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
@@ -10,6 +10,7 @@ import { getRiddle, getTrap, ROOMS, type MerchantOffer } from "../domain/dungeon
 import { getPotion, potionEffectText } from "../domain/potions";
 import { getBlessing } from "../domain/tower";
 import { useGameStore } from "../store/gameStore";
+import { CHEST_INTRO, ChestChoices } from "./DungeonPath";
 import { Gold } from "./Gold";
 
 /** Sekunden bis `deadline` (eigene Uhrzeit), viermal pro Sekunde aktualisiert. */
@@ -54,6 +55,7 @@ export function CoopRoomPanel({ battle }: { battle: CoopBattleState }) {
       {room.kind === "merchant" && <Merchant room={room} />}
       {room.kind === "trap" && <Trap battle={battle} room={room} />}
       {room.kind === "riddle" && <Riddle battle={battle} room={room} />}
+      {room.kind === "chest" && <Chest battle={battle} room={room} />}
     </div>
   );
 }
@@ -239,6 +241,39 @@ function Riddle({ battle, room }: { battle: CoopBattleState; room: Extract<CoopR
               </motion.button>
             ))}
           </div>
+          <Waiting battle={battle} acted={Object.keys(room.votes)} what="zählen die abgegebenen Stimmen" />
+        </>
+      )}
+    </>
+  );
+}
+
+function Chest({ battle, room }: { battle: CoopBattleState; room: Extract<CoopRoom, { kind: "chest" }> }) {
+  const { myId, busy } = useCoopStore();
+  const send = useCoopStore((s) => s.dungeonCommand);
+  const names = useNames();
+  const voters = (choice: string) => Object.entries(room.votes).filter(([, v]) => v === choice).map(([id]) => names[id]);
+  return (
+    <>
+      <p className="text-4xl" aria-hidden>
+        📦
+      </p>
+      <p className="max-w-md text-sm text-muted">{CHEST_INTRO}</p>
+      {room.outcome ? (
+        <p className={room.outcome.choice === "open" ? "text-xp" : "text-muted"}>
+          {room.outcome.choice === "open"
+            ? "Der Deckel knarrt – es ist nur eine Truhe. Jeder findet etwas, es liegt in eurer Truhe."
+            : "Ihr lasst die Truhe stehen. Sicher ist sicher."}
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-muted">Die Mehrheit entscheidet, bei Gleichstand zählt der Host.</p>
+          <ChestChoices disabled={busy} onChoose={(choice) => send({ type: "chest", choice })} />
+          <ul className="flex flex-col gap-0.5 text-xs text-muted">
+            {voters("open").length > 0 && <li>🗝️ {voters("open").join(", ")}</li>}
+            {voters("leave").length > 0 && <li>🚪 {voters("leave").join(", ")}</li>}
+          </ul>
+          {room.votes[myId] && <p className="text-xs text-gold">Deine Stimme: {room.votes[myId] === "open" ? "Öffnen" : "Weitergehen"}</p>}
           <Waiting battle={battle} acted={Object.keys(room.votes)} what="zählen die abgegebenen Stimmen" />
         </>
       )}

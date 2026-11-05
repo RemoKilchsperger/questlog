@@ -1,11 +1,11 @@
 // Wege durch die Dungeons (docs/dungeon-wege.md): Fortschritt, Türen an den Gabelungen
-// und die Räume ohne Kampf (Schrein, Händler, Falle, Rätsel, Schatzraum).
+// und die Räume ohne Kampf (Schrein, Händler, Falle, Rätsel, Truhe, Schatzraum).
 
 import { motion } from "motion/react";
 import { Fragment } from "react";
 import { chestCount, type BattleReward, type BattleState } from "../domain/combat";
 import { getDungeon, type AreaDef } from "../domain/creatures";
-import { getRiddle, getTrap, ROOMS, stepKind, type Door, type MerchantOffer } from "../domain/dungeonPaths";
+import { getRiddle, getTrap, ROOMS, stepKind, type ChestChoice, type Door, type MerchantOffer } from "../domain/dungeonPaths";
 import { getPotion, potionEffectText } from "../domain/potions";
 import { getBlessing, stacks } from "../domain/tower";
 import { materialEntries } from "../domain/village";
@@ -241,6 +241,7 @@ export function DungeonRoomView({ battle, run }: { battle: BattleState; run: Dun
             {room.kind === "merchant" && <MerchantRoom room={room} />}
             {room.kind === "trap" && <TrapRoom room={room} />}
             {room.kind === "riddle" && <RiddleRoom room={room} />}
+            {room.kind === "chest" && <ChestRoom room={room} />}
             {room.kind === "treasure" && <TreasureRoom room={room} />}
             {isRoomDone(room) && <DungeonOnward battle={battle} />}
           </>
@@ -380,6 +381,57 @@ function TrapRoom({ room }: { room: Extract<DungeonRoom, { kind: "trap" }> }) {
             <span className="text-xs text-muted">Kopf runter und durch. Eine gute Rüstung fängt einiges ab.</span>
           </motion.button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Truhe: Öffnen oder Weitergehen – die Knöpfe teilen sich solo und Koop. */
+export function ChestChoices({ onChoose, disabled = false }: { onChoose: (choice: ChestChoice) => void; disabled?: boolean }) {
+  return (
+    <div className="grid w-full max-w-lg gap-2 sm:grid-cols-2">
+      <motion.button
+        whileTap={{ scale: 0.95 }}
+        disabled={disabled}
+        onClick={() => onChoose("open")}
+        className="flex flex-col items-center gap-1 rounded-md border-2 border-gold/60 bg-gold/10 p-3 hover:bg-gold/20 disabled:opacity-40"
+      >
+        <span className="font-pixel text-gold">🗝️ Öffnen</span>
+        <span className="text-xs text-muted">Was drin ist, kommt in die Truhe – wenn es denn wirklich nur eine Truhe ist …</span>
+      </motion.button>
+      <motion.button
+        whileTap={{ scale: 0.95 }}
+        disabled={disabled}
+        onClick={() => onChoose("leave")}
+        className="flex flex-col items-center gap-1 rounded-md border-2 border-night-600 bg-night-800 p-3 hover:bg-night-700 disabled:opacity-40"
+      >
+        <span className="font-pixel text-parchment">🚪 Weitergehen</span>
+        <span className="text-xs text-muted">Kein Risiko, keine Beute.</span>
+      </motion.button>
+    </div>
+  );
+}
+
+export const CHEST_INTRO =
+  "Mitten im Raum steht eine alte, eisenbeschlagene Truhe. Auf dem Deckel liegt kein Staub – seltsam. Man erzählt sich von Truhen, die zubeissen.";
+
+function ChestRoom({ room }: { room: Extract<DungeonRoom, { kind: "chest" }> }) {
+  const decide = useGameStore((s) => s.dungeonChest);
+  return (
+    <div className="flex w-full flex-col items-center gap-3">
+      <p className="text-4xl" aria-hidden>
+        📦
+      </p>
+      <p className="max-w-md text-sm text-muted">{CHEST_INTRO}</p>
+      {!room.outcome ? (
+        <ChestChoices onChoose={decide} />
+      ) : room.outcome.choice === "leave" ? (
+        <p className="text-muted">Du lässt die Truhe stehen. Sicher ist sicher.</p>
+      ) : (
+        <>
+          <p className="text-xp">Der Deckel knarrt – es ist nur eine Truhe. Du nimmst, was darin liegt.</p>
+          <ChestDeposit reward={room.outcome.reward} />
+        </>
       )}
     </div>
   );

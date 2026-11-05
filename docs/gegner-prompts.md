@@ -1,6 +1,6 @@
 # Gegner-Grafiken: Prompts für die KI
 
-Prompts für alle 49 Gegner. Die Prompts sind auf Englisch, weil die meisten Bild-KIs damit zuverlässiger arbeiten.
+Prompts für alle 50 Gegner. Die Prompts sind auf Englisch, weil die meisten Bild-KIs damit zuverlässiger arbeiten.
 
 ## So gehst du vor
 
@@ -124,6 +124,12 @@ blurry, anti-aliasing, gradient background, text, watermark, multiple characters
 | `shadow-demon.png` | Schattendämon | `shadow demon, horned humanoid made of black smoke and darkness, long claws, glowing cyan eyes, rising from violet void flames` |
 | `soul-eater.png` | Seelenfresser | `soul eater, huge ghostly floating maw, dark purple spectral body, mouth full of glowing cyan trapped souls, pink glowing eyes` |
 | `void-lord.png` | Leerenfürst Xal'Zar (Boss) | `boss: void lord, enormous shadow mass with three glowing cyan eyes, a wide maw of teeth, writhing purple tentacles, cosmic stars inside its body` |
+
+## Dungeons: Mimic (in jedem Dungeon derselbe, versteckt in einer alten Truhe)
+
+| Datei | Gegner | Prompt |
+|---|---|---|
+| `mimic.png` | Mimic | `mimic, an old wooden treasure chest with iron bands that is alive, lid wide open like a mouth with rows of sharp white teeth, long red tongue hanging out, two glowing red eyes on the lid, gold coins spilling out` |
 
 ## Koop-Bosse
 

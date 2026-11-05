@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getDungeon } from "../domain/creatures";
-import { getRiddle, type Door, type RoomKind } from "../domain/dungeonPaths";
+import { getMimic, getRiddle, isMimicChest, type Door, type RoomKind } from "../domain/dungeonPaths";
 import { useGameStore } from "./gameStore";
 
 const store = () => useGameStore.getState();
@@ -129,5 +129,48 @@ describe("Dungeon-Wege im Spielstand", () => {
     enter("merchant");
     store().leaveDungeonWithChest();
     expect(store().dungeon!.claimed?.completed).toBe(false);
+  });
+
+  /** Startwert, dessen Truhe an Schritt 1 (k)ein Mimic ist. */
+  const seedFor = (mimic: boolean) => {
+    for (let i = 0; ; i++) if (isMimicChest(`chest-${i}`, 1) === mimic) return `chest-${i}`;
+  };
+
+  it("Truhe liegen lassen: nichts passiert, es geht weiter", () => {
+    const chestBefore = store().dungeon!.chest;
+    enter("chest");
+    store().dungeonChest("leave");
+    const room = store().dungeon!.room!;
+    if (room.kind !== "chest") throw new Error("keine Truhe");
+    expect(room.outcome).toEqual({ choice: "leave" });
+    expect(store().dungeon!.chest).toEqual(chestBefore);
+    expect(store().dungeon!.calm).toEqual([true, false]);
+    expect(store().dungeon!.doors).not.toBeNull();
+  });
+
+  it("Truhe öffnen: Beute ohne Erfahrung – oder ein Mimic mit besserer Beute", () => {
+    useGameStore.setState((s) => ({ dungeon: { ...s.dungeon!, seed: seedFor(false) } }));
+    const chestBefore = store().dungeon!.chest;
+    enter("chest");
+    store().dungeonChest("open");
+    const room = store().dungeon!.room!;
+    if (room.kind !== "chest" || room.outcome?.choice !== "open") throw new Error("Truhe nicht geöffnet");
+    expect(store().dungeon!.chest.xp).toBe(chestBefore.xp);
+
+    // Im zweiten Abschnitt beisst die Truhe zu
+    useGameStore.setState((s) => ({ dungeon: { ...s.dungeon!, seed: seedFor(true), stage: 0, room: null, calm: [false, false] } }));
+    enter("chest");
+    const items = store().dungeon!.chest.items.length;
+    const xp = store().dungeon!.chest.xp;
+    store().dungeonChest("open");
+    expect(store().battle!.status).toBe("active");
+    expect(store().battle!.creatureId).toBe(getMimic(dungeon).id);
+    expect(store().battle!.elite ?? []).toEqual([]);
+    expect(store().dungeon!.room).toBeNull();
+    winCurrent();
+    // Elite-Beute: sicheres Item und Erfahrung
+    expect(store().dungeon!.chest.items.length).toBe(items + 1);
+    expect(store().dungeon!.chest.xp).toBeGreaterThan(xp);
+    expect(store().dungeon!.doors).not.toBeNull();
   });
 });

@@ -29,12 +29,17 @@ import {
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type AreaDef, type BossRespawns, type CreatureDef } from "../domain/creatures";
 import { rollElite, type EliteAffix } from "../domain/elites";
 import {
+  chestReward,
   eliteRoomAffixes,
   forkDoors,
+  getMimic,
   getRiddle,
   isCalm,
+  isMimic,
+  isMimicChest,
   mainArmorClass,
   merchantOffers,
+  mimicReward,
   pickRiddle,
   pickTrap,
   RIDDLE_DAMAGE,
@@ -43,6 +48,7 @@ import {
   stepCreature,
   stepKind,
   trapOutcome,
+  type ChestChoice,
   type Door,
   type MerchantOffer,
   type RoomKind,
@@ -415,6 +421,8 @@ interface GameState {
   dungeonTrap: (choice: TrapChoice) => void;
   /** Rätsel: eine der Antworten wählen */
   dungeonRiddle: (answer: string) => void;
+  /** Truhe: öffnen (vielleicht ein Mimic) oder liegen lassen */
+  dungeonChest: (choice: ChestChoice) => void;
   /** Koop-Dungeon: Kauf beim Händler mit eigenem Gold bezahlen, Tränke kommen in den Vorrat (die Wirkung rechnet der Server) */
   payDungeonMerchant: (offer: MerchantOffer) => void;
   /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
@@ -505,6 +513,8 @@ export type DungeonRoom =
       options: string[];
       outcome: { answer: string; correct: boolean; damage: number; reward: BattleReward | null } | null;
     }
+  /** Truhe: liegen gelassen oder geöffnet – ist sie ein Mimic, beginnt stattdessen ein Kampf (der Raum ist dann weg) */
+  | { kind: "chest"; outcome: { choice: "leave" } | { choice: "open"; reward: BattleReward } | null }
   /** Schatzraum: der Fund ist beim Eintreten schon gutgeschrieben */
   | { kind: "treasure"; find: TreasureFind };
 
@@ -1857,7 +1867,8 @@ export const useGameStore = create<GameState>()(
             const trap = pickTrap(seed, stage, seen);
             seen = [...seen, trap.id];
             room = { kind: "trap", trapId: trap.id, outcome: null };
-          } else {
+          } else if (door.kind === "chest") room = { kind: "chest", outcome: null };
+          else {
             const { riddle, options } = pickRiddle(seed, stage, seen);
             seen = [...seen, riddle.id];
             room = { kind: "riddle", riddleId: riddle.id, options, outcome: null };
@@ -1953,6 +1964,30 @@ export const useGameStore = create<GameState>()(
           set({
             battle: { ...battle, hero: { ...battle.hero, hp: battle.hero.hp - damage } },
             dungeon: { ...dungeon, room: { ...room, outcome: { answer, correct: false, damage, reward: null } } },
+          });
+        }),
+
+      dungeonChest: (choice) =>
+        attempt(() => {
+          const { dungeon, battle, room } = currentRoom("chest");
+          if (room.outcome) throw new Error("Mit der Truhe bist du schon fertig.");
+          if (choice === "leave") {
+            set({ dungeon: { ...dungeon, room: { ...room, outcome: { choice } } } });
+            return;
+          }
+          const area = getDungeon(dungeon.dungeonId);
+          if (isMimicChest(dungeon.seed, dungeon.stage)) {
+            // Die Truhe beisst zurück: ein Kampf gegen den Mimic, danach geht es weiter wie nach jedem Sieg
+            const run: DungeonRun = { ...dungeon, room: null, doors: null };
+            const next = dungeonBattle(run, getMimic(area), battle.hero.hp, []);
+            set({ battle: next, battleReward: null, dungeon: run });
+            EventBus.emit("battle:started", { battle: next });
+            return;
+          }
+          const creature = stepCreature(area, dungeon.seed, dungeon.stage);
+          const reward = dungeonLoot(chestReward(creature, soloHero(), newId()), dungeon.blessings);
+          set({
+            dungeon: { ...dungeon, chest: addToChest(dungeon.chest, reward), room: { ...room, outcome: { choice, reward } } },
           });
         }),
 
@@ -2074,8 +2109,12 @@ export const useGameStore = create<GameState>()(
           // Besiegte Begleiter zählen für Aufträge und geben etwas XP und Gold
           const adds = defeatedAdds(result.state);
           for (const add of adds) questItems.push(...questEvent({ kind: "kill", creatureId: add.id, boss: false }));
-          const treasureMap = findTreasureMap(elite || heroic || !!creature.boss || !!creature.midBoss);
-          const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
+          // Ein Mimic gibt Elite-Beute, auch ohne Elite-Modifikator
+          const mimic = isMimic(creature.id);
+          const treasureMap = findTreasureMap(elite || heroic || mimic || !!creature.boss || !!creature.midBoss);
+          const raw = mimic
+            ? mimicReward(creature, soloHero(), newId())
+            : rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
           const rolled = { ...raw, xp: statueXp(raw.xp, tiers().statue) };
           if (dungeon) {

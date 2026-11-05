@@ -865,6 +865,25 @@ const STORM_LORD = [
 ];
 
 /** Leerenfürst Xal'Zar: Schattenmasse mit drei Augen, Zahnmaul und Tentakeln */
+const MIMIC = [
+  "................",
+  "................",
+  "...3333333333...",
+  "..311111111113..",
+  "..31e111111e13..",
+  "..322222222223..",
+  "..3wkwkwkwkwk3..",
+  "..kkkkkkkkkkkk..",
+  "rrrrkkkkkkkkkk..",
+  ".rrkwkwkwkwkwk..",
+  "..322222222223..",
+  "..311113311113..",
+  "..311113311113..",
+  "..311111111113..",
+  "..333333333333..",
+  "................",
+];
+
 const VOID_LORD = [
   "................",
   ".....111111.....",
@@ -1029,6 +1048,8 @@ export const CREATURE_SPRITES: Readonly<Record<string, SpriteDef>> = {
   },
   "soul-eater": { grid: SOUL_EATER, palette: { "1": "#3a2a5a", "2": "#5a3a8a", "3": "#4af0ff", e: "#ff4af0" } },
   "void-lord": { grid: VOID_LORD, palette: { "1": "#2a1a40", "2": "#5a2a8a", "3": "#7a1a5a", e: "#4af0ff" } },
+  // Dungeons: Mimic (in jeder Truhe derselbe)
+  mimic: { grid: MIMIC, palette: { "1": "#8a5a2b", "2": "#5a3a1a", "3": "#c8a040", e: "#ff4a4a", r: "#e0485a" } },
   // Koop-Bosse
   hydra: { grid: HYDRA, palette: { "1": "#3f6b4a", "2": "#2a4632", "3": "#a8b45a", e: "#f4e27a" } },
   "frost-giant": { grid: FROST_GIANT, palette: { "1": "#9ad9f0", "2": "#3a7aa8", "3": "#f2fdff", "4": "#4af0ff", e: "#1b3a5a" } },

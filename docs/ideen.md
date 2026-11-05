@@ -118,7 +118,7 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 55 | **Verletzungen und Lazarett:** misslungene Missionen verletzen Begleiter für ein paar Stunden | 💡 |
 | 56 | **Verfluchte Items:** starke Werte mit Nachteil, eine Besucher-Quest löst den Fluch | 💡 |
 | 57 | **Absichten für Elite-Gegner:** leichte Version der Boss-Absichten für den Modifikator-Angriff | 💡 |
-| 58 | **Mimik-Truhen** auf dem Dungeon-Weg | 💡 |
+| 58 | **Mimik-Truhen** auf dem Dungeon-Weg | ✅ Raum „Alte Truhe“ solo und Koop, 30 % Mimic mit Elite-Beute, `dungeonPaths.ts`, docs/dungeon-wege.md |
 | 59 | **Geister-Arena:** asynchrones PvP gegen die Kopie eines anderen Helden aus dem Cloud-Spielstand | 💡 |
 | 60 | **Koop-Dorfverteidigung:** einen Freund per Code zur Überfall-Abwehr holen | 💡 |
 | 61 | **Heldenchronik:** das Questbuch schreibt automatisch ein Tagebuch der wichtigen Momente | 💡 |

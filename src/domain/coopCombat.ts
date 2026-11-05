@@ -97,7 +97,18 @@ import { HEROIC_HP, heroicAffixes } from "./heroic";
 import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
-import { eliteRoomAffixes, stepCreature, stepKind, type MerchantOffer, type RoomKind, type TrapChoice } from "./dungeonPaths";
+import {
+  chestReward,
+  eliteRoomAffixes,
+  getMimic,
+  mimicReward,
+  stepCreature,
+  stepKind,
+  type ChestChoice,
+  type MerchantOffer,
+  type RoomKind,
+  type TrapChoice,
+} from "./dungeonPaths";
 import { BLESSING, stacks, type BlessingId } from "./tower";
 import {
   bandageHeal,
@@ -680,6 +691,8 @@ export interface CoopDungeonRun {
   room?: CoopRoom;
   /** Ausgang der Rätsel nach Schritt: gelöst, falsch beantwortet (Schaden) oder Wächter geweckt (Kampf) */
   riddles?: Record<number, "solved" | "wrong" | "guardian">;
+  /** Ausgang der Truhen nach Schritt: liegen gelassen, geöffnet (Beute) oder ein Mimic (Kampf) */
+  chests?: Record<number, "left" | "opened" | "mimic">;
   /** Segen „Schatzsucher“: an welchen Schritten ihn ein Spieler genommen hat (zählt für die Beute danach) */
   treasure?: Record<string, number[]>;
 }
@@ -699,14 +712,15 @@ export type CoopRoom =
       options: string[];
       votes: Record<string, string>;
       outcome?: { answer: string; correct: boolean; damage: number };
-    };
+    }
+  | { kind: "chest"; done: boolean; votes: Record<string, ChestChoice>; outcome?: { choice: ChestChoice; mimic: boolean } };
 
 /** Gewählte Räume – ältere Läufe ohne Weg zählen jeden Schritt als Kampf. */
 export function dungeonPath(run: CoopDungeonRun): RoomKind[] {
   return run.path ?? Array.from({ length: run.stage + 1 }, () => "fight" as const);
 }
 
-/** Gegner an Schritt `step`: Elite-Raum, Wächter eines Rätsels, heroischer Endboss oder ein Gegner, der vielleicht Elite ist. */
+/** Gegner an Schritt `step`: Elite-Raum, Wächter eines Rätsels, Mimic, heroischer Endboss oder ein Gegner, der vielleicht Elite ist. */
 function stepFoe(run: CoopDungeonRun, step: number): { creature: CreatureDef; elite: EliteAffix[]; heroic: boolean } {
   const area = getDungeon(run.id);
   const creature = stepCreature(area, run.runId, step);
@@ -715,6 +729,8 @@ function stepFoe(run: CoopDungeonRun, step: number): { creature: CreatureDef; el
   if (kind === "elite") return { creature, elite: eliteRoomAffixes(area, run.runId, step), heroic: false };
   // Der Wächter eines falsch beantworteten Rätsels ist ein gewöhnlicher Gegner
   if (kind === "riddle") return { creature, elite: [], heroic: false };
+  // Hinter einer Truhe kämpft man nur, wenn sie ein Mimic ist
+  if (kind === "chest") return { creature: getMimic(area), elite: [], heroic: false };
   return { creature, elite: coopElite(run.runId, step, creature), heroic: false };
 }
 
@@ -905,8 +921,8 @@ export function nextDungeonStage(state: CoopBattleState, id: string, now: number
 }
 
 /**
- * Truhe eines Spielers: die Beute aller geschafften Schritte, wie solo – Kämpfe, Fallen und
- * gelöste Rätsel. Gewürfelt mit einem Startwert aus Dungeon-Durchgang, Schritt und Spieler –
+ * Truhe eines Spielers: die Beute aller geschafften Schritte, wie solo – Kämpfe, Fallen,
+ * gelöste Rätsel, geöffnete Truhen und besiegte Mimics. Gewürfelt mit einem Startwert aus Dungeon-Durchgang, Schritt und Spieler –
  * so zeigt der Zwischenbildschirm schon den echten Inhalt, und nach dem Neuladen ist er gleich.
  */
 export function rollCoopDungeonChest(state: CoopBattleState, hero: HeroCombatProfile, playerId: string): DungeonChest {
@@ -929,6 +945,10 @@ export function rollCoopDungeonChest(state: CoopBattleState, hero: HeroCombatPro
       reward = { ...rollBattleReward(foe.creature, hero, uid, rng), xp: 0 };
     } else if (kind === "riddle" && riddle === "solved") {
       reward = { ...rollBattleReward(foe.creature, hero, uid, rng, [], true), xp: 0 };
+    } else if (kind === "chest" && run.chests?.[i] === "mimic") {
+      reward = mimicReward(foe.creature, hero, uid, rng);
+    } else if (kind === "chest" && run.chests?.[i] === "opened") {
+      reward = chestReward(stepCreature(getDungeon(run.id), run.runId, i), hero, uid, rng);
     }
     if (!reward) continue;
     // Segen „Schatzsucher“: mehr Erfahrung und Gold für alles danach
