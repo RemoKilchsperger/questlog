@@ -33,6 +33,8 @@ export interface FoodDef {
   tavern: number;
   /** Rezept eines Besuchers (visitors.ts): erst zu kaufen, wenn man es bekommen hat */
   recipe?: boolean;
+  /** Schatz-Rezept: nur aus einem Schatzraum (treasureMaps.ts), nie vom fahrenden Koch */
+  treasure?: boolean;
 }
 
 export const FOODS: readonly FoodDef[] = [
@@ -57,6 +59,10 @@ export const FOODS: readonly FoodDef[] = [
   { id: "kingsBroth", name: "Königsbrühe", icon: "🍽️", effect: { hp: 0.25, armor: 0.25 }, price: 50, tavern: 1, recipe: true },
   { id: "spicedPie", name: "Gewürzpastete", icon: "🌶️", effect: { damage: 0.15, crit: 0.08 }, price: 50, tavern: 1, recipe: true },
   { id: "honeyCake", name: "Honigkuchen", icon: "🍯", effect: { gold: 0.4, hp: 0.15, mana: 0.15 }, price: 50, tavern: 1, recipe: true },
+  // Schatz-Rezepte aus verborgenen Räumen: etwas stärker als die der Besucher
+  { id: "piratePie", name: "Kapitänspastete", icon: "🏴‍☠️", effect: { damage: 0.18, crit: 0.06, gold: 0.2 }, price: 60, tavern: 1, recipe: true, treasure: true },
+  { id: "dragonPepper", name: "Drachenpfeffer-Steak", icon: "🥩", effect: { damage: 0.22, hp: 0.2 }, price: 60, tavern: 1, recipe: true, treasure: true },
+  { id: "goldenBroth", name: "Goldene Brühe", icon: "🫕", effect: { hp: 0.3, armor: 0.2, mana: 0.2 }, price: 60, tavern: 1, recipe: true, treasure: true },
 ];
 
 const findFood = (id: string) => FOODS.find((f) => f.id === id);

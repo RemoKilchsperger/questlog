@@ -51,6 +51,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { SCENE_FRAME, useScrollToBattle } from "./battleLayout";
 import { DungeonChest } from "./DungeonChest";
 import { QuestItemFinds } from "./QuestItemFinds";
+import { TreasureMapFind } from "./TreasureMaps";
 import { MaterialGain } from "./materialUi";
 import { PixelAvatar } from "./PixelAvatar";
 import { CreatureSprite } from "./CreatureSprite";
@@ -1004,6 +1005,7 @@ function CoopResultPanel({ battle, onLeave }: { battle: CoopBattleState; onLeave
         <>
           <DungeonChest chest={result.chest} />
           {result.chest.questItems && <QuestItemFinds finds={result.chest.questItems} />}
+          {result.chest.treasureMap && <TreasureMapFind map={result.chest.treasureMap} />}
         </>
       ) : won ? (
         <p className="max-w-md text-sm text-muted">Beute bekommt nur, wer beim Ende dabei war.</p>

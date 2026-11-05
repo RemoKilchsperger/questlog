@@ -24,6 +24,7 @@ import { Gold } from "./Gold";
 import { Hint } from "./HoverCard";
 import { useNow } from "./useNow";
 import { GameIcon } from "./GameIcon";
+import { TreasureMapList } from "./TreasureMaps";
 
 /** Quest-Tab: Tages- und Wochenaufträge sowie laufende Quests links, das Questbuch rechts. */
 export function QuestScreen() {
@@ -158,13 +159,15 @@ function BoardPanel({ now }: { now: Date }) {
 function ActiveQuestPanel() {
   const questLog = useGameStore((s) => s.questLog);
   const visitors = useGameStore((s) => s.visitors);
+  const maps = useGameStore((s) => s.treasureMaps.length);
   const active = [...trackedVisitorQuests(visitors), ...trackedQuests(questLog, EMPTY_BOARD, EMPTY_BOARD, "", "")];
 
   return (
     <section className="panel p-4">
       <h2 className="font-pixel mb-1 text-2xl">📜 Laufende Quests</h2>
+      <TreasureMapList />
       {active.length === 0 ? (
-        <p className="text-sm text-muted">
+        maps === 0 && <p className="text-sm text-muted">
           Noch keine Quest angenommen. Im Questbuch findest du Aufträge für jedes Gebiet – Siege im Kampf-Tab bringen sie
           voran.
         </p>

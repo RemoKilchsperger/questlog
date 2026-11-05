@@ -35,7 +35,7 @@ import {
   type CreatureDef,
 } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
-import { dungeonMobs, ROOMS } from "../domain/dungeonPaths";
+import { dungeonMobs, FORK_ROOMS } from "../domain/dungeonPaths";
 import { foodEffectText, getFood, withMeal } from "../domain/food";
 import { trackedVisitorQuests } from "../domain/visitors";
 import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked } from "../domain/heroic";
@@ -84,6 +84,7 @@ import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } 
 import { classAbility } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestItemFinds } from "./QuestItemFinds";
+import { TreasureMapFind } from "./TreasureMaps";
 import { QuestProgressChips } from "./QuestScreen";
 import { useNow } from "./useNow";
 
@@ -297,6 +298,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
   const bossAbilities = getBossAbilities(boss.id);
   const questActive = useGameStore((s) => `dungeon-${dungeon.id}` in s.questLog.active);
   const heroicOpen = useGameStore((s) => open && isHeroicUnlocked(boss.id, s.records.bossesDefeated));
+  const hasMap = useGameStore((s) => s.treasureMaps.some((m) => m.dungeonId === dungeon.id));
 
   return (
     <li
@@ -310,6 +312,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
           </p>
           <p className="text-xs text-muted">{dungeon.description}</p>
           {questActive && <p className="text-xs text-gold">📜 Quest läuft: Schliesse den Dungeon ab</p>}
+          {hasMap && <p className="text-xs text-legendary">🗺️ Schatzkarte: Hinter dem Zwischenboss wartet ein verborgener Raum</p>}
         </div>
         <motion.button
           whileTap={{ scale: 0.92 }}
@@ -349,7 +352,7 @@ function DungeonCard({ dungeon, heroLevel }: { dungeon: AreaDef; heroLevel: numb
       </div>
       <p className="mt-1 text-xs text-muted">
         🔀 An den Gabelungen wählst du deinen Weg:{" "}
-        {Object.values(ROOMS)
+        {FORK_ROOMS
           .map((r) => `${r.icon} ${r.name}`)
           .join(" · ")}
       </p>
@@ -1013,6 +1016,7 @@ function BattleResult({ battle }: { battle: BattleState }) {
         </p>
       )}
       {won && reward?.questItems && <QuestItemFinds finds={reward.questItems} />}
+      {won && reward?.treasureMap && <TreasureMapFind map={reward.treasureMap} />}
       {won && quests.length > 0 && (
         <p className="flex flex-wrap items-center justify-center gap-2 text-sm text-muted">
           Quest-Fortschritt <QuestProgressChips quests={quests} />

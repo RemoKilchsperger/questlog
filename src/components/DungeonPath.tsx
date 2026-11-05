@@ -1,5 +1,5 @@
 // Wege durch die Dungeons (docs/dungeon-wege.md): Fortschritt, Türen an den Gabelungen
-// und die Räume ohne Kampf (Schrein, Händler, Falle, Rätsel).
+// und die Räume ohne Kampf (Schrein, Händler, Falle, Rätsel, Schatzraum).
 
 import { motion } from "motion/react";
 import { Fragment } from "react";
@@ -14,6 +14,7 @@ import { DungeonChest } from "./DungeonChest";
 import { Gold } from "./Gold";
 import { MaterialGain } from "./materialUi";
 import { BlessingChip } from "./TowerScreen";
+import { TreasureFindCard } from "./TreasureMaps";
 
 /** Kurzer Hinweis, was in die Truhe gewandert ist (nach einem Sieg oder aus einem Raum). */
 export function ChestDeposit({ reward }: { reward: BattleReward }) {
@@ -163,6 +164,7 @@ export function DungeonOnward({ battle }: { battle: BattleState }) {
 function DoorButton({ door, onClick }: { door: Door; onClick: () => void }) {
   const room = ROOMS[door.kind];
   const danger = door.kind === "elite";
+  const treasure = door.kind === "treasure";
   return (
     <motion.button
       whileTap={{ scale: 0.95 }}
@@ -170,7 +172,9 @@ function DoorButton({ door, onClick }: { door: Door; onClick: () => void }) {
       className={`flex flex-col items-center gap-1 rounded-md border-2 p-3 text-center ${
         door.hidden
           ? "border-night-600 bg-night-800 hover:bg-night-700"
-          : danger
+          : treasure
+            ? "border-legendary bg-legendary/15 hover:bg-legendary/25"
+            : danger
             ? "border-legendary/60 bg-legendary/10 hover:bg-legendary/20"
             : "border-gold/60 bg-gold/10 hover:bg-gold/20"
       }`}
@@ -178,7 +182,7 @@ function DoorButton({ door, onClick }: { door: Door; onClick: () => void }) {
       <span className="text-3xl" aria-hidden>
         {door.hidden ? "❓" : room.icon}
       </span>
-      <span className={`font-pixel ${door.hidden ? "text-parchment" : danger ? "text-legendary" : "text-gold"}`}>
+      <span className={`font-pixel ${door.hidden ? "text-parchment" : danger || treasure ? "text-legendary" : "text-gold"}`}>
         {door.hidden ? "Verschlossene Tür" : room.name}
       </span>
       <span className="text-xs text-muted">
@@ -237,6 +241,7 @@ export function DungeonRoomView({ battle, run }: { battle: BattleState; run: Dun
             {room.kind === "merchant" && <MerchantRoom room={room} />}
             {room.kind === "trap" && <TrapRoom room={room} />}
             {room.kind === "riddle" && <RiddleRoom room={room} />}
+            {room.kind === "treasure" && <TreasureRoom room={room} />}
             {isRoomDone(room) && <DungeonOnward battle={battle} />}
           </>
         )}
@@ -376,6 +381,19 @@ function TrapRoom({ room }: { room: Extract<DungeonRoom, { kind: "trap" }> }) {
           </motion.button>
         </div>
       )}
+    </div>
+  );
+}
+
+function TreasureRoom({ room }: { room: Extract<DungeonRoom, { kind: "treasure" }> }) {
+  return (
+    <div className="flex w-full flex-col items-center gap-3">
+      <p className="max-w-md text-sm text-muted">
+        Hinter einem lockeren Stein, genau dort, wo das Kreuz auf deiner Karte sitzt, liegt eine kleine Kammer. Staub
+        rieselt von einer alten Truhe, als du den Deckel hebst.
+      </p>
+      <TreasureFindCard find={room.find} />
+      <p className="text-xs text-xp">✓ Gehört dir schon – auch wenn du im Dungeon noch fällst. Die Karte ist eingelöst.</p>
     </div>
   );
 }

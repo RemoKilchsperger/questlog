@@ -51,6 +51,7 @@ src/
     bossIntents.ts   Absichten der Bosse: was sie jede Runde vorhaben, eigene Abläufe aller Bosse (Wut, Ansturm, Abtauchen, Panzer, Fluch …)
     heroic.ts        Heroische Bosse: mehr LP, Zusatzmechanik, mehr Boss-Beute
     dungeonPaths.ts  Wege durch die Dungeons: Gabelungen, Türen, Schrein, Händler, Falle, Rätsel
+    treasureMaps.ts  Schatzkarten: seltener Fund, Schatzraum im Solo-Dungeon, Schatz-Rezepte
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse
     achievements.ts  Erfolge, Titel, Avatar-Rahmen

@@ -10,7 +10,8 @@ import { hash, seededRng } from "./random";
 import { blessingOffer, type BlessingId } from "./tower";
 import type { ArmorClass } from "./types";
 
-export type RoomKind = "fight" | "elite" | "shrine" | "merchant" | "trap" | "riddle";
+/** `treasure`: verborgener Raum einer Schatzkarte (treasureMaps.ts) – nie an einer gewöhnlichen Gabelung */
+export type RoomKind = "fight" | "elite" | "shrine" | "merchant" | "trap" | "riddle" | "treasure";
 
 export interface RoomDef {
   kind: RoomKind;
@@ -27,14 +28,18 @@ export const ROOMS: Record<RoomKind, RoomDef> = {
   merchant: { kind: "merchant", name: "Händler", icon: "🛒", description: "Ein wandernder Händler – teuer, aber er hat, was man unterwegs braucht." },
   trap: { kind: "trap", name: "Falle", icon: "🪤", description: "Ein Gang voller Fallen. Dahinter liegt etwas Wertvolles." },
   riddle: { kind: "riddle", name: "Rätsel", icon: "🧩", description: "Eine Inschrift stellt eine Frage. Wer richtig antwortet, wird belohnt." },
+  treasure: { kind: "treasure", name: "Schatzraum", icon: "🗺️", description: "Deine Schatzkarte führt hierher. Ein legendäres Item oder ein Rezept wartet." },
 };
+
+/** Räume, die an Gabelungen ausgelost werden – der Schatzraum kommt nur über eine Karte dazu. */
+export const FORK_ROOMS: readonly RoomDef[] = Object.values(ROOMS).filter((r) => r.kind !== "treasure");
 
 /** Räume ohne (sicheren) Kampf – höchstens einer pro Abschnitt */
 export const CALM_ROOMS: readonly RoomKind[] = ["shrine", "merchant", "trap", "riddle"];
 export const isCalm = (kind: RoomKind) => CALM_ROOMS.includes(kind);
 
 /** Gewichte beim Auslosen der Türen */
-const ROOM_WEIGHTS: Record<RoomKind, number> = { fight: 30, elite: 20, shrine: 12, merchant: 12, trap: 13, riddle: 13 };
+const ROOM_WEIGHTS: Record<Exclude<RoomKind, "treasure">, number> = { fight: 30, elite: 20, shrine: 12, merchant: 12, trap: 13, riddle: 13 };
 
 /** Chance, dass eine Tür verschlossen ist (❓) – man sieht erst drinnen, was dahinter liegt. */
 export const HIDDEN_DOOR_CHANCE = 0.2;
@@ -93,7 +98,8 @@ export function stepCreature(dungeon: AreaDef, seed: string, step: number): Crea
 export function forkDoors(seed: string, step: number, calmAllowed: boolean): Door[] {
   const rng = stepRng(seed, step, "doors");
   const count = rng() < 0.5 ? 2 : 3;
-  const pick = (pool: RoomKind[]): RoomKind => {
+  type ForkRoom = keyof typeof ROOM_WEIGHTS;
+  const pick = (pool: ForkRoom[]): ForkRoom => {
     const total = pool.reduce((sum, k) => sum + ROOM_WEIGHTS[k], 0);
     let roll = rng() * total;
     for (const kind of pool) {
@@ -102,8 +108,8 @@ export function forkDoors(seed: string, step: number, calmAllowed: boolean): Doo
     }
     return pool[pool.length - 1];
   };
-  const kinds: RoomKind[] = [pick(["fight", "elite"])];
-  const rest = (Object.keys(ROOM_WEIGHTS) as RoomKind[]).filter((k) => (calmAllowed || !isCalm(k)) && !kinds.includes(k));
+  const kinds: ForkRoom[] = [pick(["fight", "elite"])];
+  const rest = (Object.keys(ROOM_WEIGHTS) as ForkRoom[]).filter((k) => (calmAllowed || !isCalm(k)) && !kinds.includes(k));
   while (kinds.length < count && rest.length > 0) {
     const kind = pick(rest);
     kinds.push(kind);
