@@ -409,6 +409,7 @@ function MissionCard({ mission, taken }: { mission: MissionDef; taken: boolean }
   const companions = useGameStore((s) => s.companions);
   const active = useGameStore((s) => s.activeMissions);
   const start = useGameStore((s) => s.startMission);
+  const heroLevel = useGameStore((s) => getLevel(s.character.totalXp));
   const [selected, setSelected] = useState<string[]>([]);
   const area = AREAS.find((a) => a.id === mission.areaId);
   const difficulty = MISSION_DIFFICULTIES[mission.difficulty];
@@ -417,7 +418,7 @@ function MissionCard({ mission, taken }: { mission: MissionDef; taken: boolean }
   const ready = group.length === mission.size;
   // Vorschau: mit der Auswahl, sonst mit den besten freien Begleitern
   const preview = ready ? group : [...free].sort((a, b) => companionGearScore(b) - companionGearScore(a)).slice(0, mission.size);
-  const loot = missionLoot(mission, preview);
+  const loot = missionLoot(mission, preview, heroLevel);
   const chance = preview.length === mission.size ? missionChance(mission, preview) : null;
   const difficultyColor = mission.difficulty === "heroic" ? "text-epic" : mission.difficulty === "hard" ? "text-rare" : "text-parchment";
 
@@ -442,7 +443,9 @@ function MissionCard({ mission, taken }: { mission: MissionDef; taken: boolean }
         <Gold amount={loot.gold} />
         <Essence amount={loot.essence} className="text-essence" />
         <MaterialGain materials={loot.materials} />
-        <span className="text-muted">🎁 Item {percent(loot.itemChance)}</span>
+        <span className="text-muted">
+          🎁 {loot.items === 1 ? "Item" : `bis ${loot.items} Items, je`} {percent(loot.itemChance)}
+        </span>
       </p>
       {taken ? (
         <p className="mt-2 text-sm text-muted">✓ Heute schon angenommen</p>
@@ -503,7 +506,7 @@ function MissionReport({
   names: (ids: readonly string[]) => string;
 }) {
   const companions = useGameStore((s) => s.companions);
-  const item = outcome.item && getItemStats(outcome.item);
+  const items = outcome.items.map((owned) => ({ uid: owned.uid, stats: getItemStats(owned) }));
   return (
     <div className="flex flex-col items-center gap-3 text-center">
       <p className={`font-pixel text-2xl ${outcome.success ? "text-xp" : "text-danger"}`}>
@@ -520,13 +523,17 @@ function MissionReport({
           <MaterialGain materials={outcome.materials} />
         </div>
       )}
-      {item && (
-        <span className={`flex items-center gap-2 rounded-md border-2 bg-night-800 px-2 py-1 ${RARITY_BORDER[item.rarity]}`}>
-          <ItemTooltip stats={item}>
-            <ItemIcon def={item.def} rarity={item.rarity} size={36} />
-          </ItemTooltip>
-          <span className={RARITY_TEXT[item.rarity]}>{itemName(item)}</span>
-        </span>
+      {items.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {items.map(({ uid, stats: item }) => (
+            <span key={uid} className={`flex items-center gap-2 rounded-md border-2 bg-night-800 px-2 py-1 ${RARITY_BORDER[item.rarity]}`}>
+              <ItemTooltip stats={item}>
+                <ItemIcon def={item.def} rarity={item.rarity} size={36} />
+              </ItemTooltip>
+              <span className={RARITY_TEXT[item.rarity]}>{itemName(item)}</span>
+            </span>
+          ))}
+        </div>
       )}
       <ul className="text-sm">
         {mission.companionIds.map((id) => {

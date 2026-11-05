@@ -12,7 +12,11 @@ import {
   isMissionDone,
   missionChance,
   missionDurationMs,
+  missionBaseLevel,
   missionLoot,
+  missionLootFactor,
+  MIN_LOOT_FACTOR,
+  MAX_LOOT_FACTOR,
   missionXp,
   randomName,
   recruit,
@@ -31,8 +35,9 @@ import {
 } from "./companions";
 import { EMPTY_EQUIPMENT } from "./equipment";
 import { gearScore } from "./gearScore";
-import { createItem, ITEMS } from "./items";
+import { createItem, getItem, ITEMS } from "./items";
 import { totalXpForLevel } from "./leveling";
+import { lootPool } from "./loot";
 import type { Equipment, ItemDef, OwnedItem, Rarity } from "./types";
 
 /** Deterministischer Zufall für reproduzierbare Tests. */
@@ -163,6 +168,7 @@ describe("Anwerben", () => {
       [c.id],
       "d",
       0,
+      20,
       uid(),
       seeded(),
     );
@@ -246,6 +252,13 @@ describe("Missionstafel", () => {
     const high = rollMissionBoard("2026-11-02", 60, 3, rng);
     expect(high.missions.at(-1)!.level).toBe(60);
   });
+
+  it("Grundlevel: Gearscore des stärksten Begleiters, höchstens Heldenlevel", () => {
+    expect(missionBaseLevel(30, [])).toBe(30);
+    expect(missionBaseLevel(30, [companion(30)])).toBe(1);
+    expect(missionBaseLevel(30, [companion(30, [], fullGear(12)), companion(30, [], fullGear(20))])).toBe(20);
+    expect(missionBaseLevel(30, [companion(30, [], fullGear(40))])).toBe(30);
+  });
 });
 
 describe("Erfolgschance", () => {
@@ -289,13 +302,14 @@ describe("Dauer", () => {
 
 describe("Beute und EP", () => {
   it("wächst mit Dauer, Truppstärke und Schwierigkeit", () => {
-    const one = missionLoot(mission({ duration: "long" }), [companion(30)]);
+    const one = missionLoot(mission({ duration: "long" }), [companion(30)], 30);
     // 20 Sieg-Äquivalente: 20 × 0.4 × 33 Gold, 10 Kristallsplitter
     expect(one.gold).toBe(264);
     expect(one.materials).toEqual({ crystalShard: 10 });
     expect(one.essence).toBe(16);
-    expect(one.itemChance).toBe(0.6);
-    const three = missionLoot(mission({ duration: "long", size: 3, difficulty: "heroic" }), [companion(30), companion(30), companion(30)]);
+    expect(one.items).toBe(3);
+    expect(one.itemChance).toBe(0.35);
+    const three = missionLoot(mission({ duration: "long", size: 3, difficulty: "heroic" }), [companion(30), companion(30), companion(30)], 30);
     expect(three.gold).toBe(Math.round(264 * 3 * 1.5));
   });
 
@@ -303,10 +317,21 @@ describe("Beute und EP", () => {
     const m = mission({ duration: "long", size: 2 });
     const a = companion(30, [{ id: "treasure", rarity: "rare" }, { id: "plunder", rarity: "legendary" }]);
     const b = companion(30, [{ id: "treasure", rarity: "rare" }, { id: "gatherer", rarity: "common" }]);
-    const loot = missionLoot(m, [a, b]);
+    const loot = missionLoot(m, [a, b], 30);
     expect(loot.gold).toBe(Math.round(264 * 2 * 1.4));
     expect(loot.materials).toEqual({ crystalShard: 22 });
-    expect(loot.itemChance).toBeCloseTo(0.9);
+    expect(loot.itemChance).toBeCloseTo(0.525);
+  });
+
+  it("tiefere Missionen bringen weniger Beute und seltener ein Item", () => {
+    const m = mission({ duration: "long", level: 20 });
+    const low = missionLoot(m, [companion(30)], 40);
+    expect(missionLootFactor(m, 40)).toBe(0.5);
+    expect(low.itemChance).toBeCloseTo(0.175);
+    expect(Object.values(low.materials)).toEqual([5]);
+    expect(low.gold).toBe(Math.round(20 * 0.5 * 0.4 * 23));
+    expect(missionLootFactor(mission({ level: 1 }), 60)).toBe(MIN_LOOT_FACTOR);
+    expect(missionLootFactor(mission({ level: 4 }), 2)).toBe(MAX_LOOT_FACTOR);
   });
 
   it("Lernbegierig für sich, Lehrmeister für die anderen", () => {
@@ -321,19 +346,23 @@ describe("Beute und EP", () => {
   it("Misserfolg gibt nur ein Viertel der EP", () => {
     const m = mission();
     const c = companion(30);
-    const failed = rollMissionOutcome(m, [c], uid(), () => 0.99);
+    const failed = rollMissionOutcome(m, [c], 30, uid(), () => 0.99);
     expect(failed.success).toBe(false);
     expect(failed.gold).toBe(0);
-    expect(failed.item).toBeNull();
+    expect(failed.items).toEqual([]);
     expect(failed.xp[c.id]).toBe(Math.round(missionXp(m, c, [c]) * 0.25));
   });
 
   it("Erfolg gibt Beute und EP", () => {
     const c = companion(30, [], fullGear(30, "legendary"));
-    const outcome = rollMissionOutcome(mission({ duration: "long" }), [c], uid(), () => 0.01);
+    const outcome = rollMissionOutcome(mission({ duration: "long" }), [c], 45, uid(), () => 0.01);
     expect(outcome.success).toBe(true);
     expect(outcome.gold).toBeGreaterThan(0);
-    expect(outcome.item).not.toBeNull();
+    // Glück bei jedem Wurf: alle 3 Items einer langen Mission
+    expect(outcome.items).toHaveLength(3);
+    expect(new Set(outcome.items.map((o) => o.uid)).size).toBe(3);
+    // Item aus dem Beutepool des Heldenlevels, nicht des Missionslevels (30)
+    for (const o of outcome.items) expect(lootPool(45)).toContain(getItem(o.itemId));
     const [after] = applyMissionXp([c], outcome, 60);
     expect(after.totalXp).toBe(c.totalXp + outcome.xp[c.id]);
   });
@@ -345,15 +374,15 @@ describe("Losschicken", () => {
   const b = companion(30, [{ id: "swift", rarity: "rare" }], fullGear(30));
 
   it("prüft Tafel, Truppstärke und ob die Begleiter frei sind", () => {
-    expect(() => startMission(board, [], [a, b], "m1", [a.id, b.id], "morgen", 0, uid())).toThrow("gestern");
-    expect(() => startMission(board, [], [a, b], "m1", [a.id], "d", 0, uid())).toThrow("genau 2");
-    expect(() => startMission(board, [], [a, b], "m1", [a.id, a.id], "d", 0, uid())).toThrow("genau 2");
-    expect(() => startMission(board, [], [a, b], "nope", [a.id, b.id], "d", 0, uid())).toThrow("gibt es nicht");
+    expect(() => startMission(board, [], [a, b], "m1", [a.id, b.id], "morgen", 0, 30, uid())).toThrow("gestern");
+    expect(() => startMission(board, [], [a, b], "m1", [a.id], "d", 0, 30, uid())).toThrow("genau 2");
+    expect(() => startMission(board, [], [a, b], "m1", [a.id, a.id], "d", 0, 30, uid())).toThrow("genau 2");
+    expect(() => startMission(board, [], [a, b], "nope", [a.id, b.id], "d", 0, 30, uid())).toThrow("gibt es nicht");
   });
 
   it("legt das Ergebnis fest und sperrt Mission und Begleiter", () => {
     const now = 1_000_000;
-    const result = startMission(board, [], [a, b], "m1", [a.id, b.id], "d", now, uid(), seeded());
+    const result = startMission(board, [], [a, b], "m1", [a.id, b.id], "d", now, 30, uid(), seeded());
     const [started] = result.active;
     expect(result.board.taken).toEqual(["m1"]);
     expect(started.end - started.start).toBe(2 * 3_600_000 * 0.9);
@@ -362,8 +391,8 @@ describe("Losschicken", () => {
     expect(isBusy(result.active, a.id)).toBe(true);
     expect(isMissionDone(started, now + 1000)).toBe(false);
     expect(isMissionDone(started, started.end)).toBe(true);
-    expect(() => startMission(result.board, result.active, [a, b], "m1", [a.id, b.id], "d", now, uid())).toThrow("schon angenommen");
+    expect(() => startMission(result.board, result.active, [a, b], "m1", [a.id, b.id], "d", now, 30, uid())).toThrow("schon angenommen");
     const second = { ...result.board, missions: [...board.missions, mission({ id: "m2" })] };
-    expect(() => startMission(second, result.active, [a, b], "m2", [a.id], "d", now, uid())).toThrow("unterwegs");
+    expect(() => startMission(second, result.active, [a, b], "m2", [a.id], "d", now, 30, uid())).toThrow("unterwegs");
   });
 });

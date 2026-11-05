@@ -100,8 +100,10 @@ Begleiter jede Mission verkürzen.
 In der Taverne hängen **4 Missionen**. Jeden Tag kommen neue, eine angenommene Mission wird erst am
 nächsten Tag ersetzt. Jede Mission hat:
 
-- **Gebiet und Level:** passend zum Heldenlevel. Die 4 Missionen liegen bei Heldenlevel −8, −4, ±0 und
-  +2, jeweils in dem Gebiet, zu dem das Level gehört.
+- **Gebiet und Level:** passend zum Gearscore des stärksten Begleiters (höchstens Heldenlevel, ohne
+  Begleiter das Heldenlevel). Die 4 Missionen liegen bei diesem Grundlevel −8, −4, ±0 und +2, jeweils
+  in dem Gebiet, zu dem das Level gehört. Die Tafel wird morgens gewürfelt, bessere Ausrüstung wirkt
+  also ab dem nächsten Tag.
 - **Dauer:** 30 Minuten, 2 Stunden oder 8 Stunden.
 - **Truppstärke:** 1, 2 oder 3 Begleiter, die man genau so losschicken muss.
 - **Schwierigkeit:** normal, schwer oder heroisch.
@@ -144,19 +146,24 @@ Die Begleiter kommen dann sofort und ohne Beute zurück.
 Die Beute wird in **Sieg-Äquivalenten** gerechnet, also so viel wie ein normaler Sieg auf Missionslevel
 bringt:
 
-| Dauer | Sieg-Äquivalente pro Begleiter | Item-Chance pro Mission |
+| Dauer | Sieg-Äquivalente pro Begleiter | Items pro Mission |
 |---|---|---|
-| 30 Min. | 3 | 10 % |
-| 2 Std. | 8 | 25 % |
-| 8 Std. | 20 | 60 % |
+| 30 Min. | 3 | bis 1, Chance 10 % |
+| 2 Std. | 8 | bis 2, je 20 % (im Schnitt 0,4) |
+| 8 Std. | 20 | bis 3, je 35 % (im Schnitt 1,05) |
 
 - **Sieg-Äquivalente der Mission** = Tabellenwert × Truppstärke, schwer ×1,25, heroisch ×1,5.
+- **Beutefaktor:** Missionslevel / Heldenlevel, zwischen 0,2 und 1,25. Er multipliziert die
+  Sieg-Äquivalente (also Gold, Material und Essenz) und die Item-Chance. Eine Mission 10 Level unter
+  einem Helden auf Level 40 bringt also nur drei Viertel der Beute. Gute Ausrüstung der Begleiter
+  (höhere Missionen auf der Tafel) lohnt sich damit doppelt.
 - **Gold:** wie ein normaler Sieg, 0,4 × (3 + Level) pro Sieg-Äquivalent.
 - **Material:** 0,5 pro Sieg-Äquivalent, das Material des Gebiets.
 - **Essenz:** 0,2 × (1 + Level / 10) pro Sieg-Äquivalent. Kämpfe geben keine Essenz, das ist also
   ein eigener Wert (auf Level 30 bringt eine 8-Stunden-Mission eines Begleiters 16 Essenz, etwa zwei
   zerlegte seltene Items).
-- **Item:** aus dem Beutepool des Missionslevels. Die Seltenheit hängt von der Schwierigkeit ab:
+- **Items:** jedes wird einzeln ausgewürfelt (Plünderer und Beutefaktor wirken auf jede Chance), aus dem Beutepool des aktuellen Heldenlevels (beim Losschicken), nicht auf dem Missionslevel – so ist es
+  auch dann nützlich, wenn die Mission tiefer liegt. Die Seltenheit hängt von der Schwierigkeit ab:
   normal wie ein normaler Drop, schwer wie eine Gebiets-Quest, heroisch wie eine Boss-Quest.
 - **EP:** jeder Begleiter erhält die EP der Sieg-Äquivalente (ohne Truppstärke) **× 3**, plus
   „Lernbegierig“ und „Lehrmeister“. Der Faktor 3 gilt, weil Begleiter nur über Missionen leveln. Der
@@ -164,6 +171,8 @@ bringt:
 - **Misserfolg:** 25 % der EP, sonst nichts.
 
 ### Ertrag pro Tag
+
+*Noch ohne Beutefaktor gerechnet – die Werte gelten für Missionen auf Heldenlevel.*
 
 Durchgerechnet mit allen 4 Missionen der Tafel (Festhalle, also Truppstärke 1–3) und 60 % Erfolg,
 Durchschnitt über 2'000 ausgewürfelte Tafeln:
