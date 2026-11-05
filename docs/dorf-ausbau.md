@@ -151,6 +151,10 @@ Der Bonus gilt für XP aus Solo-Kämpfen, Dungeons, dem Turm und abgegebenen Que
 village.ts). Kampf-Ergebnis und Truhen zeigen die XP schon mit Bonus. Im Koop gilt er nicht, wie das
 übrige Dorf.
 
+### 🏰 Wehranlage
+
+Schützt das Dorf vor Überfällen (Palisade → Wachturm → Festung), siehe [ueberfaelle.md](ueberfaelle.md).
+
 ### 🎯 Steckbriefe
 
 - Jeden Tag 2 Steckbriefe für Kreaturen aus den Tagesaufträgen deines Levels, jeder mit 2 festen

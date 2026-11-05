@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import { DRINK_POTIONS, potionEffectText, THROW_POTIONS, type PotionDef } from "../domain/potions";
 import { getBuilding } from "../domain/village";
 import { getBuildingSprite } from "../game/villageSprites";
-import { useGameStore } from "../store/gameStore";
+import { activeVillage, useGameStore } from "../store/gameStore";
 import { Gold } from "./Gold";
 import { PixelSprite } from "./PixelSprite";
 import { POTION_COLORS } from "./potionUi";
@@ -11,7 +11,7 @@ import { GameIcon } from "./GameIcon";
 /** Der Alchemist verkauft alle Tränke – je weiter ausgebaut, desto mehr Sorten. */
 export function AlchemistScreen({ onOpenVillage }: { onOpenVillage: () => void }) {
   const gold = useGameStore((s) => s.character.gold);
-  const tier = useGameStore((s) => s.village.alchemist);
+  const tier = useGameStore((s) => activeVillage(s).alchemist);
 
   if (tier === 0) {
     return (
@@ -60,7 +60,7 @@ export function PotionList({ potions: offers }: { potions: readonly PotionDef[] 
   const gold = useGameStore((s) => s.character.gold);
   const potions = useGameStore((s) => s.potions);
   const buyPotion = useGameStore((s) => s.buyPotion);
-  const alchemist = useGameStore((s) => s.village.alchemist);
+  const alchemist = useGameStore((s) => activeVillage(s).alchemist);
   const alchemistTiers = getBuilding("alchemist").tiers;
 
   return (

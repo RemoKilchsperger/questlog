@@ -113,7 +113,7 @@ describe("Bauen", () => {
   });
 
   it("höher als Stufe 3 geht nicht", () => {
-    const full: Village = { merchant: 3, smith: 3, board: 1, alchemist: 3, tavern: 3, training: 3, statue: 3 };
+    const full: Village = { merchant: 3, smith: 3, board: 1, alchemist: 3, tavern: 3, training: 3, statue: 3, walls: 3 };
     expect(nextBuildCost(full, "smith")).toBeNull();
     expect(canBuild(full, "smith", 1e9, { dragonOre: 999 })).toBe(false);
     expect(() => build(full, "smith", 1e9, {})).toThrow(/ausgebaut/);

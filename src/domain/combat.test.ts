@@ -39,6 +39,7 @@ import { MAX_LEVEL, xpForNextLevel } from "./leveling";
 import { buyPotion, getPotion } from "./potions";
 import { matchupOf, WEAPON_KIND } from "./matchups";
 import { untouchable } from "./bossIntents";
+import { announceRaid, raidLineup } from "./raids";
 import type { SkillWeapon } from "./skills";
 import { pathOrder, withSkills } from "../test/skills";
 import type { Character, Equipment, Rarity } from "./types";
@@ -509,6 +510,31 @@ describe("Gebiete und Balance", () => {
       const withPotions = Array.from({ length: 100 }, () => run(dungeon, rng, "rare", true));
       expect(withoutPotions.filter((s) => s >= last).length, `${dungeon.name}: ohne Tränke beim Boss`).toBeLessThan(25);
       expect(withPotions.filter((s) => s > last).length, `${dungeon.name}: mit Heiltränken geschafft`).toBeGreaterThan(60);
+    }
+  });
+
+  it("Überfälle: mit seltener Ausrüstung und Heiltränken meistens abgewehrt, ohne Tränke kaum – die Festung hilft spürbar", () => {
+    /** Alle Wellen und der Anführer, LP werden mitgenommen. */
+    const defend = (level: number, walls: 0 | 3, rng: () => number, rarity: Rarity, potions: boolean) => {
+      const lineup = raidLineup(announceRaid(String(rng()), level, 0), walls, 0);
+      const hero = champion(level, rarity, weaponAgainst(lineup.at(-1)!.creature));
+      let hp = hero.maxHp;
+      for (const { creature, elite } of lineup) {
+        const end = fightWell(startBattle("b", "Held", hero, creature, hp, elite), rng, potions);
+        if (end.status !== "won") return false;
+        hp = end.hero.hp;
+      }
+      return true;
+    };
+    const wins = (level: number, walls: 0 | 3, rarity: Rarity, potions: boolean) => {
+      const rng = seeded(level * 7 + walls);
+      return Array.from({ length: 60 }, () => defend(level, walls, rng, rarity, potions)).filter(Boolean).length;
+    };
+    for (const level of [8, 25, 45, 58]) {
+      expect(wins(level, 0, "rare", true), `Lv. ${level}: selten mit Tränken`).toBeGreaterThan(48);
+      expect(wins(level, 0, "common", true), `Lv. ${level}: gewöhnlich mit Tränken`).toBeGreaterThan(30);
+      expect(wins(level, 0, "common", false), `Lv. ${level}: gewöhnlich ohne Tränke`).toBeLessThan(6);
+      expect(wins(level, 3, "common", true), `Lv. ${level}: Festung, gewöhnlich mit Tränken`).toBeGreaterThan(54);
     }
   });
 

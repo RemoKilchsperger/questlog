@@ -16,7 +16,7 @@ import { ARMOR_SLOTS, getItemStats, MAX_UPGRADE, RARITIES, SLOT_ICONS, SLOT_LABE
 import { getLevel } from "../domain/leveling";
 import type { ItemStats, OwnedItem, Rarity } from "../domain/types";
 import { getBuilding, SMITH_RULES } from "../domain/village";
-import { useGameStore } from "../store/gameStore";
+import { activeVillage, useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Essence } from "./Gold";
 import { InventoryPanel } from "./InventoryPanel";
@@ -30,7 +30,7 @@ type View = "upgrade" | "salvage" | "forge";
 
 /** Regeln der Schmiede auf ihrer aktuellen Ausbaustufe (village.ts). */
 function useSmithRules() {
-  const tier = useGameStore((s) => s.village.smith);
+  const tier = useGameStore((s) => activeVillage(s).smith);
   return { tier, rules: SMITH_RULES[tier] };
 }
 

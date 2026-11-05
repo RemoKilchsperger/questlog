@@ -55,6 +55,15 @@ import {
   SMITH_RULES,
   type MaterialId,
 } from "../domain/village";
+import {
+  GUARD_WEAKEN,
+  MAX_GUARDS,
+  PLUNDER,
+  RAID_MIN_BUILDINGS,
+  RAID_WARNING_MS,
+  RAID_WAVES,
+  REPAIR_SHARE,
+} from "../domain/raids";
 import { SHOP_REROLLS_PER_DAY, SHOP_ROTATION_HOURS, SHOP_SIZE } from "../domain/shop";
 import { earnedSkillPoints, SKILL_PATHS, TIER_POINTS } from "../domain/skills";
 import { formatNumber, Gold } from "./Gold";
@@ -294,7 +303,7 @@ export function HelpScreen() {
         <Topic id="village" title="🏘️ Dorf">
           <p>
             Das Dorf baust du selbst auf. Am Anfang gibt es nur einen Strassenhändler – Schmiede, Anschlagtafel, Alchemist,
-            Taverne, Trainingsplatz und Statue musst du erst bauen. Jedes Gebäude hat drei Stufen und ist sofort fertig. Bauen
+            Taverne, Trainingsplatz, Statue und Wehranlage musst du erst bauen. Jedes Gebäude hat drei Stufen und ist sofort fertig. Bauen
             kostet Gold und Material. Ein Klick auf ein Gebäude im Dorfbild öffnet sein Menü.
           </p>
           <H>⛏️ Material</H>
@@ -332,6 +341,29 @@ export function HelpScreen() {
               ]),
             )}
           />
+          <H>⚔️ Überfälle</H>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              Ab {RAID_MIN_BUILDINGS} gebauten Gebäuden kündigt sich ab und zu eine Bande an – ein bis zwei Tage nach der
+              letzten. Sie kommt aus dem Gebiet deines Levels und greift nach {RAID_WARNING_MS / 3_600_000} Stunden an.
+            </li>
+            <li>
+              Bis dahin kannst du das Dorf verteidigen: {RAID_WAVES[0]} Wellen und ein Anführer (Elite mit zwei
+              Modifikatoren), alle auf deinem Level, ohne Heilung dazwischen. Wer gewinnt, bekommt die Beute aller Kämpfe
+              und die der Bande: viel Gold, Material und sicher ein Item mit den Chancen eines Bosses.
+            </li>
+            <li>
+              Verlierst du oder verpasst du die Frist, beschädigt die Bande ein Gebäude ab Stufe 2 – es wirkt eine Stufe
+              tiefer, bis du es reparierst ({Math.round(REPAIR_SHARE * 100)} % der Baukosten) oder ausbaust. Hast du keines,
+              plündert sie das Lager: {Math.round(PLUNDER.gold * 100)} % Gold und {Math.round(PLUNDER.materials * 100)} %
+              jedes Materials. Fliehen ist kein Verlieren: Die Bande wartet bis zur Frist.
+            </li>
+            <li>
+              Die Wehranlage schwächt die Angreifer, ab dem Wachturm kommt eine Welle weniger, und die Festung hält jeden
+              Angriff auf. Begleiter, die nicht auf Mission sind, stehen Wache: je {Math.round(GUARD_WEAKEN * 100)} %
+              schwächer, höchstens {MAX_GUARDS}.
+            </li>
+          </ul>
           <H>🏪 Händler</H>
           <ul className="list-disc space-y-1 pl-5">
             <li>

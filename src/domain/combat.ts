@@ -459,6 +459,8 @@ export interface BattleState {
   secondWindUsed?: boolean;
   /** Endlos-Turm: das Stockwerk dieses Kampfes (der Gegner kämpft auf dem Level des Helden) */
   towerFloor?: number;
+  /** Überfall aufs Dorf (raids.ts): der wievielte Kampf (ab 1) – der Gegner kämpft auf dem Level der Bande */
+  raidWave?: number;
   /** Spezialeffekte der angelegten Items (itemEffects.ts) */
   itemEffects?: ItemEffectId[];
   /** „Unbeugsam“ hat in diesem Kampf schon gerettet */

@@ -28,7 +28,7 @@ import { itemScore } from "../domain/gearScore";
 import { ARMOR_SLOTS, getItemStats, SLOT_ICONS, SLOT_LABELS, WEAPON_SLOTS } from "../domain/items";
 import { getLevel } from "../domain/leveling";
 import type { EquipSlot, OwnedItem } from "../domain/types";
-import { useGameStore } from "../store/gameStore";
+import { activeVillage, useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Essence, Gold } from "./Gold";
 import { Hint } from "./HoverCard";
@@ -76,7 +76,7 @@ function Traits({ traits }: { traits: readonly CompanionTrait[] }) {
 
 /** Eigene Begleiter und die Kandidaten des Tages. */
 export function CompanionsPanel() {
-  const tier = useGameStore((s) => s.village.tavern);
+  const tier = useGameStore((s) => activeVillage(s).tavern);
   const companions = useGameStore((s) => s.companions);
   const pool = useGameStore((s) => s.recruitPool);
   const gold = useGameStore((s) => s.character.gold);
@@ -302,7 +302,8 @@ function ItemLabel({ owned }: { owned: OwnedItem }) {
 /* ───────────── Missionen ───────────── */
 
 const percent = (value: number) => `${Math.round(value * 100)} %`;
-const formatMinutes = (ms: number) => {
+/** „3 Std. 20 Min.“ – auch für die Frist eines Überfalls. */
+export const formatMinutes = (ms: number) => {
   const minutes = Math.round(ms / 60_000);
   return minutes >= 60 ? `${Math.floor(minutes / 60)} Std.${minutes % 60 ? ` ${minutes % 60} Min.` : ""}` : `${minutes} Min.`;
 };

@@ -23,7 +23,7 @@ import {
   type SkillTier,
 } from "../domain/skills";
 import type { Character, WeaponType } from "../domain/types";
-import { useGameStore } from "../store/gameStore";
+import { activeVillage, useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Gold } from "./Gold";
 import { HoverCard } from "./HoverCard";
@@ -303,7 +303,7 @@ function WeaponAbilities() {
 /** Alle Skillpunkte gegen Gold zurücksetzen – mit Rückfrage. Braucht den Trainingsplatz im Dorf. */
 export function SkillReset() {
   const character = useGameStore((s) => s.character);
-  const training = useGameStore((s) => s.village.training);
+  const training = useGameStore((s) => activeVillage(s).training);
   const reset = useGameStore((s) => s.resetSkills);
   const [confirm, setConfirm] = useState(false);
   const close = useCallback(() => setConfirm(false), []);

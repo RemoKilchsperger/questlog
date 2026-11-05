@@ -56,6 +56,7 @@ import { useCoopStore } from "../coop/coopStore";
 import { DungeonChest } from "./DungeonChest";
 import { ChestDeposit, DungeonOnward, DungeonProgress, DungeonRoomView } from "./DungeonPath";
 import { TowerPanel, TowerProgress, TowerResultActions } from "./TowerScreen";
+import { RaidProgress, RaidResultActions } from "./RaidPanel";
 import { Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
@@ -559,6 +560,7 @@ function Battle({ battle }: { battle: BattleState }) {
   const battleFlee = useGameStore((s) => s.battleFlee);
   const gold = useGameStore((s) => s.character.gold);
   const mealInUse = useGameStore((s) => s.mealInUse);
+  const raidFightCount = useGameStore((s) => s.raid?.lineup.length ?? 0);
   const { creature, area } = getCreature(battle.creatureId);
   const fleePrice = fleeCost(creature, gold);
   const [confirmFlee, setConfirmFlee] = useState(false);
@@ -601,6 +603,10 @@ function Battle({ battle }: { battle: BattleState }) {
               <>
                 🗼 Endlos-Turm <span className="num text-gold">· Stockwerk {battle.towerFloor}</span>
               </>
+            ) : battle.raidWave ? (
+              <>
+                ⚔️ Überfall <span className="num text-gold">· Kampf {battle.raidWave}/{raidFightCount}</span>
+              </>
             ) : (
               area.name
             )}{" "}
@@ -634,6 +640,7 @@ function Battle({ battle }: { battle: BattleState }) {
           </div>
         </div>
         {area.dungeon && !battle.towerFloor && <DungeonProgress area={area} />}
+        {battle.raidWave && <RaidProgress />}
         {battle.towerFloor && <TowerProgress floor={battle.towerFloor} />}
         <Suspense
           fallback={
@@ -892,11 +899,12 @@ function BattleResult({ battle }: { battle: BattleState }) {
   const leave = useGameStore((s) => s.leaveBattle);
   const dungeon = useGameStore((s) => s.dungeon);
   const tower = useGameStore((s) => s.tower);
+  const raid = useGameStore((s) => s.raid);
   const quests = useCreatureQuests(battle.creatureId);
   const respawn = useRespawn(battle.creatureId);
   const won = battle.status === "won";
   // Im Dungeon geht die Beute in die Truhe – hier nur ein kurzer Hinweis, was dazukam.
-  const run = dungeon ?? tower;
+  const run = dungeon ?? tower ?? raid;
   const toChest = run !== null;
   const levelUp = reward !== null && reward.levelAfter > reward.levelBefore;
   const fled = battle.status === "fled";
@@ -1012,6 +1020,8 @@ function BattleResult({ battle }: { battle: BattleState }) {
         <DungeonResultActions battle={battle} won={won} />
       ) : tower ? (
         <TowerResultActions battle={battle} won={won} />
+      ) : raid ? (
+        <RaidResultActions battle={battle} won={won} />
       ) : (
         <div className="flex gap-2">
           <button

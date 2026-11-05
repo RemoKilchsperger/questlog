@@ -159,6 +159,20 @@ import {
   type MaterialStock,
   type Village,
 } from "../domain/village";
+import {
+  defendRaid,
+  EMPTY_RAIDS,
+  effectiveVillage,
+  failRaid,
+  raidBounty,
+  raidLineup,
+  refreshRaids,
+  repair,
+  repairedByBuild,
+  type RaidFight,
+  type RaidReport,
+  type RaidState,
+} from "../domain/raids";
 import { applyTrade } from "../domain/trade";
 import type { Character, EquipSlot, Equipment, Loot, OwnedItem, Rarity, StatKey } from "../domain/types";
 import { EventBus } from "../game/EventBus";
@@ -293,6 +307,21 @@ interface GameState {
   materials: MaterialStock;
   /** Baut die nächste Stufe eines Gebäudes – sofort, gegen Gold und Material. */
   build: (id: BuildingId) => void;
+
+  /** Überfälle aufs Dorf (raids.ts) – angekündigte Bande, beschädigte Gebäude, letzter Bericht */
+  raids: RaidState;
+  /** Lässt Banden kommen und angreifen – regelmässig, auch während man woanders ist. */
+  refreshRaids: () => void;
+  /** Laufende Verteidigung des Dorfs (wird wie der Kampf nicht gespeichert) */
+  raid: RaidRun | null;
+  /** Stellt sich der angekündigten Bande: erste Welle. */
+  startRaid: () => void;
+  /** Nach einem Sieg: nächste Welle bzw. der Anführer, mit den übrigen Lebenspunkten. */
+  nextRaidWave: () => void;
+  /** Repariert ein beschädigtes Gebäude gegen Gold und Material. */
+  repairBuilding: (id: BuildingId) => void;
+  /** Der Bericht des letzten Überfalls ist gelesen. */
+  dismissRaidReport: () => void;
 
   /** Begleiter aus der Taverne (companions.ts) */
   companions: Companion[];
@@ -491,6 +520,20 @@ export interface TowerRun {
   claimed: ClaimedChest | null;
 }
 
+/** Verteidigung des Dorfs: Wellen und Anführer nacheinander, ohne Heilung dazwischen. */
+export interface RaidRun {
+  /** Alle Kämpfe – beim Start festgelegt, mit Wehranlage und Wachen von diesem Moment */
+  lineup: RaidFight[];
+  /** Aktueller Kampf (Index in `lineup`) */
+  wave: number;
+  /** Gesammelte Beute – bei einer Niederlage oder Flucht verloren */
+  chest: DungeonChest;
+  /** Gutgeschriebene Truhe nach dem Sieg über den Anführer */
+  claimed: ClaimedChest | null;
+  /** Wie der Überfall ausging (verteidigt oder verloren) – fehlt, solange er läuft oder nach einer Flucht */
+  report: RaidReport | null;
+}
+
 export type ClaimedChest = DungeonChest & {
   levelBefore: number;
   levelAfter: number;
@@ -532,6 +575,7 @@ type SaveState = Pick<
   | "activeMissions"
   | "appliedTrades"
   | "visitors"
+  | "raids"
 >;
 
 const createCharacter = (): Character => ({
@@ -612,6 +656,7 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     activeMissions: (saved.activeMissions ?? []).map(migrateActiveMission),
     appliedTrades: saved.appliedTrades ?? [],
     visitors: { ...EMPTY_VISITORS, ...saved.visitors },
+    raids: { ...EMPTY_RAIDS, ...saved.raids },
   };
 }
 
@@ -757,6 +802,7 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
     const recipes = [...visitors.recipes, ...Object.keys(pantry).filter((id) => !visitors.recipes.includes(id))];
     state = { ...rest, visitors: { ...visitors, recipes } };
   }
+  // v21 → v22: Überfälle und Wehranlage – `raids` und `village.walls` ergänzt repairSave.
   return state;
 }
 
@@ -770,6 +816,11 @@ function attempt(action: () => void) {
   } catch (e) {
     console.warn(e instanceof Error ? e.message : e);
   }
+}
+
+/** Ausbaustufen, wie sie gerade wirken – beschädigte Gebäude eine Stufe tiefer (raids.ts). */
+export function activeVillage(s: Pick<GameState, "village" | "raids">): Village {
+  return effectiveVillage(s.village, s.raids.damaged);
 }
 
 // Hinweis: Zustand wird vorerst im localStorage gespeichert.
@@ -842,6 +893,9 @@ export const useGameStore = create<GameState>()(
         }
       };
 
+      /** Ausbaustufen, wie sie gerade wirken (beschädigte Gebäude eine Stufe tiefer). */
+      const tiers = () => activeVillage(get());
+
       /** Händler und Schmied: jedes Ausrüstungsteil zählt für die Händler-Aufträge. */
       const tradeEvent = (action: TradeAction, item: OwnedItem | undefined) => {
         if (item) questEvent({ kind: "trade", action });
@@ -855,8 +909,8 @@ export const useGameStore = create<GameState>()(
 
       /** Schreibt die Belohnung einer abgegebenen Quest gut und zeigt sie an. */
       const grantQuestReward = (def: QuestDef, source: QuestSource, extra: Partial<GameState>) => {
-        const { character, inventory, bossCollection, village } = get();
-        const xp = statueXp(def.reward.xp, village.statue);
+        const { character, inventory, bossCollection } = get();
+        const xp = statueXp(def.reward.xp, tiers().statue);
         const levelBefore = getLevel(character.totalXp);
         const totalXp = character.totalXp + xp;
         const levelAfter = getLevel(totalXp);
@@ -927,8 +981,8 @@ export const useGameStore = create<GameState>()(
 
       /** Kampfwerte für Solo-Kämpfe – mit der Trankwirkung des Alchemisten (im Koop gilt das Dorf nicht). */
       const soloHero = (meal = get().mealInUse) => {
-        const { character, equipment, village } = get();
-        return withMeal({ ...getHeroCombatProfile(character, equipment), potionPower: potionPower(village.alchemist) }, meal);
+        const { character, equipment } = get();
+        return withMeal({ ...getHeroCombatProfile(character, equipment), potionPower: potionPower(tiers().alchemist) }, meal);
       };
 
       /** Schreibt die Dungeon-Truhe gut und merkt sie sich für die Truhen-Animation. */
@@ -961,6 +1015,47 @@ export const useGameStore = create<GameState>()(
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
+      };
+
+      /** Kampf gegen die aktuelle Welle des Überfalls – mit den mitgenommenen LP. */
+      const raidBattle = (run: RaidRun, heroHp: number | null) => {
+        const { character } = get();
+        const hero = soloHero();
+        const { creature, elite } = run.lineup[run.wave];
+        const battle = startBattle(newId(), character.name, hero, creature, heroHp ?? hero.maxHp, elite);
+        return { ...battle, raidWave: run.wave + 1 };
+      };
+
+      /** Anführer besiegt: Die Beute der Bande kommt in die Truhe, alles wird gutgeschrieben. */
+      const claimRaid = () => {
+        const { raid, raids, character } = get();
+        if (!raid || raid.claimed || !raids.current) return;
+        const bounty = raidBounty(raids.current, getLevel(character.totalXp), newId());
+        const chest = addToChest(raid.chest, { ...bounty, xp: statueXp(bounty.xp, tiers().statue) });
+        const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
+        const defended = defendRaid(raids, Date.now());
+        const { records } = get();
+        set({
+          raids: defended,
+          raid: { ...raid, chest, claimed: { ...chest, ...levels, completed: true }, report: defended.report },
+          records: { ...records, raidsDefended: records.raidsDefended + 1 },
+        });
+        if (levels.levelAfter > levels.levelBefore) {
+          EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
+        }
+      };
+
+      /** Gegen die Bande verloren: ein Gebäude beschädigt oder das Lager geplündert – die Truhe ist weg. */
+      const loseRaid = () => {
+        const { raid, raids, village, character, materials } = get();
+        if (!raid || raid.report || !raids.current) return;
+        const change = failRaid(raids, "lost", village, character.gold, materials, Date.now());
+        set({
+          raids: change.raids,
+          raid: { ...raid, report: change.raids.report },
+          character: { ...character, gold: change.gold },
+          materials: change.materials,
+        });
       };
 
       /** Kampf auf dem aktuellen Stockwerk des Turms – mit den Segen des Laufs und den mitgenommenen LP. */
@@ -1055,6 +1150,8 @@ export const useGameStore = create<GameState>()(
       tradeLocked: [],
       appliedTrades: [],
       visitors: EMPTY_VISITORS,
+      raids: EMPTY_RAIDS,
+      raid: null,
 
       setTitle: (achievementId) =>
         set((s) => {
@@ -1162,7 +1259,7 @@ export const useGameStore = create<GameState>()(
       learnSkill: (id) => attempt(() => set((s) => ({ character: learnSkill(s.character, id) }))),
 
 
-      resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character, s.village.training) }))),
+      resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character, activeVillage(s).training) }))),
 
       dismissReward: () => set({ lastReward: null }),
 
@@ -1243,6 +1340,8 @@ export const useGameStore = create<GameState>()(
           tradeLocked: [],
           appliedTrades: [],
           visitors: EMPTY_VISITORS,
+          raids: EMPTY_RAIDS,
+          raid: null,
         }),
 
       equip: (uid, slot) =>
@@ -1263,15 +1362,15 @@ export const useGameStore = create<GameState>()(
 
       refreshShop: () => {
         const slot = shopSlot();
-        const { shop, character, village } = get();
+        const { shop, character } = get();
         if (shop.slot !== slot) {
-          set({ shop: rollShopStock(slot, getLevel(character.totalXp), newId, Math.random, MERCHANT_RULES[village.merchant]) });
+          set({ shop: rollShopStock(slot, getLevel(character.totalXp), newId, Math.random, MERCHANT_RULES[tiers().merchant]) });
         }
       },
 
       rerollShop: () =>
         attempt(() => {
-          const { character, lastShopReroll, shopRerolls, village } = get();
+          const { character, lastShopReroll, shopRerolls } = get();
           const result = rerollShop(
             character.gold,
             getLevel(character.totalXp),
@@ -1280,7 +1379,7 @@ export const useGameStore = create<GameState>()(
             newId,
             new Date(),
             Math.random,
-            MERCHANT_RULES[village.merchant],
+            MERCHANT_RULES[tiers().merchant],
           );
           set({
             shop: result.stock,
@@ -1305,20 +1404,20 @@ export const useGameStore = create<GameState>()(
       sell: (uid) =>
         attempt(() => {
           assertNotInTrade(uid);
-          const { inventory, equipment, character, village } = get();
+          const { inventory, equipment, character } = get();
           const item = findItem(uid);
-          const result = sellItem({ inventory, equipment }, character.gold, uid, MERCHANT_RULES[village.merchant].sellBonus);
+          const result = sellItem({ inventory, equipment }, character.gold, uid, MERCHANT_RULES[tiers().merchant].sellBonus);
           set({ inventory: result.gear.inventory, character: { ...character, gold: result.gold } });
           tradeEvent("sell", item);
         }),
 
       sellCommon: () =>
         attempt(() => {
-          const { inventory, equipment, character, village, tradeLocked } = get();
+          const { inventory, equipment, character, tradeLocked } = get();
           // Items im offenen Tausch bleiben liegen
           const locked = inventory.filter((i) => tradeLocked.includes(i.uid));
           const free = inventory.filter((i) => !tradeLocked.includes(i.uid));
-          const result = sellCommonItems({ inventory: free, equipment }, character.gold, MERCHANT_RULES[village.merchant].sellBonus);
+          const result = sellCommonItems({ inventory: free, equipment }, character.gold, MERCHANT_RULES[tiers().merchant].sellBonus);
           set({ inventory: [...result.gear.inventory, ...locked], character: { ...character, gold: result.gold } });
           // Jedes Item zählt einzeln für Verkaufs-Aufträge
           for (const item of result.sold) tradeEvent("sell", item);
@@ -1327,8 +1426,8 @@ export const useGameStore = create<GameState>()(
       salvage: (uid) =>
         attempt(() => {
           assertNotInTrade(uid);
-          const { inventory, equipment, character, village } = get();
-          const smith = SMITH_RULES[village.smith];
+          const { inventory, equipment, character } = get();
+          const smith = SMITH_RULES[tiers().smith];
           if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
           const item = findItem(uid);
           const result = salvageItem({ inventory, equipment }, character.essence, uid, smith.refund);
@@ -1339,8 +1438,8 @@ export const useGameStore = create<GameState>()(
       upgrade: (uid) =>
         attempt(() => {
           assertNotInTrade(uid);
-          const { inventory, equipment, character, village } = get();
-          const smith = SMITH_RULES[village.smith];
+          const { inventory, equipment, character } = get();
+          const smith = SMITH_RULES[tiers().smith];
           if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
           const result = forgeUpgrade({ inventory, equipment }, character.essence, uid, smith);
           set({
@@ -1354,8 +1453,8 @@ export const useGameStore = create<GameState>()(
       forge: (target, rarity) => {
         let forged: OwnedItem | null = null;
         attempt(() => {
-          const { inventory, character, village } = get();
-          const smith = SMITH_RULES[village.smith];
+          const { inventory, character } = get();
+          const smith = SMITH_RULES[tiers().smith];
           if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
           const level = getLevel(character.totalXp);
           const result = forgeItem(inventory, character.essence, target, rarity, level, newId(), smith.discount);
@@ -1367,15 +1466,15 @@ export const useGameStore = create<GameState>()(
 
       buyPotion: (potionId) =>
         attempt(() => {
-          const { potions, character, village } = get();
-          const result = buyPotion(potions, character.gold, potionId, village.alchemist);
+          const { potions, character } = get();
+          const result = buyPotion(potions, character.gold, potionId, tiers().alchemist);
           set({ potions: result.stock, character: { ...character, gold: result.gold } });
         }),
 
       eat: (foodId) =>
         attempt(() => {
-          const { meal, character, village, visitors } = get();
-          const result = eatMeal(meal, character.gold, foodId, getLevel(character.totalXp), village.tavern, visitors.recipes);
+          const { meal, character, visitors } = get();
+          const result = eatMeal(meal, character.gold, foodId, getLevel(character.totalXp), tiers().tavern, visitors.recipes);
           set({ meal: result.meal, character: { ...character, gold: result.gold } });
         }),
 
@@ -1392,9 +1491,9 @@ export const useGameStore = create<GameState>()(
       turnInVisitor: (who, choiceId) => {
         let outcome: VisitorOutcome | null = null;
         attempt(() => {
-          const { visitors, character, village, records } = get();
+          const { visitors, character, records } = get();
           const result = who === "story" ? turnInStory(visitors, choiceId) : turnInWanderer(visitors, Date.now());
-          const xp = statueXp(result.reward.xp, village.statue);
+          const xp = statueXp(result.reward.xp, tiers().statue);
           const levelBefore = getLevel(character.totalXp);
           const totalXp = character.totalXp + xp;
           const levelAfter = getLevel(totalXp);
@@ -1429,12 +1528,71 @@ export const useGameStore = create<GameState>()(
         attempt(() => {
           const { village, character, materials } = get();
           const result = build(village, id, character.gold, materials);
-          set({ village: result.village, materials: result.materials, character: { ...character, gold: result.gold } });
+          set({
+            village: result.village,
+            materials: result.materials,
+            character: { ...character, gold: result.gold },
+            raids: repairedByBuild(get().raids, id),
+          });
           // Ein ausgebauter Händler holt sofort neue Ware – passend zu seiner neuen Stufe
           if (id === "merchant") {
             set({ shop: rollShopStock(shopSlot(), getLevel(character.totalXp), newId, Math.random, MERCHANT_RULES[result.village.merchant]) });
           }
         }),
+
+      refreshRaids: () => {
+        const { raids, raid, village, character, materials } = get();
+        const change = refreshRaids(
+          raids,
+          {
+            village,
+            heroLevel: getLevel(character.totalXp),
+            gold: character.gold,
+            materials,
+            now: Date.now(),
+            // Wer gerade gegen die Bande kämpft, darf zu Ende kämpfen
+            fighting: raid !== null && raid.report === null,
+          },
+          newId,
+        );
+        if (change.raids === raids) return;
+        set({ raids: change.raids, character: { ...character, gold: change.gold }, materials: change.materials });
+      },
+
+      startRaid: () =>
+        attempt(() => {
+          get().refreshRaids();
+          const { raids, village, companions, activeMissions, meal } = get();
+          if (!raids.current) throw new Error("Gerade greift niemand an.");
+          // Begleiter, die nicht auf Mission sind, stehen Wache
+          const guards = companions.filter((c) => !isBusy(activeMissions, c.id)).length;
+          const run: RaidRun = { lineup: raidLineup(raids.current, village.walls, guards), wave: 0, chest: EMPTY_CHEST, claimed: null, report: null };
+          // Das Gericht wirkt bei allen Wellen
+          set({ meal: null, mealInUse: meal });
+          const battle = raidBattle(run, null);
+          set({ battle, battleReward: null, dungeon: null, tower: null, raid: run });
+          EventBus.emit("battle:started", { battle });
+        }),
+
+      nextRaidWave: () =>
+        attempt(() => {
+          const { battle, raid } = get();
+          if (!raid || !battle || battle.status !== "won" || raid.report) throw new Error("Keine Welle gewonnen.");
+          // Keine Heilung zwischen den Wellen: die Lebenspunkte werden mitgenommen
+          const next: RaidRun = { ...raid, wave: raid.wave + 1 };
+          const nextBattle = raidBattle(next, battle.hero.hp);
+          set({ battle: nextBattle, battleReward: null, raid: next });
+          EventBus.emit("battle:started", { battle: nextBattle });
+        }),
+
+      repairBuilding: (id) =>
+        attempt(() => {
+          const { raids, village, character, materials } = get();
+          const change = repair(raids, village, id, character.gold, materials);
+          set({ raids: change.raids, character: { ...character, gold: change.gold }, materials: change.materials });
+        }),
+
+      dismissRaidReport: () => set((s) => ({ raids: { ...s.raids, report: null } })),
 
       refreshTavern: () => {
         const { village, recruitPool, missionBoard, companions, character } = get();
@@ -1442,28 +1600,28 @@ export const useGameStore = create<GameState>()(
         const today = dateKey();
         const level = getLevel(character.totalXp);
         if (recruitPool.date !== today) {
-          set({ recruitPool: rollRecruitPool(today, village.tavern, level, companions.map((c) => c.name), newId) });
+          set({ recruitPool: rollRecruitPool(today, tiers().tavern, level, companions.map((c) => c.name), newId) });
         }
         if (missionBoard.date !== today) {
-          set({ missionBoard: rollMissionBoard(today, missionBaseLevel(level, companions), village.tavern) });
+          set({ missionBoard: rollMissionBoard(today, missionBaseLevel(level, companions), tiers().tavern) });
         }
       },
 
       recruitCompanion: (id) =>
         attempt(() => {
-          const { recruitPool, companions, character, village } = get();
-          const result = recruit(recruitPool, companions, character.gold, id, village.tavern);
+          const { recruitPool, companions, character } = get();
+          const result = recruit(recruitPool, companions, character.gold, id, tiers().tavern);
           set({ recruitPool: result.pool, companions: result.companions, character: { ...character, gold: result.gold } });
         }),
 
       rerollRecruits: () =>
         attempt(() => {
-          const { recruitPool, companions, character, village } = get();
+          const { recruitPool, companions, character } = get();
           const result = rerollRecruits(
             recruitPool,
             character.gold,
             dateKey(),
-            village.tavern,
+            tiers().tavern,
             getLevel(character.totalXp),
             companions.map((c) => c.name),
             newId,
@@ -1529,7 +1687,7 @@ export const useGameStore = create<GameState>()(
           const elite = heroic ? heroicAffixes(creatureId) : (openBounty(dailyQuests, creatureId, village.board) ?? rollElite(creature));
           const started = startBattle(newId(), character.name, hero, creature, hero.maxHp, elite);
           const battle = heroic ? makeHeroic(started) : started;
-          set({ battle, battleReward: null, dungeon: null, tower: null, meal: null, mealInUse: meal });
+          set({ battle, battleReward: null, dungeon: null, tower: null, raid: null, meal: null, mealInUse: meal });
           EventBus.emit("battle:started", { battle });
         }),
 
@@ -1554,6 +1712,7 @@ export const useGameStore = create<GameState>()(
             battleReward: null,
             dungeon: run,
             tower: null,
+            raid: null,
             // Das Gericht wirkt im ganzen Dungeon
             meal: null,
             mealInUse: meal,
@@ -1570,7 +1729,7 @@ export const useGameStore = create<GameState>()(
           // Das Gericht wirkt den ganzen Lauf über
           set({ meal: null, mealInUse: meal });
           const battle = towerBattle(tower, null);
-          set({ battle, battleReward: null, dungeon: null, tower });
+          set({ battle, battleReward: null, dungeon: null, tower, raid: null });
           EventBus.emit("battle:started", { battle });
         }),
 
@@ -1777,7 +1936,33 @@ export const useGameStore = create<GameState>()(
           const result = attackRound(battle, Math.random, ability);
           set({ battle: result.state, battleReward: null });
           EventBus.emit("battle:events", { battle: result.state, events: result.events });
+          if (result.state.status === "lost") loseRaid();
           if (result.state.status !== "won") return;
+
+          const { raid } = get();
+          if (raid && battle.raidWave) {
+            // Überfall: Beute in die Truhe, nach dem Anführer wird alles gutgeschrieben
+            const { creature } = raid.lineup[raid.wave];
+            const { records } = get();
+            set({
+              records: {
+                ...records,
+                battlesWon: records.battlesWon + 1,
+                closeCall: records.closeCall || result.state.hero.hp < result.state.hero.maxHp * 0.05,
+              },
+            });
+            const elite = (result.state.elite?.length ?? 0) > 0;
+            const questItems = questEvent({ kind: "kill", creatureId: creature.id, boss: false, elite });
+            const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, [], elite);
+            const reward = { ...raw, xp: statueXp(raw.xp, tiers().statue) };
+            const level = getLevel(character.totalXp);
+            set({
+              battleReward: { ...reward, levelBefore: level, levelAfter: level, questItems },
+              raid: { ...raid, chest: addToChest(raid.chest, reward) },
+            });
+            if (raid.wave === raid.lineup.length - 1) claimRaid();
+            return;
+          }
 
           const { tower } = get();
           if (tower && battle.towerFloor) {
@@ -1799,7 +1984,7 @@ export const useGameStore = create<GameState>()(
             questEvent({ kind: "towerFloor", floor: tower.floor });
             const elite = (result.state.elite?.length ?? 0) > 0;
             const rolled = rollBattleReward(creature, hero, newId(), Math.random, defeatedAdds(result.state), elite);
-            const reward = { ...rolled, xp: statueXp(rolled.xp, get().village.statue) };
+            const reward = { ...rolled, xp: statueXp(rolled.xp, tiers().statue) };
             const scaled = towerReward(reward, tower.floor, tower.blessings, elite);
             const level = getLevel(character.totalXp);
             set({
@@ -1845,7 +2030,7 @@ export const useGameStore = create<GameState>()(
           for (const add of adds) questItems.push(...questEvent({ kind: "kill", creatureId: add.id, boss: false }));
           const raw = rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
-          const rolled = { ...raw, xp: statueXp(raw.xp, get().village.statue) };
+          const rolled = { ...raw, xp: statueXp(raw.xp, tiers().statue) };
           if (dungeon) {
             // Im Dungeon kommt die Beute in die Truhe – gutgeschrieben wird erst am Ende. Material gibt es doppelt.
             const reward = dungeonLoot(rolled, dungeon.blessings);
@@ -1895,7 +2080,16 @@ export const useGameStore = create<GameState>()(
           claimTowerChest();
         }),
 
-      leaveBattle: () => set({ battle: null, battleReward: null, dungeon: null, tower: null }),
+      leaveBattle: () =>
+        set((s) => ({
+          battle: null,
+          battleReward: null,
+          dungeon: null,
+          tower: null,
+          raid: null,
+          // Den Ausgang des Überfalls hat man im Kampf gesehen – das Dorf muss ihn nicht noch einmal melden
+          ...(s.raid?.report && { raids: { ...s.raids, report: null } }),
+        })),
 
       consumePotion: (potionId) =>
         set((s) => ({ potions: { ...s.potions, [potionId]: Math.max(0, (s.potions[potionId] ?? 0) - 1) } })),
@@ -1942,7 +2136,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 21,
+      version: 22,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,
@@ -1970,6 +2164,7 @@ export const useGameStore = create<GameState>()(
         activeMissions: s.activeMissions,
         appliedTrades: s.appliedTrades,
         visitors: s.visitors,
+        raids: s.raids,
       }),
       // Nach der Migration: fehlende Felder immer ergänzen (siehe repairSave).
       merge: (persisted, current) => ({ ...current, ...repairSave(persisted as Partial<SaveState>) }),

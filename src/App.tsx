@@ -54,9 +54,12 @@ export default function App() {
   const readyQuests = useReadyQuestCount();
   const visitorWaiting = useGameStore((s) => visitorNeedsAttention(s.visitors));
   const refreshVisitors = useGameStore((s) => s.refreshVisitors);
+  const refreshRaids = useGameStore((s) => s.refreshRaids);
+  const raidComing = useGameStore((s) => s.raids.current !== null);
   const minute = Math.floor(useNow(60_000).getTime() / 60_000);
-  // Besucher kommen und gehen auch, während man woanders ist – für das Abzeichen am Dorf-Tab
+  // Besucher und Banden kommen und gehen auch, während man woanders ist – für das Abzeichen am Dorf-Tab
   useEffect(() => refreshVisitors(), [refreshVisitors, minute]);
+  useEffect(() => refreshRaids(), [refreshRaids, minute]);
 
   // Einladungslink: der Lobby beitreten und die Adresse wieder aufräumen
   useEffect(() => {
@@ -122,10 +125,16 @@ export default function App() {
         </TabButton>
         <TabButton active={tab === "village"} onClick={() => setTab("village")} icon="🏘️">
           Dorf
-          {visitorWaiting && (
-            <span className="ml-1.5 rounded-full bg-gold px-1.5 text-sm text-night-950" title="Ein Besucher wartet auf dich">
+          {raidComing ? (
+            <span className="ml-1.5 rounded-full bg-danger px-1.5 text-sm text-night-950" title="Eine Bande zieht aufs Dorf zu">
               !
             </span>
+          ) : (
+            visitorWaiting && (
+              <span className="ml-1.5 rounded-full bg-gold px-1.5 text-sm text-night-950" title="Ein Besucher wartet auf dich">
+                !
+              </span>
+            )
           )}
         </TabButton>
         <TabButton active={tab === "battle"} onClick={() => setTab("battle")} icon="⚔️">
@@ -180,7 +189,7 @@ export default function App() {
         {tab === "equipment" && <EquipmentScreen />}
         {tab === "village" &&
           (villageView === "build" ? (
-            <VillageScreen />
+            <VillageScreen onDefend={() => setTab("battle")} />
           ) : villageView === "merchant" ? (
             <ShopScreen />
           ) : villageView === "smith" ? (
