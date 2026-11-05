@@ -13,7 +13,7 @@ Oberfläche `src/components/TreasureMaps.tsx` und `DungeonPath.tsx`.
 | Ziel | Ein zufälliger offener Dungeon, für den man noch keine Karte hat |
 | Anzahl | Höchstens 3 Karten auf einmal, danach fällt keine mehr |
 | Anzeige | In der Siegmeldung, bei den laufenden Quests und auf der Dungeon-Karte |
-| Schatzraum | Nur solo: an der ersten Gabelung hinter dem Zwischenboss eine zusätzliche Tür 🗺️ (nie verschlossen) |
+| Schatzraum | Nur im Solo-Dungeon (so entschieden, auch künftig nicht im Koop): an der ersten Gabelung hinter dem Zwischenboss eine zusätzliche Tür 🗺️ (nie verschlossen) |
 | Inhalt | 75 % ein legendäres Item auf Heldenlevel (mit Spezialeffekt), 25 % ein Schatz-Rezept, solange man nicht alle kennt |
 | Sicherheit | Der Fund wird beim Eintreten sofort gutgeschrieben und geht bei einer Niederlage nicht verloren |
 | Weg | Der Schatzraum kostet den Schritt (ein Kampf weniger), zählt aber nicht als Raum ohne Kampf |
@@ -40,6 +40,5 @@ zum Betreten des Schatzraums in `treasureMaps`.
 
 ## Offen / später
 
-- Schatzraum im Koop-Dungeon (der Server würfelt die Türen)
 - Erfolg „Schatzjäger“ für eingelöste Karten
 - Karten für Gebiete mit einem verborgenen Gegner

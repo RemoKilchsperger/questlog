@@ -111,7 +111,7 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 48 | **Gebiete befreien:** Bedrohung pro Gebiet sinkt mit Kills, bei 0 % das Lager der Bande – danach keine Überfälle mehr aus diesem Gebiet | 💡 |
 | 49 | **Ruf bei Fraktionen:** Besucher-Entscheidungen und Quests geben Ruf (Händlergilde, Jägerbund, Orden) – Rabatte, eigene Kopfgelder, Fraktions-Items | 💡 |
 | 50 | **Jahreszeiten und Feste:** Erntefest, Wintersonnenwende mit Saisonboss und begrenzter Questreihe | 💡 |
-| 51 | **Schatzkarten:** sehr seltene Beute, führt zu einem Schatzraum im Solo-Dungeon mit garantiert legendärem Item oder Schatz-Rezept, bei den laufenden Quests aufgelistet | ✅ `treasureMaps.ts`, docs/schatzkarten.md – Koop-Schatzraum noch offen |
+| 51 | **Schatzkarten:** sehr seltene Beute, führt zu einem Schatzraum im Solo-Dungeon mit garantiert legendärem Item oder Schatz-Rezept, bei den laufenden Quests aufgelistet | ✅ `treasureMaps.ts`, docs/schatzkarten.md – Schatzraum bewusst nur solo |
 | 52 | **Einwohner und Zufriedenheit:** Gebäude ziehen Einwohner an, die Gold und Material abgeben; Überfälle senken die Zufriedenheit | 💡 |
 | 53 | **Kräutergarten:** Beete wachsen in Echtzeit und liefern Zutaten, seltene Samen als Beute | 💡 |
 | 54 | **Persönliche Begleiter-Quest:** ab einem Level erzählt ein Begleiter seine Geschichte, am Ende ein einzigartiger Trait | 💡 |
