@@ -12,6 +12,7 @@
 // Dazu Gift, Feuer und Bluten (Schaden über Zeit).
 
 import type { AbilityDef } from "./abilities";
+import { AREAS } from "./creatures";
 import type { SkillWeapon } from "./skills";
 
 export type DamageKind = "blade" | "blunt" | "pierce" | "magic";
@@ -120,11 +121,12 @@ export const CREATURE_MATCHUPS: Record<string, CreatureMatchups> = {
   "soul-eater": { weak: ["blunt"], resist: ["magic"], immune: ["poison"] },
   "abyss-tyrant": { weak: ["burn"], resist: ["magic"] },
   "void-lord": { weak: ["pierce"], resist: ["magic"] },
-  // Mimics (Truhen im Dungeon): Holz brennt, Eisenbeschläge halten Klingen ab
-  "mimic-mine": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
-  "mimic-temple": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
-  "mimic-storm": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
-  "mimic-void": { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] },
+  // Mimics (Truhen im Dungeon und nach Siegen in den Gebieten): Holz brennt, Eisenbeschläge halten Klingen ab
+  ...Object.fromEntries(
+    ["mimic-mine", "mimic-temple", "mimic-storm", "mimic-void", ...AREAS.flatMap((a) => (a.mimics ?? []).map((m) => m.id))].map(
+      (id): [string, CreatureMatchups] => [id, { weak: ["burn", "blunt"], resist: ["blade"], immune: ["poison"] }],
+    ),
+  ),
   // Raid-Bosse
   "swamp-hydra": { weak: ["burn", "blade"], immune: ["poison"] },
   "frost-giant": { weak: ["burn", "blunt"], resist: ["blade"] },

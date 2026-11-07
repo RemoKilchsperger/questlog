@@ -23,6 +23,7 @@ import {
 } from "../domain/coopCombat";
 import { AREA_BOSS_RESPAWN_MS, AREAS, DUNGEONS, getCreature, XP_PENALTY_FREE_LEVELS } from "../domain/creatures";
 import { FORK_ROOMS, MIMIC_CHANCE } from "../domain/dungeonPaths";
+import { AREA_CHEST_CHANCE } from "../domain/areaChests";
 import { COOP_DECIDE_SECONDS } from "../domain/coopDungeonPaths";
 import { FRAMES } from "../domain/achievements";
 import { FORGE_COST_FACTOR, forgeCost, UPGRADE_REFUND } from "../domain/forge";
@@ -654,6 +655,11 @@ export function HelpScreen() {
             den Deckel hebst. Der Mimic ist zäher als die übrigen Gegner, sein Biss lässt dich bluten. Dafür gibt er Elite-Beute
             mit Erfahrung und noch mehr Gold. Eine echte Truhe enthält Beute wie von einem Gegner, aber ohne Erfahrung. Wer
             nichts riskieren will, geht einfach weiter.
+          </p>
+          <p>
+            📦 Auch nach einem <b>normalen Kampf</b> in den Gebieten bleibt manchmal (etwa {pct(AREA_CHEST_CHANCE)}) eine alte
+            Truhe zurück. Auch dort kann ein Mimic darin stecken, so stark wie die besiegte Kreatur und etwas zäher. Gegen ihn
+            kämpfst du mit den LP, die dir geblieben sind – öffne sie also lieber nicht mit letzter Kraft und ohne Tränke.
           </p>
           <p>
             🗺️ Ganz selten fällt nach einem Sieg eine <b>Schatzkarte</b>, nach Elite-Gegnern und Bossen etwas öfter. Sie

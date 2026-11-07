@@ -28,6 +28,7 @@ import {
 } from "../domain/combat";
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type AreaDef, type BossRespawns, type CreatureDef } from "../domain/creatures";
 import { rollElite, type EliteAffix } from "../domain/elites";
+import { getAreaMimic, rollAreaChest, type AreaChest } from "../domain/areaChests";
 import {
   chestReward,
   eliteRoomAffixes,
@@ -402,6 +403,10 @@ interface GameState {
   /** Flucht: kostet Gold (siehe `fleeCost`), beendet den Kampf ohne Gegenangriff. */
   battleFlee: () => void;
   leaveBattle: () => void;
+  /** Alte Truhe nach einem normalen Sieg (areaChests.ts) – wird wie der Kampf nicht gespeichert. */
+  areaChest: AreaChest | null;
+  /** Truhe nach einem normalen Sieg: öffnen (vielleicht ein Mimic) oder liegen lassen */
+  openAreaChest: (choice: ChestChoice) => void;
 
   /** Laufender Dungeon (wird wie der Kampf nicht gespeichert). */
   dungeon: DungeonRun | null;
@@ -1170,6 +1175,7 @@ export const useGameStore = create<GameState>()(
       achievementQueue: [],
       battle: null,
       battleReward: null,
+      areaChest: null,
       dungeon: null,
       treasureMaps: [],
       tower: null,
@@ -1716,6 +1722,7 @@ export const useGameStore = create<GameState>()(
           const hero = soloHero(meal);
           if (hero.level < area.minLevel) throw new Error(`${area.name} ist erst ab Level ${area.minLevel} zugänglich.`);
           if (area.dungeon) throw new Error("Dungeon-Gegner kämpfen nur im Dungeon.");
+          if (isMimic(creatureId)) throw new Error("Mimics warten in Truhen – herausfordern kann man sie nicht.");
           const wait = respawnLeft(get().bossRespawns, creatureId);
           if (wait > 0) throw new Error(`${creature.name} erscheint erst in ${formatRespawn(wait)} wieder.`);
           if (heroic && !isHeroicUnlocked(creatureId, get().records.bossesDefeated)) {
@@ -1725,7 +1732,7 @@ export const useGameStore = create<GameState>()(
           const elite = heroic ? heroicAffixes(creatureId) : (openBounty(dailyQuests, creatureId, village.board) ?? rollElite(creature));
           const started = startBattle(newId(), character.name, hero, creature, hero.maxHp, elite);
           const battle = heroic ? makeHeroic(started) : started;
-          set({ battle, battleReward: null, dungeon: null, tower: null, raid: null, meal: null, mealInUse: meal });
+          set({ battle, battleReward: null, areaChest: null, dungeon: null, tower: null, raid: null, meal: null, mealInUse: meal });
           EventBus.emit("battle:started", { battle });
         }),
 
@@ -2139,7 +2146,8 @@ export const useGameStore = create<GameState>()(
           if (reward.buffPotion) potionDrops[reward.buffPotion] = (potionDrops[reward.buffPotion] ?? 0) + 1;
           const items = [reward.loot, reward.bossLoot].filter((i) => i !== null);
           const levels = grantRewards(reward.xp, reward.gold, items, potionDrops, reward.materials);
-          set({ battleReward: { ...reward, ...levels, questItems, treasureMap } });
+          // Selten bleibt eine alte Truhe zurück – nach einem Mimic nicht noch eine
+          set({ battleReward: { ...reward, ...levels, questItems, treasureMap }, areaChest: mimic ? get().areaChest : rollAreaChest(creature.id) });
           if (levels.levelAfter > levels.levelBefore) {
             EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
           }
@@ -2166,10 +2174,39 @@ export const useGameStore = create<GameState>()(
           claimTowerChest();
         }),
 
+      openAreaChest: (choice) =>
+        attempt(() => {
+          const { areaChest, battle, character } = get();
+          if (!areaChest || !battle || battle.status !== "won" || battle.creatureId !== areaChest.creatureId) {
+            throw new Error("Hier steht keine Truhe.");
+          }
+          if (areaChest.outcome) throw new Error("Mit der Truhe bist du schon fertig.");
+          if (choice === "leave") {
+            set({ areaChest: { ...areaChest, outcome: { choice, reward: null } } });
+            return;
+          }
+          if (areaChest.mimic) {
+            // Die Truhe beisst zurück: Kampf mit den LP, die vom Kampf davor übrig sind
+            const next = startBattle(newId(), character.name, soloHero(), getAreaMimic(areaChest.creatureId), battle.hero.hp, []);
+            set({ battle: next, battleReward: null, areaChest: { ...areaChest, outcome: { choice, reward: null } } });
+            EventBus.emit("battle:started", { battle: next });
+            return;
+          }
+          // Echte Truhe: Beute wie von der besiegten Kreatur, aber ohne Erfahrung – sofort gutgeschrieben
+          const reward = chestReward(getCreature(areaChest.creatureId).creature, soloHero(), newId());
+          const potionDrops: Record<string, number> = {};
+          if (reward.potions) potionDrops[reward.potions.potionId] = reward.potions.count;
+          if (reward.buffPotion) potionDrops[reward.buffPotion] = (potionDrops[reward.buffPotion] ?? 0) + 1;
+          const items = [reward.loot, reward.bossLoot].filter((i) => i !== null);
+          grantRewards(0, reward.gold, items, potionDrops, reward.materials);
+          set({ areaChest: { ...areaChest, outcome: { choice, reward } } });
+        }),
+
       leaveBattle: () =>
         set((s) => ({
           battle: null,
           battleReward: null,
+          areaChest: null,
           dungeon: null,
           tower: null,
           raid: null,

@@ -56,6 +56,11 @@ export interface AreaDef {
   dungeon?: boolean;
   /** Nur Dungeons: der Mimic, der sich in einer Truhe versteckt (dungeonPaths.ts) – kein Schritt des Wegs */
   mimic?: CreatureDef;
+  /**
+   * Nur Gebiete: je ein Mimic pro gewöhnlicher Kreatur, auf deren Level – er steckt in der
+   * Truhe, die nach einem Sieg manchmal zurückbleibt (areaChests.ts). Kein Gegner der Gebietskarte.
+   */
+  mimics?: readonly CreatureDef[];
 }
 
 /**
@@ -139,6 +144,25 @@ const dungeonRun = (mobs: readonly CreatureDef[], midBoss: CreatureDef, boss: Cr
   ...mobs,
   boss,
 ];
+
+/** Mimics sind zäher als die übrigen Gegner eines Dungeons – dafür lohnt sich die Beute (dungeonPaths.ts). */
+const MIMIC_POWER = 1.25;
+/**
+ * Mimics in den Gebieten: etwas schwächer als im Dungeon, weil man ihnen mit den
+ * LP begegnet, die nach dem Kampf davor noch übrig sind (areaChests.ts).
+ */
+export const AREA_MIMIC_POWER = 1.15;
+
+/** Id des Mimics, der nach einem Sieg über diese Kreatur in der Truhe stecken kann. */
+export const areaMimicId = (creatureId: string) => `mimic-${creatureId}`;
+
+/** Gebiet samt seinen Mimics – einer pro gewöhnlicher Kreatur, auf deren Level. */
+const withMimics = (area: AreaDef): AreaDef => ({
+  ...area,
+  mimics: area.creatures
+    .filter((cr) => !cr.boss)
+    .map((cr): CreatureDef => ({ id: areaMimicId(cr.id), name: "Mimic", sprite: "mimic", level: cr.level, boss: false, power: AREA_MIMIC_POWER })),
+});
 
 export const AREAS: readonly AreaDef[] = [
   {
@@ -231,7 +255,7 @@ export const AREAS: readonly AreaDef[] = [
       withAdds({ ...c("ignaroth", "Uralter Drache Ignaroth", "ancient-dragon", 60, true), bossFactors: LATE_AREA_BOSS_FACTORS }, "fire-salamander", 1.45, { creatureId: "demon-guard", role: "shield" }),
     ],
   },
-];
+].map(withMimics);
 
 /**
  * Stärke der Dungeon-Gegner gegenüber normalen Kreaturen gleichen Levels. Per
@@ -241,8 +265,6 @@ export const AREAS: readonly AreaDef[] = [
  */
 const DUNGEON_POWER = 1.1;
 const ABYSS_POWER = 1.1;
-/** Mimics sind zäher als die übrigen Gegner eines Dungeons – dafür lohnt sich die Beute (dungeonPaths.ts). */
-const MIMIC_POWER = 1.25;
 
 /** Mimic eines Dungeons: kämpft auf dessen höchstem Level, mit eigener Fähigkeit (bossAbilities.ts). */
 const mimic = (id: string, level: number): CreatureDef => d(id, "Mimic", "mimic", level, MIMIC_POWER);
@@ -428,7 +450,8 @@ export function getCreatureGold(creature: CreatureDef): number {
 /** Kreatur samt Gebiet bzw. Dungeon, in dem sie lebt. */
 export function getCreature(id: string): { creature: CreatureDef; area: AreaDef } {
   for (const area of [...AREAS, ...DUNGEONS]) {
-    const creature = area.creatures.find((cr) => cr.id === id) ?? (area.mimic?.id === id ? area.mimic : undefined);
+    const creature =
+      area.creatures.find((cr) => cr.id === id) ?? (area.mimic?.id === id ? area.mimic : area.mimics?.find((cr) => cr.id === id));
     if (creature) return { creature, area };
   }
   throw new Error(`Unbekannte Kreatur: ${id}`);

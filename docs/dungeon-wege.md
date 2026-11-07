@@ -89,6 +89,36 @@ Der Mimic ist ein eigener Gegner pro Dungeon (`AreaDef.mimic`, Ids `mimic-mine`,
 Grafik: Bild `src/assets/creatures/mimic.png` (Prompt in `gegner-prompts.md`), als Rückfall das Pixel-Sprite
 `mimic` in `creatureSprites.ts`.
 
+### Truhen in den Gebieten
+
+Auch nach normalen Kämpfen kann eine alte Truhe zurückbleiben (`src/domain/areaChests.ts`, nur solo):
+
+- Chance 5 % (`AREA_CHEST_CHANCE`) nach jedem Sieg über eine gewöhnliche Kreatur eines Gebiets. Nicht nach
+  Gebietsbossen, Dungeon-, Turm- oder Überfall-Kämpfen und nicht nach einem Mimic.
+- Sie erscheint im Siegbildschirm unter der Beute: **Öffnen** oder **Liegen lassen**. Ob sie ein Mimic ist
+  (30 %, `MIMIC_CHANCE` wie im Dungeon), wird beim Auftauchen gewürfelt, man sieht es erst beim Öffnen.
+- **Echte Truhe:** Beute wie von der besiegten Kreatur, ohne XP, sofort gutgeschrieben.
+- **Mimic:** Kampf mit den LP, die vom Kampf davor übrig sind (Tränke gehen wie immer). Elite-Beute mit XP und
+  Elite-Gold ×1,5 wie im Dungeon, zählt für Schatzkarten wie ein Elite. „Nochmal kämpfen“ geht danach wieder gegen
+  die ursprüngliche Kreatur.
+
+Jede gewöhnliche Kreatur hat ihren eigenen Mimic auf ihrem Level (`AreaDef.mimics`, Id `mimic-<kreatur>`), damit ein
+Level-3-Held am Grauwolf keinem Level-10-Mimic begegnet. Er hat dieselbe Fähigkeit und dieselben Schwächen wie die
+Dungeon-Mimics, aber Stärke ×1,15 (`AREA_MIMIC_POWER`) statt ×1,25, weil man ihm angeschlagen begegnet. Direkt
+herausfordern kann man ihn nicht.
+
+Simulation (Champion bzw. Wächter auf dem Level der Kreatur, erster Kampf ohne Tränke, im Schnitt mit 60–75 % LP
+übrig, 300 Kämpfe pro Kreatur):
+
+| Stärke | gewöhnlich, ohne Tränke | gewöhnlich, mit Tränken | selten, ohne Tränke | selten, mit Tränken |
+|---|---|---|---|---|
+| ×1,0 | 16–80 % | 94–100 % | 87–100 % | 100 % |
+| **×1,15** | 1–34 % | 50–100 % | 39–90 % | 100 % |
+| ×1,25 | 0–11 % | 19–100 % | 12–86 % | 94–100 % |
+
+Mit ×1,15 ist der Mimic eine echte Gefahr, wer angeschlagen und ohne Tränke öffnet, verliert oft. Mit Tränken ist
+er gut zu schaffen. Eine Niederlage kostet wie jeder verlorene Kampf nichts ausser der Beute.
+
 ## Abstimmung (Simulation)
 
 Simuliert mit dem Champion bzw. Wächter aus dem Balance-Test (Boss-Level, Heiltränke unter 40 % LP),

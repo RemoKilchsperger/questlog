@@ -35,7 +35,7 @@ import {
   type CreatureDef,
 } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
-import { dungeonMobs, FORK_ROOMS } from "../domain/dungeonPaths";
+import { dungeonMobs, FORK_ROOMS, isMimic } from "../domain/dungeonPaths";
 import { foodEffectText, getFood, withMeal } from "../domain/food";
 import { trackedVisitorQuests } from "../domain/visitors";
 import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked } from "../domain/heroic";
@@ -54,7 +54,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { CoopDungeonList, CoopJoinForm, CoopPanel, CoopScreen } from "./CoopScreen";
 import { useCoopStore } from "../coop/coopStore";
 import { DungeonChest } from "./DungeonChest";
-import { ChestDeposit, DungeonOnward, DungeonProgress, DungeonRoomView } from "./DungeonPath";
+import { ChestChoices, ChestDeposit, DungeonOnward, DungeonProgress, DungeonRoomView } from "./DungeonPath";
 import { TowerPanel, TowerProgress, TowerResultActions } from "./TowerScreen";
 import { RaidProgress, RaidResultActions } from "./RaidPanel";
 import { SCENE_FRAME, useScrollToBattle } from "./battleLayout";
@@ -905,8 +905,11 @@ function BattleResult({ battle }: { battle: BattleState }) {
   const dungeon = useGameStore((s) => s.dungeon);
   const tower = useGameStore((s) => s.tower);
   const raid = useGameStore((s) => s.raid);
+  const areaChest = useGameStore((s) => s.areaChest);
+  // Nach einem Mimic geht es mit der Kreatur weiter, nach deren Sieg die Truhe stand
+  const againId = isMimic(battle.creatureId) && areaChest ? areaChest.creatureId : battle.creatureId;
   const quests = useCreatureQuests(battle.creatureId);
-  const respawn = useRespawn(battle.creatureId);
+  const respawn = useRespawn(againId);
   const won = battle.status === "won";
   // Im Dungeon geht die Beute in die Truhe – hier nur ein kurzer Hinweis, was dazukam.
   const run = dungeon ?? tower ?? raid;
@@ -1022,6 +1025,10 @@ function BattleResult({ battle }: { battle: BattleState }) {
           Quest-Fortschritt <QuestProgressChips quests={quests} />
         </p>
       )}
+      {won && !run && areaChest?.creatureId === battle.creatureId && <AreaChestView />}
+      {won && !run && isMimic(battle.creatureId) && (
+        <p className="text-legendary">🦷 Mimic besiegt: Elite-Beute und mehr Gold, als in eine Truhe passt.</p>
+      )}
       {dungeon ? (
         <DungeonResultActions battle={battle} won={won} />
       ) : tower ? (
@@ -1037,7 +1044,7 @@ function BattleResult({ battle }: { battle: BattleState }) {
             Zurück zur Gebietskarte
           </button>
           <button
-            onClick={() => startBattle(battle.creatureId)}
+            onClick={() => startBattle(againId)}
             disabled={respawn > 0}
             title={respawn > 0 ? "Gebietsbosse erscheinen 5 Minuten nach einem Sieg wieder" : undefined}
             className="font-pixel rounded-md border-2 border-danger bg-danger/15 px-4 py-1.5 text-danger hover:bg-danger/25 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1047,6 +1054,46 @@ function BattleResult({ battle }: { battle: BattleState }) {
         </div>
       )}
     </motion.section>
+  );
+}
+
+/** Alte Truhe nach einem normalen Sieg (areaChests.ts): öffnen oder liegen lassen – beim Mimic beginnt ein Kampf. */
+function AreaChestView() {
+  const chest = useGameStore((s) => s.areaChest)!;
+  const decide = useGameStore((s) => s.openAreaChest);
+  const reward = chest.outcome?.reward ?? null;
+  const loot = reward?.loot ? getItemStats(reward.loot) : null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="flex w-full flex-col items-center gap-2 rounded-md border-2 border-gold/40 bg-night-800/60 p-3"
+    >
+      <p className="font-pixel text-gold">📦 Eine alte Truhe!</p>
+      {!chest.outcome ? (
+        <>
+          <p className="max-w-md text-sm text-muted">
+            Wo eben noch gekämpft wurde, steht eine alte, eisenbeschlagene Truhe. Hat dein Gegner sie bewacht – oder hat
+            sie auf dich gewartet? Man erzählt sich von Truhen, die zubeissen.
+          </p>
+          <ChestChoices
+            onChoose={decide}
+            leaveLabel="✋ Liegen lassen"
+            openHint="Was drin ist, gehört dir – wenn es denn wirklich nur eine Truhe ist … Ein Mimic kämpft gegen deine übrigen LP."
+          />
+        </>
+      ) : chest.outcome.choice === "leave" ? (
+        <p className="text-sm text-muted">Du lässt die Truhe stehen. Sicher ist sicher.</p>
+      ) : (
+        reward && (
+          <>
+            <p className="text-sm text-xp">Der Deckel knarrt – es ist nur eine Truhe. Du nimmst, was darin liegt.</p>
+            <ChestDeposit reward={reward} label="📦 Inhalt:" />
+            {loot && <LootCard loot={loot} heading="🎁 Aus der Truhe" />}
+          </>
+        )
+      )}
+    </motion.div>
   );
 }
 
