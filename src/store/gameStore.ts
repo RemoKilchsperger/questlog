@@ -29,6 +29,7 @@ import {
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type AreaDef, type BossRespawns, type CreatureDef } from "../domain/creatures";
 import { rollElite, type EliteAffix } from "../domain/elites";
 import { getAreaMimic, rollAreaChest, type AreaChest } from "../domain/areaChests";
+import { getRare, rareCreature, rareReward, rollRare } from "../domain/rares";
 import {
   chestReward,
   eliteRoomAffixes,
@@ -230,6 +231,8 @@ export type BattleRewardEvent = BattleReward & {
   questItems?: QuestItemFind[];
   /** Gefundene Schatzkarte (treasureMaps.ts) */
   treasureMap?: TreasureMap;
+  /** Besiegter seltener Gegner (rares.ts) – `first`: neu in der Sammlung */
+  rare?: { id: string; first: boolean };
 };
 
 interface GameState {
@@ -1729,9 +1732,12 @@ export const useGameStore = create<GameState>()(
             throw new Error(`Besiege ${creature.name} zuerst, dann kannst du ihn heroisch fordern.`);
           }
           // Offener Steckbrief: die gesuchte Kreatur erscheint genau so als Elite
-          const elite = heroic ? heroicAffixes(creatureId) : (openBounty(dailyQuests, creatureId, village.board) ?? rollElite(creature));
-          const started = startBattle(newId(), character.name, hero, creature, hero.maxHp, elite);
-          const battle = heroic ? makeHeroic(started) : started;
+          const bounty = heroic ? null : openBounty(dailyQuests, creatureId, village.board);
+          // Selten erscheint statt der Kreatur ihre benannte Variante (nicht bei einem Steckbrief)
+          const rare = heroic || bounty ? null : rollRare(creatureId);
+          const elite = heroic ? heroicAffixes(creatureId) : (bounty ?? (rare ? [...rare.affixes] : rollElite(creature)));
+          const started = startBattle(newId(), character.name, hero, rare ? rareCreature(rare) : creature, hero.maxHp, elite);
+          const battle = heroic ? makeHeroic(started) : rare ? { ...started, rare: rare.id } : started;
           set({ battle, battleReward: null, areaChest: null, dungeon: null, tower: null, raid: null, meal: null, mealInUse: meal });
           EventBus.emit("battle:started", { battle });
         }),
@@ -2093,11 +2099,14 @@ export const useGameStore = create<GameState>()(
 
           const { creature } = getCreature(battle.creatureId);
           const heroic = !!result.state.heroic;
+          const rare = result.state.rare ? getRare(result.state.rare) : null;
           const { records } = get();
+          const rareFirst = !!rare && !records.raresDefeated.includes(rare.id);
           set({
             records: {
               ...records,
               battlesWon: records.battlesWon + 1,
+              ...(rareFirst && { raresDefeated: [...records.raresDefeated, rare.id] }),
               bossesDefeated:
                 creature.boss && !records.bossesDefeated.includes(creature.id)
                   ? [...records.bossesDefeated, creature.id]
@@ -2121,7 +2130,9 @@ export const useGameStore = create<GameState>()(
           const treasureMap = findTreasureMap(elite || heroic || mimic || !!creature.boss || !!creature.midBoss);
           const raw = mimic
             ? mimicReward(creature, soloHero(), newId())
-            : rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
+            : rare
+              ? rareReward(rare, soloHero(), newId())
+              : rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
           const rolled = { ...raw, xp: statueXp(raw.xp, tiers().statue) };
           if (dungeon) {
@@ -2147,7 +2158,10 @@ export const useGameStore = create<GameState>()(
           const items = [reward.loot, reward.bossLoot].filter((i) => i !== null);
           const levels = grantRewards(reward.xp, reward.gold, items, potionDrops, reward.materials);
           // Selten bleibt eine alte Truhe zurück – nach einem Mimic nicht noch eine
-          set({ battleReward: { ...reward, ...levels, questItems, treasureMap }, areaChest: mimic ? get().areaChest : rollAreaChest(creature.id) });
+          set({
+            battleReward: { ...reward, ...levels, questItems, treasureMap, ...(rare && { rare: { id: rare.id, first: rareFirst } }) },
+            areaChest: mimic ? get().areaChest : rollAreaChest(creature.id),
+          });
           if (levels.levelAfter > levels.levelBefore) {
             EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
           }

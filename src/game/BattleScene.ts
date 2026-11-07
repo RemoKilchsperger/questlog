@@ -10,6 +10,7 @@ import { ADD_SKILLS, getBossPhase, RITUAL_ROUNDS, SHIELD_EVERY } from "../domain
 import { bossTurnOf, type BattleEvent, type BattleState, type Side } from "../domain/combat";
 import { getCreature } from "../domain/creatures";
 import { getPotion } from "../domain/potions";
+import { getRare, type RareLook } from "../domain/rares";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
 import { iconText } from "./phaserIcons";
@@ -23,6 +24,27 @@ import { paintSprite, renderSprite, type PixelImage, type SpriteDef } from "./sp
 
 export const SCENE_WIDTH = 720;
 export const SCENE_HEIGHT = 320;
+
+/**
+ * Färbt ein Bild ein: Helligkeit des Pixels mal Zielfarbe (`k` hellt auf) – so bleiben
+ * die Details der Zeichnung erhalten, egal welche Farbe die Grundkreatur hat.
+ */
+function colorize(m: Phaser.FX.ColorMatrix, color: number, k = 1.4) {
+  const [r, g, b] = [(color >> 16) & 255, (color >> 8) & 255, color & 255].map((c) => (c / 255) * k);
+  const row = (c: number) => [0.3 * c, 0.59 * c, 0.11 * c, 0, 0];
+  m.set([...row(r), ...row(g), ...row(b), 0, 0, 0, 1, 0]);
+}
+
+/** Farbvarianten seltener Gegner (rares.ts) – ein Farbfilter auf dem Bild der Grundkreatur. */
+const RARE_LOOKS: Record<RareLook, (m: Phaser.FX.ColorMatrix) => void> = {
+  silver: (m) => m.grayscale(1).brightness(1.35, true),
+  gold: (m) => m.sepia().saturate(0.8, true).brightness(1.25, true),
+  shadow: (m) => m.grayscale(1).brightness(0.55, true),
+  crimson: (m) => colorize(m, 0xff5a4a),
+  frost: (m) => colorize(m, 0x9fd8ff, 1.5),
+  jade: (m) => colorize(m, 0x6ae08a),
+  amethyst: (m) => colorize(m, 0xc38aff, 1.5),
+};
 
 export interface BattleSceneData {
   battle: BattleState;
@@ -148,14 +170,22 @@ export class BattleScene extends Phaser.Scene {
 
     this.fighters = {
       hero: this.createFighter(hero, battle.hero.name, battle.hero.level, battle.hero.hp, battle.hero.maxHp),
-      enemy: this.createFighter(enemy, battle.elite ? `★ ${battle.enemy.name}` : battle.enemy.name, battle.enemy.level, battle.enemy.hp, battle.enemy.maxHp),
+      enemy: this.createFighter(
+        enemy,
+        battle.rare ? `✦ ${battle.enemy.name}` : battle.elite ? `★ ${battle.enemy.name}` : battle.enemy.name,
+        battle.enemy.level,
+        battle.enemy.hp,
+        battle.enemy.maxHp,
+      ),
     };
-    // Elite-Gegner leuchten golden
+    // Seltene Gegner in ihrer eigenen Farbe mit violettem Schimmer, Elite-Gegner leuchten golden
     if (battle.elite) {
+      const look = battle.rare ? RARE_LOOKS[getRare(battle.rare).look] : null;
       for (const image of enemy.images) {
         if (!image.preFX) continue;
         image.preFX.padding = 8;
-        image.preFX.addGlow(0xf4c95d, 4, 0, false, 0.1, 12);
+        if (look) look(image.preFX.addColorMatrix());
+        image.preFX.addGlow(look ? 0xb57af0 : 0xf4c95d, 4, 0, false, 0.1, 12);
       }
     }
     // Begleiter: kleiner, der erste vor dem Boss, der zweite dahinter

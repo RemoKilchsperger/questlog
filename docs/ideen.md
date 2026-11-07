@@ -122,3 +122,26 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 59 | **Geister-Arena:** asynchrones PvP gegen die Kopie eines anderen Helden aus dem Cloud-Spielstand | 💡 |
 | 60 | **Koop-Dorfverteidigung:** einen Freund per Code zur Überfall-Abwehr holen | 💡 |
 | 61 | **Heldenchronik:** das Questbuch schreibt automatisch ein Tagebuch der wichtigen Momente | 💡 |
+
+## Sechste Runde: Content-Vielfalt (2026-11-07)
+
+| # | Idee | Status |
+|---|---|---|
+| 62 | **Seltene Gegner:** mit 1–2 % Chance statt eines normalen Gegners eine benannte Variante („Silberpelz, der Leitwolf“), mit eigener Beute und Sammlung | ✅ 24 seltene Gegner in den Gebieten, `rares.ts`, docs/seltene-gegner.md |
+| 63 | **Rudel-Kämpfe:** ab und zu 2–3 schwache Gegner gleichzeitig statt einem starken – Zielwahl und Flächenfähigkeiten werden wichtig | 💡 |
+| 64 | **Tag und Nacht (echte Uhrzeit):** nachts andere Gegner in manchen Gebieten (Untote im Düsterwald, Irrlichter in den Sümpfen) | 💡 |
+| 65 | **Gegner mit Eigenheiten:** Goblin schnappt sich Gold und flieht (2 Runden Zeit), Kröte schluckt einen Trank, Spinne fesselt eine Runde | 💡 |
+| 66 | **Umgebung im Kampf:** ein Objekt pro Gebiet, einmal nutzbar – Pulverfass in der Mine, Spiegel in der Kristallhöhle, einstürzende Säule in den Ruinen | 💡 |
+| 67 | **Kampfwertung S–C:** nach Runden, verlorenen LP und Tränken – S gibt etwas mehr Beute und zählt für Erfolge | 💡 |
+| 68 | **Herausforderung pro Kampf:** optionale Aufgabe vor dem Kampf („ohne Trank“, „in 4 Runden“) mit Bonus | 💡 |
+| 69 | **Neue Dungeon-Räume:** Spiegelraum (gegen den eigenen Schatten), Blutbrunnen (LP gegen starken Segen), Gefangener (wird Begleiter oder Händler), Arena (drei Wellen) | 💡 |
+| 70 | **Versteckter Boss:** mit einer Bedingung im Lauf (alle Elite-Räume, Rätsel fehlerfrei) wartet hinter dem Endboss ein geheimer Boss mit eigener Beute | 💡 |
+| 71 | **Verfluchte Türen:** ein Fluch für den Rest des Laufs (Gegner +20 % Schaden), dafür eine Extra-Truhe am Ende | 💡 |
+| 72 | **Waffen mit Geschichte:** Waffen zählen Siege, nach 100 Wölfen heisst sie „Wolfsbann“ und macht +10 % gegen Wölfe | 💡 |
+| 73 | **Trophäenhalle im Dorf:** Boss-Trophäen aufhängen, jede mit kleinem dauerhaftem Bonus | 💡 |
+| 74 | **Haustier aus seltenem Ei:** schlüpft nach einigen Kämpfen, läuft im Kampf mit, kleiner Effekt (findet Gold, warnt bei Absichten) | 💡 |
+| 75 | **Rote Linie durch die Gebiete:** ein Gegenspieler (Kultist, der Xal'Zar befreien will) taucht überall kurz auf, Story-Kapitel nach jedem Gebietsboss, Finale im Abgrund | 💡 |
+| 76 | **Entscheidungen mit Weltfolgen:** Krummzahn verschonen macht das Goblin-Lager zum Handelsposten, töten gibt mehr Beute und mehr Goblin-Überfälle | 💡 |
+| 77 | **Täglicher Dungeon:** fester Seed für alle (gleicher Weg, gleiche Elite, gleiche Segen), Tages-Rangliste nach Zeit | 💡 |
+| 78 | **Würfelpoker in der Taverne:** Minispiel gegen Gäste um Gold, mit Einsatzlimit | 💡 |
+| 79 | **Hardcore-Held:** eigener Charakter mit nur einem Leben, eigene Rangliste | 💡 |
