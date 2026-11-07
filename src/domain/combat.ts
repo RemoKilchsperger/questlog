@@ -106,6 +106,7 @@ import {
   type EliteAffix,
 } from "./elites";
 import { HEROIC_BOSS_LOOT_CHANCE, HEROIC_REWARD_FACTOR } from "./heroic";
+import { PACK_MEMBER, packAdds } from "./packs";
 import { getSetHpMultiplier } from "./bossSets";
 import { freshStunImmunity, MANA_REGEN, maxManaFor, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
@@ -356,7 +357,8 @@ export type BattleEvent =
   /** Der Gegner raubt dem Helden Mana */
   | { type: "manaBurn"; amount: number }
   /** Mit `add`: nur ein Begleiter fällt, der Kampf geht weiter */
-  | { type: "defeated"; side: Side; add?: string }
+  /** `pack`: Das erste Tier eines Rudels fällt, seine Artgenossen kämpfen weiter */
+  | { type: "defeated"; side: Side; add?: string; pack?: true }
   | { type: "fled"; goldLost: number }
   /** Klassen-Regeneration (Kleriker) am Ende der Runde */
   | { type: "regen"; heal: number };
@@ -453,6 +455,8 @@ export interface BattleState {
   heroic?: boolean;
   /** Seltener Gegner (rares.ts): Id der Variante – `elite` sind seine festen Modifikatoren */
   rare?: string;
+  /** Rudel (packs.ts): Die Begleiter sind Artgenossen – fällt der Gegner, geht der Kampf gegen sie weiter */
+  pack?: boolean;
   /** Hauptwaffe des Helden – ihre Schadensart zählt bei normalen Angriffen (matchups.ts) */
   heroWeapon?: SkillWeapon | null;
   /** Endlos-Turm: Segen des Laufs (tower.ts) – wirken im Kampf (Fokus, Blutdurst, Henker, Dornen, Alchemie, Zweiter Atem) */
@@ -510,6 +514,7 @@ export interface BattleState {
 /**
  * Beginnt einen Kampf. `heroHp` setzt die Lebenspunkte des Helden – in Dungeons
  * bleiben sie zwischen den Kämpfen erhalten (sonst startet man mit vollen LP).
+ * `pack`: ein Rudel aus schwächeren Artgenossen statt eines Gegners (packs.ts).
  */
 export function startBattle(
   id: string,
@@ -518,8 +523,10 @@ export function startBattle(
   creature: CreatureDef,
   heroHp: number = hero.maxHp,
   elite: readonly EliteAffix[] = [],
+  pack = false,
 ): BattleState {
-  const enemy = eliteStats(getCreatureStats(creature), elite);
+  const single = eliteStats(getCreatureStats(creature), elite);
+  const enemy = pack ? { ...single, maxHp: Math.round(single.maxHp * PACK_MEMBER.hp), damage: single.damage * PACK_MEMBER.damage } : single;
   return {
     id,
     creatureId: creature.id,
@@ -550,7 +557,7 @@ export function startBattle(
     enemyEffects: {},
     // „Wachsam“: Der erste gegnerische Angriff wird geblockt
     heroEffects: hasEffect(hero.itemEffects, "vigilant") ? { bulwark: true } : {},
-    adds: enemyAdds(creature, elite)
+    adds: (pack ? packAdds(creature) : enemyAdds(creature, elite))
       .flatMap((add) => Array.from({ length: add.count }, () => add))
       .map((add, i) => {
         // Begleiter kämpfen auf dem Level ihres Bosses – so wirken ihre Faktoren bei jedem Boss gleich
@@ -566,6 +573,7 @@ export function startBattle(
         };
       }),
     ...(elite.length > 0 && { elite: [...elite] }),
+    ...(pack && { pack }),
     ...withBossTurn(creature.id),
     status: "active",
     log: [],
@@ -602,6 +610,7 @@ export function livingAdds(state: BattleState): BattleAdd[] {
 /** Wählt das Ziel des Helden: einen lebenden Begleiter (uid) oder den Boss (undefined). */
 export function setTarget(state: BattleState, target: string | undefined): BattleState {
   if (target !== undefined && !livingAdds(state).some((a) => a.uid === target)) throw new Error("Dieses Ziel gibt es nicht.");
+  if (target === undefined && state.enemy.hp === 0) throw new Error("Dieses Ziel gibt es nicht.");
   return { ...state, target };
 }
 
@@ -874,11 +883,26 @@ export function attackRound(
   // Der Boss zuerst, dann die Begleiter – Kopien, die sich in dieser Runde ändern
   const boss: Foe = { creatureId: state.creatureId, c: state.enemy, fx: state.enemyEffects };
   const adds: Foe[] = (state.adds ?? []).map((a) => ({ add: a.uid, creatureId: a.creatureId, role: a.role, cast: a.cast, c: a.combatant, fx: a.effects }));
-  /** Ein gefallener Begleiter – der Kampf geht weiter. Skill „Seuche“: Sein Gift springt auf einen anderen über. */
+  /** Rudel (packs.ts): Der Kampf läuft, bis alle Tiere liegen – nicht nur das erste */
+  const pack = !!state.pack;
+  /** Steht noch ein Gegner? Sonst ist der Kampf gewonnen. */
+  const standing = () => boss.c.hp > 0 || (pack && adds.some((f) => f.c.hp > 0));
+  /** Das erste Tier des Rudels liegt schon – sein Fall ist gemeldet */
+  let packLeadDown = pack && state.enemy.hp === 0;
+  /**
+   * Ein gefallener Begleiter – der Kampf geht weiter. Im Rudel auch das erste Tier, solange ein anderes steht.
+   * Skill „Seuche“: Sein Gift springt auf einen anderen über.
+   */
   const addDown = (foe: Foe) => {
-    if (!foe.add || foe.c.hp !== 0) return;
-    events.push({ type: "defeated", side: "enemy", add: foe.add });
-    if (!foe.role) addsDown++;
+    if (foe.c.hp !== 0) return;
+    if (foe.add) {
+      events.push({ type: "defeated", side: "enemy", add: foe.add });
+      if (!foe.role) addsDown++;
+    } else {
+      if (!pack || packLeadDown || !adds.some((f) => f.c.hp > 0)) return;
+      packLeadDown = true;
+      events.push({ type: "defeated", side: "enemy", pack: true });
+    }
     const poison = foe.fx.poison;
     if (!poison || rankIn(skills, "plague") === 0) return;
     const next = [boss, ...adds].find((f) => f !== foe && f.c.hp > 0 && !f.fx.poison && matchupFactor(f.creatureId, "poison") > 0);
@@ -943,7 +967,9 @@ export function attackRound(
   const takenBy = (foe: Foe) => (foe === boss ? bossTurnTakenFactor(turn) : 1);
   const foes = [boss, ...adds];
   const living = () => foes.filter((f) => f.c.hp > 0);
-  const target = adds.find((f) => f.add === state.target && f.c.hp > 0) ?? boss;
+  /** Ohne gewähltes Ziel geht es gegen den Boss – im Rudel gegen das nächste Tier, wenn das erste liegt */
+  const fallback = boss.c.hp > 0 || !pack ? boss : (adds.find((f) => f.c.hp > 0) ?? boss);
+  const target = adds.find((f) => f.add === state.target && f.c.hp > 0) ?? fallback;
   const aoe = ability?.aoe;
   // Verstärkungen wirken auf Schaden und Rüstung, die Lebenspunkte bleiben die echten.
   const strongBase = buffedHero(state);
@@ -970,7 +996,7 @@ export function attackRound(
     // Meisteralchemist: Wurftränke wirken stärker
     const power = state.potionPower ?? 1;
     const blast = effect.throw === "blast";
-    const aim = adds.find((f) => f.add === state.thrownAt && f.c.hp > 0) ?? boss;
+    const aim = adds.find((f) => f.add === state.thrownAt && f.c.hp > 0) ?? fallback;
     const missed = !blast && aim === boss && hidden;
     events.push({ type: "thrown", potionId: thrown.id, ...(!blast && foeTag(aim)), ...(missed && { missed }) });
     for (const foe of (blast ? living() : missed ? [] : [aim]).filter((f) => !(f === boss && hidden))) {
@@ -1057,6 +1083,8 @@ export function attackRound(
   const armorOf = (foe: Foe) => (ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0))));
   /** Lichkönig: Fällt er, solange das Seelengefäss geladen ist, steht er einmal wieder auf. */
   const rise = () => {
+    // Nur wer ein Seelengefäss hat – sonst stünde jeder Gegner auf, dessen Begleiter mit ihm fallen
+    if (turn?.vessel === undefined) return;
     const charges = Math.min(VESSEL_MAX, (turn?.vessel ?? 0) + addsDown);
     if (boss.c.hp > 0 || risen || charges <= 0 || hero.hp <= 0) return;
     risen = true;
@@ -1201,7 +1229,7 @@ export function attackRound(
   };
   // Wer abwehrt, greift nicht an
   const volley = () => {
-    for (let i = 0; i < (defending ? 0 : abilityHits(ability, hero.hp, hero.maxHp)) && boss.c.hp > 0 && hero.hp > 0; i++) {
+    for (let i = 0; i < (defending ? 0 : abilityHits(ability, hero.hp, hero.maxHp)) && standing() && hero.hp > 0; i++) {
       if (aoe === "all") {
         for (const foe of living()) strike(foe);
       } else if (aoe === "spread") {
@@ -1222,11 +1250,11 @@ export function attackRound(
     echoShare = 1;
   }
   // Finte: Der normale Angriff trifft ein zweites Mal
-  if (feint && target.c.hp > 0 && boss.c.hp > 0) strike(target);
+  if (feint && target.c.hp > 0 && standing()) strike(target);
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
-  if (plainAttack && state.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
+  if (plainAttack && state.heroClass === "duelist" && target.c.hp > 0 && standing() && rng() < DUELIST_EXTRA_HIT) strike(target);
   // Item-Effekt „Kettenblitz“: Ein normaler Angriff springt auf einen zweiten Gegner über
-  if (plainAttack && hasEffect(effects, "chainLightning") && boss.c.hp > 0 && rng() < EFFECT.chainLightning.chance) {
+  if (plainAttack && hasEffect(effects, "chainLightning") && standing() && rng() < EFFECT.chainLightning.chance) {
     const others = living().filter((f) => f !== target);
     if (others.length > 0) strike(others[Math.floor(rng() * others.length)], EFFECT.chainLightning.share);
   }
@@ -1257,7 +1285,7 @@ export function attackRound(
   for (const foe of foes) {
     for (const kind of OVER_TIME) {
       const effect = foe.fx[kind];
-      if (effect && foe.c.hp > 0 && boss.c.hp > 0) {
+      if (effect && foe.c.hp > 0 && standing()) {
         const damage = Math.max(1, Math.round(effect.damage * vulnerableOf(foe) * takenBy(foe)));
         foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - damage) };
         events.push({ type: kind, target: "enemy", damage, ...foeTag(foe) });
@@ -1265,7 +1293,7 @@ export function attackRound(
         foe.fx = { ...foe.fx, [kind]: next };
         addDown(foe);
         // Blutsturz: Läuft das Bluten aus, platzt die Wunde
-        const burst = kind === "bleed" && !next && foe.c.hp > 0 && boss.c.hp > 0 ? bloodburstDamage(skills, effect.damage) : 0;
+        const burst = kind === "bleed" && !next && foe.c.hp > 0 && standing() ? bloodburstDamage(skills, effect.damage) : 0;
         if (burst > 0) {
           const dealt = Math.max(1, Math.round(burst * vulnerableOf(foe) * takenBy(foe)));
           foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - dealt) };
@@ -1277,7 +1305,7 @@ export function attackRound(
   }
   for (const kind of OVER_TIME) {
     const effect = heroEffects[kind];
-    if (effect && boss.c.hp > 0 && hero.hp > 0) {
+    if (effect && standing() && hero.hp > 0) {
       // Gegengift: weniger Schaden durch Gift, Feuer und Bluten
       const damage = Math.max(1, Math.round(effect.damage * dotTakenFactor(skills)));
       hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
@@ -1301,7 +1329,7 @@ export function attackRound(
   /** Diese Boss-Fähigkeit hat den Helden erreicht – Neferets Fluch der Mumie legt den Fluch */
   let abilityLanded: string | undefined;
   const stunned = new Set<Foe>();
-  if (boss.c.hp > 0 && hero.hp > 0) {
+  if (standing() && hero.hp > 0) {
     // Ein abgetauchter Boss ist auch nicht zu betäuben
     for (const foe of aoe === "all" ? living() : [target]) {
       if (foe.c.hp > 0 && !(foe === boss && hidden) && stunLands(ability, rng, skills, !!foe.fx.burn)) stunned.add(foe);
@@ -1350,7 +1378,7 @@ export function attackRound(
     status = hero.hp === 0 ? "lost" : "won";
     events.push({ type: "defeated", side: hero.hp === 0 ? "hero" : "enemy" });
   };
-  if (boss.c.hp === 0) {
+  if (!standing()) {
     enemyDown();
   } else if (hero.hp === 0) {
     status = "lost";
@@ -1376,7 +1404,9 @@ export function attackRound(
     let blocked = false;
     /** Eingefroren durch Frostbiss oder eine Fähigkeit? */
     const freezeOf = (foe: Foe) => (frozenByItem.has(foe) ? { freeze: true as const } : freezeFlag(ability));
-    if (stunned.has(boss) && !boss.fx.stunImmunity) {
+    if (boss.c.hp === 0) {
+      // Rudel: Das erste Tier liegt – es greifen nur noch seine Artgenossen an
+    } else if (stunned.has(boss) && !boss.fx.stunImmunity) {
       bossStunned = true;
       events.push({ type: "stunned", ...freezeOf(boss) });
       markStunned(boss);
@@ -1463,6 +1493,7 @@ export function attackRound(
           if (counter > 0) {
             boss.c = { ...boss.c, hp: Math.max(0, boss.c.hp - counter) };
             events.push({ type: "counter", damage: counter });
+            addDown(boss);
           }
         }
         // Lebensentzug der Boss-Fähigkeit bzw. Elite „Vampirisch“
@@ -1502,7 +1533,7 @@ export function attackRound(
     // Begleiter, solange Boss und Held stehen: Die mit Aufgabe setzen ihre Fähigkeit ein
     // (bossMechanics.ts), sonst je ein normaler Angriff
     for (const foe of adds) {
-      if (foe.c.hp === 0 || boss.c.hp === 0 || hero.hp === 0) continue;
+      if (foe.c.hp === 0 || !standing() || hero.hp === 0) continue;
       const tag = { add: foe.add! };
       if (foe.role === "healer") {
         // Heilritual: Ein Treffer oder eine Betäubung unterbricht es – angreifen tut der Heiler nie
@@ -1570,7 +1601,7 @@ export function attackRound(
     // Zorn des Bollwerks: ein Stapel pro Runde, in der der Held abgewehrt, geblockt oder pariert hat
     if (warded && rankIn(skills, "wrath") > 0) heroEffects = { ...heroEffects, wrath: Math.min(SKILL.wrath.max, (heroEffects.wrath ?? 0) + 1) };
     rise();
-    if (boss.c.hp === 0) {
+    if (!standing()) {
       enemyDown();
     } else if (hero.hp === 0) {
       status = "lost";
@@ -1612,7 +1643,7 @@ export function attackRound(
 
   // Item-Effekt „Unbeugsam“: einmal pro Kampf mit 1 LP überleben (vor dem Zweiten Atem des Turms)
   let endured = state.endured;
-  if (status === "lost" && hero.hp === 0 && boss.c.hp > 0 && !endured && hasEffect(effects, "unyielding")) {
+  if (status === "lost" && hero.hp === 0 && standing() && !endured && hasEffect(effects, "unyielding")) {
     const last = events.at(-1);
     if (last?.type === "defeated" && last.side === "hero") events.pop();
     hero = { ...hero, hp: 1 };
@@ -1623,7 +1654,7 @@ export function attackRound(
 
   // Turm-Segen „Zweiter Atem“: Wer fällt, steht einmal pro Lauf wieder auf (der Gegner lebt noch)
   let secondWindUsed = state.secondWindUsed;
-  if (status === "lost" && hero.hp === 0 && boss.c.hp > 0 && !secondWindUsed && stacks(state.blessings, "secondWind") > 0) {
+  if (status === "lost" && hero.hp === 0 && standing() && !secondWindUsed && stacks(state.blessings, "secondWind") > 0) {
     const last = events.at(-1);
     if (last?.type === "defeated" && last.side === "hero") events.pop();
     const heal = Math.round(hero.maxHp * BLESSING.secondWind);
@@ -1681,8 +1712,8 @@ export function attackRound(
           effects: tickEnemyEffects(adds[i].fx),
         })),
       }),
-      // Ist das gewählte Ziel gefallen, geht es wieder gegen den Boss
-      target: target.add !== undefined && target.c.hp > 0 ? target.add : undefined,
+      // Ist das gewählte Ziel gefallen, geht es wieder gegen den Boss – im Rudel gegen das nächste Tier, wenn das erste liegt
+      target: target.add !== undefined && target.c.hp > 0 ? target.add : boss.c.hp > 0 || !pack ? undefined : adds.find((f) => f.c.hp > 0)?.add,
       ...(phase && { phase }),
       ...(nextTurn && { bossTurn: nextTurn }),
       bossShield: bossShield > 0 ? bossShield : undefined,

@@ -29,6 +29,7 @@ import {
 import { formatRespawn, getCreature, getDungeon, respawnLeft, startRespawn, type AreaDef, type BossRespawns, type CreatureDef } from "../domain/creatures";
 import { rollElite, type EliteAffix } from "../domain/elites";
 import { getAreaMimic, rollAreaChest, type AreaChest } from "../domain/areaChests";
+import { packReward, rollPack } from "../domain/packs";
 import { getRare, rareCreature, rareReward, rollRare } from "../domain/rares";
 import {
   chestReward,
@@ -1735,8 +1736,10 @@ export const useGameStore = create<GameState>()(
           const bounty = heroic ? null : openBounty(dailyQuests, creatureId, village.board);
           // Selten erscheint statt der Kreatur ihre benannte Variante (nicht bei einem Steckbrief)
           const rare = heroic || bounty ? null : rollRare(creatureId);
-          const elite = heroic ? heroicAffixes(creatureId) : (bounty ?? (rare ? [...rare.affixes] : rollElite(creature)));
-          const started = startBattle(newId(), character.name, hero, rare ? rareCreature(rare) : creature, hero.maxHp, elite);
+          // Manchmal kommt ein Rudel aus drei schwächeren Artgenossen – nie als Elite
+          const pack = !heroic && !bounty && !rare && rollPack(creatureId);
+          const elite = heroic ? heroicAffixes(creatureId) : (bounty ?? (rare ? [...rare.affixes] : pack ? [] : rollElite(creature)));
+          const started = startBattle(newId(), character.name, hero, rare ? rareCreature(rare) : creature, hero.maxHp, elite, pack);
           const battle = heroic ? makeHeroic(started) : rare ? { ...started, rare: rare.id } : started;
           set({ battle, battleReward: null, areaChest: null, dungeon: null, tower: null, raid: null, meal: null, mealInUse: meal });
           EventBus.emit("battle:started", { battle });
@@ -2128,11 +2131,14 @@ export const useGameStore = create<GameState>()(
           // Ein Mimic gibt Elite-Beute, auch ohne Elite-Modifikator
           const mimic = isMimic(creature.id);
           const treasureMap = findTreasureMap(elite || heroic || mimic || !!creature.boss || !!creature.midBoss);
+          const uid = newId();
           const raw = mimic
-            ? mimicReward(creature, soloHero(), newId())
+            ? mimicReward(creature, soloHero(), uid)
             : rare
-              ? rareReward(rare, soloHero(), newId())
-              : rollBattleReward(creature, soloHero(), newId(), Math.random, adds, elite, heroic);
+              ? rareReward(rare, soloHero(), uid)
+              : result.state.pack
+                ? packReward(rollBattleReward(creature, soloHero(), uid), creature, uid)
+                : rollBattleReward(creature, soloHero(), uid, Math.random, adds, elite, heroic);
           // Statue im Dorf: mehr XP aus Solo-Kämpfen (der Koop bleibt unberührt)
           const rolled = { ...raw, xp: statueXp(raw.xp, tiers().statue) };
           if (dungeon) {

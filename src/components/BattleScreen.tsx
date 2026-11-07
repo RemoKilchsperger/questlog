@@ -42,6 +42,7 @@ import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { questsForCreature, trackedQuests } from "../domain/quests";
+import { PACK_LOOT_FACTOR, PACK_REWARD_FACTOR } from "../domain/packs";
 import { RARE_REWARD_FACTOR } from "../domain/rares";
 import { skillPointsNote } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
@@ -618,6 +619,10 @@ function Battle({ battle }: { battle: BattleState }) {
               <Hint text="Seltener Gegner: stärker und mit festen Modifikatoren, dafür viel Erfahrung, viel Gold und sicher ein episches oder legendäres Item.">
                 <span className="ml-2 text-base text-epic">✦ Selten</span>
               </Hint>
+            ) : battle.pack ? (
+              <Hint text="Rudel: drei schwächere Artgenossen auf einmal. Gewonnen ist erst, wenn alle liegen – wähle dein Ziel, Flächen-Fähigkeiten treffen alle. Dafür mehr Erfahrung, mehr Gold und öfter ein Item.">
+                <span className="ml-2 text-base text-rare">🐺 Rudel</span>
+              </Hint>
             ) : battle.heroic ? (
               <Hint text={heroicText(battle.creatureId)}>
                 <span className="ml-2 text-base text-epic">☠️ Heroisch</span>
@@ -965,6 +970,11 @@ function BattleResult({ battle }: { battle: BattleState }) {
               episches oder legendäres Item.
               {reward.rare.first && <span className="block font-bold">Neu in deiner Sammlung!</span>}
             </motion.p>
+          ) : battle.pack ? (
+            <p className="text-rare">
+              🐺 Rudel besiegt: {Math.round((PACK_REWARD_FACTOR - 1) * 100)} % mehr Erfahrung und Gold,{" "}
+              {Math.round((PACK_LOOT_FACTOR - 1) * 100)} % höhere Chance auf ein Item.
+            </p>
           ) : battle.heroic ? (
             <p className="text-epic">
               ☠️ Heroischer Boss besiegt: {Math.round((HEROIC_REWARD_FACTOR - 1) * 100)} % mehr Erfahrung und Gold.
@@ -1364,7 +1374,13 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return phase ? `${battle.enemy.name}: ${phase.icon} ${phase.name}! ${phase.description}` : `${battle.enemy.name} wird wütend!`;
     }
     case "defeated":
-      return e.side === "hero" ? "Du wurdest besiegt." : e.add ? `${enemy} geht zu Boden.` : `${enemy} ist besiegt!`;
+      return e.side === "hero"
+        ? "Du wurdest besiegt."
+        : e.add || e.pack
+          ? `${enemy} geht zu Boden.`
+          : battle.pack
+            ? "Das Rudel ist besiegt!"
+            : `${enemy} ist besiegt!`;
     case "fled":
       return e.goldLost > 0 ? `Du fliehst und verlierst ${e.goldLost} Gold.` : "Du fliehst.";
     case "ability":

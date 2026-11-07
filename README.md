@@ -52,6 +52,7 @@ src/
     heroic.ts        Heroische Bosse: mehr LP, Zusatzmechanik, mehr Boss-Beute
     dungeonPaths.ts  Wege durch die Dungeons: Gabelungen, Türen, Schrein, Händler, Falle, Rätsel, Truhe (Mimic)
     areaChests.ts    Seltene Truhe nach normalen Kämpfen, auch mit Mimic
+    packs.ts         Rudel-Kämpfe: drei schwächere Artgenossen statt eines Gegners
     treasureMaps.ts  Schatzkarten: seltener Fund, Schatzraum im Solo-Dungeon, Schatz-Rezepte
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse

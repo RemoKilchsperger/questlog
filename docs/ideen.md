@@ -128,7 +128,7 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | # | Idee | Status |
 |---|---|---|
 | 62 | **Seltene Gegner:** mit 1–2 % Chance statt eines normalen Gegners eine benannte Variante („Silberpelz, der Leitwolf“), mit eigener Beute und Sammlung | ✅ 24 seltene Gegner in den Gebieten, `rares.ts`, docs/seltene-gegner.md |
-| 63 | **Rudel-Kämpfe:** ab und zu 2–3 schwache Gegner gleichzeitig statt einem starken – Zielwahl und Flächenfähigkeiten werden wichtig | 💡 |
+| 63 | **Rudel-Kämpfe:** ab und zu 2–3 schwache Gegner gleichzeitig statt einem starken – Zielwahl und Flächenfähigkeiten werden wichtig | ✅ 7 % Chance, immer 3 Tiere, alle gewöhnlichen Gebietskreaturen, `packs.ts`, docs/rudel-kaempfe.md |
 | 64 | **Tag und Nacht (echte Uhrzeit):** nachts andere Gegner in manchen Gebieten (Untote im Düsterwald, Irrlichter in den Sümpfen) | 💡 |
 | 65 | **Gegner mit Eigenheiten:** Goblin schnappt sich Gold und flieht (2 Runden Zeit), Kröte schluckt einen Trank, Spinne fesselt eine Runde | 💡 |
 | 66 | **Umgebung im Kampf:** ein Objekt pro Gebiet, einmal nutzbar – Pulverfass in der Mine, Spiegel in der Kristallhöhle, einstürzende Säule in den Ruinen | 💡 |
