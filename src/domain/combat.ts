@@ -451,6 +451,8 @@ export interface BattleState {
   elite?: EliteAffix[];
   /** Heroischer Boss (heroic.ts): `elite` ist seine Zusatzmechanik, er zählt aber nicht als Elite */
   heroic?: boolean;
+  /** Seltener Gegner (rares.ts): Id der Variante – `elite` sind seine festen Modifikatoren */
+  rare?: string;
   /** Hauptwaffe des Helden – ihre Schadensart zählt bei normalen Angriffen (matchups.ts) */
   heroWeapon?: SkillWeapon | null;
   /** Endlos-Turm: Segen des Laufs (tower.ts) – wirken im Kampf (Fokus, Blutdurst, Henker, Dornen, Alchemie, Zweiter Atem) */

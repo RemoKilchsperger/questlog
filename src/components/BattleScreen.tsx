@@ -42,6 +42,7 @@ import { heroicDescription as heroicText, HEROIC_REWARD_FACTOR, isHeroicUnlocked
 import { getBossItems, getItemStats } from "../domain/items";
 import { POINTS_PER_LEVEL } from "../domain/leveling";
 import { questsForCreature, trackedQuests } from "../domain/quests";
+import { RARE_REWARD_FACTOR } from "../domain/rares";
 import { skillPointsNote } from "../domain/skills";
 import type { ItemStats } from "../domain/types";
 import { DRINK_POTIONS, getPotion, isThrowable, potionEffectText, potionHeal, THROW_POTIONS } from "../domain/potions";
@@ -423,16 +424,13 @@ function CreatureRow({ creature, heroLevel }: { creature: CreatureDef; heroLevel
           </Hint>
           {dangerText && <span className={danger > 0 ? "text-danger" : "text-xp"}>{dangerText}</span>}
         </div>
-        {hasBossScript(creature.id) ? (
-          <p className="mt-1 text-xs text-danger">❓ Kämpft mit eigener Taktik – im Kampf siehst du jede Runde, was er vorhat.</p>
-        ) : (
+        {!hasBossScript(creature.id) &&
           bossAbilities.map((a) => (
             <p key={a.id} className="mt-1 text-xs text-danger">
               Fähigkeit: {a.icon} {a.name} – {bossAbilities.length > 1 ? "im Wechsel " : ""}alle {a.every} Runden.{" "}
               {a.description}
             </p>
-          ))
-        )}
+          ))}
         <BossDrops creature={creature} />
       </div>
       <div className="flex shrink-0 flex-col items-stretch gap-1.5">
@@ -615,8 +613,12 @@ function Battle({ battle }: { battle: BattleState }) {
             ) : (
               area.name
             )}{" "}
-            <span className="text-base text-muted">· {creature.name}</span>
-            {battle.heroic ? (
+            <span className="text-base text-muted">· {battle.rare ? battle.enemy.name : creature.name}</span>
+            {battle.rare ? (
+              <Hint text="Seltener Gegner: stärker und mit festen Modifikatoren, dafür viel Erfahrung, viel Gold und sicher ein episches oder legendäres Item.">
+                <span className="ml-2 text-base text-epic">✦ Selten</span>
+              </Hint>
+            ) : battle.heroic ? (
               <Hint text={heroicText(battle.creatureId)}>
                 <span className="ml-2 text-base text-epic">☠️ Heroisch</span>
               </Hint>
@@ -952,7 +954,18 @@ function BattleResult({ battle }: { battle: BattleState }) {
               </span>
             </motion.p>
           )}
-          {battle.heroic ? (
+          {reward.rare ? (
+            <motion.p
+              className="text-epic"
+              initial={{ scale: 0.6 }}
+              animate={{ scale: [0.6, 1.1, 1] }}
+              transition={{ duration: 0.6 }}
+            >
+              ✦ Seltener Gegner besiegt: {RARE_REWARD_FACTOR}-fache Erfahrung, {RARE_REWARD_FACTOR}-faches Gold und sicher ein
+              episches oder legendäres Item.
+              {reward.rare.first && <span className="block font-bold">Neu in deiner Sammlung!</span>}
+            </motion.p>
+          ) : battle.heroic ? (
             <p className="text-epic">
               ☠️ Heroischer Boss besiegt: {Math.round((HEROIC_REWARD_FACTOR - 1) * 100)} % mehr Erfahrung und Gold.
             </p>

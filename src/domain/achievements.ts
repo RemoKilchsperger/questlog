@@ -14,6 +14,7 @@ import { AREAS, DUNGEONS } from "./creatures";
 import { COOP_BOSSES, type CoopStats } from "./coopCombat";
 import { getLevel } from "./leveling";
 import { QUESTS, type QuestLog } from "./quests";
+import { RARES } from "./rares";
 import type { HeroClassId } from "./heroClasses";
 import { HEROIC_AFFIX } from "./heroic";
 import type { Character } from "./types";
@@ -54,6 +55,8 @@ export interface Records {
   heroicDefeated: string[];
   /** Erfolgreich verteidigte Überfälle aufs Dorf (raids.ts) */
   raidsDefended: number;
+  /** Ids besiegter seltener Gegner (rares.ts) – die Sammlung */
+  raresDefeated: string[];
 }
 
 export const EMPTY_RECORDS: Records = {
@@ -75,6 +78,7 @@ export const EMPTY_RECORDS: Records = {
   abilitiesSeen: [],
   heroicDefeated: [],
   raidsDefended: 0,
+  raresDefeated: [],
 };
 
 /** Alles, woraus sich der Fortschritt berechnet. */
@@ -199,6 +203,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   // Sammeln
   { id: "treasure-hunter", name: "Schatzjäger", icon: "💎", category: "collection", description: "{n} legendäre Items gefunden", tiers: [1, 10, 30], title: "Schatzjäger", progress: (i) => i.records.legendarySeen.length },
   { id: "boss-collector", name: "Boss-Sammler", icon: "👑", category: "collection", description: "{n} Boss-Items gesammelt", tiers: [5, 20, BOSS_ITEMS.length], title: "Sammler", progress: (i) => i.bossCollection.length },
+  { id: "rare-hunter", name: "Seltenheitenjäger", icon: "🎯", category: "collection", description: "{n} verschiedene seltene Gegner besiegt", tiers: [1, 12, RARES.length], title: "Seltenheitenjäger", progress: (i) => i.records.raresDefeated.length },
   { id: "master-smith", name: "Meisterschmied", icon: "⚒️", category: "collection", description: "{n} Items auf die höchste Stufe verbessert", tiers: [1, 5, 15], title: "Meisterschmied", progress: (i) => i.records.maxedSeen.length },
   { id: "rich", name: "Wohlstand", icon: "🪙", category: "collection", description: "{n} Gold auf einmal besessen", tiers: [1000, 10000, 100000], title: "Goldbaron", progress: (i) => Math.max(i.records.maxGold, i.character.gold) },
   // Koop

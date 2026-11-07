@@ -3,6 +3,7 @@ import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { ADD_SKILLS, type AddRole } from "../domain/bossMechanics";
 import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL, getEliteAffix } from "../domain/elites";
+import { RARE_CHANCE, RARE_POWER, RARE_REWARD_FACTOR, RARES } from "../domain/rares";
 import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
 import { ITEM_EFFECTS } from "../domain/itemEffects";
 import { BLESSING_EVERY, BLESSINGS, BOSS_EVERY, TOWER_MIN_LEVEL } from "../domain/tower";
@@ -578,6 +579,15 @@ export function HelpScreen() {
               </li>
             ))}
           </ul>
+          <H>✦ Seltene Gegner</H>
+          <p>
+            Jede gewöhnliche Kreatur in den Gebieten hat eine seltene Variante mit eigenem Namen und eigener Farbe. Mit{" "}
+            {Math.round(RARE_CHANCE * 100)} % Chance erscheint sie statt der Kreatur, aber nicht, solange ein Steckbrief
+            für sie offen ist. Sie ist {Math.round((RARE_POWER - 1) * 100)} % stärker und hat feste Elite-Modifikatoren.
+            Dafür gibt es {RARE_REWARD_FACTOR}-fache Erfahrung, {RARE_REWARD_FACTOR}-faches Gold und sicher ein episches oder
+            legendäres Item. Für Quests zählt sie wie die gewöhnliche Kreatur.
+          </p>
+          <p>Für die Sammlung gibt es den Erfolg „Seltenheitenjäger“ ({RARES.length} seltene Gegner).</p>
           <H>Boss-Fähigkeiten und Absichten</H>
           <p>
             Bosse zeigen dir jede Runde, was sie vorhaben – bevor du handelst. Ihre besonderen Attacken kommen mit Ansage:
