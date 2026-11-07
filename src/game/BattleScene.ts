@@ -84,6 +84,9 @@ const BOSS_IMAGE_SCALE = 1.55;
 const ADD_X = [410, 655];
 const ADD_IMAGE_SCALE = 0.95;
 const ADD_SPRITE_SCALE = 6;
+/** Rudel: Das erste Tier ist kaum grösser als seine Artgenossen */
+const PACK_IMAGE_SCALE = 1.1;
+const PACK_SPRITE_SCALE = 7;
 const ADD_BAR_WIDTH = 90;
 /** Kleinere Lebensbalken tiefer, unter dem des Bosses */
 const ADD_BAR_Y = 112;
@@ -160,10 +163,10 @@ export class BattleScene extends Phaser.Scene {
     this.drawBackground(colors, this.setup.areaId);
 
     const hero = this.addBody(HERO_X, "hero", this.setup.heroSprite, HERO_SCALE, this.setup.heroWeapon);
-    const enemyScale = this.setup.boss ? 9.5 : 8;
+    const enemyScale = this.setup.boss ? 9.5 : battle.pack ? PACK_SPRITE_SCALE : 8;
     const enemyImage = `creature-img-${this.setup.enemySprite}`;
     const enemy = this.textures.exists(enemyImage)
-      ? this.addImageBody(ENEMY_X, enemyImage, this.setup.boss ? BOSS_IMAGE_SCALE : ENEMY_IMAGE_SCALE)
+      ? this.addImageBody(ENEMY_X, enemyImage, this.setup.boss ? BOSS_IMAGE_SCALE : battle.pack ? PACK_IMAGE_SCALE : ENEMY_IMAGE_SCALE)
       : this.addBody(ENEMY_X, `creature-${this.setup.enemySprite}`, getCreatureSprite(this.setup.enemySprite), enemyScale);
 
     this.addHeroGlow(hero);
@@ -219,6 +222,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     for (const add of battle.adds ?? []) if (add.combatant.hp === 0) this.showAddDefeat(add.uid, true);
+    if (battle.pack && battle.status === "active" && battle.enemy.hp === 0) this.showAddDefeat("enemy", true);
     if (battle.status === "won") this.showDefeat("enemy", true);
     if (battle.status === "lost") this.showDefeat("hero", true);
     if (battle.status === "fled") this.showFlight(true);
@@ -469,7 +473,7 @@ export class BattleScene extends Phaser.Scene {
       this.time.delayedCall(delay, () => (sideHit ? this.sideImpact(event) : this.animate(event, special)));
       delay +=
         event.type === "defeated" || event.type === "fled"
-          ? event.type === "defeated" && event.add
+          ? event.type === "defeated" && (event.add || event.pack)
             ? 450
             : 900
           : event.type === "bossPhase" || event.type === "explosion"
@@ -806,6 +810,8 @@ export class BattleScene extends Phaser.Scene {
       this.sparkles(hero.homeX, GROUND_Y - 60, 0x9dffc8);
     } else if (event.type === "defeated" && event.add) {
       this.showAddDefeat(event.add, false);
+    } else if (event.type === "defeated" && event.pack) {
+      this.showAddDefeat("enemy", false);
     } else if (event.type === "defeated") {
       music.stop(this, 0.3);
       this.showDefeat(event.side, false);
@@ -900,7 +906,8 @@ export class BattleScene extends Phaser.Scene {
     }
     const scaleX = this.bossScale * grow;
     const scaleY = this.bossScale * grow * squash;
-    if (boss.body.angle !== angle || boss.body.scaleX !== scaleX || boss.body.scaleY !== scaleY) {
+    // Ein gefallenes Tier des Rudels bleibt liegen
+    if (state.enemy.hp > 0 && (boss.body.angle !== angle || boss.body.scaleX !== scaleX || boss.body.scaleY !== scaleY)) {
       this.tweens.add({ targets: boss.body, angle, scaleX, scaleY, duration: 300, ease: "Sine.easeOut" });
     }
     // Heben und Senken über die Teile der Figur – der Container atmet weiter
@@ -2211,7 +2218,7 @@ export class BattleScene extends Phaser.Scene {
     fx.pillar(this, this.center(uid), 0xf4c95d, 50);
   }
 
-  /** Ein Begleiter fällt – er sinkt zusammen und verblasst, der Kampf geht weiter. */
+  /** Ein Begleiter (oder das erste Tier eines Rudels) fällt – er sinkt zusammen und verblasst, der Kampf geht weiter. */
   private showAddDefeat(uid: string, instant: boolean) {
     const f = this.fighters[uid];
     this.tweens.killTweensOf(f.body);

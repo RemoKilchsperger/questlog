@@ -3,6 +3,7 @@ import { MANA_REGEN, STUN_IMMUNITY_ROUNDS } from "../domain/abilities";
 import { ARMOR_CLASSES } from "../domain/armorClasses";
 import { ADD_SKILLS, type AddRole } from "../domain/bossMechanics";
 import { ELITE_AFFIXES, ELITE_CHANCE, ELITE_DOUBLE_LEVEL, getEliteAffix } from "../domain/elites";
+import { PACK_CHANCE, PACK_LOOT_FACTOR, PACK_MEMBER, PACK_REWARD_FACTOR, PACK_SIZE } from "../domain/packs";
 import { RARE_CHANCE, RARE_POWER, RARE_REWARD_FACTOR, RARES } from "../domain/rares";
 import { MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR } from "../domain/matchups";
 import { ITEM_EFFECTS } from "../domain/itemEffects";
@@ -588,6 +589,15 @@ export function HelpScreen() {
             legendäres Item. Für Quests zählt sie wie die gewöhnliche Kreatur.
           </p>
           <p>Für die Sammlung gibt es den Erfolg „Seltenheitenjäger“ ({RARES.length} seltene Gegner).</p>
+          <H>🐺 Rudel</H>
+          <p>
+            Mit {Math.round(PACK_CHANCE * 100)} % Chance kommt in einem Gebiet statt einer Kreatur ein Rudel aus {PACK_SIZE}{" "}
+            Artgenossen, jeder mit {Math.round(PACK_MEMBER.hp * 100)} % der Lebenspunkte und{" "}
+            {Math.round(PACK_MEMBER.damage * 100)} % des Schadens. Gewonnen ist erst, wenn alle liegen: Wähle dein Ziel
+            (Klick auf den Gegner), Flächen-Fähigkeiten treffen das ganze Rudel. Ein Rudel ist nie Elite. Dafür gibt es{" "}
+            {Math.round((PACK_REWARD_FACTOR - 1) * 100)} % mehr Erfahrung und Gold und eine{" "}
+            {Math.round((PACK_LOOT_FACTOR - 1) * 100)} % höhere Chance auf ein Item. Jedes Tier zählt für Aufträge.
+          </p>
           <H>Boss-Fähigkeiten und Absichten</H>
           <p>
             Bosse zeigen dir jede Runde, was sie vorhaben – bevor du handelst. Ihre besonderen Attacken kommen mit Ansage:

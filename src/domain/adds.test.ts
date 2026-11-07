@@ -63,6 +63,18 @@ const enemyHits = (events: BattleEvent[], add?: string) =>
 const add = (state: BattleState, uid: string) => state.adds!.find((a) => a.uid === uid)!;
 
 describe("Begleiter", () => {
+  it("fallen Boss und Begleiter zusammen, steht der Boss nicht wieder auf – das kann nur der Lichkönig", () => {
+    const battle = bossFight("axe-0");
+    const state = {
+      ...battle,
+      enemy: { ...battle.enemy, hp: 1 },
+      adds: battle.adds!.map((a) => ({ ...a, combatant: { ...a.combatant, hp: 1 } })),
+    };
+    const { state: next, events } = attackRound(state, rng(0.5), "axe-3");
+    expect(events.some((e) => e.type === "risen")).toBe(false);
+    expect(next.status).toBe("won");
+  });
+
   it("der Goblinhäuptling kämpft mit zwei zerbrechlichen Plünderern, normale Kreaturen allein", () => {
     const battle = startBattle("b", "Held", profileWith("sword-0"), chief);
     expect(battle.adds!.map((a) => a.uid)).toEqual(["add-1", "add-2"]);
