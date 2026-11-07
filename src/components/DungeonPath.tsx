@@ -17,7 +17,7 @@ import { BlessingChip } from "./TowerScreen";
 import { TreasureFindCard } from "./TreasureMaps";
 
 /** Kurzer Hinweis, was in die Truhe gewandert ist (nach einem Sieg oder aus einem Raum). */
-export function ChestDeposit({ reward }: { reward: BattleReward }) {
+export function ChestDeposit({ reward, label = "🧰 In die Truhe:" }: { reward: BattleReward; label?: string }) {
   const things = [reward.bossLoot, reward.loot].filter((i) => i !== null).length;
   const potions = (reward.potions?.count ?? 0) + (reward.buffPotion ? 1 : 0);
   // Nur was dazukam, mit Trennpunkten dazwischen (aus Fallen und Rätseln gibt es keine XP)
@@ -39,7 +39,7 @@ export function ChestDeposit({ reward }: { reward: BattleReward }) {
       animate={{ opacity: 1, y: 0 }}
       className="rounded-md bg-night-800 px-3 py-1.5 text-sm"
     >
-      🧰 In die Truhe:{" "}
+      {label}{" "}
       {parts.length === 0
         ? "nichts"
         : parts.map((part, i) => (
@@ -387,7 +387,17 @@ function TrapRoom({ room }: { room: Extract<DungeonRoom, { kind: "trap" }> }) {
 }
 
 /** Truhe: Öffnen oder Weitergehen – die Knöpfe teilen sich solo und Koop. */
-export function ChestChoices({ onChoose, disabled = false }: { onChoose: (choice: ChestChoice) => void; disabled?: boolean }) {
+export function ChestChoices({
+  onChoose,
+  disabled = false,
+  openHint = "Was drin ist, kommt in die Truhe – wenn es denn wirklich nur eine Truhe ist …",
+  leaveLabel = "🚪 Weitergehen",
+}: {
+  onChoose: (choice: ChestChoice) => void;
+  disabled?: boolean;
+  openHint?: string;
+  leaveLabel?: string;
+}) {
   return (
     <div className="grid w-full max-w-lg gap-2 sm:grid-cols-2">
       <motion.button
@@ -397,7 +407,7 @@ export function ChestChoices({ onChoose, disabled = false }: { onChoose: (choice
         className="flex flex-col items-center gap-1 rounded-md border-2 border-gold/60 bg-gold/10 p-3 hover:bg-gold/20 disabled:opacity-40"
       >
         <span className="font-pixel text-gold">🗝️ Öffnen</span>
-        <span className="text-xs text-muted">Was drin ist, kommt in die Truhe – wenn es denn wirklich nur eine Truhe ist …</span>
+        <span className="text-xs text-muted">{openHint}</span>
       </motion.button>
       <motion.button
         whileTap={{ scale: 0.95 }}
@@ -405,7 +415,7 @@ export function ChestChoices({ onChoose, disabled = false }: { onChoose: (choice
         onClick={() => onChoose("leave")}
         className="flex flex-col items-center gap-1 rounded-md border-2 border-night-600 bg-night-800 p-3 hover:bg-night-700 disabled:opacity-40"
       >
-        <span className="font-pixel text-parchment">🚪 Weitergehen</span>
+        <span className="font-pixel text-parchment">{leaveLabel}</span>
         <span className="text-xs text-muted">Kein Risiko, keine Beute.</span>
       </motion.button>
     </div>

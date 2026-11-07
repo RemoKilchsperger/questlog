@@ -10,6 +10,8 @@
 // ein einzelnes Ziel, dann eine gegen die ganze Gruppe (`target: "group"`).
 // Solo treffen beide den Helden, im Koop trifft die zweite alle (coopCombat.ts).
 
+import { AREAS } from "./creatures";
+
 export interface BossAbilityDef {
   /** Eindeutig – bei der ersten Fähigkeit eines Bosses gleich seiner Id */
   id: string;
@@ -204,8 +206,9 @@ export const BOSS_ABILITIES: readonly BossAbilityDef[] = [
     drain: 1,
     manaBurn: 15,
   },
-  // Mimics (Truhen im Dungeon, dungeonPaths.ts): kein Boss, aber mit eigenem Biss
-  ...["mimic-mine", "mimic-temple", "mimic-storm", "mimic-void"].map(
+  // Mimics (Truhen im Dungeon, dungeonPaths.ts, und nach Siegen in den Gebieten, areaChests.ts):
+  // kein Boss, aber mit eigenem Biss
+  ...["mimic-mine", "mimic-temple", "mimic-storm", "mimic-void", ...AREAS.flatMap((a) => (a.mimics ?? []).map((m) => m.id))].map(
     (id): BossAbilityDef => ({
       id,
       bossId: id,

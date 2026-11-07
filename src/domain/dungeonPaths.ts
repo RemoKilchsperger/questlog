@@ -4,7 +4,7 @@
 // Store (`dungeon`), gekämpft wird mit combat.ts.
 
 import { rollBattleReward, type BattleReward, type HeroCombatProfile } from "./combat";
-import { DUNGEONS, type AreaDef, type CreatureDef } from "./creatures";
+import { AREAS, DUNGEONS, type AreaDef, type CreatureDef } from "./creatures";
 import { ELITE_AFFIXES, type EliteAffix } from "./elites";
 import { getPotion, THROW_POTIONS } from "./potions";
 import { hash, seededRng } from "./random";
@@ -303,7 +303,9 @@ export function getMimic(dungeon: AreaDef): CreatureDef {
   return dungeon.mimic;
 }
 
-export const isMimic = (creatureId: string) => DUNGEONS.some((d) => d.mimic?.id === creatureId);
+/** Dungeon-Mimic oder Mimic aus einer Truhe in den Gebieten (areaChests.ts) */
+export const isMimic = (creatureId: string) =>
+  DUNGEONS.some((d) => d.mimic?.id === creatureId) || AREAS.some((a) => a.mimics?.some((m) => m.id === creatureId));
 
 /** Inhalt einer echten Truhe: Beute wie von einem Gegner des Dungeons, aber ohne Erfahrung. */
 export function chestReward(creature: CreatureDef, hero: HeroCombatProfile, uid: string, rng: () => number = Math.random): BattleReward {

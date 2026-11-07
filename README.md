@@ -51,6 +51,7 @@ src/
     bossIntents.ts   Absichten der Bosse: was sie jede Runde vorhaben, eigene Abläufe aller Bosse (Wut, Ansturm, Abtauchen, Panzer, Fluch …)
     heroic.ts        Heroische Bosse: mehr LP, Zusatzmechanik, mehr Boss-Beute
     dungeonPaths.ts  Wege durch die Dungeons: Gabelungen, Türen, Schrein, Händler, Falle, Rätsel, Truhe (Mimic)
+    areaChests.ts    Seltene Truhe nach normalen Kämpfen, auch mit Mimic
     treasureMaps.ts  Schatzkarten: seltener Fund, Schatzraum im Solo-Dungeon, Schatz-Rezepte
     combat.ts        Rundenbasierter Kampf, Kampfwerte des Helden, Belohnung
     coopCombat.ts    Koop-Kampf gegen Raid-Bosse
@@ -182,6 +183,7 @@ Klassen, Boss-Sets und leichte Rüstung kommen jeweils noch dazu.
 
 **Gebiete** (`creatures.ts`): Düsterwald (1–10), Nebelsümpfe (11–20), Kristallhöhlen (21–30),
 Frostgipfel (31–40), Schattenruinen (41–50), Drachenhort (51–60). Je 4 Kreaturen und ein Boss.
+Nach einem Sieg über eine gewöhnliche Kreatur bleibt selten eine alte Truhe zurück, manchmal mit Mimic (`areaChests.ts`).
 
 **Dungeons:** Verlassene Mine (ab 10), Versunkener Tempel (ab 25), Gewitterturm (ab 40),
 Abgrund der Leere (ab 60). Acht Schritte ohne Heilung dazwischen: Eingangskampf, Gabelungen, ein
