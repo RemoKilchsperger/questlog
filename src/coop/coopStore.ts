@@ -14,6 +14,7 @@ import {
   type CoopBattleState,
 } from "../domain/coopCombat";
 import { awaitsDecision } from "../domain/coopDungeonPaths";
+import { announceLobby } from "../friends/lobbyPresence";
 import { EventBus } from "../game/EventBus";
 import { useGameStore, type ClaimedChest } from "../store/gameStore";
 import { availableBackend, getBackend, type CoopBackend } from "./backend";
@@ -47,6 +48,8 @@ interface CoopState {
 
   createLobby: (bossId: string) => Promise<void>;
   joinLobby: (code: string) => Promise<void>;
+  /** Der offenen Lobby eines Freundes beitreten – false, wenn es nicht geklappt hat (Meldung in `joinError`) */
+  joinFriend: (friendId: string) => Promise<boolean>;
   setReady: (ready: boolean) => Promise<void>;
   /** Nur der Host: Kampf starten */
   startBattle: () => Promise<void>;
@@ -109,6 +112,7 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     unsubscribe?.();
     unsubscribe = null;
     window.clearTimeout(tickTimer);
+    announceLobby(null);
     set({ phase: "idle", backend: null, row: null, pendingAction: null, result: null, busy: false, error });
   }
 
@@ -169,6 +173,12 @@ export const useCoopStore = create<CoopState>()((set, get) => {
       unsubscribe = backend().subscribe(next.id, applyRow);
     }
     scheduleTick(next);
+    // Freunde sehen, dass man in einer Lobby wartet (nur mit Cloud-Konto)
+    announceLobby(
+      get().backend === "cloud" && next.phase === "lobby"
+        ? { userId: myId, bossId: next.boss_id, members: next.members.length }
+        : null,
+    );
   }
 
   /** Zur Deadline nachfragen: ist die Zeit um, löst der Server die Runde auf – im Dungeon auch Tür und Raum. */
@@ -186,7 +196,8 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     set({ busy: true });
     try {
       // Der Server liest die Kampfwerte aus dem Cloud-Spielstand – vorher den aktuellen hochladen.
-      if (kind === "cloud" && (command.type === "create" || command.type === "join" || command.type === "ready" || command.type === "start")) {
+      const usesSave = ["create", "join", "joinFriend", "ready", "start"].includes(command.type);
+      if (kind === "cloud" && usesSave) {
         await useCloudStore.getState().uploadNow();
       }
       const response = await getBackend(kind).send(command, get().row?.id, get().myId);
@@ -197,6 +208,20 @@ export const useCoopStore = create<CoopState>()((set, get) => {
       set({ busy: false, error: error instanceof Error ? error.message : String(error) });
       return false;
     }
+  }
+
+  /** Beitreten per Code oder über die Freundesliste – Fehler gehören ans Eingabefeld, nicht zu den Listen. */
+  async function join(command: Extract<CoopCommand, { type: "join" | "joinFriend" }>): Promise<boolean> {
+    const fail = () => {
+      const message = get().error;
+      reset();
+      set({ joinError: message });
+      return false;
+    };
+    set({ joinError: null });
+    if (!begin()) return fail();
+    set({ phase: "joining" });
+    return (await send(command)) || fail();
   }
 
   /** Verbindung für eine neue Lobby vorbereiten. */
@@ -230,17 +255,10 @@ export const useCoopStore = create<CoopState>()((set, get) => {
     },
 
     joinLobby: async (code) => {
-      // Fehler beim Beitreten gehören ans Eingabefeld, nicht zu den Listen
-      const fail = () => {
-        const message = get().error;
-        reset();
-        set({ joinError: message });
-      };
-      set({ joinError: null });
-      if (!begin()) return fail();
-      set({ phase: "joining" });
-      if (!(await send({ type: "join", code }))) fail();
+      await join({ type: "join", code });
     },
+
+    joinFriend: (friendId) => join({ type: "joinFriend", friendId }),
 
     setReady: async (ready) => {
       await send({ type: "ready", ready });

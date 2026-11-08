@@ -112,7 +112,7 @@ export function isParticipant(row: CoopRow, userId: string): boolean {
 export function applyCommand(row: CoopRow | null, command: CoopCommand, ctx: ServerContext): CoopRow | null {
   if (command.type === "create") return create(command.bossId, ctx);
   if (!row) throw new CoopError("Diese Lobby gibt es nicht mehr.");
-  if (command.type === "join") return join(row, ctx);
+  if (command.type === "join" || command.type === "joinFriend") return join(row, ctx);
   if (!isParticipant(row, ctx.userId)) throw new CoopError("Du bist nicht Teil dieses Kampfs.");
 
   switch (command.type) {
@@ -196,6 +196,11 @@ function join(row: CoopRow, ctx: ServerContext): CoopRow {
     return touch(row, { members: row.members.map((m) => (m.id === ctx.userId ? { ...ctx.member!, ready: m.ready } : m)) }, ctx);
   }
   if (row.members.length >= COOP_MAX_PLAYERS) throw new CoopError("Die Lobby ist voll.");
+  const content = coopContent(row.boss_id);
+  // Wie beim Erstellen: nur mit dem Level für den Inhalt – per Code genauso wie über die Freundesliste
+  if (ctx.member.level < content.level) {
+    throw new CoopError(`${content.name} ist erst ab Level ${content.level} zugänglich.`);
+  }
   return touch(row, { members: [...row.members, { ...ctx.member, ready: false }], player_ids: [...row.player_ids, ctx.userId] }, ctx);
 }
 

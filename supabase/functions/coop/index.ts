@@ -13,7 +13,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { applyCommand, COOP_ROW_TTL_HOURS, CoopError, memberFromSave, newLobbyCode } from "../_shared/coop-server.js";
 
 // Schlanke Typen für diese Datei – die vollständigen stehen in src/coop/protocol.ts.
-type CoopCommand = { type: "create" | "ready" | "leave" | "start" | "act" | "tick" | "next" | "exit" } | { type: "join"; code: string };
+type CoopCommand =
+  | { type: "create" | "ready" | "leave" | "start" | "act" | "tick" | "next" | "exit" }
+  | { type: "join"; code: string }
+  | { type: "joinFriend"; friendId: string };
 type CoopRow = { id: string; version: number; player_ids: string[] };
 type CoopMember = { id: string };
 
@@ -41,9 +44,35 @@ async function loadMember(userId: string): Promise<CoopMember> {
   return memberFromSave(userId, save.data?.data ?? null, (profile.data?.username as string | undefined) ?? null);
 }
 
-async function loadRow(command: CoopCommand, id: string | undefined): Promise<CoopRow | null> {
+/** Sind die beiden befreundet (angenommene Anfrage)? */
+async function areFriends(userId: string, otherId: string): Promise<boolean> {
+  const [a, b] = userId < otherId ? [userId, otherId] : [otherId, userId];
+  const { data, error } = await admin
+    .from("friendships")
+    .select("status")
+    .eq("user_a", a)
+    .eq("user_b", b)
+    .eq("status", "accepted")
+    .maybeSingle();
+  if (error) throw error;
+  return data !== null;
+}
+
+async function loadRow(command: CoopCommand, id: string | undefined, userId: string): Promise<CoopRow | null> {
   if (command.type === "create") return null;
   const query = admin.from("coop_battles").select("*");
+  if (command.type === "joinFriend") {
+    // Ohne Freundschaft verrät der Server nicht einmal, ob es eine Lobby gibt
+    if (!(await areFriends(userId, String(command.friendId)))) throw new CoopError("Ihr seid nicht befreundet.");
+    const result = await query
+      .contains("player_ids", [command.friendId])
+      .eq("phase", "lobby")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    return (result.data as CoopRow | null) ?? null;
+  }
   const result =
     command.type === "join"
       ? await query.eq("code", String(command.code).toUpperCase()).maybeSingle()
@@ -68,8 +97,8 @@ Deno.serve(async (req) => {
     }
 
     for (let attempt = 0; attempt < 5; attempt++) {
-      const row = await loadRow(command, id);
-      const needsMember = command.type === "create" || command.type === "join" || command.type === "ready";
+      const row = await loadRow(command, id, userId);
+      const needsMember = command.type === "create" || command.type === "join" || command.type === "joinFriend" || command.type === "ready";
       const member = needsMember ? await loadMember(userId) : null;
       const members =
         command.type === "start" && row

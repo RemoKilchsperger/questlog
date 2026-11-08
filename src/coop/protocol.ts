@@ -56,6 +56,8 @@ export type CoopCommand =
   | { type: "next" }
   | { type: "exit" }
   | { type: "join"; code: string }
+  /** Der offenen Lobby eines Freundes beitreten – der Server prüft Freundschaft und Level */
+  | { type: "joinFriend"; friendId: string }
   | { type: "ready"; ready: boolean }
   | { type: "leave" }
   | { type: "start" }

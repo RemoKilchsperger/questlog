@@ -108,7 +108,9 @@ const localBackend: CoopBackend = {
         ? null
         : command.type === "join"
           ? (Object.values(rows).find((r) => r.code === command.code) ?? null)
-          : (rows[id ?? ""] ?? null);
+          : command.type === "joinFriend"
+            ? (Object.values(rows).find((r) => r.phase === "lobby" && r.player_ids.includes(command.friendId)) ?? null)
+            : (rows[id ?? ""] ?? null);
     // Wie der Server: Kampfwerte aus dem Spielstand – hier dem eigenen im Browser
     const { character, equipment, meal, records } = useGameStore.getState();
     const member = memberFromSave(userId, { state: { character, equipment, meal, records } }, null);

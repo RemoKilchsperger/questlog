@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { BattleScreen } from "./components/BattleScreen";
 import { CharacterSheet, type CharacterView } from "./components/CharacterSheet";
 import { CloudDialogs } from "./components/CloudAccount";
+import { FriendsScreen, useIncomingFriendRequests } from "./components/FriendsScreen";
 import { Leaderboard } from "./components/Leaderboard";
 import { EquipmentScreen } from "./components/EquipmentScreen";
 import { GameIcon } from "./components/GameIcon";
@@ -22,8 +23,10 @@ import { visitorNeedsAttention } from "./domain/visitors";
 import { useGameStore } from "./store/gameStore";
 import { useCoopStore } from "./coop/coopStore";
 import { isLobbyCode } from "./coop/protocol";
+import { useCloudStore } from "./cloud/cloudStore";
+import { useFriendStore } from "./friends/friendStore";
 
-type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard" | "help";
+type Tab = "quests" | "character" | "skills" | "equipment" | "village" | "battle" | "leaderboard" | "friends" | "help";
 /** Untermenü des Dorfs */
 type VillageView = "build" | "merchant" | "smith" | "alchemist" | "trade";
 
@@ -34,11 +37,12 @@ function readCoopInvite(): string | null {
   return code && isLobbyCode(code) ? code : null;
 }
 
-/** Teilbare Adressen: #/rangliste und #/held/<name> öffnen Rangliste bzw. Profil. */
-function readRoute(): { tab: "leaderboard"; username: string | null } | null {
+/** Teilbare Adressen: #/rangliste, #/held/<name> und #/freunde öffnen Rangliste, Profil bzw. Freundesliste. */
+function readRoute(): { tab: "leaderboard" | "friends"; username: string | null } | null {
   const profile = window.location.hash.match(/^#\/held\/([^/?]+)$/);
   if (profile) return { tab: "leaderboard", username: decodeURIComponent(profile[1]) };
   if (window.location.hash === "#/rangliste") return { tab: "leaderboard", username: null };
+  if (window.location.hash === "#/freunde") return { tab: "friends", username: null };
   return null;
 }
 
@@ -52,6 +56,12 @@ export default function App() {
   const newAchievements = useGameStore((s) => s.achievementQueue.length);
   const skillPoints = useGameStore((s) => unspentSkillPoints(s.character));
   const readyQuests = useReadyQuestCount();
+  const friendRequests = useIncomingFriendRequests();
+  const userId = useCloudStore((s) => s.session?.user.id);
+  // Freundesliste beim Login laden – für das Abzeichen an „Freunde“
+  useEffect(() => {
+    if (userId) void useFriendStore.getState().load();
+  }, [userId]);
   const visitorWaiting = useGameStore((s) => visitorNeedsAttention(s.visitors));
   const refreshVisitors = useGameStore((s) => s.refreshVisitors);
   const refreshRaids = useGameStore((s) => s.refreshRaids);
@@ -86,10 +96,12 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  /** Tab wechseln – die Adresse zeigt nur bei der Rangliste etwas an. */
+  /** Tab wechseln – die Adresse zeigt nur bei Rangliste und Freunden etwas an. */
   const setTab = (next: Tab) => {
     if (next === "leaderboard") {
       window.location.hash = "#/rangliste";
+    } else if (next === "friends") {
+      window.location.hash = "#/freunde";
     } else if (readRoute()) {
       history.replaceState(null, "", window.location.pathname + window.location.search);
       setProfileName(null);
@@ -142,6 +154,14 @@ export default function App() {
         </TabButton>
         <TabButton active={tab === "leaderboard"} onClick={() => setTab("leaderboard")} icon="🏆">
           Rangliste
+        </TabButton>
+        <TabButton active={tab === "friends"} onClick={() => setTab("friends")} icon="👥">
+          Freunde
+          {friendRequests > 0 && (
+            <span className="num ml-1.5 rounded-full bg-xp px-1.5 text-sm text-night-950" title="Offene Freundschaftsanfragen">
+              {friendRequests}
+            </span>
+          )}
         </TabButton>
         <TabButton active={tab === "help"} onClick={() => setTab("help")} icon="❓">
           Hilfe
@@ -201,6 +221,7 @@ export default function App() {
           ))}
         {tab === "battle" && <BattleScreen />}
         {tab === "leaderboard" && <Leaderboard username={profileName} />}
+        {tab === "friends" && <FriendsScreen onJoined={() => setTab("battle")} />}
         {tab === "help" && <HelpScreen />}
       </main>
 

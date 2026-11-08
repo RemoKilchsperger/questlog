@@ -153,3 +153,11 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 80 | **Sumpfhydra:** Bei 75/50/25 % LP fällt ein Kopf ab und kämpft als Begleiter mit eigener Fähigkeit (Gift, Säure, Blut). Lebt er nach 3 Runden noch, wachsen zwei nach. Feuer brennt den Stumpf aus, solange Köpfe leben, erleidet die Hydra halben Schaden | ✅ `hydra.ts`, docs/raid-bosse.md |
 | 81 | **Frostriese:** Eiskerker (Mitspieler befreien), Lawine mit Ansage (gemeinsam abbrechen), zerbrechender Riese unter 25 % | 💡 docs/raid-bosse.md |
 | 82 | **Weltenverschlinger:** zwei Leerenrisse, die in derselben Runde fallen müssen; verschlingt den Helden mit der höchsten Bedrohung, der von innen kämpft | 💡 docs/raid-bosse.md |
+
+## Freunde (2026-11-08)
+
+| # | Idee | Status |
+|---|---|---|
+| 83 | **Freundesliste:** Freunde per Benutzername, live sehen, wer in einer Koop-Lobby wartet, und direkt beitreten (mit Level-Prüfung), sonst „zuletzt aktiv“ | ✅ `src/friends/`, docs/freunde.md |
+| 84 | **Freunde zum Tausch einladen:** offenen Tausch eines Freundes in der Liste zeigen und direkt beitreten | 💡 |
+| 85 | **Schnell-Nachrichten unter Freunden:** vorgefertigte Sätze und Emotes statt freiem Chat – keine Moderation nötig | 💡 |
