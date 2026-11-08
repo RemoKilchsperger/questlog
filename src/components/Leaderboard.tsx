@@ -9,6 +9,7 @@ import { getItemStats, SLOT_ICONS, SLOT_LABELS } from "../domain/items";
 import { STAT_LABELS } from "../domain/stats";
 import type { EquipSlot, StatKey } from "../domain/types";
 import { CoopRecord } from "./CoopRecord";
+import { FriendButton } from "./FriendsScreen";
 import { ItemIcon } from "./ItemIcon";
 import { itemName } from "./itemUi";
 import { ItemTooltip } from "./ItemTooltip";
@@ -206,6 +207,7 @@ function ProfilePage({ username }: { username: string }) {
             <span className="num text-parchment">{profile.quests_done}</span> Quests erledigt
           </p>
           <p className="text-xs text-muted">Zuletzt aktiv: {new Date(profile.updated_at).toLocaleDateString("de-CH")}</p>
+          <FriendButton username={profile.username} />
         </section>
 
         <div className="flex flex-col gap-4">

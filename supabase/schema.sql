@@ -5,6 +5,7 @@
 -- public_profiles  öffentlich: nur Spielwerte (Level, Ausrüstung, Sammlung …) – für Profile und Rangliste
 -- coop_battles     Koop-Kämpfe – siehe supabase/migrations/20261006120000_coop_battles.sql
 -- trades           Item-Tausch und Besitzer-Register – siehe supabase/migrations/20261103120000_trades.sql
+-- friendships      Freundesliste – siehe supabase/migrations/20261108120000_friendships.sql
 --
 -- Stufe A: Der Browser rechnet und speichert, die Datenbank vertraut ihm.
 

@@ -83,6 +83,15 @@ describe("Koop-Server: Lobby", () => {
     expect(() => run(started(), { type: "join", code: "ABCDEF" }, "e")).toThrow(/läuft bereits/);
   });
 
+  it("beitreten nur mit passendem Level – über die Freundesliste wie per Code", () => {
+    const row = run(null, { type: "create", bossId: "swamp-hydra" }, "a")!;
+    expect(() => run(row, { type: "joinFriend", friendId: "a" }, "b", { member: member("b", 5) })).toThrow(/ab Level/);
+    expect(() => run(row, { type: "join", code: row.code }, "b", { member: member("b", 5) })).toThrow(/ab Level/);
+    const joined = run(row, { type: "joinFriend", friendId: "a" }, "c")!;
+    expect(joined.player_ids).toEqual(["a", "c"]);
+    expect(joined.members[1].ready).toBe(false);
+  });
+
   it("geht der Host, übernimmt der nächste; geht der letzte, ist die Lobby weg", () => {
     const row = run(readyLobby(), { type: "leave" }, "a")!;
     expect(row.host_id).toBe("b");

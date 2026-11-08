@@ -89,6 +89,7 @@ const TOPICS = [
   "dungeons",
   "coop",
   "trade",
+  "friends",
   "achievements",
 ] as const;
 
@@ -751,6 +752,24 @@ export function HelpScreen() {
             <li>Was im Angebot liegt, ist gesperrt: nicht verkaufen, zerlegen, verbessern oder anlegen.</li>
             <li>Höchstens {TRADE_DAILY_LIMIT} Tausche in 24 Stunden und nur ein offener Tausch gleichzeitig.</li>
             <li>Gold lässt sich nicht tauschen.</li>
+          </ul>
+        </Topic>
+
+        <Topic id="friends" title="👥 Freunde">
+          <p>
+            Im Tab „Freunde“ fügst du andere Helden per Benutzername hinzu – oder im Profil eines Helden mit „Als Freund
+            hinzufügen“. Sobald der andere annimmt, seid ihr befreundet. Dafür brauchst du ein Cloud-Konto.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              Wartet ein Freund in einer Koop-Lobby, siehst du das sofort und trittst mit „Beitreten“ bei – ohne Code.
+              In der Lobby muss ein Platz frei sein.
+            </li>
+            <li>Bei allen anderen Freunden steht, wann sie zuletzt aktiv waren.</li>
+            <li>
+              Ob über die Freundesliste, per Code oder Einladungslink: Beitreten kann nur, wessen Level für den
+              Raid-Boss bzw. Dungeon reicht.
+            </li>
           </ul>
         </Topic>
 
