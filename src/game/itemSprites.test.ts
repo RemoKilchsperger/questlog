@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import { BOSS_ITEMS, createItem, getItem, getItemParts, ITEMS } from "../domain/items";
+import { DEFAULT_LOOKS, LOOK_OPTIONS, type HeroLooks } from "../domain/looks";
+import { SHIRT_COLORS, SKIN_COLORS } from "./heroLooks";
 import { getHeroSprite, getMainWeapon, HERO_SPRITE } from "./heroSprite";
 import { BOSS_ARMOR, BOSS_HELMETS } from "./bossArmor";
 import { getItemSprite, getWornBossArmor, getWornHelmet, getWornWeapon } from "./itemSprites";
@@ -134,8 +136,41 @@ describe("Held mit Ausrüstung", () => {
   const colors = (equipment = EMPTY_EQUIPMENT) =>
     new Set(renderSprite(getHeroSprite(equipment)).pixels.flat().filter(Boolean));
 
-  it("ohne Ausrüstung entspricht er der Grundgrafik", () => {
-    expect(colors()).toEqual(new Set(renderSprite(HERO_SPRITE).pixels.flat().filter(Boolean)));
+  it("ohne Ausrüstung und mit Standard-Aussehen sieht er aus wie vor der Charaktererstellung", () => {
+    // Die frühere Grundgrafik: Haare fest im Körper gezeichnet
+    const before = {
+      grid: [
+        ".........hhhhhh.........",
+        ".......hhjjhhhhh........",
+        "......hhjhhhhhhhhh......",
+        "......hhhhhhhhhhhh......",
+        "......ihsssssssshi......",
+        "......hssssssssssh......",
+        ...HERO_SPRITE.grid.slice(6),
+      ],
+      palette: { ...HERO_SPRITE.palette, h: "#6b4a2b", j: "#8f673d", i: "#4e3420" },
+    };
+    const bare = getHeroSprite(EMPTY_EQUIPMENT);
+    const expected = composeSprites(bare.grid[0].length, bare.grid.length, [{ sprite: before, x: 6, y: 4 }]);
+    expect(renderSprite(bare).pixels).toEqual(renderSprite(expected).pixels);
+  });
+
+  it("jede Frisur und jeder Bart sieht anders aus, Haut und Hemd färben um", () => {
+    const outline = (looks: HeroLooks) => renderSprite(getHeroSprite(EMPTY_EQUIPMENT, { looks })).pixels.map((r) => r.map(Boolean));
+    const styles = LOOK_OPTIONS.hairStyle.map((o) => JSON.stringify(outline({ ...DEFAULT_LOOKS, hairStyle: o.id })));
+    expect(new Set(styles).size).toBe(styles.length);
+    const beards = LOOK_OPTIONS.beard.map((o) => JSON.stringify(renderSprite(getHeroSprite(EMPTY_EQUIPMENT, { looks: { ...DEFAULT_LOOKS, beard: o.id } })).pixels));
+    expect(new Set(beards).size).toBe(beards.length);
+    const shown = new Set(renderSprite(getHeroSprite(EMPTY_EQUIPMENT, { looks: { ...DEFAULT_LOOKS, skin: "dunkel", shirt: "rot" } })).pixels.flat());
+    expect(shown.has(SKIN_COLORS.dunkel.s) && shown.has(SHIRT_COLORS.rot.a)).toBe(true);
+    expect(shown.has(SKIN_COLORS.hell.s) || shown.has(SHIRT_COLORS.blau.a)).toBe(false);
+  });
+
+  it("unter einem Helm ragt keine Frisur über den Kopf hinaus", () => {
+    const helmet = { ...EMPTY_EQUIPMENT, head: own("head-0") };
+    const helmed = (hairStyle: HeroLooks["hairStyle"]) => renderSprite(getHeroSprite(helmet, { looks: { ...DEFAULT_LOOKS, hairStyle } })).pixels.slice(0, 5);
+    expect(helmed("iro")).toEqual(helmed("glatze"));
+    expect(helmed("stachel")).toEqual(helmed("glatze"));
   });
 
   it("zeigt Helm, Waffe und Schild in deren Materialfarben", () => {

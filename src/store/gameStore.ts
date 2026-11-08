@@ -1,3 +1,4 @@
+import { DEFAULT_LOOKS, sanitizeLooks, type HeroLooks } from "../domain/looks";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
@@ -257,6 +258,8 @@ interface GameState {
   refreshQuestBoards: () => void;
 
   renameCharacter: (name: string) => void;
+  /** Aussehen aus der Charaktererstellung ändern */
+  setLooks: (looks: HeroLooks) => void;
   /** Verteilt einen Level-up-Punkt auf ein Attribut. */
   allocatePoint: (stat: StatKey) => void;
   /** Alle Attributpunkte zurücksetzen – das erste Mal kostenlos, danach teuer. */
@@ -612,6 +615,8 @@ type SaveState = Pick<
 
 const createCharacter = (): Character => ({
   name: "Held",
+  named: false,
+  looks: DEFAULT_LOOKS,
   totalXp: 0,
   gold: 0,
   essence: 0,
@@ -645,6 +650,9 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
   const character = saved.character && {
     ...fresh,
     ...savedCharacter,
+    // Wer schon vor dem Namensdialog spielte, wird nicht mehr gefragt
+    named: savedCharacter.named ?? true,
+    looks: sanitizeLooks(savedCharacter.looks),
     stats: { ...fresh.stats, ...saved.character.stats },
     // Neuer Skilltree: Ränge des alten (pro Waffentyp) fallen weg, zu hohe werden gekappt – die Punkte sind wieder frei.
     skills: sanitizeSkills(saved.character.skills),
@@ -1297,7 +1305,9 @@ export const useGameStore = create<GameState>()(
       },
 
       renameCharacter: (name) =>
-        set((s) => ({ character: { ...s.character, name: name.trim() || s.character.name } })),
+        set((s) => (name.trim() ? { character: { ...s.character, name: name.trim(), named: true } } : {})),
+
+      setLooks: (looks) => set((s) => ({ character: { ...s.character, looks: sanitizeLooks(looks) } })),
 
       allocatePoint: (stat) => attempt(() => set((s) => ({ character: allocatePoint(s.character, stat) }))),
 

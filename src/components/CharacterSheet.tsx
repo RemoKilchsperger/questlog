@@ -22,6 +22,7 @@ import { formatNumber, Gold } from "./Gold";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 import { PixelAvatar } from "./PixelAvatar";
+import { LooksDialog } from "./LooksEditor";
 import { AchievementsPanel, AvatarFrame, CosmeticsPicker, TitleBadge } from "./Achievements";
 import { XpBar } from "./XpBar";
 import { ClassCodex, HeroClassBadge } from "./HeroClassInfo";
@@ -66,6 +67,7 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
 
   const cosmetics = useGameStore((s) => s.cosmetics);
   const [editing, setEditing] = useState(false);
+  const [editingLooks, setEditingLooks] = useState(false);
   const [nameDraft, setNameDraft] = useState(character.name);
 
   const { level } = getLevelProgress(character.totalXp);
@@ -121,6 +123,10 @@ export function CharacterSheet({ view = "details" }: { view?: CharacterView }) {
         )}
 
         <TitleBadge achievementId={cosmetics.title} className="-mt-2 text-sm" />
+        <button onClick={() => setEditingLooks(true)} className="-mt-1 text-sm text-muted underline hover:text-gold">
+          Aussehen ändern
+        </button>
+        <LooksDialog open={editingLooks} onClose={() => setEditingLooks(false)} />
         <p className="font-pixel text-lg text-gold">
           Level <span className="num">{level}</span>
           <span className="mt-1 block">

@@ -3,6 +3,7 @@ import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import { createItem } from "../domain/items";
 import { xpForNextLevel } from "../domain/leveling";
 import { EMPTY_RECORDS } from "../domain/achievements";
+import { DEFAULT_LOOKS } from "../domain/looks";
 import type { Character } from "../domain/types";
 import {
   buildPublicProfile,
@@ -51,6 +52,12 @@ describe("Öffentliches Profil", () => {
       coopStats: { wins: 3, bosses: ["swamp-hydra"] },
     });
     expect(raider.snapshot.coop).toEqual({ wins: 3, bosses: ["swamp-hydra"] });
+  });
+
+  it("zeigt das Aussehen – der Standardheld, wenn keins gewählt ist", () => {
+    expect(profile.snapshot.looks).toEqual(DEFAULT_LOOKS);
+    const looks = { ...DEFAULT_LOOKS, hairStyle: "zopf", skin: "braun" } as const;
+    expect(buildPublicProfile({ character: { ...character, looks }, equipment, bossCollection: [] }).snapshot.looks).toEqual(looks);
   });
 
   it("verrät weder Gold noch Inventar", () => {

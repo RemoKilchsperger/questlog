@@ -99,7 +99,7 @@ function Ranking() {
                 {i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}
               </span>
               <AvatarFrame frame={p.snapshot.frame} className="rounded bg-night-950/60 p-0.5">
-                <PixelAvatar size={40} equipment={p.snapshot.equipment} />
+                <PixelAvatar size={40} equipment={p.snapshot.equipment} looks={p.snapshot.looks} />
               </AvatarFrame>
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold">
@@ -185,7 +185,7 @@ function ProfilePage({ username }: { username: string }) {
       <div className="grid gap-4 md:grid-cols-[280px_1fr]">
         <section className="panel flex flex-col items-center gap-2 p-5 text-center">
           <AvatarFrame frame={snapshot.frame} className="rounded-lg bg-night-800 p-4">
-            <PixelAvatar size={144} equipment={snapshot.equipment} />
+            <PixelAvatar size={144} equipment={snapshot.equipment} looks={snapshot.looks} />
           </AvatarFrame>
           <p className="font-pixel text-3xl">{profile.hero_name}</p>
           <p className="text-xs text-muted">@{profile.username}</p>

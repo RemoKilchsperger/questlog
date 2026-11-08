@@ -353,7 +353,8 @@ export class CoopBattleScene extends Phaser.Scene {
   private addHero(id: string, x: number, member: CoopMember | undefined, name: string, hp: number, maxHp: number, me: boolean): Unit {
     const key = `coop-hero-${id}`;
     const equipment = member?.equipment;
-    const bodySprite = equipment ? getHeroSprite(equipment, { withoutMainWeapon: true }) : getHeroSprite(EMPTY_EQUIPMENT);
+    const looks = member?.looks;
+    const bodySprite = equipment ? getHeroSprite(equipment, { withoutMainWeapon: true, looks }) : getHeroSprite(EMPTY_EQUIPMENT, { looks });
     const { image, lastRow, object: figure } = this.figure(key, bodySprite);
     const held = equipment ? getMainWeapon(equipment) : null;
     let weapon: Phaser.GameObjects.Image | null = null;

@@ -38,6 +38,7 @@ import { getDungeon } from "../domain/creatures";
 import { mainArmorClass } from "../domain/dungeonPaths";
 import { isHeroicUnlocked } from "../domain/heroic";
 import { EMPTY_EQUIPMENT, getArmorClassSummary } from "../domain/equipment";
+import { sanitizeLooks } from "../domain/looks";
 import { convertLinearCurveXp, getLevel } from "../domain/leveling";
 import type { Character, Equipment } from "../domain/types";
 import type { CoopCommand, CoopMember, CoopRow } from "./protocol";
@@ -84,6 +85,7 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1, ...raw.stats },
     spentPoints: raw.spentPoints ?? 0,
     skills: raw.skills ?? {},
+    looks: sanitizeLooks(raw.looks),
   };
   const equipment: Equipment = { ...EMPTY_EQUIPMENT, ...state.equipment };
   return {
@@ -92,6 +94,7 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
     username,
     level: getLevel(character.totalXp),
     equipment,
+    looks: character.looks,
     // Gericht aus der Taverne: wirkt auch im Koop (der Client isst es beim Kampfbeginn auf)
     profile: withMeal(getHeroCombatProfile(character, equipment), state.meal),
     bossesDefeated: state.records?.bossesDefeated ?? [],

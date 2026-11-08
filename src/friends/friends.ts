@@ -2,6 +2,7 @@
 // `friendships`. Der Browser schreibt direkt, RLS regelt, wer was darf.
 
 import { supabase } from "../cloud/supabase";
+import type { HeroLooks } from "../domain/looks";
 import type { Equipment } from "../domain/types";
 
 export type FriendStatus = "accepted" | "incoming" | "outgoing";
@@ -16,6 +17,7 @@ export interface Friend {
   updatedAt: string;
   equipment: Equipment;
   frame?: string;
+  looks?: HeroLooks;
 }
 
 interface FriendshipRow {
@@ -33,6 +35,7 @@ interface FriendProfileRow {
   updated_at: string;
   equipment: Equipment;
   frame: string | null;
+  looks: HeroLooks | null;
 }
 
 /** Ein Paar steht genau einmal in der Tabelle: die kleinere Id vorne. */
@@ -71,7 +74,7 @@ export async function fetchFriends(me: string): Promise<Friend[]> {
   const otherId = (r: FriendshipRow) => (r.user_a === me ? r.user_b : r.user_a);
   const profiles = await db
     .from("public_profiles")
-    .select("user_id, username, hero_name, level, updated_at, equipment:snapshot->equipment, frame:snapshot->>frame")
+    .select("user_id, username, hero_name, level, updated_at, equipment:snapshot->equipment, frame:snapshot->>frame, looks:snapshot->looks")
     .in("user_id", rows.map(otherId));
   if (profiles.error) throw new Error(profiles.error.message);
   const byId = new Map((profiles.data as unknown as FriendProfileRow[]).map((p) => [p.user_id, p]));
@@ -88,6 +91,7 @@ export async function fetchFriends(me: string): Promise<Friend[]> {
         updatedAt: p.updated_at,
         equipment: p.equipment,
         frame: p.frame ?? undefined,
+        looks: p.looks ?? undefined,
       },
     ];
   });
