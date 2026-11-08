@@ -764,6 +764,26 @@ const HYDRA = [
   "................",
 ];
 
+/** Abgeschlagener Kopf der Sumpfhydra: Kopf auf einem Halsstumpf – die Farbe zeigt seine Fähigkeit */
+const HYDRA_HEAD = [
+  "................",
+  "................",
+  "................",
+  "......1111......",
+  ".....1e1111.....",
+  "....11111111....",
+  "...ww1111111....",
+  "..w..111.111....",
+  "......11..11....",
+  ".......11.11....",
+  "........1111....",
+  "........1111....",
+  ".......33333....",
+  "......4444444...",
+  ".....444444444..",
+  "................",
+];
+
 /** Koop-Boss Frostriese Hrimgar: Eiskrone, Frostbart, gewaltige Fäuste */
 const FROST_GIANT = [
   "....4.4.4.......",
@@ -1052,6 +1072,10 @@ export const CREATURE_SPRITES: Readonly<Record<string, SpriteDef>> = {
   mimic: { grid: MIMIC, palette: { "1": "#8a5a2b", "2": "#5a3a1a", "3": "#c8a040", e: "#ff4a4a", r: "#e0485a" } },
   // Koop-Bosse
   hydra: { grid: HYDRA, palette: { "1": "#3f6b4a", "2": "#2a4632", "3": "#a8b45a", e: "#f4e27a" } },
+  // Abgeschlagene Köpfe der Hydra (hydra.ts): Halsstumpf blutet, Kopf in der Farbe der Fähigkeit
+  "hydra-head-venom": { grid: HYDRA_HEAD, palette: { "1": "#4f9a5a", "3": "#c23a3a", "4": "#2a4632", e: "#f4e27a" } },
+  "hydra-head-acid": { grid: HYDRA_HEAD, palette: { "1": "#9a9a3a", "3": "#c23a3a", "4": "#2a4632", e: "#ff8a3a" } },
+  "hydra-head-blood": { grid: HYDRA_HEAD, palette: { "1": "#8a2a3a", "3": "#c23a3a", "4": "#2a4632", e: "#f4e27a" } },
   "frost-giant": { grid: FROST_GIANT, palette: { "1": "#9ad9f0", "2": "#3a7aa8", "3": "#f2fdff", "4": "#4af0ff", e: "#1b3a5a" } },
   "world-eater": { grid: WORLD_EATER, palette: { "1": "#4a2a6a", "2": "#7a2a8a", "3": "#ff4d6d", e: "#4af0ff" } },
 };

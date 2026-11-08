@@ -65,11 +65,13 @@ import {
   MatchupBadge,
   matchupChips,
   PhaseWarning,
+  hydraChips,
   soloBossChips,
   StatusSide,
   TargetPicker,
 } from "./BattleStatus";
 import { ADD_SKILLS, addIntentText, getBossPhase } from "../domain/bossMechanics";
+import { getHydraHead, headIntentText, HYDRA_ID } from "../domain/hydra";
 import { describeIntent, type IntentView } from "../domain/bossIntents";
 import { defendEffect } from "../domain/combat";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
@@ -673,6 +675,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
             ...eliteChips(battle.elite),
             ...matchupChips(battle.bossId),
             ...soloBossChips(battle.bossId, battle.phase, battle.bossShield, battle.adds ?? []),
+            ...(battle.bossId === HYDRA_ID ? hydraChips(battle.heads, battle.adds ?? []) : []),
             ...enemyStatusChips(battle.bossEffects),
           ]}
         />
@@ -687,7 +690,8 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               creatureId: battle.bossId,
               ...(bossIntent && { intent: { text: `${bossIntent.icon} ${bossIntent.title}`, urgent: bossIntent.tone === "danger" } }),
             },
-            ...(battle.adds ?? []).map((a) => ({
+            // Besiegte Hydra-Köpfe verschwinden aus der Auswahl
+            ...(battle.adds ?? []).filter((a) => !(a.head && a.combatant.hp === 0)).map((a) => ({
               uid: a.uid,
               combatant: a.combatant,
               effects: a.effects,
@@ -695,6 +699,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               role: a.role,
               creatureId: a.creatureId,
               ...(a.role && { intent: addIntentText(a.role, a.cast) }),
+              ...(a.head && { intent: headIntentText(a.head, a.grow) }),
             })),
           ]}
           selected={target}
@@ -1054,7 +1059,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "counter":
       return `${name(e.heroId)} schlägt zurück: ${bossName} −${e.damage}.`;
     case "hit":
-      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}.`;
+      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.neck ? " – der gepanzerte Hals fängt ab" : ""}.`;
     case "immune":
       return `${name(e.target)} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "thorns":
@@ -1091,6 +1096,14 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
         : `${name(e.heroId)} blockt den Angriff mit Bollwerk.`;
     case "addDown":
       return `${name(e.add)} geht zu Boden.`;
+    case "headSevered": {
+      const head = getHydraHead(e.head);
+      return `🪓 Ein Kopf ist ab! Der ${head.name} kämpft weiter: ${head.description}${e.seared ? " Das Feuer brennt den Stumpf aus – hier wächst nichts nach." : ""}${e.head === "blood" ? ` Der unsterbliche Kopf rast!` : ""}`;
+    }
+    case "headGrown":
+      return `🐍 Aus dem Stumpf von ${name(e.from)} wächst ein zweiter Kopf!`;
+    case "etched":
+      return `🫗 ${name(e.add)} ätzt ${name(e.heroId)} – der Schaden auf das Ziel steigt.`;
     case "down":
       return `${name(e.heroId)} ist gefallen!`;
     case "victory":

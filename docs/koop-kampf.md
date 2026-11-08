@@ -54,7 +54,7 @@ Namen und Werte stehen noch offen.
 
 | Boss | Level | Idee |
 |---|---|---|
-| Sumpfhydra | 20 | Mehrere Köpfe: Giftatem trifft alle, Biss trifft das Ziel |
+| Sumpfhydra | 20 | Giftatem trifft alle. Bei 75/50/25 % fällt ein Kopf ab und kämpft weiter (docs/raid-bosse.md) |
 | Frostriese | 40 | Stampfer trifft alle, Eiskerker betäubt einen Spieler für eine Runde |
 | Weltenverschlinger | 60 | Leerenstrudel trifft alle und raubt Mana, Lebensentzug am Ziel |
 

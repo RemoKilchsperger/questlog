@@ -145,3 +145,11 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 77 | **Täglicher Dungeon:** fester Seed für alle (gleicher Weg, gleiche Elite, gleiche Segen), Tages-Rangliste nach Zeit | 💡 |
 | 78 | **Würfelpoker in der Taverne:** Minispiel gegen Gäste um Gold, mit Einsatzlimit | 💡 |
 | 79 | **Hardcore-Held:** eigener Charakter mit nur einem Leben, eigene Rangliste | 💡 |
+
+## Raid-Bosse mit Phasen (2026-11-08)
+
+| # | Idee | Status |
+|---|---|---|
+| 80 | **Sumpfhydra:** Bei 75/50/25 % LP fällt ein Kopf ab und kämpft als Begleiter mit eigener Fähigkeit (Gift, Säure, Blut). Lebt er nach 3 Runden noch, wachsen zwei nach. Feuer brennt den Stumpf aus, solange Köpfe leben, erleidet die Hydra halben Schaden | ✅ `hydra.ts`, docs/raid-bosse.md |
+| 81 | **Frostriese:** Eiskerker (Mitspieler befreien), Lawine mit Ansage (gemeinsam abbrechen), zerbrechender Riese unter 25 % | 💡 docs/raid-bosse.md |
+| 82 | **Weltenverschlinger:** zwei Leerenrisse, die in derselben Runde fallen müssen; verschlingt den Helden mit der höchsten Bedrohung, der von innen kämpft | 💡 docs/raid-bosse.md |

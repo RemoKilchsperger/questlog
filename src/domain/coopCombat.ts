@@ -23,6 +23,10 @@
 // Absichten (bossIntents.ts, docs/boss-absichten.md): Dungeon-Bosse zeigen wie solo
 // jede Runde, was sie vorhaben, und folgen ihrem eigenen Ablauf. Statt anzugreifen
 // kann jeder Held abwehren. Raid-Bosse setzen ihre Fähigkeit weiter im festen Takt ein.
+//
+// Raid-Bosse mit Phasen (docs/raid-bosse.md): Der Sumpfhydra schlägt die Gruppe bei 75, 50 und
+// 25 % einen Kopf ab, der als Begleiter weiterkämpft (hydra.ts) – Begleiter kommen hier also auch
+// mitten im Kampf dazu.
 
 import { freshStunImmunity, MANA_REGEN, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
@@ -94,6 +98,7 @@ import {
   type EliteAffix,
 } from "./elites";
 import { HEROIC_HP, heroicAffixes } from "./heroic";
+import { ACID, BLOOD_HEAL, getHydraHead, HEAD_DAMAGE, HEAD_GROW_ROUNDS, HEAD_HP, headDue, hydraAbilityEvery, HYDRA_ID, NECK_TAKEN, VENOM, type HydraHeadKind } from "./hydra";
 import { DUNGEONS, getCreature, getCreatureStats, getDungeon, type CreatureDef } from "./creatures";
 import { getPotion, potionHeal, type BuffKind } from "./potions";
 import { hash, seededRng } from "./random";
@@ -207,7 +212,7 @@ export const COOP_BOSSES: readonly CoopBossDef[] = [
   {
     id: "swamp-hydra",
     name: "Sumpfhydra",
-    description: "Drei Köpfe, ein Hunger. Ihr Giftatem trifft die ganze Gruppe.",
+    description: "Drei Köpfe, ein Hunger. Schlagt ihr einen ab, kämpft er weiter – und lebt er zu lange, wachsen zwei nach.",
     level: 20,
     sprite: "hydra",
     areaId: "mistmarsh",
@@ -477,6 +482,10 @@ export interface CoopAdd {
   role?: AddRole;
   /** Fortschritt seiner Fähigkeit: Runden im Heilritual, Runden seit dem letzten Schild, Trommelwirbel */
   cast?: number;
+  /** Abgeschlagener Kopf der Sumpfhydra (hydra.ts) */
+  head?: HydraHeadKind;
+  /** Runden, bis aus dem Stumpf ein zweiter Kopf wächst – fehlt, wenn keiner (mehr) nachwächst */
+  grow?: number;
   combatant: Combatant;
   effects: CoopEnemyEffects;
 }
@@ -532,6 +541,8 @@ export interface CoopHero {
     wrath?: number;
     /** Notverband hat in diesem Kampf schon geheilt */
     bandaged?: boolean;
+    /** Säurekopf der Hydra: erlittener Schaden × (1 + percent) */
+    corroded?: ActiveBuff;
     /** Eingesetzte Fähigkeiten in diesem Kampf – für das Echo */
     casts?: number;
   };
@@ -580,6 +591,8 @@ export type CoopEvent =
       absorbed?: number;
       /** Eine Panzerplatte des Erzkönigs hat den Treffer gemindert */
       plated?: boolean;
+      /** Der gepanzerte Hals der Hydra hat den Treffer gemindert (ein Kopf lebt noch) */
+      neck?: boolean;
     }
   /** Ein Held wehrt ab: kein Angriff, halber Schaden, etwas Mana */
   | { type: "defend"; heroId: string; mana: number }
@@ -624,6 +637,12 @@ export type CoopEvent =
   | { type: "blocked"; heroId: string; add?: string }
   /** Ein Begleiter fällt – der Kampf geht weiter */
   | { type: "addDown"; add: string }
+  /** Sumpfhydra: Ein Kopf ist ab und kämpft als Begleiter `add` – `seared`: Feuer hat den Stumpf ausgebrannt */
+  | { type: "headSevered"; add: string; head: HydraHeadKind; seared: boolean }
+  /** Aus dem Stumpf von `from` ist ein zweiter Kopf `add` gewachsen */
+  | { type: "headGrown"; add: string; from: string }
+  /** Der Säurekopf ätzt einen Helden – er erleidet mehr Schaden */
+  | { type: "etched"; heroId: string; add: string }
   | { type: "down"; heroId: string }
   | { type: "victory" }
   | { type: "wipe" }
@@ -657,6 +676,8 @@ export interface CoopBattleState {
   adds?: CoopAdd[];
   /** Der Boss ist in seiner zweiten Phase (bossMechanics.ts) – sie kommt nur einmal */
   phase?: boolean;
+  /** Sumpfhydra: so viele Köpfe sind schon abgeschlagen (hydra.ts) */
+  heads?: number;
   /** Absicht des Dungeon-Bosses in dieser Runde (bossIntents.ts) – fehlt bei Raid-Bossen und normalen Gegnern */
   bossTurn?: BossTurn;
   /** Schild des Schildträgers über dem Boss: so viel Schaden schluckt er noch */
@@ -1042,6 +1063,9 @@ interface Foe {
   role?: AddRole;
   /** Fortschritt der Fähigkeit eines Begleiters mit Aufgabe (CoopAdd.cast) */
   cast?: number;
+  /** Kopf der Hydra und Runden bis zum zweiten (CoopAdd.head, CoopAdd.grow) */
+  head?: HydraHeadKind;
+  grow?: number;
   c: Combatant;
   fx: CoopEnemyEffects;
 }
@@ -1093,7 +1117,16 @@ export function resolveRound(
   let heroes = state.heroes.map((h) => ({ ...h, combatant: { ...h.combatant }, effects: { ...h.effects } }));
   // Der Boss zuerst, dann die Begleiter – Kopien, die sich in dieser Runde ändern
   const boss: Foe = { id: BOSS, creatureId: state.bossId, c: { ...state.boss }, fx: { ...state.bossEffects } };
-  const adds: Foe[] = (state.adds ?? []).map((a) => ({ id: a.uid, creatureId: a.creatureId, role: a.role, cast: a.cast, c: { ...a.combatant }, fx: { ...a.effects } }));
+  const adds: Foe[] = (state.adds ?? []).map((a) => ({
+    id: a.uid,
+    creatureId: a.creatureId,
+    role: a.role,
+    cast: a.cast,
+    head: a.head,
+    grow: a.grow,
+    c: { ...a.combatant },
+    fx: { ...a.effects },
+  }));
   const enemy = getCoopEnemy(state.bossId);
   /** Absicht des Bosses in dieser Runde (nur Dungeon-Bosse) */
   const turn = coopBossTurn(state);
@@ -1148,8 +1181,29 @@ export function resolveRound(
   };
   const foes = [boss, ...adds];
   let phase = state.phase;
-  /** Absicht des Bosses: Taumelnd oder mit geschlossenem Auge erleidet er mehr Schaden */
-  const takenBy = (foe: Foe) => (foe === boss ? bossTurnTakenFactor(turn) : 1);
+  let heads = state.heads ?? 0;
+  /** Köpfe, die in dieser Runde erst in den Kampf gefallen bzw. gewachsen sind – sie handeln ab der nächsten */
+  const newHeads = new Set<Foe>();
+  /** Ein Kopf der Hydra fällt in den Kampf (bzw. wächst nach) – mit `grow` Runden, bis ein zweiter wächst */
+  const spawnHead = (kind: HydraHeadKind, grow: number | undefined): Foe => {
+    const maxHp = Math.round(boss.c.maxHp * HEAD_HP);
+    const foe: Foe = {
+      id: `add-${adds.length + 1}`,
+      creatureId: state.bossId,
+      head: kind,
+      ...(grow !== undefined && { grow }),
+      c: { ...boss.c, name: getHydraHead(kind).name, maxHp, hp: maxHp, damage: state.boss.damage * HEAD_DAMAGE },
+      fx: {},
+    };
+    adds.push(foe);
+    foes.push(foe);
+    newHeads.add(foe);
+    return foe;
+  };
+  /** Sumpfhydra: Solange ein Kopf lebt, schützt sie ihr gepanzerter Hals */
+  const neckGuarded = () => adds.some((f) => f.head && f.c.hp > 0);
+  /** Absicht des Bosses: Taumelnd oder mit geschlossenem Auge erleidet er mehr Schaden – der Hals der Hydra weniger */
+  const takenBy = (foe: Foe) => (foe === boss ? bossTurnTakenFactor(turn) * (neckGuarded() ? NECK_TAKEN : 1) : 1);
   const living = () => foes.filter((f) => f.c.hp > 0);
   /** Fähigkeit, die einen Gegner in dieser Runde betäuben würde */
   const stunAttempts = new Map<Foe, { ability: AbilityDef; hero: CoopHero }>();
@@ -1477,7 +1531,7 @@ export function resolveRound(
         target: foe.id,
         ...hit,
         ...(ability && { weapon: ability.weapon, ability: ability.id }),
-        ...(taken < 1 && { shielded: true }),
+        ...(taken < 1 && (foe === boss && neckGuarded() ? { neck: true } : { shielded: true })),
         ...(absorbed > 0 && { absorbed }),
         ...(plate < 1 && { plated: true }),
         ...((matchup === "weak" || matchup === "resist") && { matchup }),
@@ -1629,7 +1683,9 @@ export function resolveRound(
   const soloScale = 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1);
   /** Schildwall/Wutschrei: Faktor auf den Schaden, den ein Held erleidet */
   const hurt = (hero: CoopHero) =>
-    Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0)) * (defending.has(hero.id) ? defendTaken(hero.skills, DEFEND_DAMAGE_TAKEN) : 1);
+    Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0)) *
+    (1 + (hero.effects.corroded?.percent ?? 0)) *
+    (defending.has(hero.id) ? defendTaken(hero.skills, DEFEND_DAMAGE_TAKEN) : 1);
   /** Der Gegner fällt – ein explosiver Elite trifft alle stehenden Helden (Bollwerk blockt). Fallen alle, ist der Kampf verloren. */
   const enemyDown = () => {
     if (elite.includes("explosive")) {
@@ -1697,6 +1753,15 @@ export function resolveRound(
       }
       events.push({ type: "bossPhase", bossId: state.bossId, ...(nextPhase.rally && { rally: rallied.map((f) => f.id) }) });
     }
+    // Sumpfhydra: Unter 75, 50 und 25 % fällt ein Kopf – höchstens einer pro Runde
+    const head = state.bossId === HYDRA_ID ? headDue(heads, boss.c.hp, boss.c.maxHp) : null;
+    if (head) {
+      heads++;
+      // Feuer brennt den Stumpf aus: Brennt die Hydra gerade, wächst dieser Kopf nicht nach
+      const seared = boss.fx.burn !== undefined || events.some((e) => e.type === "burn" && e.target === BOSS);
+      const severed = spawnHead(head.kind, seared ? undefined : HEAD_GROW_ROUNDS);
+      events.push({ type: "headSevered", add: severed.id, head: head.kind, seared });
+    }
     // Trommler: Der Boss macht mehr Schaden, je lauter er trommelt (seine Wirbel aus den Runden davor)
     const drums = 1 + DRUM_BONUS * adds.reduce((sum, f) => sum + (f.role === "drummer" && f.c.hp > 0 ? (f.cast ?? 0) : 0), 0);
     if (stunnedNow(boss)) {
@@ -1718,7 +1783,7 @@ export function resolveRound(
         ? stolenAbility(heroes.find((h) => h.id === stolenFrom.heroId), stolenFrom.ability as AbilityId)
         : turn
           ? scripted && coopAbility(scripted)
-          : abilityForRound(enemy.abilities, state.round);
+          : abilityForRound(raidAbilities(enemy, heads), state.round);
       if (stolenFrom) events.push({ type: "stolen", heroId: stolenFrom.heroId ?? "", ability: stolenFrom.ability as AbilityId });
       else if (special) events.push({ type: "bossAbility", bossId: enemy.id, abilityId: special.id ?? enemy.id, name: special.name });
       // Geschwächt (Erdbeben, Fluch): weniger Schaden
@@ -1856,8 +1921,16 @@ export function resolveRound(
     // Begleiter, solange der Boss steht: Die mit Aufgabe setzen ihre Fähigkeit ein (bossMechanics.ts),
     // sonst je ein normaler Angriff auf ein Ziel nach Bedrohung
     for (const add of adds) {
-      if (add.c.hp <= 0 || boss.c.hp <= 0 || heroes.every((h) => h.down)) continue;
+      if (add.c.hp <= 0 || boss.c.hp <= 0 || heroes.every((h) => h.down) || newHeads.has(add)) continue;
       const stunned = stunnedNow(add);
+      if (add.head === "blood") {
+        // Blutkopf: beisst nicht, sondern heilt die Hydra – betäubt nicht
+        if (stunned) continue;
+        const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * BLOOD_HEAL));
+        boss.c.hp += heal;
+        if (heal > 0) events.push({ type: "addHeal", add: add.id, heal });
+        continue;
+      }
       if (add.role === "healer") {
         // Heilritual: Ein Treffer oder eine Betäubung unterbricht es – angreifen tut der Heiler nie
         if (stunned || hitAdds.has(add.id)) {
@@ -1919,7 +1992,32 @@ export function resolveRound(
       target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
       events.push({ type: "hit", attacker: add.id, target: target.id, ...hit });
       thorns(target, add, hit.damage);
+      if (add.head && hit.damage > 0 && target.combatant.hp > 0) {
+        if (add.head === "venom") {
+          // Giftbiss: Das Gift stapelt sich bis VENOM.max – ein stärkeres (Giftatem) bleibt
+          const stack = Math.max(1, Math.round(add.c.damage * VENOM.percent));
+          const rounds = heroDotRounds(target.itemEffects, "poison", VENOM.rounds);
+          const current = target.effects.poison?.damage ?? 0;
+          const damage = Math.max(current, Math.min(stack * VENOM.max, current + stack));
+          if (rounds > 0) target.effects.poison = { damage, roundsLeft: rounds };
+        } else {
+          // Säurebiss: Das Ziel erleidet mehr Schaden
+          target.effects.corroded = { percent: ACID.percent, roundsLeft: ACID.rounds };
+          events.push({ type: "etched", heroId: target.id, add: add.id });
+        }
+      }
       knockDown(target);
+    }
+    // Sumpfhydra: Lebt ein Kopf zu lange, wächst aus seinem Stumpf ein zweiter, gleicher Kopf
+    if (boss.c.hp > 0) {
+      for (const add of [...adds]) {
+        if (!add.head || add.grow === undefined || add.c.hp <= 0 || newHeads.has(add)) continue;
+        add.grow--;
+        if (add.grow > 0) continue;
+        add.grow = undefined;
+        const twin = spawnHead(add.head, undefined);
+        events.push({ type: "headGrown", add: twin.id, from: add.id });
+      }
     }
     for (const hero of shielded) hero.effects.bulwark = undefined;
     if (boss.c.hp <= 0) {
@@ -2007,7 +2105,13 @@ export function resolveRound(
   const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
   heroes = heroes.map((h) => ({
     ...h,
-    effects: { ...h.effects, empower: tick(h.effects.empower), damageTaken: tick(h.effects.damageTaken), renew: tick(h.effects.renew) },
+    effects: {
+      ...h.effects,
+      empower: tick(h.effects.empower),
+      damageTaken: tick(h.effects.damageTaken),
+      renew: tick(h.effects.renew),
+      corroded: tick(h.effects.corroded),
+    },
     cooldowns: tickCooldowns(h.cooldowns, used.get(h.id) ?? null),
     threat: Math.round(h.threat * (1 - THREAT_DECAY)),
     mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + manaRegen(h.skills, MANA_REGEN)),
@@ -2024,15 +2128,20 @@ export function resolveRound(
       heroes,
       boss: boss.c,
       bossEffects: tickEnemyEffects(boss.fx),
-      ...(state.adds && {
-        adds: state.adds.map((a, i) => ({
-          ...a,
-          ...(adds[i].cast !== undefined && { cast: adds[i].cast }),
-          combatant: adds[i].c,
-          effects: tickEnemyEffects(adds[i].fx),
+      ...((state.adds || adds.length > 0) && {
+        adds: adds.map((f, i) => ({
+          ...state.adds?.[i],
+          uid: f.id,
+          creatureId: f.creatureId,
+          ...(f.role && { role: f.role }),
+          ...(f.cast !== undefined && { cast: f.cast }),
+          ...(f.head && { head: f.head, grow: f.grow }),
+          combatant: f.c,
+          effects: tickEnemyEffects(f.fx),
         })),
       }),
       ...(phase && { phase }),
+      ...(heads > 0 && { heads }),
       ...(nextTurn && { bossTurn: nextTurn }),
       bossShield: bossShield > 0 ? bossShield : undefined,
       status,
@@ -2057,10 +2166,16 @@ export function recordCoopWin(stats: CoopStats, bossId: string): CoopStats {
   return { wins: stats.wins + 1, bosses: stats.bosses.includes(bossId) ? stats.bosses : [...stats.bosses, bossId] };
 }
 
+/** Fähigkeiten im Takt – ohne Köpfe rast die Sumpfhydra und setzt ihren Giftatem öfter ein (hydra.ts). */
+function raidAbilities(enemy: CoopEnemy, heads: number | undefined): CoopBossAbility[] {
+  const every = enemy.id === HYDRA_ID ? hydraAbilityEvery(heads) : null;
+  return every ? enemy.abilities.map((a) => ({ ...a, every })) : enemy.abilities;
+}
+
 /** Die Fähigkeit, die der Gegner in dieser Runde einsetzt – oder null (für die Ankündigung). */
 export function coopAbilityDue(state: CoopBattleState): CoopBossAbility | null {
   const turn = coopBossTurn(state);
-  if (!turn) return abilityForRound(getCoopEnemy(state.bossId).abilities, state.round);
+  if (!turn) return abilityForRound(raidAbilities(getCoopEnemy(state.bossId), state.heads), state.round);
   const ability = turnAbility(turn);
   return ability && coopAbility(ability);
 }
