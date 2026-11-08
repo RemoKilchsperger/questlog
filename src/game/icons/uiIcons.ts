@@ -128,20 +128,24 @@ const question = icon({ s: "#b0a38f", S: "#efe6d2", k: "#6a5e4e" }, [
   "....kkk.....",
 ]);
 
+/** Pfeil nach rechts – nach links gespiegelt für ◀ */
+const ARROW = [
+  "..y.........",
+  "..yy........",
+  "..yYy.......",
+  "..yYYy......",
+  "..yYYYy.....",
+  "..yYYYYo....",
+  "..yYYYo.....",
+  "..yYYo......",
+  "..yYo.......",
+  "..yo........",
+  "..o.........",
+];
+
 export const UI_ICONS: Readonly<Record<string, SpriteDef>> = {
-  "▶": icon(GOLD, [
-    "..y.........",
-    "..yy........",
-    "..yYy.......",
-    "..yYYy......",
-    "..yYYYy.....",
-    "..yYYYYo....",
-    "..yYYYo.....",
-    "..yYYo......",
-    "..yYo.......",
-    "..yo........",
-    "..o.........",
-  ]),
+  "▶": icon(GOLD, ARROW),
+  "◀": icon(GOLD, ARROW.map((row) => [...row].reverse().join(""))),
   "🥇": medal("#f4c95d", "#fff1a8", "#c4842a", "#7a4e12"),
   "🥈": medal("#c8d0dc", "#ffffff", "#8e939d", "#4c505a"),
   "🥉": medal("#d0915e", "#f0c89a", "#a0582f", "#5e3420"),

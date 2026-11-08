@@ -2,12 +2,14 @@
 // der Phaser-Kampfszene.
 //
 // Der Held ist 24 × 24 Pixel gross, seine Hände sind 2 × 2-Blöcke. Helme, Waffen,
-// Schilde und die eigenen Teile der Boss-Rüstungen (bossArmor.ts) sind im selben
-// Raster gezeichnet.
+// Schilde, die eigenen Teile der Boss-Rüstungen (bossArmor.ts) sowie Frisuren und
+// Bärte aus der Charaktererstellung (heroLooks.ts) sind im selben Raster gezeichnet.
 
 import { getItem } from "../domain/items";
+import { DEFAULT_LOOKS, sanitizeLooks, type HeroLooks } from "../domain/looks";
 import type { ArmorSlot, Equipment, ItemDef, ItemType } from "../domain/types";
 import { bossGlowColor, getWornBossArmor, getWornHelmet, getWornWeapon, itemPalette } from "./itemSprites";
+import { BEARD_TOP, BEARDS, HAIR_COLORS, HAIR_STYLES, SHIRT_COLORS, SKIN_COLORS } from "./heroLooks";
 import { composeSprites, type SpriteDef, type SpriteLayer } from "./sprites";
 
 /** Grösse des Helden-Rasters */
@@ -15,14 +17,15 @@ const SIZE = 24;
 /** Hände sind 2 × 2 Pixel gross; so viel Platz hatte ein Pixel im alten 12er-Raster */
 const HAND = 2;
 
+/** Grundkörper mit kahlem Kopf – Haare und Bart liegen als eigene Ebenen darüber (heroLooks.ts). */
 export const HERO_SPRITE: SpriteDef = {
   grid: [
-    ".........hhhhhh.........",
-    ".......hhjjhhhhh........",
-    "......hhjhhhhhhhhh......",
-    "......hhhhhhhhhhhh......",
-    "......ihsssssssshi......",
-    "......hssssssssssh......",
+    "........................",
+    ".........ssssss.........",
+    ".......ssssssssss.......",
+    "......ssssssssssss......",
+    "......zssssssssssz......",
+    "......ssssssssssss......",
     "......ssewssssewss......",
     "......sseesssseess......",
     "......zssssssssssz......",
@@ -42,10 +45,8 @@ export const HERO_SPRITE: SpriteDef = {
     "......FFFf....FFFf......",
     "......ffff....ffff......",
   ],
+  // Haut und Hemd färbt das Aussehen um (siehe `armoredBody`)
   palette: {
-    h: "#6b4a2b", // Haare
-    j: "#8f673d", // Haare, Glanzlicht
-    i: "#4e3420", // Haare, Schatten
     s: "#f1c7a0", // Haut
     z: "#d9a37c", // Haut, Schatten
     e: "#1b1424", // Augen
@@ -113,13 +114,15 @@ function glowLayer(sprite: SpriteDef, def: ItemDef): SpriteDef {
 }
 
 /**
- * Grundgrafik mit den Farben der angelegten Rüstung (Brust, Arme, Beine, Schuhe).
- * Mit `glow` stattdessen die Leuchtschicht: nur Teile von Boss-Rüstungen leuchten.
+ * Grundgrafik in Haut- und Hemdfarbe, darüber die Farben der angelegten Rüstung
+ * (Brust, Arme, Beine, Schuhe). Mit `glow` stattdessen die Leuchtschicht: nur
+ * Teile von Boss-Rüstungen leuchten.
  */
-function armoredBody(equipment: Equipment, glow = false): SpriteDef {
+function armoredBody(equipment: Equipment, looks: HeroLooks, glow = false): SpriteDef {
+  const skin = SKIN_COLORS[looks.skin];
   const palette: Record<string, string> = glow
     ? Object.fromEntries(Object.keys(HERO_SPRITE.palette).map((ch) => [ch, NO_GLOW]))
-    : { ...HERO_SPRITE.palette };
+    : { ...HERO_SPRITE.palette, s: skin.s, z: skin.z, n: skin.s, N: skin.z, ...SHIRT_COLORS[looks.shirt] };
   for (const [slot, mapping] of Object.entries(ARMOR_COLORS) as [keyof typeof ARMOR_COLORS, Record<string, string>][]) {
     const owned = equipment[slot];
     if (!owned) continue;
@@ -156,26 +159,48 @@ export function getMainWeaponGlow(equipment: Equipment): string | null {
   return main ? bossGlowColor(main) : null;
 }
 
+interface HeroSpriteOptions {
+  /** Ohne die Waffe in der rechten Hand (siehe `getMainWeapon`) */
+  withoutMainWeapon?: boolean;
+  /** Aussehen aus der Charaktererstellung – ohne Angabe der Standardheld. Fremde Profile dürfen Unsinn enthalten. */
+  looks?: HeroLooks;
+}
+
 /**
  * Der Held mit sichtbarer Ausrüstung: Rüstung in Materialfarben, Helm auf dem
  * Kopf, Waffe in der rechten Hand, Schild bzw. zweite Waffe in der linken.
- * Mit `withoutMainWeapon` fehlt die rechte Waffe (siehe `getMainWeapon`).
  */
-export function getHeroSprite(equipment: Equipment, { withoutMainWeapon = false } = {}): SpriteDef {
-  return composeSprites(WIDTH, HEIGHT, heroLayers(equipment, withoutMainWeapon, false));
+export function getHeroSprite(equipment: Equipment, { withoutMainWeapon = false, looks = DEFAULT_LOOKS }: HeroSpriteOptions = {}): SpriteDef {
+  return composeSprites(WIDTH, HEIGHT, heroLayers(equipment, looks, withoutMainWeapon, false));
 }
 
 /**
  * Leuchtschicht zu `getHeroSprite` (gleiche Grösse): nur die sichtbaren Pixel
  * angelegter Boss-Items, in ihrer Leuchtfarbe. null, wenn nichts leuchtet.
  */
-export function getHeroGlowSprite(equipment: Equipment, { withoutMainWeapon = false } = {}): SpriteDef | null {
-  const { grid, palette } = composeSprites(WIDTH, HEIGHT, heroLayers(equipment, withoutMainWeapon, true));
+export function getHeroGlowSprite(equipment: Equipment, { withoutMainWeapon = false, looks = DEFAULT_LOOKS }: HeroSpriteOptions = {}): SpriteDef | null {
+  const { grid, palette } = composeSprites(WIDTH, HEIGHT, heroLayers(equipment, looks, withoutMainWeapon, true));
   const glowing = Object.fromEntries(Object.entries(palette).filter(([, color]) => color !== NO_GLOW));
   return Object.keys(glowing).length > 0 ? { grid, palette: glowing } : null;
 }
 
-function heroLayers(equipment: Equipment, withoutMainWeapon: boolean, glow: boolean): SpriteLayer[] {
+/**
+ * Frisur und Bart in Haarfarbe. Unter einem Helm fällt der Teil der Frisur weg,
+ * der über den Kopf hinausragt (Stacheln, Irokese) – der Rest liegt unter dem Helm.
+ */
+function hairLayers(looks: HeroLooks, helmet: boolean, glow: boolean): SpriteLayer[] {
+  const palette: Record<string, string> = glow
+    ? { h: NO_GLOW, j: NO_GLOW, i: NO_GLOW, g: NO_GLOW }
+    : { ...HAIR_COLORS[looks.hairColor], g: HERO_SPRITE.palette.g };
+  const hair = HAIR_STYLES[looks.hairStyle];
+  return [
+    helmet ? { sprite: { grid: hair.slice(TOP_MARGIN), palette }, x: 0, y: 0 } : { sprite: { grid: hair, palette }, x: 0, y: -TOP_MARGIN },
+    { sprite: { grid: BEARDS[looks.beard], palette }, x: 0, y: BEARD_TOP },
+  ];
+}
+
+function heroLayers(equipment: Equipment, rawLooks: HeroLooks, withoutMainWeapon: boolean, glow: boolean): SpriteLayer[] {
+  const looks = sanitizeLooks(rawLooks);
   const at = (sprite: SpriteDef, x: number, y: number): SpriteLayer => ({
     sprite,
     x: x + SIDE_MARGIN,
@@ -211,5 +236,6 @@ function heroLayers(equipment: Equipment, withoutMainWeapon: boolean, glow: bool
   if (shield) front.push(inHand(shield, LEFT_HAND, false));
   if (main && !withoutMainWeapon) front.push(inHand(main, RIGHT_HAND, false));
 
-  return [...back, at(armoredBody(equipment, glow), 0, 0), ...front];
+  const hair = hairLayers(looks, equipment.head !== null, glow).map((l) => at(l.sprite, l.x, l.y));
+  return [...back, at(armoredBody(equipment, looks, glow), 0, 0), ...hair, ...front];
 }

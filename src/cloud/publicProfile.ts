@@ -11,6 +11,7 @@ import { getLevel } from "../domain/leveling";
 import type { QuestLog } from "../domain/quests";
 import { EMPTY_TOWER_RECORD, type TowerRecord } from "../domain/tower";
 import type { SkillRanks } from "../domain/skills";
+import { DEFAULT_LOOKS, type HeroLooks } from "../domain/looks";
 import type { Character, Equipment, Stats } from "../domain/types";
 
 /** Was ein öffentliches Profil zeigt. */
@@ -20,6 +21,8 @@ export interface ProfileSnapshot {
   /** Attribute inkl. Ausrüstungs- und Set-Boni */
   stats: Stats;
   equipment: Equipment;
+  /** Aussehen aus der Charaktererstellung – fehlt bei älteren Profilen */
+  looks?: HeroLooks;
   bossCollection: string[];
   skills: SkillRanks;
   /** Koop-Erfolge – fehlt bei Profilen von vor Etappe 3 */
@@ -81,6 +84,7 @@ export function buildPublicProfile({
     snapshot: {
       stats: getEffectiveStats(character.stats, equipment),
       equipment,
+      looks: character.looks ?? DEFAULT_LOOKS,
       bossCollection,
       skills: character.skills,
       coop: coopStats ?? EMPTY_COOP_STATS,

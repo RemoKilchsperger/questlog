@@ -6,6 +6,7 @@ import type { HeroCombatProfile } from "../domain/combat";
 import type { CoopAction, CoopBattleState, CoopEvent } from "../domain/coopCombat";
 import type { ChestChoice, TrapChoice } from "../domain/dungeonPaths";
 import type { BlessingId } from "../domain/tower";
+import type { HeroLooks } from "../domain/looks";
 import type { Equipment } from "../domain/types";
 
 export interface CoopMember {
@@ -17,6 +18,8 @@ export interface CoopMember {
   username: string | null;
   level: number;
   equipment: Equipment;
+  /** Aussehen aus der Charaktererstellung (fehlt bei älteren Lobbys) */
+  looks?: HeroLooks;
   /** Kampfwerte – vom Server aus dem Cloud-Spielstand berechnet */
   profile: HeroCombatProfile;
   /** Schon besiegte Bosse – schaltet heroische Koop-Dungeons frei (fehlt bei älteren Lobbys) */

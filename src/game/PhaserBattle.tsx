@@ -15,14 +15,15 @@ export default function PhaserBattle({ battleId }: { battleId: string }) {
   const parent = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const { battle, equipment } = useGameStore.getState();
+    const { battle, equipment, character } = useGameStore.getState();
+    const looks = character.looks;
     if (!battle || !parent.current) return;
     const { creature, area } = getCreature(battle.creatureId);
     const data: BattleSceneData = {
       battle,
-      heroSprite: getHeroSprite(equipment, { withoutMainWeapon: true }),
+      heroSprite: getHeroSprite(equipment, { withoutMainWeapon: true, looks }),
       heroWeapon: getMainWeapon(equipment),
-      heroGlow: getHeroGlowSprite(equipment, { withoutMainWeapon: true }),
+      heroGlow: getHeroGlowSprite(equipment, { withoutMainWeapon: true, looks }),
       heroWeaponGlow: getMainWeaponGlow(equipment),
       enemySprite: creature.sprite,
       boss: creature.boss,

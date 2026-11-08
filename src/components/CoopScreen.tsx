@@ -370,7 +370,7 @@ function Lobby() {
         <ul className="grid gap-2 sm:grid-cols-2">
           {members.map((m) => (
             <li key={m.id} className={`flex items-center gap-3 rounded-md border-2 bg-night-800 p-2 ${m.id === myId ? "border-gold/60" : "border-night-700"}`}>
-              <PixelAvatar size={48} equipment={m.equipment} />
+              <PixelAvatar size={48} equipment={m.equipment} looks={m.looks} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">
                   {m.id === hostId && (

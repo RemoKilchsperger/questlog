@@ -7,6 +7,7 @@ import { Leaderboard } from "./components/Leaderboard";
 import { EquipmentScreen } from "./components/EquipmentScreen";
 import { GameIcon } from "./components/GameIcon";
 import { HelpScreen } from "./components/HelpScreen";
+import { HeroNameDialog } from "./components/HeroNameDialog";
 import { Hud } from "./components/Hud";
 import { QuestScreen, useReadyQuestCount } from "./components/QuestScreen";
 import { RewardToast } from "./components/RewardToast";
@@ -228,6 +229,7 @@ export default function App() {
       <RewardToast />
       <AchievementToast />
       <CloudDialogs />
+      <HeroNameDialog />
     </div>
   );
 }

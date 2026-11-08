@@ -23,6 +23,15 @@ const saveAt = (level: number, name = "Held") => {
 };
 const member = (id: string, level = 25): CoopMember => memberFromSave(id, saveAt(level, id), null);
 
+describe("Aussehen in der Lobby", () => {
+  it("kommt aus dem Spielstand – Unbekanntes wird zum Standard", () => {
+    const save = saveAt(10);
+    const withLooks = { ...save, state: { ...save.state, character: { ...save.state.character, looks: { skin: "dunkel", hairStyle: "quatsch" } } } };
+    expect(memberFromSave("a", withLooks, null).looks).toMatchObject({ skin: "dunkel", hairStyle: "kurz" });
+    expect(memberFromSave("a", save, null).looks).toMatchObject({ skin: "hell", hairStyle: "kurz" });
+  });
+});
+
 let clock = 1_000_000;
 const ctx = (userId: string, extra: Partial<ServerContext> = {}): ServerContext => ({
   userId,

@@ -1,6 +1,7 @@
 import type { ItemEffectId } from "./itemEffects";
 import type { SkillRanks } from "./skills";
 import type { AbilityId } from "./abilities";
+import type { HeroLooks } from "./looks";
 // Zentrale Datentypen. Bewusst frei von React/Zustand, damit dieselben
 // Typen später im Backend (Supabase Edge Function) und im Kampfsystem
 // (Phaser) wiederverwendet werden können.
@@ -14,6 +15,10 @@ export type Loot = OwnedItem | null;
 
 export interface Character {
   name: string;
+  /** false, solange ein neuer Held noch auf seinen Namen wartet (Dialog beim ersten Start). Ältere Stände: fehlt = benannt. */
+  named?: boolean;
+  /** Aussehen aus der Charaktererstellung (src/domain/looks.ts) – fehlt = Standardheld */
+  looks?: HeroLooks;
   /** Gesamt-XP seit Spielbeginn. Level wird daraus berechnet, nie gespeichert. */
   totalXp: number;
   gold: number;

@@ -189,7 +189,7 @@ function FriendRow({
       }`}
     >
       <AvatarFrame frame={friend.frame} className="rounded bg-night-950/60 p-0.5">
-        <PixelAvatar size={40} equipment={friend.equipment} />
+        <PixelAvatar size={40} equipment={friend.equipment} looks={friend.looks} />
       </AvatarFrame>
       <div className="min-w-0 flex-1">
         <a href={`#/held/${friend.username}`} className="block truncate font-semibold hover:text-gold">
