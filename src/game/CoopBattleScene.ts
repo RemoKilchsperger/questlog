@@ -8,6 +8,7 @@ import { ADD_SKILLS, getBossPhase, RITUAL_ROUNDS, SHIELD_EVERY } from "../domain
 import { STATIC_MAX } from "../domain/bossIntents";
 import { BOSS, coopBossTurn, getCoopEnemy, type CoopBattleState, type CoopEvent } from "../domain/coopCombat";
 import { getCreature } from "../domain/creatures";
+import { getHydraHead, HYDRA_HEADS, HYDRA_ID, type HydraHeadKind } from "../domain/hydra";
 import { getPotion } from "../domain/potions";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
@@ -52,8 +53,29 @@ const ADD_SPRITE_SCALE = 6;
 const ADD_BAR = 80;
 const ADD_BAR_Y = 106;
 
-/** Grafik eines Begleiters (creatureSprites.ts / creatureImages.ts). */
-const addSprite = (creatureId: string) => getCreature(creatureId).creature.sprite;
+/**
+ * Abgeschlagene Köpfe der Sumpfhydra (hydra.ts): bis zu sechs, verteilt um die Hydra in zwei Reihen
+ * von Lebensbalken – schmaler als die der übrigen Begleiter.
+ */
+const HEAD_SLOTS = [
+  { x: 400, barY: 106 },
+  { x: 690, barY: 106 },
+  { x: 330, barY: 150 },
+  { x: 470, barY: 150 },
+  { x: 620, barY: 150 },
+  { x: 545, barY: 106 },
+];
+const HEAD_BAR = 60;
+const HEAD_SCALE = 5;
+
+/** Grafik eines Begleiters (creatureSprites.ts / creatureImages.ts) – Hydra-Köpfe haben ihre eigene. */
+const addSprite = (add: { creatureId: string; head?: HydraHeadKind }) =>
+  add.head ? getHydraHead(add.head).sprite : getCreature(add.creatureId).creature.sprite;
+/** Platz eines Begleiters auf dem Feld: x, Höhe des Lebensbalkens und seine Breite. */
+const addSlot = (add: { head?: HydraHeadKind }, index: number) =>
+  add.head
+    ? { ...HEAD_SLOTS[index % HEAD_SLOTS.length], bar: HEAD_BAR, scale: HEAD_SCALE }
+    : { x: ADD_X[index % ADD_X.length], barY: ADD_BAR_Y, bar: ADD_BAR, scale: ADD_SPRITE_SCALE };
 /** Boss-Fähigkeiten, deren Treffer erst nach einer längeren Animation landet (siehe `bossHits`) */
 const SLOW_IMPACT = new Set(["ore-king", "high-priestess", "void-lord"]);
 
@@ -91,6 +113,8 @@ interface Unit {
   barY: number;
   /** Leichtes Auf und Ab im Stand (pausiert bei Sprüngen) */
   idle?: Phaser.Tweens.Tween;
+  /** Name und Schatten eines Begleiters – verschwinden mit einem besiegten Hydra-Kopf */
+  extras?: (Phaser.GameObjects.Container | Phaser.GameObjects.Graphics)[];
 }
 
 export class CoopBattleScene extends Phaser.Scene {
@@ -101,6 +125,8 @@ export class CoopBattleScene extends Phaser.Scene {
   private boss!: Unit;
   /** Begleiter des Bosses unter ihrer uid */
   private adds = new Map<string, Unit>();
+  /** uids der Hydra-Köpfe – besiegt verschwinden sie ganz */
+  private heads = new Set<string>();
   /** Pfeil über dem eigenen Ziel – nur, wenn Begleiter mitkämpfen */
   private targetMarker: Phaser.GameObjects.Text | null = null;
   /** Dauerhafte Zeichen des Zustands (applyLooks): Farbschicht über der Figur, solange er anhält */
@@ -116,6 +142,7 @@ export class CoopBattleScene extends Phaser.Scene {
     this.setup = data;
     this.heroes = new Map();
     this.adds = new Map();
+    this.heads = new Set();
     this.targetMarker = null;
     this.looks = new Map();
     this.shieldDome = null;
@@ -124,7 +151,9 @@ export class CoopBattleScene extends Phaser.Scene {
   /** Boss mit eigenem Bild (creatureImages.ts) vorab laden. */
   preload() {
     const { state } = this.setup;
-    const sprites = [getCoopEnemy(state.bossId).sprite, ...(state.adds ?? []).map((a) => addSprite(a.creatureId))];
+    // Die Köpfe der Hydra fallen erst im Kampf – ihre Grafiken trotzdem vorab laden
+    const heads = state.bossId === HYDRA_ID ? HYDRA_HEADS.map((h) => h.sprite) : [];
+    const sprites = [getCoopEnemy(state.bossId).sprite, ...(state.adds ?? []).map(addSprite), ...heads];
     for (const sprite of new Set(sprites)) {
       const url = creatureImage(sprite);
       if (url && !this.textures.exists(`creature-img-${sprite}`)) this.load.image(`creature-img-${sprite}`, url);
@@ -153,11 +182,7 @@ export class CoopBattleScene extends Phaser.Scene {
       }
     }
     (state.adds ?? []).forEach((add, i) => {
-      // Begleiter mit Rolle tragen ihr Zeichen vor dem Namen (💚 Heiler, 🛡️ Schildträger, 🥁 Trommler)
-      const label = add.role ? `${ADD_SKILLS[add.role].icon} ${add.combatant.name}` : add.combatant.name;
-      const unit = this.addAdd(add.creatureId, ADD_X[i % ADD_X.length], label, add.combatant.hp, add.combatant.maxHp);
-      unit.body.setDepth(i % 2 === 0 ? 2 : -0.5);
-      this.adds.set(add.uid, unit);
+      this.placeAdd(add, i);
       if (add.combatant.hp === 0) this.addFalls(add.uid, true);
     });
     if (this.adds.size > 0) this.enableTargeting();
@@ -194,15 +219,39 @@ export class CoopBattleScene extends Phaser.Scene {
     g.fillStyle(0x000000, 0.3);
     for (const x of HERO_X[this.setup.state.heroes.length] ?? HERO_X[4]) g.fillEllipse(x, GROUND_Y + 2, 60, 12);
     g.fillEllipse(BOSS_X, GROUND_Y + 2, 150, 18);
-    (this.setup.state.adds ?? []).forEach((_, i) => g.fillEllipse(ADD_X[i % ADD_X.length], GROUND_Y + 2, 80, 14));
+    // Hydra-Köpfe zeichnen ihren Schatten selbst (placeAdd)
+    (this.setup.state.adds ?? []).forEach((add, i) => !add.head && g.fillEllipse(addSlot(add, i).x, GROUND_Y + 2, 80, 14));
+  }
+
+  /** Einen Begleiter an seinen Platz stellen – beim Aufbau und wenn er mitten im Kampf dazukommt (Hydra-Köpfe). */
+  private placeAdd(add: NonNullable<CoopBattleState["adds"]>[number], index: number): Unit {
+    // Begleiter mit Rolle tragen ihr Zeichen vor dem Namen (💚 Heiler, 🛡️ Schildträger, 🥁 Trommler), Köpfe ihre Farbe
+    const icon = add.role ? ADD_SKILLS[add.role].icon : add.head ? getHydraHead(add.head).icon : null;
+    const label = icon ? `${icon} ${add.combatant.name}` : add.combatant.name;
+    const slot = addSlot(add, index);
+    const unit = this.addAdd(addSprite(add), slot, label, add.combatant.hp, add.combatant.maxHp);
+    unit.body.setDepth(add.head ? 2 : index % 2 === 0 ? 2 : -0.5);
+    if (add.head) {
+      // Köpfe haben ihren eigenen Schatten – er verschwindet mit ihnen
+      const shadow = this.add.graphics().fillStyle(0x000000, 0.3).fillEllipse(slot.x, GROUND_Y + 2, 70, 12).setDepth(-0.9);
+      unit.extras = [...(unit.extras ?? []), shadow];
+      this.heads.add(add.uid);
+    }
+    this.adds.set(add.uid, unit);
+    return unit;
   }
 
   /** Begleiter: kleiner als der Boss, mit schmalem Lebensbalken unter dessen. */
-  private addAdd(creatureId: string, x: number, name: string, hp: number, maxHp: number): Unit {
-    const sprite = addSprite(creatureId);
+  private addAdd(
+    sprite: string,
+    { x, barY, bar, scale: spriteScale }: { x: number; barY: number; bar: number; scale: number },
+    name: string,
+    hp: number,
+    maxHp: number,
+  ): Unit {
     const imageKey = `creature-img-${sprite}`;
     let object: Phaser.GameObjects.Image;
-    let scale = ADD_SPRITE_SCALE;
+    let scale = spriteScale;
     if (this.textures.exists(imageKey)) {
       const source = this.textures.get(imageKey).getSourceImage() as HTMLImageElement;
       object = this.add.image(0, 0, imageKey).setOrigin(0.5, (lastOpaqueRow(source) + 1) / source.height);
@@ -212,22 +261,23 @@ export class CoopBattleScene extends Phaser.Scene {
     }
     const body = this.add.container(x, GROUND_Y + 4, [object]).setScale(scale);
     const idle = this.tweens.add({ targets: body, y: body.y - 3, duration: 1000 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    iconText(this, x, ADD_BAR_Y - 22, name, { fontFamily: NUMBER_FONT, fontSize: "12px", fontStyle: "bold", color: "#efe6d2" }, { color: "#0e0b16", width: 4 }, 0);
+    const label = iconText(this, x, barY - 22, name, { fontFamily: NUMBER_FONT, fontSize: "12px", fontStyle: "bold", color: "#efe6d2" }, { color: "#0e0b16", width: 4 }, 0);
     const unit: Unit = {
+      extras: [label],
       body,
       images: [object],
       weapon: null,
       weaponType: null,
       bar: this.add.graphics(),
       hpText: this.add
-        .text(x, ADD_BAR_Y + 10, "", { fontFamily: NUMBER_FONT, fontSize: "11px", fontStyle: "bold", color: "#efe6d2" })
+        .text(x, barY + 10, "", { fontFamily: NUMBER_FONT, fontSize: "11px", fontStyle: "bold", color: "#efe6d2" })
         .setOrigin(0.5, 0)
         .setStroke("#0e0b16", 3),
       hp,
       maxHp,
       homeX: x,
-      barWidth: ADD_BAR,
-      barY: ADD_BAR_Y,
+      barWidth: bar,
+      barY,
       idle,
     };
     this.drawBar(unit, hp);
@@ -237,11 +287,7 @@ export class CoopBattleScene extends Phaser.Scene {
   /** Gegner anklicken wählt das eigene Ziel (die Aktionsleiste übernimmt es), ein Pfeil zeigt es an. */
   private enableTargeting() {
     const foes: [string | undefined, Unit][] = [[undefined, this.boss], ...[...this.adds].map(([uid, unit]): [string, Unit] => [uid, unit])];
-    for (const [uid, unit] of foes) {
-      unit.images[0].setInteractive({ useHandCursor: true }).on("pointerdown", () => {
-        if (unit.hp > 0) EventBus.emit("coop:select-target", { target: uid });
-      });
-    }
+    for (const [uid, unit] of foes) this.targetable(uid, unit);
     this.targetMarker = this.add
       .text(0, 0, "▼", { fontFamily: NUMBER_FONT, fontSize: "22px", color: "#f4c95d" })
       .setOrigin(0.5, 1)
@@ -249,6 +295,13 @@ export class CoopBattleScene extends Phaser.Scene {
       .setDepth(5);
     this.tweens.add({ targets: this.targetMarker, alpha: 0.45, duration: 600, yoyo: true, repeat: -1 });
     this.markTarget(undefined);
+  }
+
+  /** Anklicken wählt diesen Gegner als eigenes Ziel. */
+  private targetable(uid: string | undefined, unit: Unit) {
+    unit.images[0].setInteractive({ useHandCursor: true }).on("pointerdown", () => {
+      if (unit.hp > 0) EventBus.emit("coop:select-target", { target: uid });
+    });
   }
 
   /** Pfeil über das eigene Ziel setzen (undefined = Boss). */
@@ -264,6 +317,13 @@ export class CoopBattleScene extends Phaser.Scene {
     if (!unit) return;
     this.tweens.killTweensOf(unit.body);
     unit.images[0].disableInteractive();
+    if (this.heads.has(uid)) {
+      // Ein besiegter Hydra-Kopf verschwindet ganz – samt Name, Lebensbalken und Schatten
+      const parts = [unit.body, unit.bar, unit.hpText, ...(unit.extras ?? [])];
+      this.tweens.add({ targets: unit.body, angle: 20, y: GROUND_Y + 16, duration: instant ? 0 : 500 });
+      this.tweens.add({ targets: parts, alpha: 0, duration: instant ? 0 : 500, onComplete: () => parts.forEach((p) => p.setVisible(false)) });
+      return;
+    }
     this.tweens.add({ targets: unit.body, alpha: 0.2, angle: 12, y: GROUND_Y + 12, duration: instant ? 0 : 500 });
   }
 
@@ -427,7 +487,7 @@ export class CoopBattleScene extends Phaser.Scene {
         special = "void-lord";
       }
       const ability = special;
-      this.time.delayedCall(delay, () => (sideHit && event.type === "hit" ? this.sideImpact(event) : this.animate(event, ability)));
+      this.time.delayedCall(delay, () => (sideHit && event.type === "hit" ? this.sideImpact(event) : this.animate(event, ability, next)));
       const quick =
         sideHit ||
         (aoe && ((event.type === "hit" && event.attacker === BOSS) || event.type === "blocked" || event.type === "manaBurn")) ||
@@ -436,7 +496,7 @@ export class CoopBattleScene extends Phaser.Scene {
         event.type === "blast" ||
         event.type === "corroded" ||
         event.type === "smoked";
-      const long = event.type === "bossPhase" || event.type === "explosion";
+      const long = event.type === "bossPhase" || event.type === "explosion" || event.type === "headSevered" || event.type === "headGrown";
       // Steinschlag, Fluchkreis und Strudel treffen erst nach ihrer Animation – dafür Zeit lassen
       const slowImpact = event.type === "hit" && event.attacker === BOSS && special !== null && SLOW_IMPACT.has(special);
       delay +=
@@ -468,7 +528,7 @@ export class CoopBattleScene extends Phaser.Scene {
   }
 
   /** `bossAbility`: Id des Bosses, dessen Fähigkeit gerade wirkt (für den passenden Treffer-Effekt) */
-  private animate(event: CoopEvent, bossAbility: string | null) {
+  private animate(event: CoopEvent, bossAbility: string | null, next: CoopBattleState) {
     switch (event.type) {
       case "potion": {
         const target = this.unit(event.targetId);
@@ -588,6 +648,18 @@ export class CoopBattleScene extends Phaser.Scene {
       case "explosion":
         this.showExplosion(event.hits);
         break;
+      case "headSevered":
+        this.headSevered(next, event.add, event.seared);
+        break;
+      case "headGrown":
+        this.headGrown(next, event.add, event.from);
+        break;
+      case "etched": {
+        const hero = this.unit(event.heroId);
+        this.float(hero, "VERÄTZT", "#d8d24a", 14, 30);
+        fx.burst(this, this.center(hero), 0xd8d24a, 8, 40);
+        break;
+      }
       case "addDown":
         this.addFalls(event.add, false);
         this.float(this.unit(event.add), "BESIEGT", "#a49cb8", 14, 20);
@@ -836,7 +908,10 @@ export class CoopBattleScene extends Phaser.Scene {
       if (!unit) continue;
       const cast = add.cast ?? 0;
       const alive = active && add.combatant.hp > 0;
-      if (!alive || !add.role) this.setLook(unit, null);
+      if (alive && add.head) {
+        // Hydra-Köpfe: Der Blutkopf pulsiert rot, ein Kopf kurz vor dem Nachwachsen grün
+        this.setLook(unit, add.grow === 1 ? { color: 0x5dff9a, alpha: 0.4, pulse: 260 } : add.head === "blood" ? { color: 0xff4a4a, alpha: 0.2, pulse: 500 } : null);
+      } else if (!alive || !add.role) this.setLook(unit, null);
       else if (add.role === "healer") this.setLook(unit, cast > 0 ? { color: 0x5dff9a, alpha: 0.2 * cast, pulse: cast >= RITUAL_ROUNDS - 1 ? 250 : 0 } : null);
       else if (add.role === "shield") this.setLook(unit, cast >= SHIELD_EVERY - 1 ? { color: 0x7aa7f0, alpha: 0.5, pulse: 260 } : null);
       else this.setLook(unit, cast > 0 ? { color: 0xff7a3a, alpha: 0.07 * cast } : null);
@@ -1827,6 +1902,65 @@ export class CoopBattleScene extends Phaser.Scene {
       }
       if (hits.some((h) => h.blocked)) sfx.block();
     });
+  }
+
+  /** Sumpfhydra: Ein Kopf fliegt ab und landet an seinem Platz – Feuer brennt den Stumpf aus. */
+  private headSevered(next: CoopBattleState, uid: string, seared: boolean) {
+    const index = next.adds?.findIndex((a) => a.uid === uid) ?? -1;
+    const add = next.adds?.[index];
+    if (!add || this.adds.has(uid)) return;
+    const unit = this.spawnAdd(add, index);
+    const from = this.center(this.boss);
+    sfx.hit(true, true);
+    this.cameras.main.shake(300, 0.01);
+    fx.flash(this, 0xc23a3a, 0.2, 200);
+    fx.burst(this, from, 0x3f6b4a, 18, 80, 6);
+    this.float(this.boss, "KOPF AB!", "#f4c95d", 26, 70);
+    if (seared) {
+      fx.rise(this, from, 0xf08a2c, 12, 70);
+      this.time.delayedCall(300, () => this.float(this.boss, "AUSGEBRANNT", "#f08a2c", 16, 40));
+    }
+    // Der Kopf fliegt im Bogen vom Hals an seinen Platz
+    const home = unit.body.y;
+    unit.body.setPosition(BOSS_X, home - 140).setAlpha(0);
+    this.tweens.add({ targets: unit.body, alpha: 1, duration: 150 });
+    this.tweens.add({ targets: unit.body, x: unit.homeX, duration: 600, ease: "Sine.easeOut" });
+    this.tweens.add({
+      targets: unit.body,
+      y: home,
+      duration: 600,
+      ease: "Bounce.easeOut",
+      onComplete: () => this.idleAdd(unit, home),
+    });
+  }
+
+  /** Aus dem Stumpf eines Kopfs wächst ein zweiter – er schiesst neben ihm aus dem Boden. */
+  private headGrown(next: CoopBattleState, uid: string, fromUid: string) {
+    const index = next.adds?.findIndex((a) => a.uid === uid) ?? -1;
+    const add = next.adds?.[index];
+    if (!add || this.adds.has(uid)) return;
+    const unit = this.spawnAdd(add, index);
+    const from = this.adds.get(fromUid);
+    if (from) fx.burst(this, this.center(from), 0x7dd3a8, 12, 50);
+    sfx.roar();
+    this.float(unit, "NACHGEWACHSEN!", "#f0776a", 16, 40);
+    const home = unit.body.y;
+    unit.body.setY(home + 60).setAlpha(0);
+    this.tweens.add({ targets: unit.body, y: home, alpha: 1, duration: 500, ease: "Back.easeOut", onComplete: () => this.idleAdd(unit, home) });
+  }
+
+  /** Neuer Begleiter mitten im Kampf: mit Schatten, anklickbar als Ziel. */
+  private spawnAdd(add: NonNullable<CoopBattleState["adds"]>[number], index: number): Unit {
+    const unit = this.placeAdd(add, index);
+    this.tweens.killTweensOf(unit.body);
+    if (this.targetMarker) this.targetable(add.uid, unit);
+    else this.enableTargeting();
+    return unit;
+  }
+
+  /** Leichtes Auf und Ab im Stand. */
+  private idleAdd(unit: Unit, y: number) {
+    unit.idle = this.tweens.add({ targets: unit.body, y: y - 3, duration: 1000 + unit.homeX, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
   }
 
   /** Sammelruf: Der Begleiter steht (wieder) auf, mit vollen Lebenspunkten. */

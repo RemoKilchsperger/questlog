@@ -136,5 +136,8 @@ blurry, anti-aliasing, gradient background, text, watermark, multiple characters
 | Datei | Gegner | Prompt |
 |---|---|---|
 | `hydra.png` | Sumpfhydra | `boss: swamp hydra, three serpent heads on long necks, dark green scales, heavy body, toxic green breath, yellow eyes` |
+| `hydra-head-venom.png` | Giftkopf (abgeschlagen) | `severed hydra head on a short bleeding neck stump, lying on the ground but still alive and snapping, green scales, dripping toxic green venom from its fangs, yellow eyes` |
+| `hydra-head-acid.png` | Säurekopf (abgeschlagen) | `severed hydra head on a short bleeding neck stump, lying on the ground but still alive and snapping, sickly yellow-olive scales, sizzling yellow acid foaming from its jaws, orange eyes` |
+| `hydra-head-blood.png` | Blutkopf (abgeschlagen) | `severed hydra head on a short bleeding neck stump, lying on the ground but still alive, dark crimson scales, a thin stream of red life force flowing from it back towards the hydra, yellow eyes` |
 | `frost-giant.png` | Frostriese Hrimgar | `boss: frost giant, enormous humanoid of glacier ice, crown of ice spikes, frosty beard, massive fists, glowing cyan eyes` |
 | `world-eater.png` | Weltenverschlinger | `boss: world eater, colossal gaping maw from the void, rows of teeth, many glowing eyes, purple and red tentacles, cosmic darkness` |

@@ -198,7 +198,8 @@ auch im Koop mit Abstimmung). Beute in einer Truhe, die bei einer Niederlage ver
 Endboss schon besiegt haben). Raid-Bosse gibt es nicht heroisch.
 
 **Koop** (`coopCombat.ts`, Plan in `docs/koop-kampf.md`): 2–4 Spieler gegen Sumpfhydra (20),
-Frostriese (40) oder Weltenverschlinger (60). Der Boss greift nach Bedrohung an,
+Frostriese (40) oder Weltenverschlinger (60). Der Hydra schlägt die Gruppe bei 75/50/25 % einen Kopf ab,
+der als Begleiter weiterkämpft (`hydra.ts`, docs/raid-bosse.md). Der Boss greift nach Bedrohung an,
 Gefallene lassen sich mit einem Heiltrank wiederbeleben, jeder würfelt eigene Beute (×1.5 XP und Gold).
 Auch alle Dungeons gehen im Koop (Plan in `docs/koop-dungeons.md`): Gegner mit Lebenspunkten
 `× n × (1 + 0.1 · (n − 1))` und Schaden `× (1 + 0.4 · (n − 1))`, Gefallene stehen zwischen den Kämpfen

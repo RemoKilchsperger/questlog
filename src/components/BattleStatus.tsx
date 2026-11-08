@@ -8,6 +8,7 @@ import type { AbilityDef, Guard } from "../domain/abilities";
 import { ADD_SKILLS, DRUM_BONUS, getBossPhase, type AddRole, type AddRoleDef } from "../domain/bossMechanics";
 import type { ActiveBuff, DamageOverTime } from "../domain/combat";
 import { getEliteAffix, type EliteAffix } from "../domain/elites";
+import { FRENZY_EVERY, HYDRA_HEADS, NECK_TAKEN, type HydraHeadKind } from "../domain/hydra";
 import { foodEffectText, getFood } from "../domain/food";
 import { getMatchups, MATCHUP_LABELS, RESIST_FACTOR, WEAK_FACTOR, type Matchup } from "../domain/matchups";
 import { BUFF_LABELS, type BuffKind } from "../domain/potions";
@@ -36,6 +37,7 @@ interface HeroEffects {
   damageTaken?: ActiveBuff;
   charged?: number;
   renew?: ActiveBuff;
+  corroded?: ActiveBuff;
 }
 
 /** Plakette für eine Abwehr gegen den nächsten Angriff (Parade, Vergeltung, Ausweichschuss, …). */
@@ -89,6 +91,9 @@ export function heroStatusChips(
       tone: less ? "good" : "bad",
       title: less ? "Schildwall: Du erleidest weniger Schaden" : "Wutschrei: Du erleidest mehr Schaden",
     });
+  }
+  if (effects.corroded) {
+    chips.push({ key: "corroded", icon: "🫗", text: `+${pct(effects.corroded.percent)} erlittener Schaden`, rounds: effects.corroded.roundsLeft, tone: "bad", title: "Säure des Säurekopfs: Du erleidest mehr Schaden" });
   }
   if (effects.renew) {
     chips.push({ key: "renew", icon: "💚", text: `+${pct(effects.renew.percent)} LP pro Runde`, rounds: effects.renew.roundsLeft, tone: "good", title: "Arkane Heilung" });
@@ -166,6 +171,21 @@ export function soloBossChips(
   const drums = adds.reduce((sum, a) => sum + (a.role === "drummer" && a.combatant.hp > 0 ? (a.cast ?? 0) : 0), 0);
   if (drums > 0) {
     chips.push({ key: "drummer", icon: ADD_SKILLS.drummer.icon, text: `Angefeuert +${pct(drums * DRUM_BONUS)}`, tone: "bad", title: ADD_SKILLS.drummer.description });
+  }
+  return chips;
+}
+
+/** Sumpfhydra (hydra.ts): gepanzerter Hals, solange ein Kopf lebt, und Raserei ohne Köpfe. */
+export function hydraChips(heads: number | undefined, adds: readonly { head?: HydraHeadKind; combatant: { hp: number } }[]): StatusChip[] {
+  const chips: StatusChip[] = [];
+  if (adds.some((a) => a.head && a.combatant.hp > 0)) {
+    chips.push({ key: "neck", icon: "🐍", text: `Gepanzerter Hals −${pct(1 - NECK_TAKEN)}`, tone: "bad", title: "Solange ein abgeschlagener Kopf lebt, erleidet die Hydra weniger Schaden" });
+  }
+  const next = HYDRA_HEADS[heads ?? 0];
+  if (next) {
+    chips.push({ key: "nextHead", icon: "🪓", text: `Nächster Kopf bei ${pct(next.at)}`, tone: "foe", title: `Unter ${pct(next.at)} LP fällt der ${next.name}: ${next.description}` });
+  } else {
+    chips.push({ key: "frenzy", icon: "💢", text: `Raserei: Giftatem alle ${FRENZY_EVERY} Runden`, tone: "bad", title: "Alle Köpfe sind ab – der unsterbliche Kopf rast" });
   }
   return chips;
 }
