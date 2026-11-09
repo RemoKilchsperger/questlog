@@ -32,7 +32,12 @@ export type QuestGoal =
    * Quest-Gegenstand eines Besuchers (visitors.ts): fällt mit einer Chance bei Siegen gegen
    * diese Kreatur. Er liegt nicht im Inventar, er zählt nur als Fortschritt.
    */
-  | { kind: "fetch"; creatureId: string; count: number; item: string; icon: string };
+  | { kind: "fetch"; creatureId: string; count: number; item: string; icon: string }
+  /**
+   * Letztes Kapitel eines Dungeon-Besuchers (dungeonVisitors.ts): die Szene hinter der Geschichtstür
+   * spielen und danach den Endboss besiegen. Kein Ereignis zählt dafür – das setzt der Store direkt.
+   */
+  | { kind: "dungeonStory"; dungeonId: string };
 
 export interface QuestReward {
   xp: number;
@@ -213,7 +218,7 @@ export function questArea(def: QuestDef): AreaDef {
 
 /** Ziel als Zahl: Anzahl Siege, Dungeons oder Ausrüstungsteile – beim bestimmten Dungeon 1. */
 export function questTarget(def: QuestDef): number {
-  return def.goal.kind === "dungeon" ? 1 : def.goal.kind === "towerFloor" ? def.goal.floor : def.goal.count;
+  return def.goal.kind === "dungeon" || def.goal.kind === "dungeonStory" ? 1 : def.goal.kind === "towerFloor" ? def.goal.floor : def.goal.count;
 }
 
 const TRADE_GOAL_TEXT: Record<TradeAction, string> = {
@@ -228,6 +233,8 @@ export function questGoalText(def: QuestDef): string {
   switch (goal.kind) {
     case "dungeon":
       return `Schliesse den Dungeon ${questArea(def).name} ab`;
+    case "dungeonStory":
+      return `Folge der Geschichte hinter der 📜 Tür in ${questArea(def).name} und besiege den Endboss`;
     case "kill": {
       const { creature } = getCreature(goal.creatureId);
       return creature.boss ? `Besiege ${creature.name}` : `Töte ${goal.count}× ${creature.name}`;
@@ -284,6 +291,9 @@ function matchesGoal(goal: QuestGoal, event: QuestEvent): boolean {
     // Ob der Gegenstand fällt, würfelt visitors.ts – hier zählt nur, ob es die richtige Kreatur war
     case "fetch":
       return event.kind === "kill" && event.creatureId === goal.creatureId;
+    // Setzt der Store direkt, wenn nach der Szene der Endboss fällt (visitors.ts, completeStoryScene)
+    case "dungeonStory":
+      return false;
   }
 }
 

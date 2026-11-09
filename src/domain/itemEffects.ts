@@ -134,6 +134,10 @@ export const VISITOR_EFFECTS: Record<string, ItemEffectId> = {
   "unique-torbin-axe": "runeblade",
   "unique-stranger-scepter": "soulDrain",
   "unique-aldric-greatsword": "dragonfire",
+  "unique-samira-shield": "purity",
+  "unique-vessa-staff": "chainLightning",
+  "unique-orun-mantle": "unyielding",
+  "unique-orun-axe": "vortex",
 };
 
 export function getItemEffect(id: ItemEffectId): ItemEffectDef {
