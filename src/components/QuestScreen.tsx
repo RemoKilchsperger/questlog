@@ -372,7 +372,7 @@ function QuestIcon({ def }: { def: QuestDef }) {
       </span>
     );
   }
-  if (goal.kind === "dungeon") return <CreatureSprite sprite={getDungeon(goal.dungeonId).creatures.at(-1)!.sprite} size={40} className="shrink-0" />;
+  if (goal.kind === "dungeon" || goal.kind === "dungeonStory") return <CreatureSprite sprite={getDungeon(goal.dungeonId).creatures.at(-1)!.sprite} size={40} className="shrink-0" />;
   const symbol =
     goal.kind === "trade" ? TRADE_ICONS[goal.action] : goal.kind === "dungeons" ? "🏰" : goal.kind === "towerFloor" ? "🗼" : goal.boss ? "👑" : "⚔️";
   return (

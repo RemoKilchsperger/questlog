@@ -132,6 +132,17 @@ export const VILLAGE_ICONS: Readonly<Record<string, SpriteDef>> = {
     "kcccccccccck",
     ".kkkkkkkkkk.",
   ]),
+  // Dattelbrot (Rezept von Samira): ein Laib mit Einschnitten und Datteln
+  "🍞": icon({ c: "#c8843a", C: "#e8b060", k: "#7a4418", d: "#5a2a18" }, [
+    "....kkkk....",
+    "..kkCCCCkk..",
+    ".kCCcCCcCCk.",
+    "kCCdCCcCdCCk",
+    "kCcCCdCCcCck",
+    "kcCcCCcCCcck",
+    "kcccccccccck",
+    ".kkkkkkkkkk.",
+  ]),
   "🎂": icon({ W: "#f5f2ea", w: "#d8d0c0", p: "#e88aa8", P: "#c05a80", y: "#f4c95d", r: "#e04848" }, [
     ".....y......",
     ".....r......",

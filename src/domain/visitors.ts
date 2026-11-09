@@ -4,8 +4,12 @@
 // bleiben 24 Stunden und haben eine kurze Bitte. Quest-Gegenstände (Ziel `fetch`)
 // fallen mit einer Chance bei Siegen gegen eine bestimmte Kreatur. Reine Logik ohne
 // UI, der Zufall kommt über `rng` herein.
+// Dazu kommen die Dungeon-Besucher (dungeonVisitors.ts, docs/dungeon-besucher.md): Sie haben
+// einen eigenen Platz (`dungeonStory`) und enden mit einer Szene im Dungeon.
 
 import { getCreature, AREAS, DUNGEONS, isAreaUnlocked, type CreatureDef } from "./creatures";
+import { DUNGEON_VISITORS } from "./dungeonVisitors";
+import type { BlessingId } from "./tower";
 import { FOODS } from "./food";
 import { BUFF_POTIONS } from "./potions";
 import {
@@ -70,6 +74,10 @@ export interface FixedVisitorDef {
   icon: string;
   /** Gebiet, in dem die Geschichte spielt */
   areaId: string;
+  /** Dungeon-Besucher: sein Dungeon – er hat einen eigenen Platz im Dorf und eine Szene im letzten Kapitel */
+  dungeonId?: string;
+  /** Szene hinter der Geschichtstür. Gibt es eine Entscheidung, gehören ihre Optionen zu den Optionen der Szene (gleiche Ids). */
+  scene?: StoryScene;
   /** Ab diesem Level kommt er ins Dorf */
   level: number;
   /** Erste Begegnung */
@@ -81,6 +89,34 @@ export interface FixedVisitorDef {
   choice?: { prompt: string; options: VisitorChoiceOption[] };
   /** Abschied, wenn es keine Entscheidung gibt */
   farewell: string;
+}
+
+/** Eine Wahl in der Szene hinter der Geschichtstür. */
+export interface StorySceneOption {
+  id: string;
+  label: string;
+  /** Hinweis unter dem Knopf – ohne Zahlen */
+  hint: string;
+  /** Was nach der Wahl passiert */
+  result: string;
+  /** Zusatzkampf gegen diese Kreatur des Dungeons, als Elite mit zwei Modifikatoren */
+  fight?: string;
+  /** Probe wie bei der Falle: Ausweichen nach Rüstungsklasse, sonst Schaden (schwere Rüstung weniger) – mit Text für beide Ausgänge */
+  test?: { pass: string; fail: string };
+  /** Segen bis zum Ende des Laufs */
+  blessing?: BlessingId;
+  /** Der Endboss dieses Laufs hat so viel weniger Lebenspunkte (0..1) */
+  weakenBoss?: number;
+  /** Der Besucher kommt nicht zurück – im Dorf wartet stattdessen ein Brief von ihm */
+  letter?: boolean;
+}
+
+export interface StoryScene {
+  title: string;
+  text: string;
+  options: StorySceneOption[];
+  /** Abschluss der Szene, wenn sie ohne Kampf endet bzw. nach dem Sieg */
+  after: string;
 }
 
 /** Chance auf den Quest-Gegenstand bei einem normalen Gegner – Elite und Bosse lassen ihn immer fallen. */
@@ -318,7 +354,7 @@ export const FIXED_VISITORS: readonly FixedVisitorDef[] = [
 ];
 
 export function getFixedVisitor(id: string): FixedVisitorDef {
-  const def = FIXED_VISITORS.find((v) => v.id === id);
+  const def = FIXED_VISITORS.find((v) => v.id === id) ?? DUNGEON_VISITORS.find((v) => v.id === id);
   if (!def) throw new Error(`Unbekannter Besucher: ${id}`);
   return def;
 }
@@ -334,9 +370,12 @@ function goalUnits(goal: QuestGoal): { level: number; units: number } {
     }
     case "fetch": {
       const { creature } = getCreature(goal.creatureId);
-      return { level: creature.level, units: creature.boss ? 8 * goal.count : goal.count / FETCH_CHANCE };
+      // Der Zwischenboss lässt ihn immer fallen (er ist Elite), ist aber halb so viel wert wie ein Boss
+      const units = creature.boss ? 8 * goal.count : creature.midBoss ? 4 * goal.count : goal.count / FETCH_CHANCE;
+      return { level: creature.level, units };
     }
-    case "dungeon": {
+    case "dungeon":
+    case "dungeonStory": {
       const dungeon = DUNGEONS.find((d) => d.id === goal.dungeonId);
       return { level: dungeon?.maxLevel ?? 1, units: 12 };
     }
@@ -464,7 +503,7 @@ export const COOK_RECIPES: readonly string[] = FOODS.filter(
   (food) =>
     food.recipe &&
     !food.treasure &&
-    !FIXED_VISITORS.some((v) =>
+    ![...FIXED_VISITORS, ...DUNGEON_VISITORS].some((v) =>
       [v.gift, ...(v.choice?.options.map((o) => o.gift) ?? [])].some((g) => g?.kind === "recipe" && g.foodId === food.id),
     ),
 ).map((food) => food.id);
@@ -561,12 +600,21 @@ export interface StoryVisit {
   /** Hat man das aktuelle Kapitel angenommen? */
   accepted: boolean;
   progress: number;
+  /** Dungeon-Besucher: die Wahl in der Szene – gespeichert, sobald nach ihr der Endboss gefallen ist */
+  scene?: string;
 }
+
+/** Platz eines festen Besuchers im Dorf: Gebiets- oder Dungeon-Besucher. */
+export type StorySlot = "story" | "dungeonStory";
+export type VisitorKind = StorySlot | "wanderer";
+export const STORY_SLOTS: readonly StorySlot[] = ["story", "dungeonStory"];
 
 /** Besucher – wird gespeichert. */
 export interface VisitorState {
   /** Der feste Besucher, der gerade im Dorf ist */
   story: StoryVisit | null;
+  /** Der Dungeon-Besucher, der gerade im Dorf ist – eigener Platz neben `story` */
+  dungeonStory: StoryVisit | null;
   /** Feste Besucher, deren Geschichte erledigt ist */
   done: string[];
   /** Entscheidungen am Ende: Besucher → gewählte Option */
@@ -578,17 +626,28 @@ export interface VisitorState {
   nextWanderer: number;
 }
 
-export const EMPTY_VISITORS: VisitorState = { story: null, done: [], choices: {}, recipes: [], wanderer: null, nextWanderer: 0 };
+export const EMPTY_VISITORS: VisitorState = {
+  story: null,
+  dungeonStory: null,
+  done: [],
+  choices: {},
+  recipes: [],
+  wanderer: null,
+  nextWanderer: 0,
+};
+
+const SLOT_VISITORS: Record<StorySlot, readonly FixedVisitorDef[]> = { story: FIXED_VISITORS, dungeonStory: DUNGEON_VISITORS };
 
 /**
- * Lässt Besucher kommen und gehen: der nächste feste Besucher, sobald das Level reicht,
- * Durchreisende nach Zeit. Ohne Änderung kommt dasselbe Objekt zurück.
+ * Lässt Besucher kommen und gehen: der nächste feste Besucher und der nächste Dungeon-Besucher,
+ * sobald das Level reicht, Durchreisende nach Zeit. Ohne Änderung kommt dasselbe Objekt zurück.
  */
 export function refreshVisitors(state: VisitorState, heroLevel: number, now: number, rng: () => number = Math.random): VisitorState {
   let next = state;
-  if (!next.story) {
-    const def = FIXED_VISITORS.find((v) => !next.done.includes(v.id) && v.level <= heroLevel);
-    if (def) next = { ...next, story: { id: def.id, chapter: 0, accepted: false, progress: 0 } };
+  for (const slot of STORY_SLOTS) {
+    if (next[slot]) continue;
+    const def = SLOT_VISITORS[slot].find((v) => !next.done.includes(v.id) && v.level <= heroLevel);
+    if (def) next = { ...next, [slot]: { id: def.id, chapter: 0, accepted: false, progress: 0 } };
   }
   if (next.wanderer && now >= next.wanderer.leaves) {
     const [min, max] = WANDERER_GAP_MS;
@@ -602,11 +661,12 @@ export function refreshVisitors(state: VisitorState, heroLevel: number, now: num
 }
 
 /** Nimmt das aktuelle Kapitel des festen Besuchers bzw. die Bitte des Durchreisenden an. */
-export function acceptVisitor(state: VisitorState, who: "story" | "wanderer"): VisitorState {
-  if (who === "story") {
-    if (!state.story) throw new Error("Gerade ist kein Besucher im Dorf.");
-    if (state.story.accepted) throw new Error("Das hast du schon angenommen.");
-    return { ...state, story: { ...state.story, accepted: true } };
+export function acceptVisitor(state: VisitorState, who: VisitorKind): VisitorState {
+  if (who !== "wanderer") {
+    const story = state[who];
+    if (!story) throw new Error("Gerade ist kein Besucher im Dorf.");
+    if (story.accepted) throw new Error("Das hast du schon angenommen.");
+    return { ...state, [who]: { ...story, accepted: true } };
   }
   if (!state.wanderer) throw new Error("Gerade ist kein Durchreisender im Dorf.");
   if (state.wanderer.accepted) throw new Error("Das hast du schon angenommen.");
@@ -629,11 +689,13 @@ function advance(def: QuestDef, progress: number, event: QuestEvent, rng: () => 
 /** Ein Sieg oder Dungeon bringt die angenommenen Besucher-Quests voran. Ohne Änderung dasselbe Objekt. */
 export function applyVisitorEvent(state: VisitorState, event: QuestEvent, rng: () => number = Math.random): VisitorState {
   let next = state;
-  const { story, wanderer } = state;
-  if (story?.accepted) {
+  for (const slot of STORY_SLOTS) {
+    const story = state[slot];
+    if (!story?.accepted) continue;
     const progress = advance(chapterQuest(getFixedVisitor(story.id), story.chapter), story.progress, event, rng);
-    if (progress !== story.progress) next = { ...next, story: { ...story, progress } };
+    if (progress !== story.progress) next = { ...next, [slot]: { ...story, progress } };
   }
+  const { wanderer } = state;
   if (wanderer?.accepted) {
     const progress = advance(wanderer.quest, wanderer.progress, event, rng);
     if (progress !== wanderer.progress) next = { ...next, wanderer: { ...wanderer, progress } };
@@ -655,10 +717,14 @@ export function foundQuestItems(before: VisitorState, after: VisitorState): Ques
   const check = (goal: QuestGoal, from: number, to: number) => {
     if (goal.kind === "fetch" && to > from) finds.push({ item: goal.item, icon: goal.icon, progress: Math.min(to, goal.count), count: goal.count });
   };
-  const { story, wanderer } = before;
-  if (story && after.story?.id === story.id && after.story.chapter === story.chapter) {
-    check(getFixedVisitor(story.id).chapters[story.chapter].goal, story.progress, after.story.progress);
+  for (const slot of STORY_SLOTS) {
+    const story = before[slot];
+    const later = after[slot];
+    if (story && later?.id === story.id && later.chapter === story.chapter) {
+      check(getFixedVisitor(story.id).chapters[story.chapter].goal, story.progress, later.progress);
+    }
   }
+  const { wanderer } = before;
   if (wanderer && after.wanderer?.arrives === wanderer.arrives) check(wanderer.quest.goal, wanderer.progress, after.wanderer.progress);
   return finds;
 }
@@ -687,26 +753,27 @@ function learnRecipe(state: VisitorState, gift: VisitorGift | null, reward: Ques
   return { state: { ...state, recipes: [...state.recipes, gift.foodId] }, reward, recipeKnown: false };
 }
 
-/** Ist das aktuelle Kapitel des festen Besuchers erfüllt? */
-export function storyChapterComplete(state: VisitorState): boolean {
-  const { story } = state;
+/** Ist das aktuelle Kapitel des festen Besuchers (bzw. des Dungeon-Besuchers) erfüllt? */
+export function storyChapterComplete(state: VisitorState, slot: StorySlot = "story"): boolean {
+  const story = state[slot];
   return !!story?.accepted && isQuestComplete(chapterQuest(getFixedVisitor(story.id), story.chapter), story.progress);
 }
 
 /**
  * Gibt das aktuelle Kapitel beim festen Besucher ab. Im letzten Kapitel mit
- * Entscheidung braucht es `choiceId`.
+ * Entscheidung braucht es `choiceId` – beim Dungeon-Besucher gilt die Wahl aus der Szene.
  */
-export function turnInStory(state: VisitorState, choiceId?: string): VisitorTurnIn {
-  const { story } = state;
+export function turnInStory(state: VisitorState, choiceId?: string, slot: StorySlot = "story"): VisitorTurnIn {
+  const story = state[slot];
   if (!story) throw new Error("Gerade ist kein Besucher im Dorf.");
   const def = getFixedVisitor(story.id);
   const quest = chapterQuest(def, story.chapter);
   if (!story.accepted || !isQuestComplete(quest, story.progress)) throw new Error("Das Kapitel ist noch nicht erfüllt.");
   const last = story.chapter === def.chapters.length - 1;
+  if (def.scene) choiceId = story.scene;
   if (!last) {
     return {
-      state: { ...state, story: { id: def.id, chapter: story.chapter + 1, accepted: false, progress: 0 } },
+      state: { ...state, [slot]: { id: def.id, chapter: story.chapter + 1, accepted: false, progress: 0 } },
       reward: quest.reward,
       gift: null,
       text: def.chapters[story.chapter].thanks,
@@ -728,7 +795,7 @@ export function turnInStory(state: VisitorState, choiceId?: string): VisitorTurn
     choices[def.id] = option.id;
   }
   return {
-    ...learnRecipe({ ...state, story: null, done: [...state.done, def.id], choices }, gift, reward),
+    ...learnRecipe({ ...state, [slot]: null, done: [...state.done, def.id], choices }, gift, reward),
     gift,
     text,
     finished: true,
@@ -761,8 +828,9 @@ export function dismissWanderer(state: VisitorState, now: number, rng: () => num
 /** Angenommene Besucher-Quests für Questbuch und Kampfanzeige. */
 export function trackedVisitorQuests(state: VisitorState): TrackedQuest[] {
   const tracked: TrackedQuest[] = [];
-  if (state.story?.accepted) {
-    tracked.push({ def: chapterQuest(getFixedVisitor(state.story.id), state.story.chapter), progress: state.story.progress, source: "visitor" });
+  for (const slot of STORY_SLOTS) {
+    const story = state[slot];
+    if (story?.accepted) tracked.push({ def: chapterQuest(getFixedVisitor(story.id), story.chapter), progress: story.progress, source: "visitor" });
   }
   if (state.wanderer?.accepted) tracked.push({ def: state.wanderer.quest, progress: state.wanderer.progress, source: "visitor" });
   return tracked;
@@ -772,9 +840,47 @@ export function trackedVisitorQuests(state: VisitorState): TrackedQuest[] {
 export function visitorNeedsAttention(state: VisitorState): boolean {
   const wanderer = state.wanderer;
   return (
-    (!!state.story && (!state.story.accepted || storyChapterComplete(state))) ||
+    STORY_SLOTS.some((slot) => !!state[slot] && (!state[slot].accepted || storyChapterComplete(state, slot))) ||
     (!!wanderer && (!wanderer.accepted || isQuestComplete(wanderer.quest, wanderer.progress)))
   );
+}
+
+/* ───────────── Szene im Dungeon ───────────── */
+
+/**
+ * Wartet in diesem Dungeon eine Szene? Nur wenn das letzte Kapitel des Dungeon-Besuchers
+ * angenommen und noch nicht erfüllt ist.
+ */
+export function storySceneFor(state: VisitorState, dungeonId: string): { visitor: FixedVisitorDef; scene: StoryScene } | null {
+  const story = state.dungeonStory;
+  if (!story?.accepted) return null;
+  const visitor = getFixedVisitor(story.id);
+  if (visitor.dungeonId !== dungeonId || !visitor.scene || story.chapter !== visitor.chapters.length - 1) return null;
+  if (storyChapterComplete(state, "dungeonStory")) return null;
+  return { visitor, scene: visitor.scene };
+}
+
+/** Hat die Wahl in der Szene den Besucher behalten? Dann liegt im Dorf nur noch ein Brief von ihm. */
+export function leftLetter(story: StoryVisit): boolean {
+  const scene = getFixedVisitor(story.id).scene;
+  return !!scene && !!story.scene && !!getSceneOption(scene, story.scene).letter;
+}
+
+export function getSceneOption(scene: StoryScene, optionId: string): StorySceneOption {
+  const option = scene.options.find((o) => o.id === optionId);
+  if (!option) throw new Error("Diese Wahl gibt es nicht.");
+  return option;
+}
+
+/**
+ * Nach der Szene ist der Endboss gefallen: Das letzte Kapitel ist erfüllt und die Wahl gespeichert.
+ * Ohne passende Szene kommt dasselbe Objekt zurück.
+ */
+export function completeStoryScene(state: VisitorState, dungeonId: string, optionId: string): VisitorState {
+  const found = storySceneFor(state, dungeonId);
+  if (!found) return state;
+  getSceneOption(found.scene, optionId);
+  return { ...state, dungeonStory: { ...state.dungeonStory!, progress: 1, scene: optionId } };
 }
 
 /** „ein Rezept für die Taverne“, „2 Portionen besonderes Essen“ – kurzer Text für ein Geschenk. */

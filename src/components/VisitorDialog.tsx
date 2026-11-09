@@ -7,7 +7,16 @@ import { effectOf, getItemEffect } from "../domain/itemEffects";
 import { getPotion } from "../domain/potions";
 import { isQuestComplete, questGoalText, questTarget, type QuestDef } from "../domain/quests";
 import { materialEntries } from "../domain/village";
-import { chapterQuest, getFixedVisitor, RECIPE_KNOWN_XP_FACTOR, wandererTemplate, type VisitorGift } from "../domain/visitors";
+import {
+  chapterQuest,
+  getFixedVisitor,
+  getSceneOption,
+  leftLetter,
+  RECIPE_KNOWN_XP_FACTOR,
+  wandererTemplate,
+  type VisitorGift,
+  type VisitorKind,
+} from "../domain/visitors";
 import { getVisitorSprite } from "../game/visitorSprites";
 import { useGameStore, type VisitorOutcome } from "../store/gameStore";
 import { Gold } from "./Gold";
@@ -16,7 +25,7 @@ import { Modal } from "./Modal";
 import { PixelSprite } from "./PixelSprite";
 import { useNow } from "./useNow";
 
-export type VisitorKind = "story" | "wanderer";
+export type { VisitorKind };
 
 /** Gespräch mit einem Besucher: Geschichte, Bitte annehmen, Fortschritt, abgeben – und am Ende das Geschenk. */
 export function VisitorDialog({ who, onClose }: { who: VisitorKind | null; onClose: () => void }) {
@@ -48,9 +57,10 @@ export function VisitorDialog({ who, onClose }: { who: VisitorKind | null; onClo
 
 function useVisitorHeader(who: VisitorKind | null): { title: string } | null {
   const visitors = useGameStore((s) => s.visitors);
-  if (who === "story" && visitors.story) {
-    const def = getFixedVisitor(visitors.story.id);
-    return { title: `${def.name}, ${def.role}` };
+  const story = who === "story" || who === "dungeonStory" ? visitors[who] : null;
+  if (story) {
+    const def = getFixedVisitor(story.id);
+    return { title: leftLetter(story) ? `Brief von ${def.name}` : `${def.name}, ${def.role}` };
   }
   if (who === "wanderer" && visitors.wanderer) {
     const template = wandererTemplate(visitors.wanderer.kind);
@@ -66,16 +76,18 @@ function VisitorBody({ who, onOutcome, onClose }: { who: VisitorKind; onOutcome:
   const turnIn = useGameStore((s) => s.turnInVisitor);
   const now = useNow();
 
-  const story = who === "story" ? visitors.story : null;
+  const story = who === "wanderer" ? null : visitors[who];
   const wanderer = who === "wanderer" ? visitors.wanderer : null;
   const def = story ? getFixedVisitor(story.id) : null;
   const quest: QuestDef = def ? chapterQuest(def, story!.chapter) : wanderer!.quest;
   const accepted = story ? story.accepted : wanderer!.accepted;
   const progress = story ? story.progress : wanderer!.progress;
   const complete = accepted && isQuestComplete(quest, progress);
-  const sprite = getVisitorSprite(def ? def.id : wanderer!.kind);
+  const sprite = getVisitorSprite(story && leftLetter(story) ? "letter" : def ? def.id : wanderer!.kind);
   const last = def ? story!.chapter === def.chapters.length - 1 : true;
-  const choice = def && last ? def.choice : undefined;
+  // Beim Dungeon-Besucher fiel die Entscheidung schon in der Szene im Dungeon
+  const choice = def && last && !def.scene ? def.choice : undefined;
+  const sceneChoice = def?.scene && story?.scene ? getSceneOption(def.scene, story.scene) : null;
 
   const text = def
     ? complete
@@ -112,6 +124,7 @@ function VisitorBody({ who, onOutcome, onClose }: { who: VisitorKind; onOutcome:
             {complete ? "✓ Erfüllt" : `Fortschritt: ${progress}/${questTarget(quest)}`}
           </p>
         )}
+        {sceneChoice && <p className="mt-1 text-xs text-muted">📜 Deine Wahl im Dungeon: {sceneChoice.label}</p>}
         <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
           <span className="text-xp tabular-nums">+{quest.reward.xp} XP</span>
           <Gold amount={quest.reward.gold} sign className="text-gold" />
@@ -153,7 +166,7 @@ function VisitorBody({ who, onOutcome, onClose }: { who: VisitorKind; onOutcome:
             Weiter geht's
           </button>
         )}
-        {complete && !choice && <ActionButton onClick={() => give()}>Abgeben</ActionButton>}
+        {complete && !choice && <ActionButton onClick={() => give()}>{story && leftLetter(story) ? "Brief lesen" : "Abgeben"}</ActionButton>}
       </div>
       {complete && choice && (
         <div className="flex flex-col gap-2 border-t-2 border-night-700 pt-3">
