@@ -16,13 +16,14 @@ import { DRUM_BONUS, DRUM_MAX, RITUAL_HEAL, RITUAL_ROUNDS, SHIELD_EVERY, SHIELD_
 import { CURSE_DAMAGE, plateFactor } from "./bossIntents";
 import type { ActiveBuff, Combatant, DamageOverTime } from "./combat";
 import { POISON, RAGE_BONUS, REGEN_SHARE, SWIFT_SHARE, type EliteAffix } from "./elites";
-import { CLERIC_REGEN, DUELIST_EXTRA_HIT, PLUNDERER_BLEED, type HeroClassId } from "./heroClasses";
+import { CLERIC_REGEN, DUELIST_EXTRA_HIT, lifestealShare, PLUNDERER_BLEED, type HeroClassId } from "./heroClasses";
 import { critBurns, EFFECT, effectCritBonus, effectDamageFactor, has as hasEffect, heroDotRounds, type ItemEffectId } from "./itemEffects";
 import { matchupFactor, matchupOf, type DamageKind, type DotKind } from "./matchups";
 import {
   bandageHeal,
   bloodburstDamage,
   critMana,
+  defendMana,
   defendTaken,
   defendThorns,
   dodgeChance,
@@ -35,6 +36,7 @@ import {
   SKILL,
   skillCritBonus,
   skillDamageFactor,
+  skillLifesteal,
   stackPoison,
   type FoeState,
   type SkillRanks,
@@ -628,4 +630,91 @@ export function heroVolley<F extends { c: { hp: number } }>(o: {
     const others = living().filter((f) => f !== target);
     if (others.length > 0) o.strike(others[Math.floor(rng() * others.length)], EFFECT.chainLightning.share, 1);
   }
+}
+
+/* ───────────────────────── Fähigkeiten ───────────────────────── */
+
+/** Was eine Fähigkeit dem Helden selbst gibt – als Felder seiner Wirkungen. */
+export interface AbilityBuffs {
+  guard?: Guard;
+  empower?: ActiveBuff;
+  damageTaken?: ActiveBuff;
+  charged?: number;
+  ambush?: true;
+  feint?: true;
+}
+
+/**
+ * Parade/Vergeltung, Verstärkung, Schildwall/Wutschrei, Ausholen (Titanenschlag), Schattenschritt und Finte.
+ * Die Verstärkung zählt erst ab der nächsten Runde – darum eine Runde mehr (am Rundenende läuft eine ab).
+ */
+export function abilityBuffs(ability: AbilityDef): AbilityBuffs {
+  return {
+    ...(ability.guard && { guard: ability.guard }),
+    ...(ability.empower && { empower: { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 } }),
+    ...(ability.damageTaken && { damageTaken: { percent: ability.damageTaken.percent, roundsLeft: ability.damageTaken.rounds } }),
+    ...(ability.charge && { charged: ability.charge }),
+    ...(ability.ambush && { ambush: true as const }),
+    ...(ability.feint && { feint: true as const }),
+  };
+}
+
+/** Heilung einer Fähigkeit – `share` < 1 für Mitspieler (Arkane Heilung). */
+export const abilityHeal = (hp: number, maxHp: number, heal: number, share = 1): number =>
+  Math.min(maxHp - hp, Math.round(maxHp * heal * share));
+
+/** Läuterung: Gift, Feuer und Bluten fallen ab – null, wenn es nichts zu läutern gibt. */
+export function cleansed<E extends { poison?: unknown; burn?: unknown; bleed?: unknown }>(effects: E): E | null {
+  if (!effects.poison && !effects.burn && !effects.bleed) return null;
+  return { ...effects, poison: undefined, burn: undefined, bleed: undefined };
+}
+
+/** Schwächen, Verwundbar und Rüstungsbruch einer Fähigkeit auf einem Gegner. */
+export function debuffFoe<F extends { weaken?: ActiveBuff; vulnerable?: ActiveBuff; armorBreak?: number }>(fx: F, ability: AbilityDef): F {
+  let next = fx;
+  if (ability.weaken) next = { ...next, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
+  if (ability.vulnerable) next = { ...next, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
+  if (ability.armorBreak) next = { ...next, armorBreak: ability.armorBreak };
+  return next;
+}
+
+/** Fluch der Schwäche: Gift und Feuer auf dem Ziel halten länger. */
+export function extendDots<F extends { poison?: DamageOverTime; burn?: DamageOverTime }>(fx: F, ability: AbilityDef): F {
+  if (!ability.extendDots) return fx;
+  let next = fx;
+  for (const kind of ["poison", "burn"] as const) {
+    const dot = next[kind];
+    if (dot) next = { ...next, [kind]: { ...dot, roundsLeft: dot.roundsLeft + ability.extendDots } };
+  }
+  return next;
+}
+
+/** Gift, Feuer und Bluten einer Fähigkeit: `lay(kind, base, rounds)` legt sie auf den Gegner (`base`: Schaden des Helden). */
+export function layAbilityDots(ability: AbilityDef, base: number, lay: (kind: DotKind, base: number, rounds: number) => void): void {
+  for (const kind of DOT_ORDER) {
+    const effect = ability[kind];
+    if (effect) lay(kind, base * effect.percent, effect.rounds);
+  }
+}
+
+/* ───────────────────────── Abwehren und Lebensraub ───────────────────────── */
+
+/** Abwehren gibt Mana – Gelassenheit mehr, nie über das Maximum. */
+export const defendGain = (mana: number, maxMana: number, skills: SkillRanks | undefined, base: number): number =>
+  Math.min(maxMana - mana, defendMana(skills, base));
+
+/** Lebensraub: Fähigkeit und Plünderer, Segen „Blutdurst“, Item-Effekt „Seelenraub“ und Blutsauger. */
+export function heroLifesteal(
+  heroClass: HeroClassId | null | undefined,
+  ability: AbilityDef | null,
+  blessings: readonly BlessingId[] | undefined,
+  itemEffects: readonly ItemEffectId[] | undefined,
+  skills: SkillRanks | undefined,
+): number {
+  return (
+    lifestealShare(heroClass, ability) +
+    BLESSING.bloodthirst * stacks(blessings, "bloodthirst") +
+    (hasEffect(itemEffects, "soulDrain") ? EFFECT.soulDrain : 0) +
+    skillLifesteal(skills)
+  );
 }

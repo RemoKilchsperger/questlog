@@ -50,7 +50,6 @@ import {
   riposteFactor,
   sanitizeSkills,
   skillCostFactor,
-  skillLifesteal,
   skillStatBonus,
   skillStunChance,
   wrathFactor,
@@ -94,7 +93,6 @@ import {
   classStatBonus,
   CLERIC_POTION_FACTOR,
   detectHeroClass,
-  lifestealShare,
   rageFactor,
   type HeroClassId,
 } from "./heroClasses";
@@ -103,6 +101,14 @@ import { attributeDamage, shieldArmorBonus } from "./weaponScaling";
 import { mainWeapon, matchupFactor, WEAPON_KIND, type DotKind } from "./matchups";
 import { BLESSING, stacks, type BlessingId } from "./tower";
 import {
+  abilityBuffs,
+  abilityHeal,
+  cleansed,
+  debuffFoe,
+  defendGain,
+  extendDots,
+  heroLifesteal,
+  layAbilityDots,
   absorbShield,
   abilityDots,
   afterHeroHit,
@@ -708,9 +714,6 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
   };
 }
 
-/** Gift, Feuer und Bluten – in dieser Reihenfolge wirken sie pro Runde. */
-const OVER_TIME = ["poison", "burn", "bleed"] as const;
-
 /** Nach jeder Runde läuft eine Runde der Verstärkungen ab. */
 function tickBuffs(buffs: BattleState["buffs"]): BattleState["buffs"] {
   const next: BattleState["buffs"] = {};
@@ -982,7 +985,7 @@ export function attackRound(
 
   // 1. Aktion des Helden
   if (defending) {
-    const gain = Math.min(state.maxMana - mana, defendMana(skills, DEFEND_MANA));
+    const gain = defendGain(mana, state.maxMana, skills, DEFEND_MANA);
     mana += gain;
     events.push({ type: "defend", mana: gain });
   }
@@ -990,43 +993,28 @@ export function attackRound(
     const manaCost = abilityCost(state, ability.id);
     mana -= manaCost;
     events.push({ type: "ability", ability: ability.id, weapon: ability.weapon, manaCost, ...(echo && { echo }) });
-    if (ability.bulwark) heroEffects = { ...heroEffects, bulwark: true };
-    if (ability.guard) heroEffects = { ...heroEffects, guard: ability.guard };
-    // +1, weil die Verstärkung erst ab der nächsten Runde zählt (am Rundenende läuft eine ab)
-    if (ability.empower) heroEffects = { ...heroEffects, empower: { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 } };
+    // Bollwerk, Parade, Verstärkung, Schildwall, Ausholen, Schattenschritt, Finte, Arkane Heilung
+    heroEffects = {
+      ...heroEffects,
+      ...(ability.bulwark && { bulwark: true }),
+      ...abilityBuffs(ability),
+      ...(ability.renew && { renew: { percent: ability.renew.percent, roundsLeft: ability.renew.rounds } }),
+    };
     if (ability.heal) {
-      const heal = Math.min(hero.maxHp - hero.hp, Math.round(hero.maxHp * ability.heal));
+      const heal = abilityHeal(hero.hp, hero.maxHp, ability.heal);
       hero = { ...hero, hp: hero.hp + heal };
       if (heal > 0) events.push({ type: "selfHeal", heal });
     }
-    if (ability.cleanse && (heroEffects.poison || heroEffects.burn || heroEffects.bleed)) {
-      heroEffects = { ...heroEffects, poison: undefined, burn: undefined, bleed: undefined };
+    const pure = ability.cleanse ? cleansed(heroEffects) : null;
+    if (pure) {
+      heroEffects = pure;
       events.push({ type: "cleansed" });
     }
-    if (ability.damageTaken) heroEffects = { ...heroEffects, damageTaken: { percent: ability.damageTaken.percent, roundsLeft: ability.damageTaken.rounds } };
-    if (ability.charge) heroEffects = { ...heroEffects, charged: ability.charge };
-    if (ability.ambush) heroEffects = { ...heroEffects, ambush: true };
-    if (ability.feint) heroEffects = { ...heroEffects, feint: true };
-    if (ability.renew) heroEffects = { ...heroEffects, renew: { percent: ability.renew.percent, roundsLeft: ability.renew.rounds } };
     if (ability.manaGain) mana = Math.min(state.maxMana, mana + ability.manaGain);
     // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner (nicht auf einen abgetauchten Boss)
     for (const foe of (aoe === "all" ? living() : [target]).filter((f) => !(f === boss && hidden))) {
-      if (ability.weaken) foe.fx = { ...foe.fx, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
-      if (ability.vulnerable) {
-        foe.fx = { ...foe.fx, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
-      }
-      if (ability.armorBreak) foe.fx = { ...foe.fx, armorBreak: ability.armorBreak };
-      // Fluch der Schwäche: Gift und Feuer auf dem Ziel halten länger
-      if (ability.extendDots) {
-        for (const kind of ["poison", "burn"] as const) {
-          const dot = foe.fx[kind];
-          if (dot) foe.fx = { ...foe.fx, [kind]: { ...dot, roundsLeft: dot.roundsLeft + ability.extendDots } };
-        }
-      }
-      for (const kind of OVER_TIME) {
-        const effect = ability[kind];
-        if (effect) applyDot(foe, kind, strong.damage * effect.percent, effect.rounds);
-      }
+      foe.fx = extendDots(debuffFoe(foe.fx, ability), ability);
+      layAbilityDots(ability, strong.damage, (kind, base, rounds) => applyDot(foe, kind, base, rounds));
     }
   }
   const vulnerableOf = (foe: Foe) => 1 + (foe.fx.vulnerable?.percent ?? 0);
@@ -1155,13 +1143,9 @@ export function attackRound(
     rng,
   });
   // Lebensraub: Blutrausch und Plünderer
-  const lifesteal =
-    lifestealShare(state.heroClass, ability) +
-    BLESSING.bloodthirst * stacks(state.blessings, "bloodthirst") +
-    (hasEffect(effects, "soulDrain") ? EFFECT.soulDrain : 0) +
-    skillLifesteal(skills);
+  const lifesteal = heroLifesteal(state.heroClass, ability, state.blessings, effects, skills);
   if (lifesteal > 0 && dealtByHero > 0) {
-    const heal = Math.min(hero.maxHp - hero.hp, Math.round(dealtByHero * lifesteal));
+    const heal = drainHeal(hero, dealtByHero, lifesteal);
     hero = { ...hero, hp: hero.hp + heal };
     if (heal > 0) events.push({ type: "selfHeal", heal });
   }

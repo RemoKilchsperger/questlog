@@ -111,11 +111,21 @@ function randomProfile(rng: Rng, level: number): HeroCombatProfile {
 }
 
 /** Rollender Fingerabdruck über alles, was im Kampf passiert. */
+/**
+ * Felder sortiert: Es zählt, was im Zustand steht – nicht, in welcher Reihenfolge ein Feld
+ * angelegt wurde (das ändert sich beim Umbau, ohne dass sich am Kampf etwas ändert).
+ * Felder mit `undefined` fallen wie in JSON weg.
+ */
+const canonical = (_key: string, value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, (value as Record<string, unknown>)[k]]))
+    : value;
+
 function recorder(name: string) {
   let digest = hash(name);
   return {
     add(value: unknown) {
-      digest = hash(`${digest}|${JSON.stringify(value)}`);
+      digest = hash(`${digest}|${JSON.stringify(value, canonical)}`);
     },
     done: () => digest.toString(16).padStart(8, "0"),
   };

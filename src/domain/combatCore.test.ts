@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { DamageOverTime } from "./combat";
 import type { AbilityDef } from "./abilities";
 import {
+  abilityBuffs,
+  abilityHeal,
+  cleansed,
+  debuffFoe,
+  defendGain,
+  extendDots,
+  heroLifesteal,
+  layAbilityDots,
   absorbShield,
   afterHeroHit,
   foeArmor,
@@ -364,5 +372,56 @@ describe("Kampfkern: Trefferfolge", () => {
   it("Raserei: die Trefferzahl wird vor jedem Treffer neu bestimmt", () => {
     let left = 3;
     expect(play({ hits: () => left--, plain: false })).toHaveLength(2);
+  });
+});
+
+describe("Kampfkern: Fähigkeiten", () => {
+  it("Selbst-Wirkungen: die Verstärkung zählt erst ab der nächsten Runde", () => {
+    const buffs = abilityBuffs({ empower: { percent: 0.3, rounds: 2 }, guard: { reduce: 0.5 }, charge: 2, feint: true } as AbilityDef);
+    expect(buffs).toEqual({ empower: { percent: 0.3, roundsLeft: 3 }, guard: { reduce: 0.5 }, charged: 2, feint: true });
+    expect(abilityBuffs({} as AbilityDef)).toEqual({});
+  });
+
+  it("Heilung nie über das Maximum, Mitspieler mit Anteil", () => {
+    expect(abilityHeal(50, 100, 0.3)).toBe(30);
+    expect(abilityHeal(90, 100, 0.3)).toBe(10);
+    expect(abilityHeal(50, 100, 0.3, 0.5)).toBe(15);
+  });
+
+  it("Läuterung nimmt Gift, Feuer und Bluten – sonst gibt es nichts zu läutern", () => {
+    const effects: { poison?: DamageOverTime; burn?: DamageOverTime; bleed?: DamageOverTime; feint?: true } = { poison: { damage: 1, roundsLeft: 1 }, feint: true };
+    expect(cleansed(effects)).toEqual({ poison: undefined, burn: undefined, bleed: undefined, feint: true });
+    expect(cleansed({ feint: true } as typeof effects)).toBeNull();
+  });
+
+  it("Schwächen, Verwundbar, Rüstungsbruch und Fluch der Schwäche", () => {
+    const fx = debuffFoe({}, { weaken: { percent: 0.2, rounds: 2 }, armorBreak: 0.3 } as AbilityDef);
+    expect(fx).toEqual({ weaken: { percent: 0.2, roundsLeft: 2 }, armorBreak: 0.3 });
+    const longer = extendDots({ poison: { damage: 5, roundsLeft: 1 }, bleed: { damage: 5, roundsLeft: 1 } }, { extendDots: 2 } as AbilityDef);
+    expect(longer.poison?.roundsLeft).toBe(3);
+    expect(longer.bleed?.roundsLeft).toBe(1);
+  });
+
+  it("Gift, Feuer und Bluten einer Fähigkeit – Stärke aus dem Schaden des Helden", () => {
+    const laid: [string, number, number][] = [];
+    layAbilityDots({ burn: { percent: 0.5, rounds: 2 }, poison: { percent: 0.2, rounds: 3 } } as AbilityDef, 100, (kind, base, rounds) =>
+      laid.push([kind, base, rounds]),
+    );
+    expect(laid).toEqual([
+      ["poison", 20, 3],
+      ["burn", 50, 2],
+    ]);
+  });
+});
+
+describe("Kampfkern: Abwehren und Lebensraub", () => {
+  it("Abwehren gibt Mana bis zum Maximum", () => {
+    expect(defendGain(50, 100, undefined, 10)).toBe(10);
+    expect(defendGain(95, 100, undefined, 10)).toBe(5);
+  });
+
+  it("Lebensraub summiert Fähigkeit, Klasse, Segen, Item und Skill", () => {
+    expect(heroLifesteal(null, null, undefined, undefined, undefined)).toBe(0);
+    expect(heroLifesteal("plunderer", null, ["bloodthirst"], ["soulDrain"], { leech: 1 })).toBeGreaterThan(heroLifesteal("plunderer", null, undefined, undefined, undefined));
   });
 });
