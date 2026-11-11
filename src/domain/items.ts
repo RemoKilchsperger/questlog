@@ -360,6 +360,11 @@ const VISITOR_ITEM_SPECS: readonly VisitorItemSpec[] = [
   { id: "unique-torbin-axe", visitorId: "torbin", level: 30, type: "axe", name: "Torbins Kristallhacke" },
   { id: "unique-stranger-scepter", visitorId: "stranger", level: 50, type: "scepter", name: "Seelenfänger" },
   { id: "unique-aldric-greatsword", visitorId: "aldric", level: 60, type: "greatsword", name: "Aldrics Drachentöter" },
+  // Dungeon-Besucher (dungeonVisitors.ts)
+  { id: "unique-samira-shield", visitorId: "samira", level: 30, type: "shield", name: "Sonnenschild der Neferet" },
+  { id: "unique-vessa-staff", visitorId: "vessa", level: 45, type: "staff", name: "Sturmbinder" },
+  { id: "unique-orun-mantle", visitorId: "orun", level: 60, type: "chest", name: "Oruns Siegelmantel" },
+  { id: "unique-orun-axe", visitorId: "orun", level: 60, type: "greataxe", name: "Leerenspalter" },
 ];
 
 function buildVisitorItem(spec: VisitorItemSpec): ItemDef {

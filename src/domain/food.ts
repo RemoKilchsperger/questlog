@@ -59,6 +59,8 @@ export const FOODS: readonly FoodDef[] = [
   { id: "kingsBroth", name: "Königsbrühe", icon: "🍽️", effect: { hp: 0.25, armor: 0.25 }, price: 50, tavern: 1, recipe: true },
   { id: "spicedPie", name: "Gewürzpastete", icon: "🌶️", effect: { damage: 0.15, crit: 0.08 }, price: 50, tavern: 1, recipe: true },
   { id: "honeyCake", name: "Honigkuchen", icon: "🍯", effect: { gold: 0.4, hp: 0.15, mana: 0.15 }, price: 50, tavern: 1, recipe: true },
+  // Samira (Dungeon-Besucherin im Versunkenen Tempel), wenn man das Amulett zurücklegt
+  { id: "dateBread", name: "Dattelbrot der Priester", icon: "🍞", effect: { hp: 0.2, mana: 0.2, crit: 0.1 }, price: 50, tavern: 1, recipe: true },
   // Schatz-Rezepte aus verborgenen Räumen: etwas stärker als die der Besucher
   { id: "piratePie", name: "Kapitänspastete", icon: "🏴‍☠️", effect: { damage: 0.18, crit: 0.06, gold: 0.2 }, price: 60, tavern: 1, recipe: true, treasure: true },
   { id: "dragonPepper", name: "Drachenpfeffer-Steak", icon: "🥩", effect: { damage: 0.22, hp: 0.2 }, price: 60, tavern: 1, recipe: true, treasure: true },

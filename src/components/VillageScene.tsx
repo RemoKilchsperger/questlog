@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isQuestComplete } from "../domain/quests";
 import { BUILDINGS, canBuild, maxTier, type BuildingDef, type BuildingId } from "../domain/village";
-import { chapterQuest, getFixedVisitor, wandererTemplate } from "../domain/visitors";
+import { chapterQuest, getFixedVisitor, leftLetter, STORY_SLOTS, wandererTemplate } from "../domain/visitors";
 import { BG_HEIGHT, paintVillage, VILLAGE_WIDTH } from "../game/backgrounds";
 import { sfx } from "../game/sfx";
 import { renderSprite } from "../game/sprites";
@@ -142,8 +142,8 @@ function BuildingSpot({
   );
 }
 
-/** Plätze der Besucher im Dorfbild: der feste vor dem Händler, der Durchreisende am anderen Ende. */
-const VISITOR_SPOTS: Record<VisitorKind, number> = { story: 45, wanderer: 256 };
+/** Plätze der Besucher im Dorfbild: der feste vor dem Händler, der Dungeon-Besucher in der Mitte, der Durchreisende am anderen Ende. */
+const VISITOR_SPOTS: Record<VisitorKind, number> = { story: 45, dungeonStory: 171, wanderer: 256 };
 /** Unterkante der Figuren – vor den Gebäuden auf der Strasse. */
 const VISITOR_BASE = 78;
 
@@ -154,18 +154,24 @@ function Visitors({ onTalk }: { onTalk: (who: VisitorKind) => void }) {
   const minute = Math.floor(useNow(60_000).getTime() / 60_000);
   useEffect(() => refresh(), [refresh, minute]);
 
-  const { story, wanderer } = visitors;
+  const { wanderer } = visitors;
   return (
     <>
-      {story && (
-        <VisitorSpot
-          who="story"
-          spriteKey={story.id}
-          name={`${getFixedVisitor(story.id).name}, ${getFixedVisitor(story.id).role}`}
-          marker={!story.accepted ? "!" : isQuestComplete(chapterQuest(getFixedVisitor(story.id), story.chapter), story.progress) ? "?" : null}
-          onTalk={onTalk}
-        />
-      )}
+      {STORY_SLOTS.map((slot) => {
+        const story = visitors[slot];
+        if (!story) return null;
+        const def = getFixedVisitor(story.id);
+        return (
+          <VisitorSpot
+            key={slot}
+            who={slot}
+            spriteKey={leftLetter(story) ? "letter" : story.id}
+            name={leftLetter(story) ? `Brief von ${def.name}` : `${def.name}, ${def.role}`}
+            marker={!story.accepted ? "!" : isQuestComplete(chapterQuest(def, story.chapter), story.progress) ? "?" : null}
+            onTalk={onTalk}
+          />
+        );
+      })}
       {wanderer && (
         <VisitorSpot
           who="wanderer"

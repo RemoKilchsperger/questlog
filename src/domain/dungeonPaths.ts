@@ -11,8 +11,8 @@ import { hash, seededRng } from "./random";
 import { blessingOffer, type BlessingId } from "./tower";
 import type { ArmorClass } from "./types";
 
-/** `treasure`: verborgener Raum einer Schatzkarte (treasureMaps.ts) – nie an einer gewöhnlichen Gabelung */
-export type RoomKind = "fight" | "elite" | "shrine" | "merchant" | "trap" | "riddle" | "chest" | "treasure";
+/** `treasure`: verborgener Raum einer Schatzkarte (treasureMaps.ts), `story`: Geschichtstür eines Dungeon-Besuchers (visitors.ts) – beide nie an einer gewöhnlichen Gabelung */
+export type RoomKind = "fight" | "elite" | "shrine" | "merchant" | "trap" | "riddle" | "chest" | "treasure" | "story";
 
 export interface RoomDef {
   kind: RoomKind;
@@ -31,17 +31,18 @@ export const ROOMS: Record<RoomKind, RoomDef> = {
   riddle: { kind: "riddle", name: "Rätsel", icon: "🧩", description: "Eine Inschrift stellt eine Frage. Wer richtig antwortet, wird belohnt." },
   chest: { kind: "chest", name: "Alte Truhe", icon: "📦", description: "Eine alte Truhe, ganz allein im Raum. Öffnen – oder lieber liegen lassen?" },
   treasure: { kind: "treasure", name: "Schatzraum", icon: "🗺️", description: "Deine Schatzkarte führt hierher. Ein legendäres Item oder ein Rezept wartet." },
+  story: { kind: "story", name: "Geschichte", icon: "📜", description: "Hier geht deine Geschichte mit einem Besucher aus dem Dorf weiter." },
 };
 
 /** Räume, die an Gabelungen ausgelost werden – der Schatzraum kommt nur über eine Karte dazu. */
-export const FORK_ROOMS: readonly RoomDef[] = Object.values(ROOMS).filter((r) => r.kind !== "treasure");
+export const FORK_ROOMS: readonly RoomDef[] = Object.values(ROOMS).filter((r) => r.kind !== "treasure" && r.kind !== "story");
 
 /** Räume ohne (sicheren) Kampf – höchstens einer pro Abschnitt */
 export const CALM_ROOMS: readonly RoomKind[] = ["shrine", "merchant", "trap", "riddle", "chest"];
 export const isCalm = (kind: RoomKind) => CALM_ROOMS.includes(kind);
 
 /** Gewichte beim Auslosen der Türen */
-const ROOM_WEIGHTS: Record<Exclude<RoomKind, "treasure">, number> = { fight: 30, elite: 20, shrine: 12, merchant: 12, trap: 13, riddle: 13, chest: 12 };
+const ROOM_WEIGHTS: Record<Exclude<RoomKind, "treasure" | "story">, number> = { fight: 30, elite: 20, shrine: 12, merchant: 12, trap: 13, riddle: 13, chest: 12 };
 
 /** Chance, dass eine Tür verschlossen ist (❓) – man sieht erst drinnen, was dahinter liegt. */
 export const HIDDEN_DOOR_CHANCE = 0.2;
@@ -222,6 +223,16 @@ export function trapOutcome(
   const full = maxHp * TRAP_DAMAGE;
   const dodged = choice === "dodge" && rng() < TRAP_DODGE[armorClass];
   const raw = dodged ? 0 : Math.round(full * (choice === "endure" ? TRAP_ENDURE[armorClass] : 1));
+  return { dodged, damage: Math.min(raw, hp - 1) };
+}
+
+/**
+ * Probe in einer Szene (Dungeon-Besucher): wie die Falle, aber ohne Wahl. Leichte Rüstung entkommt
+ * eher, schwere hält den Treffer besser aus. Mindestens 1 LP bleibt.
+ */
+export function sceneTestOutcome(armorClass: ArmorClass, maxHp: number, hp: number, rng: () => number): { dodged: boolean; damage: number } {
+  const dodged = rng() < TRAP_DODGE[armorClass];
+  const raw = dodged ? 0 : Math.round(maxHp * TRAP_DAMAGE * TRAP_ENDURE[armorClass]);
   return { dodged, damage: Math.min(raw, hp - 1) };
 }
 

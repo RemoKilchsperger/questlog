@@ -9,12 +9,15 @@ import { getRiddle, getTrap, ROOMS, stepKind, type ChestChoice, type Door, type 
 import { getPotion, potionEffectText } from "../domain/potions";
 import { getBlessing, stacks } from "../domain/tower";
 import { materialEntries } from "../domain/village";
+import { getFixedVisitor, getSceneOption } from "../domain/visitors";
+import { getVisitorSprite } from "../game/visitorSprites";
 import { isRoomDone, useGameStore, type DungeonRoom, type DungeonRun } from "../store/gameStore";
 import { DungeonChest } from "./DungeonChest";
 import { Gold } from "./Gold";
 import { MaterialGain } from "./materialUi";
 import { BlessingChip } from "./TowerScreen";
 import { TreasureFindCard } from "./TreasureMaps";
+import { PixelSprite } from "./PixelSprite";
 
 /** Kurzer Hinweis, was in die Truhe gewandert ist (nach einem Sieg oder aus einem Raum). */
 export function ChestDeposit({ reward, label = "🧰 In die Truhe:" }: { reward: BattleReward; label?: string }) {
@@ -164,7 +167,7 @@ export function DungeonOnward({ battle }: { battle: BattleState }) {
 function DoorButton({ door, onClick }: { door: Door; onClick: () => void }) {
   const room = ROOMS[door.kind];
   const danger = door.kind === "elite";
-  const treasure = door.kind === "treasure";
+  const treasure = door.kind === "treasure" || door.kind === "story";
   return (
     <motion.button
       whileTap={{ scale: 0.95 }}
@@ -243,6 +246,7 @@ export function DungeonRoomView({ battle, run }: { battle: BattleState; run: Dun
             {room.kind === "riddle" && <RiddleRoom room={room} />}
             {room.kind === "chest" && <ChestRoom room={room} />}
             {room.kind === "treasure" && <TreasureRoom room={room} />}
+            {room.kind === "story" && <StoryRoom room={room} />}
             {isRoomDone(room) && <DungeonOnward battle={battle} />}
           </>
         )}
@@ -490,6 +494,61 @@ function RiddleRoom({ room }: { room: Extract<DungeonRoom, { kind: "riddle" }> }
               {option}
             </motion.button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Geschichtstür eines Dungeon-Besuchers: Szene mit zwei Wegen – manche führen in einen Kampf. */
+function StoryRoom({ room }: { room: Extract<DungeonRoom, { kind: "story" }> }) {
+  const choose = useGameStore((s) => s.dungeonStoryChoice);
+  const visitor = getFixedVisitor(room.visitorId);
+  const scene = visitor.scene!;
+  const option = room.outcome ? getSceneOption(scene, room.outcome.optionId) : null;
+  return (
+    <div className="flex w-full flex-col items-center gap-3">
+      <div className="flex max-w-lg items-start gap-3 text-left">
+        <PixelSprite sprite={getVisitorSprite(visitor.id)} size={56} className="shrink-0 rounded-md border-2 border-night-700 bg-night-800 p-1" />
+        <div className="min-w-0 text-sm">
+          <p className="font-pixel text-lg text-legendary">📜 {scene.title}</p>
+          <p className="text-xs text-muted">Die Geschichte von {visitor.name}</p>
+          <p className="mt-1">{scene.text}</p>
+        </div>
+      </div>
+      {!option ? (
+        <div className="grid w-full max-w-lg gap-2 sm:grid-cols-2">
+          {scene.options.map((o) => (
+            <motion.button
+              key={o.id}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => choose(o.id)}
+              className={`flex flex-col items-center gap-1 rounded-md border-2 p-3 text-center ${
+                o.fight ? "border-legendary/60 bg-legendary/10 hover:bg-legendary/20" : "border-gold/60 bg-gold/10 hover:bg-gold/20"
+              }`}
+            >
+              <span className={`font-pixel ${o.fight ? "text-legendary" : "text-gold"}`}>
+                {o.fight ? "⚔️ " : ""}
+                {o.label}
+              </span>
+              <span className="text-xs text-muted">{o.hint}</span>
+            </motion.button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex max-w-lg flex-col gap-2 text-sm">
+          <p>{option.result}</p>
+          {option.test &&
+            (room.outcome?.dodged ? (
+              <p className="text-xp">{option.test.pass}</p>
+            ) : (
+              <p className="text-danger">
+                {option.test.fail} −{room.outcome?.damage ?? 0} LP.
+              </p>
+            ))}
+          {option.blessing && <BlessingChip id={option.blessing} count={1} />}
+          <p className="text-muted">{scene.after}</p>
+          <p className="text-xs text-xp">✓ Besiege jetzt den Endboss, dann erzähl {visitor.name} im Dorf davon.</p>
         </div>
       )}
     </div>

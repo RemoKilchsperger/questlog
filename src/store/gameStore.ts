@@ -47,6 +47,7 @@ import {
   pickRiddle,
   pickTrap,
   RIDDLE_DAMAGE,
+  sceneTestOutcome,
   sectionOf,
   shrineOffer,
   stepCreature,
@@ -83,14 +84,18 @@ import { totalXpForLevel } from "../domain/leveling";
 import {
   acceptVisitor,
   applyVisitorEvent,
+  completeStoryScene,
   dismissWanderer,
   EMPTY_VISITORS,
+  getSceneOption,
   refreshVisitors,
+  storySceneFor,
   turnInStory,
   turnInWanderer,
   foundQuestItems,
   type QuestItemFind,
   type VisitorGift,
+  type VisitorKind,
   type VisitorState,
 } from "../domain/visitors";
 import {
@@ -312,11 +317,11 @@ interface GameState {
   visitors: VisitorState;
   /** Lässt Besucher kommen und gehen – beim Öffnen des Dorfs und regelmässig. */
   refreshVisitors: () => void;
-  acceptVisitor: (who: "story" | "wanderer") => void;
+  acceptVisitor: (who: VisitorKind) => void;
   /** Schickt den Durchreisenden weg (der feste Besucher wartet einfach weiter). */
   dismissWanderer: () => void;
-  /** Gibt beim Besucher ab – im letzten Kapitel mit Entscheidung braucht es `choiceId`. */
-  turnInVisitor: (who: "story" | "wanderer", choiceId?: string) => VisitorOutcome | null;
+  /** Gibt beim Besucher ab – im letzten Kapitel mit Entscheidung braucht es `choiceId` (beim Dungeon-Besucher zählt die Szene). */
+  turnInVisitor: (who: VisitorKind, choiceId?: string) => VisitorOutcome | null;
 
   /** Ausbaustufen der Gebäude im Dorf (village.ts) */
   village: Village;
@@ -435,6 +440,8 @@ interface GameState {
   dungeonRiddle: (answer: string) => void;
   /** Truhe: öffnen (vielleicht ein Mimic) oder liegen lassen */
   dungeonChest: (choice: ChestChoice) => void;
+  /** Geschichtstür eines Dungeon-Besuchers: eine Wahl in der Szene treffen */
+  dungeonStoryChoice: (optionId: string) => void;
   /** Koop-Dungeon: Kauf beim Händler mit eigenem Gold bezahlen, Tränke kommen in den Vorrat (die Wirkung rechnet der Server) */
   payDungeonMerchant: (offer: MerchantOffer) => void;
   /** Dungeon nach einem Sieg freiwillig verlassen – die Truhe mit der bisherigen Beute wird gutgeschrieben. */
@@ -492,6 +499,10 @@ export interface DungeonRun {
   heroic?: boolean;
   /** Schatzkarte für diesen Dungeon – hinter dem Zwischenboss wartet der Schatzraum, bis man ihn betritt */
   treasureMap?: string;
+  /** Wahl in der Szene des Dungeon-Besuchers – fällt danach der Endboss, ist sein letztes Kapitel erfüllt */
+  storyChoice?: string;
+  /** Aus der Szene: Der Endboss hat so viel weniger Lebenspunkte (0..1) */
+  bossWeaken?: number;
 }
 
 /** Frischer Dungeon-Lauf am Eingang (Schritt 0, ein Kampf). */
@@ -528,7 +539,12 @@ export type DungeonRoom =
   /** Truhe: liegen gelassen oder geöffnet – ist sie ein Mimic, beginnt stattdessen ein Kampf (der Raum ist dann weg) */
   | { kind: "chest"; outcome: { choice: "leave" } | { choice: "open"; reward: BattleReward } | null }
   /** Schatzraum: der Fund ist beim Eintreten schon gutgeschrieben */
-  | { kind: "treasure"; find: TreasureFind };
+  | { kind: "treasure"; find: TreasureFind }
+  /**
+   * Szene eines Dungeon-Besuchers. Führt die Wahl in einen Kampf, ist der Raum danach weg (wie beim Mimic).
+   * `damage`: Schaden aus einer Probe, `dodged`: die Probe ist gelungen.
+   */
+  | { kind: "story"; visitorId: string; outcome: { optionId: string; dodged?: boolean; damage?: number } | null };
 
 /** Ist der Raum erledigt? Beim Händler kann man jederzeit weiter. */
 export function isRoomDone(room: DungeonRoom): boolean {
@@ -1051,6 +1067,10 @@ export const useGameStore = create<GameState>()(
             }),
         });
         if (completed) questEvent({ kind: "dungeon", dungeonId: dungeon.dungeonId });
+        // Szene gespielt und danach den Endboss besiegt: das letzte Kapitel des Dungeon-Besuchers ist erfüllt
+        if (completed && dungeon.storyChoice) {
+          set((s) => ({ visitors: completeStoryScene(s.visitors, dungeon.dungeonId, dungeon.storyChoice!) }));
+        }
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
         }
@@ -1135,7 +1155,11 @@ export const useGameStore = create<GameState>()(
         const heroicBoss = !!run.heroic && creature.boss;
         const affixes = heroicBoss ? heroicAffixes(creature.id) : (elite ?? rollElite(creature));
         const started = startBattle(newId(), character.name, hero, creature, heroHp ?? hero.maxHp, affixes);
-        const battle = heroicBoss ? makeHeroic(started) : started;
+        const heroicBattle = heroicBoss ? makeHeroic(started) : started;
+        // Szene des Dungeon-Besuchers: der Endboss kann geschwächt sein
+        const weaken = creature.boss ? (run.bossWeaken ?? 0) : 0;
+        const enemyHp = Math.round(heroicBattle.enemy.maxHp * (1 - weaken));
+        const battle = weaken > 0 ? { ...heroicBattle, enemy: { ...heroicBattle.enemy, hp: enemyHp, maxHp: enemyHp } } : heroicBattle;
         return { ...battle, blessings: run.blessings, secondWindUsed: run.secondWindUsed };
       };
 
@@ -1144,8 +1168,13 @@ export const useGameStore = create<GameState>()(
         const step = run.stage + 1;
         if (step >= dungeon.creatures.length || stepKind(dungeon, step) !== "fork") return null;
         const doors = forkDoors(run.seed, step, !run.calm[sectionOf(dungeon, step)]);
-        // Mit Schatzkarte: an der ersten Gabelung hinter dem Zwischenboss eine Tür mehr
-        return run.treasureMap && step === treasureStep(dungeon) ? [...doors, { kind: "treasure", hidden: false }] : doors;
+        if (step !== treasureStep(dungeon)) return doors;
+        // An der ersten Gabelung hinter dem Zwischenboss: mit Schatzkarte der Schatzraum,
+        // im letzten Kapitel des Dungeon-Besuchers die Geschichtstür
+        const extra: Door[] = [];
+        if (run.treasureMap) extra.push({ kind: "treasure", hidden: false });
+        if (!run.storyChoice && storySceneFor(get().visitors, dungeon.id)) extra.push({ kind: "story", hidden: false });
+        return [...doors, ...extra];
       };
 
       /** Beute aus Kampf oder Raum für die Dungeon-Truhe: Material doppelt, „Schatzsucher“ gibt mehr Erfahrung und Gold. */
@@ -1550,7 +1579,7 @@ export const useGameStore = create<GameState>()(
         let outcome: VisitorOutcome | null = null;
         attempt(() => {
           const { visitors, character, records } = get();
-          const result = who === "story" ? turnInStory(visitors, choiceId) : turnInWanderer(visitors, Date.now());
+          const result = who === "wanderer" ? turnInWanderer(visitors, Date.now()) : turnInStory(visitors, choiceId, who);
           const xp = statueXp(result.reward.xp, tiers().statue);
           const levelBefore = getLevel(character.totalXp);
           const totalXp = character.totalXp + xp;
@@ -1560,7 +1589,7 @@ export const useGameStore = create<GameState>()(
             character: { ...character, totalXp, gold: character.gold + result.reward.gold },
             records: { ...records, questsCompleted: records.questsCompleted + 1 },
           });
-          const item = result.gift ? grantGift(result.gift, levelAfter, visitors.story?.id ?? "wanderer") : null;
+          const item = result.gift ? grantGift(result.gift, levelAfter, who === "wanderer" ? "wanderer" : (visitors[who]?.id ?? "wanderer")) : null;
           const gold = result.reward.gold + (result.gift?.kind === "gold" ? result.gift.gold : 0);
           set({
             lastReward: { id: newId(), questTitle: result.title, source: "visitor", xp, gold, loot: item, levelBefore, levelAfter },
@@ -1873,6 +1902,15 @@ export const useGameStore = create<GameState>()(
             return;
           }
 
+          if (door.kind === "story") {
+            // Geschichtstür: zählt nicht als Raum ohne Kampf, die Wahl fällt im Raum
+            const found = storySceneFor(get().visitors, area.id);
+            if (!found) throw new Error("Hier geht gerade keine Geschichte weiter.");
+            const run: DungeonRun = { ...moved, room: { kind: "story", visitorId: found.visitor.id, outcome: null } };
+            set({ dungeon: { ...run, doors: nextDoors(area, run) }, battleReward: null });
+            return;
+          }
+
           if (!isCalm(door.kind)) {
             const creature = stepCreature(area, seed, stage);
             const elite = door.kind === "elite" ? eliteRoomAffixes(area, seed, stage) : undefined;
@@ -2014,6 +2052,41 @@ export const useGameStore = create<GameState>()(
           const reward = dungeonLoot(chestReward(creature, soloHero(), newId()), dungeon.blessings);
           set({
             dungeon: { ...dungeon, chest: addToChest(dungeon.chest, reward), room: { ...room, outcome: { choice, reward } } },
+          });
+        }),
+
+      dungeonStoryChoice: (optionId) =>
+        attempt(() => {
+          const { dungeon, battle, room } = currentRoom("story");
+          if (room.outcome) throw new Error("Hier hast du dich schon entschieden.");
+          const found = storySceneFor(get().visitors, dungeon.dungeonId);
+          if (!found || found.visitor.id !== room.visitorId) throw new Error("Diese Geschichte geht gerade nicht weiter.");
+          const option = getSceneOption(found.scene, optionId);
+          const area = getDungeon(dungeon.dungeonId);
+          const chosen: DungeonRun = {
+            ...dungeon,
+            storyChoice: option.id,
+            ...(option.weakenBoss && { bossWeaken: option.weakenBoss }),
+            ...(option.blessing && { blessings: [...dungeon.blessings, option.blessing] }),
+          };
+          if (option.fight) {
+            // Zusatzkampf: Elite mit zwei Modifikatoren, danach geht es weiter wie nach jedem Sieg
+            const run: DungeonRun = { ...chosen, room: null, doors: null };
+            const next = dungeonBattle(run, getCreature(option.fight).creature, battle.hero.hp, eliteRoomAffixes(area, dungeon.seed, dungeon.stage));
+            set({ battle: next, battleReward: null, dungeon: run });
+            EventBus.emit("battle:started", { battle: next });
+            return;
+          }
+          let hero = option.blessing ? blessBattle(battle, dungeon.blessings, option.blessing) : battle;
+          let test: { dodged: boolean; damage: number } | null = null;
+          if (option.test) {
+            const armorClass = mainArmorClass(getArmorClassSummary(get().equipment).pieces);
+            test = sceneTestOutcome(armorClass, hero.hero.maxHp, hero.hero.hp, Math.random);
+            hero = { ...hero, hero: { ...hero.hero, hp: hero.hero.hp - test.damage } };
+          }
+          set({
+            battle: hero,
+            dungeon: { ...chosen, room: { ...room, outcome: { optionId: option.id, ...(test && { dodged: test.dodged, damage: test.damage }) } } },
           });
         }),
 
