@@ -146,6 +146,21 @@ const ARROW = [
 export const UI_ICONS: Readonly<Record<string, SpriteDef>> = {
   "▶": icon(GOLD, ARROW),
   "◀": icon(GOLD, ARROW.map((row) => [...row].reverse().join(""))),
+  // Doppelpfeil fürs Kampftempo
+  "⏩": icon(GOLD, [
+    "............",
+    "y.....y.....",
+    "yy....yy....",
+    "yYy...yYy...",
+    "yYYy..yYYy..",
+    "yYYYy.yYYYy.",
+    "yYYYo.yYYYYo",
+    "yYYo..yYYYo.",
+    "yYo...yYYo..",
+    "yo....yYo...",
+    "o.....yo....",
+    "......o.....",
+  ]),
   "🥇": medal("#f4c95d", "#fff1a8", "#c4842a", "#7a4e12"),
   "🥈": medal("#c8d0dc", "#ffffff", "#8e939d", "#4c505a"),
   "🥉": medal("#d0915e", "#f0c89a", "#a0582f", "#5e3420"),

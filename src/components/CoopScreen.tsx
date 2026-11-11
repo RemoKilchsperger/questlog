@@ -4,6 +4,7 @@ import { useCloudStore } from "../cloud/cloudStore";
 import { availableBackend } from "../coop/backend";
 import { localDeadline, useCoopStore } from "../coop/coopStore";
 import { isLobbyCode } from "../coop/protocol";
+import { SpeedControl } from "./SpeedControl";
 import { getAbility } from "../domain/abilities";
 import {
   clearedStages,
@@ -487,9 +488,12 @@ function CoopBattle() {
               </span>
             )}
           </h2>
-          <span className="font-pixel text-gold">
-            Runde <span className="num">{battle.round}</span>
-          </span>
+          <div className="flex items-center gap-3">
+            <SpeedControl />
+            <span className="font-pixel text-gold">
+              Runde <span className="num">{battle.round}</span>
+            </span>
+          </div>
         </div>
         <Suspense
           fallback={

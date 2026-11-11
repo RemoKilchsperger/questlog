@@ -68,9 +68,13 @@ import { bonusText, mainStatText, RARITY_BORDER, RARITY_TEXT, rarityLabel } from
 import { PixelAvatar } from "./PixelAvatar";
 import { AvatarFrame } from "./Achievements";
 import { POTION_BUTTONS, POTION_COLORS } from "./potionUi";
+import { SpeedControl } from "./SpeedControl";
+import { ABILITY_KEYS, POTION_KEYS, useHotkeys } from "./useHotkeys";
+import { useBattleSpeedStore } from "../store/battleSpeedStore";
 import {
   AbilityButton,
   ActionGroup,
+  Kbd,
   eliteChips,
   enemyStatusChips,
   heroStatusChips,
@@ -597,6 +601,41 @@ function Battle({ battle }: { battle: BattleState }) {
   const battlePotions = [...DRINK_POTIONS, ...THROW_POTIONS].filter(
     (p) => (potions[p.id] ?? 0) > 0 || battle.potionsUsed.includes(p.id),
   );
+  const potionBlockerOf = (p: (typeof battlePotions)[number]) =>
+    (potions[p.id] ?? 0) === 0 && !battle.potionsUsed.includes(p.id)
+      ? "Keine mehr im Vorrat – Nachschub beim Händler."
+      : potionBlocker(battle, p);
+
+  // Tastenkürzel: A angreifen, D abwehren, 1–9 Fähigkeiten, Q–R Tränke, T Ziel wechseln, S Tempo
+  const cycleSpeed = useBattleSpeedStore((s) => s.cycleSpeed);
+  const chooseTarget = useGameStore((s) => s.battleTarget);
+  useHotkeys((key) => {
+    if (key === "s") {
+      cycleSpeed();
+      return true;
+    }
+    if (confirmFlee || busy || !active) return false;
+    if (key === "a") act(() => attack());
+    else if (key === "d") act(() => attack(DEFEND));
+    else if (ABILITY_KEYS.includes(key)) {
+      const id = battle.abilities[ABILITY_KEYS.indexOf(key)];
+      if (!id || abilityBlocker(battle, id) !== null) return false;
+      act(() => attack(id));
+    } else if (POTION_KEYS.includes(key)) {
+      const p = battlePotions[POTION_KEYS.indexOf(key)];
+      if (!p || potionBlockerOf(p) !== null) return false;
+      act(() => drink(p.id));
+    } else if (key === "t") {
+      // Reihum durch alle Gegner, die noch stehen (undefined = Boss bzw. erstes Tier)
+      const foes: (string | undefined)[] = [
+        ...(battle.enemy.hp > 0 ? [undefined] : []),
+        ...(battle.adds ?? []).filter((a) => a.combatant.hp > 0).map((a) => a.uid),
+      ];
+      if (foes.length < 2) return false;
+      chooseTarget(foes[(foes.indexOf(battle.target) + 1) % foes.length]);
+    } else return false;
+    return true;
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -636,6 +675,7 @@ function Battle({ battle }: { battle: BattleState }) {
             )}
           </h2>
           <div className="flex items-center gap-3">
+            <SpeedControl />
             <SoundControl />
             <span className="font-pixel text-gold">
               Runde <span className="num">{battle.round}</span>
@@ -699,7 +739,8 @@ function Battle({ battle }: { battle: BattleState }) {
                 onClick={() => act(() => attack())}
                 className="font-pixel w-full rounded-md border-2 border-danger bg-danger/20 px-4 py-2 text-xl text-danger hover:bg-danger/30 disabled:pointer-events-none disabled:opacity-40"
               >
-                ⚔️ Angreifen <MatchupBadge matchup={matchupAgainst(battle, battle.heroWeapon ? WEAPON_KIND[battle.heroWeapon] : null)} />
+                ⚔️ Angreifen <MatchupBadge matchup={matchupAgainst(battle, battle.heroWeapon ? WEAPON_KIND[battle.heroWeapon] : null)} />{" "}
+                <Kbd>A</Kbd>
               </motion.button>
             </Hint>
             <Hint
@@ -713,16 +754,17 @@ function Battle({ battle }: { battle: BattleState }) {
                 onClick={() => act(() => attack(DEFEND))}
                 className="font-pixel w-full rounded-md border-2 border-intellect bg-intellect/15 px-4 py-2 text-xl text-intellect hover:bg-intellect/25 disabled:pointer-events-none disabled:opacity-40"
               >
-                🛡️ Abwehren
+                🛡️ Abwehren <Kbd>D</Kbd>
               </motion.button>
             </Hint>
           </div>
 
           <ActionGroup label="Fähigkeiten">
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-              {battle.abilities.map((id) => (
+              {battle.abilities.map((id, i) => (
                 <AbilityButton
                   key={id}
+                  hotkey={ABILITY_KEYS[i]}
                   ability={{ ...classAbility(id, battle.heroClass), manaCost: abilityCost(battle, id) }}
                   blocker={abilityBlocker(battle, id)}
                   disabled={busy}
@@ -755,7 +797,8 @@ function Battle({ battle }: { battle: BattleState }) {
               {battlePotions.map((p, i) => {
                 const count = potions[p.id] ?? 0;
                 const used = battle.potionsUsed.includes(p.id);
-                const blocker = count === 0 && !used ? "Keine mehr im Vorrat – Nachschub beim Händler." : potionBlocker(battle, p);
+                const blocker = potionBlockerOf(p);
+                const hotkey = POTION_KEYS[i]?.toUpperCase();
                 const effect = p.effect.kind === "heal" ? `Heilt ${potionHeal(p, battle.hero.maxHp)} LP` : potionEffectText(p);
                 // Wurftränke (nur die im Vorrat) stehen abgesetzt hinter den Trinktränken
                 const thrown = isThrowable(p);
@@ -783,6 +826,11 @@ function Battle({ battle }: { battle: BattleState }) {
                     >
                       {p.icon} <span className="hidden text-xs sm:inline">{p.name}</span> <span className="num font-bold">× {count}</span>
                       {used && <span className="ml-1 text-xs">✓</span>}
+                      {hotkey && (
+                        <span className="ml-1">
+                          <Kbd>{hotkey}</Kbd>
+                        </span>
+                      )}
                     </button>
                   </Hint>,
                 ];

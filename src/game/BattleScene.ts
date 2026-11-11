@@ -13,6 +13,7 @@ import { getPotion } from "../domain/potions";
 import { getRare, type RareLook } from "../domain/rares";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
+import { attachTempo, damageFontSize, type BattleTempo } from "./battleTempo";
 import { iconText } from "./phaserIcons";
 import { creatureImage, lastOpaqueRow } from "./creatureImages";
 import { getCreatureSprite } from "./creatureSprites";
@@ -139,6 +140,8 @@ export class BattleScene extends Phaser.Scene {
   private bossLift = 0;
   /** Noten über dem Trommler – je lauter, desto öfter */
   private drumNotes: Record<string, { stacks: number; timer: Phaser.Time.TimerEvent }> = {};
+  /** Abspieltempo und Hit-Stop (battleTempo.ts) */
+  private tempo!: BattleTempo;
 
   constructor() {
     super("battle");
@@ -160,6 +163,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     const { battle, colors } = this.setup;
+    this.tempo = attachTempo(this);
     this.drawBackground(colors, this.setup.areaId);
 
     const hero = this.addBody(HERO_X, "hero", this.setup.heroSprite, HERO_SCALE, this.setup.heroWeapon);
@@ -1027,9 +1031,13 @@ export class BattleScene extends Phaser.Scene {
     sfx.hit(crit, shake >= 0.012);
     this.tweens.add({ targets: defender.body, alpha: 0.25, duration: 70, yoyo: true, repeat: 2 });
     this.tweens.add({ targets: defender.body, x: defender.homeX + 10 * dir, duration: 60, yoyo: true, repeat: 1 });
-    if (crit || shake > 0) this.cameras.main.shake(crit ? 180 : 220, Math.max(shake, crit ? 0.01 : 0));
-    if (crit) this.floatText(defender.homeX, GROUND_Y - 110, `KRITISCH! -${damage}`, "#f4c95d", 28);
-    else this.floatText(defender.homeX, GROUND_Y - 100, `-${damage}`, "#f0776a", 26);
+    if ((crit || shake > 0) && !this.tempo.instant())
+      this.cameras.main.shake(crit ? 180 : 220, Math.max(shake, crit ? 0.01 : 0));
+    // Grosse Treffer, grosse Zahlen
+    const size = damageFontSize(damage, defender.maxHp, 20, 16);
+    if (crit) this.floatText(defender.homeX, GROUND_Y - 110, `KRITISCH! -${damage}`, "#f4c95d", size + 4);
+    else this.floatText(defender.homeX, GROUND_Y - 100, `-${damage}`, "#f0776a", size);
+    this.tempo.hitStop(crit);
   }
 
   /** Ausfallschritt zum Gegner und zurück; `onHit` beim Auftreffen. */
