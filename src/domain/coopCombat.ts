@@ -59,7 +59,7 @@ import {
   type HeroCombatProfile,
 } from "./combat";
 import { abilityForRound, getBossAbilities, type BossAbilityDef } from "./bossAbilities";
-import { DRUM_BONUS, DRUM_MAX, phaseDue, RITUAL_HEAL, RITUAL_ROUNDS, SHIELD_EVERY, SHIELD_SHARE, type AddRole } from "./bossMechanics";
+import { phaseDue, type AddRole } from "./bossMechanics";
 import {
   bossAttacks,
   bossTurnTakenFactor,
@@ -68,7 +68,6 @@ import {
   plateFactor,
   stolenStrike,
   turnAbility,
-  CURSE_DAMAGE,
   COOP_STATIC_PER_HERO,
   CURSE_ROUNDS,
   type BossTurn,
@@ -88,9 +87,6 @@ import {
   eliteStats,
   enemyAdds,
   EXPLOSION_FACTOR,
-  POISON,
-  RAGE_BONUS,
-  SWIFT_SHARE,
   VAMPIRE_SHARE,
   type EliteAffix,
 } from "./elites";
@@ -112,16 +108,42 @@ import {
   type TrapChoice,
 } from "./dungeonPaths";
 import { BLESSING, stacks, type BlessingId } from "./tower";
-import { bandage, canEndure, eliteRegen, healShare, heroRegenShare, layDot, secondWind, tickEnemyEffects } from "./combatCore";
 import {
-  bloodburstDamage,
+  abilityDots,
+  bandage,
+  canEndure,
+  curseBurstDamage,
+  damageTakenFactor,
+  dodges,
+  DOT_ORDER,
+  drainHeal,
+  drumFactor,
+  drumTurn,
+  elitePoison,
+  eliteRegen,
+  eliteStrike,
+  guardedDamage,
+  guardRetort,
+  healerTurn,
+  healShare,
+  heroDotDamage,
+  heroRegenShare,
+  layDot,
+  ritualHeal,
+  secondWind,
+  shieldTurn,
+  strikeHero,
+  thornsDamage,
+  thornsShare,
+  tickDot,
+  tickEnemyEffects,
+  tickFoeDots,
+  weakenFactor,
+} from "./combatCore";
+import {
   cooldownSkipChance,
   critMana,
   defendMana,
-  defendTaken,
-  defendThorns,
-  dodgeChance,
-  dotTakenFactor,
   echoDue,
   interruptMana,
   manaRegen,
@@ -1220,12 +1242,8 @@ export function resolveRound(
   }
   /** Item-Effekt „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst – Stachelwehr beim Abwehren. */
   const thorns = (hero: CoopHero, foe: Foe, damage: number) => {
-    const share =
-      (hasEffect(hero.itemEffects, "thorns") ? EFFECT.thorns : 0) +
-      (defending.has(hero.id) ? defendThorns(hero.skills) : 0) +
-      BLESSING.thorns * stacks(hero.blessings, "thorns");
-    if (share <= 0 || damage <= 0 || foe.c.hp <= 0) return;
-    const back = Math.max(1, Math.round(damage * share));
+    const back = thornsDamage(damage, thornsShare(hero.itemEffects, hero.blessings, defending.has(hero.id), hero.skills), foe.c.hp);
+    if (back === 0) return;
     foe.c.hp = Math.max(0, foe.c.hp - back);
     events.push({ type: "thorns", heroId: hero.id, target: foe.id, damage: back });
     addDown(foe);
@@ -1599,37 +1617,34 @@ export function resolveRound(
 
   // 2. Gift, Feuer, Bluten – erst an den Gegnern, dann an den Helden
   for (const foe of foes) {
-    for (const kind of OVER_TIME) {
-      const effect = foe.fx[kind];
-      if (!effect || foe.c.hp <= 0 || boss.c.hp <= 0) continue;
-      const damage = Math.max(1, Math.round(effect.damage * (1 + (foe.fx.vulnerable?.percent ?? 0)) * takenBy(foe)));
-      foe.c.hp = Math.max(0, foe.c.hp - damage);
-      const source = heroes.find((h) => h.id === effect.sourceId && !h.down);
-      if (source) source.threat += damage * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
-      events.push({ type: kind, target: foe.id, damage });
-      const ending = effect.roundsLeft <= 1;
-      foe.fx = { ...foe.fx, [kind]: ending ? undefined : { ...effect, roundsLeft: effect.roundsLeft - 1 } };
-      addDown(foe);
-      // Blutsturz des Verursachers: Läuft das Bluten aus, platzt die Wunde
-      const burst = kind === "bleed" && ending && foe.c.hp > 0 && boss.c.hp > 0 ? bloodburstDamage(sourceSkills(effect.sourceId), effect.damage) : 0;
-      if (burst > 0) {
-        const dealt = Math.max(1, Math.round(burst * (1 + (foe.fx.vulnerable?.percent ?? 0)) * takenBy(foe)));
-        foe.c.hp = Math.max(0, foe.c.hp - dealt);
-        events.push({ type: "bleed", target: foe.id, damage: dealt, burst: true });
-        addDown(foe);
-      }
-    }
+    tickFoeDots<SourcedDot, CoopEnemyEffects>(foe, {
+      fightOn: () => boss.c.hp > 0,
+      scale: (damage) => damage * (1 + (foe.fx.vulnerable?.percent ?? 0)) * takenBy(foe),
+      // Blutsturz des Verursachers
+      sourceSkills: (effect) => sourceSkills(effect.sourceId),
+      damage: (kind, damage, effect, burst) => {
+        foe.c.hp = Math.max(0, foe.c.hp - damage);
+        if (burst) {
+          events.push({ type: "bleed", target: foe.id, damage, burst: true });
+          return;
+        }
+        const source = heroes.find((h) => h.id === effect.sourceId && !h.down);
+        if (source) source.threat += damage * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
+        events.push({ type: kind, target: foe.id, damage });
+      },
+      down: () => addDown(foe),
+    });
   }
   if (boss.c.hp > 0) {
     for (const hero of heroes) {
-      for (const kind of OVER_TIME) {
+      for (const kind of DOT_ORDER) {
         const effect = hero.effects[kind];
         if (!effect || hero.down) continue;
         // Gegengift: weniger Schaden durch Gift, Feuer und Bluten
-        const damage = Math.max(1, Math.round(effect.damage * dotTakenFactor(hero.skills)));
+        const damage = heroDotDamage(effect, hero.skills);
         hero.combatant.hp = Math.max(0, hero.combatant.hp - damage);
         events.push({ type: kind, target: hero.id, damage });
-        hero.effects[kind] = effect.roundsLeft > 1 ? { ...effect, roundsLeft: effect.roundsLeft - 1 } : undefined;
+        hero.effects[kind] = tickDot(effect);
         knockDown(hero);
       }
     }
@@ -1656,10 +1671,7 @@ export function resolveRound(
   /** Wie Gruppen-Fähigkeiten: Was alle trifft, trifft jeden mit dem Schaden wie solo (ohne Gruppenzuschlag) */
   const soloScale = 1 + DUNGEON_COOP_DAMAGE_STEP * (heroes.length - 1);
   /** Schildwall/Wutschrei: Faktor auf den Schaden, den ein Held erleidet */
-  const hurt = (hero: CoopHero) =>
-    Math.max(0, 1 + (hero.effects.damageTaken?.percent ?? 0)) *
-    (1 + (hero.effects.corroded?.percent ?? 0)) *
-    (defending.has(hero.id) ? defendTaken(hero.skills, DEFEND_DAMAGE_TAKEN) : 1);
+  const hurt = (hero: CoopHero) => damageTakenFactor(hero.effects, defending.has(hero.id), hero.skills, DEFEND_DAMAGE_TAKEN);
   /** Der Gegner fällt – ein explosiver Elite trifft alle stehenden Helden (Bollwerk blockt). Fallen alle, ist der Kampf verloren. */
   const enemyDown = () => {
     if (elite.includes("explosive")) {
@@ -1737,7 +1749,7 @@ export function resolveRound(
       events.push({ type: "headSevered", add: severed.id, head: head.kind, seared });
     }
     // Trommler: Der Boss macht mehr Schaden, je lauter er trommelt (seine Wirbel aus den Runden davor)
-    const drums = 1 + DRUM_BONUS * adds.reduce((sum, f) => sum + (f.role === "drummer" && f.c.hp > 0 ? (f.cast ?? 0) : 0), 0);
+    const drums = drumFactor(adds);
     if (stunnedNow(boss)) {
       bossStunned = true;
     } else if (!bossAttacks(turn)) {
@@ -1765,16 +1777,10 @@ export function resolveRound(
       // Gruppenzuschlag. Fähigkeiten gegen ein Ziel haben ihn wie normale Angriffe.
       const groupScale = special?.aoe && !enemy.raid ? soloScale : 1;
       // Elite: Rasend macht mehr Schaden (unter halben LP noch mehr), Flink schlägt zweimal schwächer zu
-      const rage = elite.includes("raging") ? 1 + (boss.c.hp < boss.c.maxHp / 2 ? RAGE_BONUS.low : RAGE_BONUS.base) : 1;
-      const swift = elite.includes("swift");
+      const { rage, swift, hits } = eliteStrike(elite, boss.c);
       const attacker = {
         ...boss.c,
-        damage:
-          ((boss.c.damage * (special?.multiplier ?? 1)) / groupScale) *
-          (1 - (boss.fx.weaken?.percent ?? 0)) *
-          drums *
-          rage *
-          (swift ? SWIFT_SHARE : 1),
+        damage: ((boss.c.damage * (special?.multiplier ?? 1)) / groupScale) * weakenFactor(boss.fx) * drums * rage * swift,
       };
       const targets = special?.aoe ? heroes.filter((h) => !h.down) : [pickBossTarget(heroes, rng)!];
       /**
@@ -1790,7 +1796,6 @@ export function resolveRound(
           events.push({ type: "blocked", heroId: target.id });
           continue;
         }
-        const dodge = dodgeChance(target.skills);
         const defender = special?.ignoreArmor ? { ...buffed(target), armor: 0 } : buffed(target);
         // Item-Effekt „Standhaft“: Boss-Fähigkeiten treffen schwächer
         const attackerFor = {
@@ -1798,65 +1803,63 @@ export function resolveRound(
           damage: attacker.damage * hurt(target) * (special && hasEffect(target.itemEffects, "steadfast") ? 1 - EFFECT.steadfast : 1),
         };
         let taken = 0;
+        /** Voller Schaden vor der Parade – für Rückwurf und „verhindert“ */
+        let raw = 0;
         /** Treffer, denen der Held nicht ausgewichen ist (Schemen) */
         let landed = 0;
-        for (let i = 0; i < (special?.hits ?? (swift ? 2 : 1)) && target.combatant.hp > 0; i++) {
-          if (dodge > 0 && rng() < dodge) {
+        // Parade/Vergeltung mindert alle Treffer dieses Angriffs – Rückwurf und Konter kommen danach einmal
+        const guard = target.effects.guard;
+        for (let i = 0; i < (special?.hits ?? hits) && target.combatant.hp > 0; i++) {
+          if (dodges(target.skills, rng)) {
             events.push({ type: "dodged", heroId: target.id, attacker: BOSS });
             continue;
           }
           landed++;
-          if (defending.has(target.id) || target.effects.guard) warded.add(target);
+          if (defending.has(target.id) || guard) warded.add(target);
           const rolled = rollHit(attackerFor, defender, rng);
-          // Parade/Vergeltung: nur ein Teil kommt durch, dann Konter bzw. Rückwurf (nur beim ersten Treffer)
-          const guard = target.effects.guard;
-          const hit = guard ? { ...rolled, damage: Math.max(1, Math.round(rolled.damage * guard.reduce)) } : rolled;
+          const hit = guard ? { ...rolled, damage: guardedDamage(rolled.damage, guard) } : rolled;
           target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
+          raw += rolled.damage;
           taken += hit.damage;
           events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
-          if (guard) {
-            target.effects.guard = undefined;
-            events.push({ type: "guarded", heroId: target.id, prevented: rolled.damage - hit.damage });
-            let counter = guard.reflect ? Math.round(rolled.damage * guard.reflect) : 0;
-            if (guard.counter && target.combatant.hp > 0) {
-              const own = buffed(target);
-              const armor = Math.round(boss.c.armor * (1 - (boss.fx.armorBreak ?? 0)));
-              const kind = target.weapon ? WEAPON_KIND[target.weapon] : null;
-              const damage = own.damage * guard.counter * takenBy(boss) * matchupFactor(boss.creatureId, kind);
-              counter += rollHit({ ...own, damage }, { ...boss.c, armor }, rng).damage;
-            }
-            if (counter > 0 && boss.c.hp > 0) {
-              boss.c.hp = Math.max(0, boss.c.hp - counter);
-              target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
-              events.push({ type: "counter", heroId: target.id, damage: counter });
-            }
-          }
           if (drain > 0 && boss.c.hp > 0) {
-            const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(hit.damage * drain));
+            const heal = drainHeal(boss.c, hit.damage, drain);
             boss.c.hp += heal;
             if (heal > 0) events.push({ type: "drain", heal });
           }
         }
         thorns(target, boss, taken);
+        if (guard && landed > 0) {
+          target.effects.guard = undefined;
+          events.push({ type: "guarded", heroId: target.id, prevented: raw - taken });
+          const counter = guardRetort(
+            guard,
+            raw,
+            target.combatant.hp > 0
+              ? (factor) => {
+                  const own = buffed(target);
+                  const armor = Math.round(boss.c.armor * (1 - (boss.fx.armorBreak ?? 0)));
+                  const kind = target.weapon ? WEAPON_KIND[target.weapon] : null;
+                  const damage = own.damage * factor * takenBy(boss) * matchupFactor(boss.creatureId, kind);
+                  return rollHit({ ...own, damage }, { ...boss.c, armor }, rng).damage;
+                }
+              : null,
+          );
+          if (counter > 0 && boss.c.hp > 0) {
+            boss.c.hp = Math.max(0, boss.c.hp - counter);
+            target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
+            events.push({ type: "counter", heroId: target.id, damage: counter });
+          }
+        }
         // Wer allem ausgewichen ist, entgeht auch den Zusatzeffekten
         if (landed === 0) {
           knockDown(target);
           continue;
         }
         if (target.combatant.hp > 0) {
-          for (const kind of OVER_TIME) {
-            const effect = special?.[kind];
-            if (!effect) continue;
-            const damage = Math.max(1, Math.round(((boss.c.damage * drums) / groupScale) * effect.percent));
-            // Reinheit kürzt, Drachenfeuer macht gegen Feuer immun
-            const rounds = heroDotRounds(target.itemEffects, kind, effect.rounds);
-            if (rounds > 0) target.effects[kind] = { damage, roundsLeft: rounds };
-          }
+          for (const [kind, dot] of abilityDots(special, (boss.c.damage * drums) / groupScale, target.itemEffects)) target.effects[kind] = dot;
           // Elite „Giftig“: Wer getroffen wird, ist vergiftet
-          if (elite.includes("poisonous") && taken > 0) {
-            const rounds = heroDotRounds(target.itemEffects, "poison", POISON.rounds);
-            target.effects.poison = { damage: Math.max(1, Math.round(boss.c.damage * POISON.percent)), roundsLeft: rounds };
-          }
+          if (elite.includes("poisonous") && taken > 0) target.effects.poison = elitePoison(boss.c.damage, target.itemEffects);
         }
         if (special?.manaBurn && target.combatant.hp > 0) {
           const amount = Math.min(target.mana, special.manaBurn);
@@ -1884,7 +1887,7 @@ export function resolveRound(
       const living = heroes.filter((h) => !h.down);
       const victim = living.find((h) => h.id === curse.heroId) ?? pickBossTarget(heroes, rng);
       if (victim) {
-        const damage = Math.max(1, Math.round(victim.combatant.maxHp * CURSE_DAMAGE * hurt(victim)));
+        const damage = curseBurstDamage(victim.combatant.maxHp, hurt(victim));
         victim.combatant.hp = Math.max(0, victim.combatant.hp - damage);
         events.push({ type: "curseBurst", heroId: victim.id, damage });
         knockDown(victim);
@@ -1907,23 +1910,19 @@ export function resolveRound(
       }
       if (add.role === "healer") {
         // Heilritual: Ein Treffer oder eine Betäubung unterbricht es – angreifen tut der Heiler nie
-        if (stunned || hitAdds.has(add.id)) {
-          if (add.cast) {
+        const ritual = healerTurn(add.cast, stunned || hitAdds.has(add.id));
+        add.cast = ritual.cast;
+        if (ritual.act === "interrupted") {
+          // Nur ein laufendes Ritual zählt als unterbrochen (Unterbrecher)
+          if (ritual.wasCasting) {
             events.push({ type: "interrupted", add: add.id });
             for (const hero of addHitters.get(add.id) ?? []) interrupters.add(hero);
           }
-          add.cast = 0;
-          continue;
-        }
-        const cast = (add.cast ?? 0) + 1;
-        if (cast >= RITUAL_ROUNDS) {
-          add.cast = 0;
-          const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * RITUAL_HEAL));
+        } else if (ritual.act === "ritual") events.push({ type: "ritual", add: add.id, roundsLeft: ritual.roundsLeft });
+        else {
+          const heal = ritualHeal(boss.c);
           boss.c.hp += heal;
           if (heal > 0) events.push({ type: "addHeal", add: add.id, heal });
-        } else {
-          add.cast = cast;
-          events.push({ type: "ritual", add: add.id, roundsLeft: RITUAL_ROUNDS - cast });
         }
         continue;
       }
@@ -1937,32 +1936,32 @@ export function resolveRound(
       }
       if (add.role === "shield") {
         // Statt anzugreifen hebt er regelmässig den Schild
-        const cast = (add.cast ?? 0) + 1;
-        add.cast = cast % SHIELD_EVERY;
-        if (cast >= SHIELD_EVERY) {
-          bossShield = Math.round(boss.c.maxHp * SHIELD_SHARE);
+        const raise = shieldTurn(add.cast, boss.c.maxHp);
+        add.cast = raise.cast;
+        if (raise.shield > 0) {
+          bossShield = raise.shield;
           events.push({ type: "bossShield", add: add.id, shield: bossShield });
           continue;
         }
       }
       if (add.role === "drummer") {
-        add.cast = Math.min(DRUM_MAX, (add.cast ?? 0) + 1);
+        add.cast = drumTurn(add.cast);
         events.push({ type: "drumming", add: add.id, stacks: add.cast });
       }
       const target = pickBossTarget(heroes, rng)!;
-      if (target.effects.bulwark) {
+      const strike = strikeHero(add.c, add.fx, buffed(target), { bulwark: !!target.effects.bulwark, skills: target.skills, hurt: hurt(target) }, rng);
+      if ("blocked" in strike) {
         shielded.add(target);
         warded.add(target);
         events.push({ type: "blocked", heroId: target.id, add: add.id });
         continue;
       }
-      const dodge = dodgeChance(target.skills);
-      if (dodge > 0 && rng() < dodge) {
+      if ("dodged" in strike) {
         events.push({ type: "dodged", heroId: target.id, attacker: add.id });
         continue;
       }
       if (defending.has(target.id)) warded.add(target);
-      const hit = rollHit({ ...add.c, damage: add.c.damage * (1 - (add.fx.weaken?.percent ?? 0)) * hurt(target) }, buffed(target), rng);
+      const hit = strike.hit;
       target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
       events.push({ type: "hit", attacker: add.id, target: target.id, ...hit });
       thorns(target, add, hit.damage);

@@ -466,3 +466,29 @@ describe("Segen im Koop-Dungeon", () => {
     expect(rollCoopDungeonChest(lucky, profile(), "b").xp).toBe(rollCoopDungeonChest(won, profile(), "b").xp);
   });
 });
+
+describe("Koop-Kampf: Parade", () => {
+  it("mindert wie im Solo alle Treffer eines Angriffs – Rückwurf und Konter danach einmal", () => {
+    const bossId = COOP_BOSSES.find((b) => b.id !== HYDRA)!.id;
+    const base = tough(startCoopBattle("k", bossId, [player("a"), player("b")], 0));
+    // Flink: zwei Treffer pro Angriff; b liegt, also trifft der Boss a
+    const fight = (guard?: { reduce: number }): CoopBattleState => ({
+      ...base,
+      elite: ["swift"],
+      heroes: base.heroes.map((h) =>
+        h.id === "a" ? { ...h, effects: { ...h.effects, ...(guard && { guard }) } } : { ...h, down: true, combatant: { ...h.combatant, hp: 0 } },
+      ),
+    });
+    const bossHits = (state: CoopBattleState) =>
+      resolveRound(state, {}, rng(0.5), 0).events.filter((e) => e.type === "hit" && e.attacker === BOSS);
+    const plain = bossHits(fight()).map((e) => (e.type === "hit" ? e.damage : 0));
+    expect(plain.length).toBeGreaterThanOrEqual(2);
+
+    const { events } = resolveRound(fight({ reduce: 0.5 }), {}, rng(0.5), 0);
+    const guarded = events.filter((e) => e.type === "hit" && e.attacker === BOSS).map((e) => (e.type === "hit" ? e.damage : 0));
+    expect(guarded).toEqual(plain.map((d) => Math.max(1, Math.round(d * 0.5))));
+    const notes = events.filter((e) => e.type === "guarded");
+    expect(notes).toHaveLength(1);
+    expect(notes[0].type === "guarded" && notes[0].prevented).toBe(plain.reduce((s, d, i) => s + d - guarded[i], 0));
+  });
+});
