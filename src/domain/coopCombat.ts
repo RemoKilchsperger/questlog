@@ -1803,44 +1803,25 @@ export function resolveRound(
           damage: attacker.damage * hurt(target) * (special && hasEffect(target.itemEffects, "steadfast") ? 1 - EFFECT.steadfast : 1),
         };
         let taken = 0;
+        /** Voller Schaden vor der Parade – für Rückwurf und „verhindert“ */
+        let raw = 0;
         /** Treffer, denen der Held nicht ausgewichen ist (Schemen) */
         let landed = 0;
+        // Parade/Vergeltung mindert alle Treffer dieses Angriffs – Rückwurf und Konter kommen danach einmal
+        const guard = target.effects.guard;
         for (let i = 0; i < (special?.hits ?? hits) && target.combatant.hp > 0; i++) {
           if (dodges(target.skills, rng)) {
             events.push({ type: "dodged", heroId: target.id, attacker: BOSS });
             continue;
           }
           landed++;
-          if (defending.has(target.id) || target.effects.guard) warded.add(target);
+          if (defending.has(target.id) || guard) warded.add(target);
           const rolled = rollHit(attackerFor, defender, rng);
-          // Parade/Vergeltung: nur ein Teil kommt durch, dann Konter bzw. Rückwurf (nur beim ersten Treffer)
-          const guard = target.effects.guard;
           const hit = guard ? { ...rolled, damage: guardedDamage(rolled.damage, guard) } : rolled;
           target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
+          raw += rolled.damage;
           taken += hit.damage;
           events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
-          if (guard) {
-            target.effects.guard = undefined;
-            events.push({ type: "guarded", heroId: target.id, prevented: rolled.damage - hit.damage });
-            const counter = guardRetort(
-              guard,
-              rolled.damage,
-              target.combatant.hp > 0
-                ? (factor) => {
-                    const own = buffed(target);
-                    const armor = Math.round(boss.c.armor * (1 - (boss.fx.armorBreak ?? 0)));
-                    const kind = target.weapon ? WEAPON_KIND[target.weapon] : null;
-                    const damage = own.damage * factor * takenBy(boss) * matchupFactor(boss.creatureId, kind);
-                    return rollHit({ ...own, damage }, { ...boss.c, armor }, rng).damage;
-                  }
-                : null,
-            );
-            if (counter > 0 && boss.c.hp > 0) {
-              boss.c.hp = Math.max(0, boss.c.hp - counter);
-              target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
-              events.push({ type: "counter", heroId: target.id, damage: counter });
-            }
-          }
           if (drain > 0 && boss.c.hp > 0) {
             const heal = drainHeal(boss.c, hit.damage, drain);
             boss.c.hp += heal;
@@ -1848,6 +1829,28 @@ export function resolveRound(
           }
         }
         thorns(target, boss, taken);
+        if (guard && landed > 0) {
+          target.effects.guard = undefined;
+          events.push({ type: "guarded", heroId: target.id, prevented: raw - taken });
+          const counter = guardRetort(
+            guard,
+            raw,
+            target.combatant.hp > 0
+              ? (factor) => {
+                  const own = buffed(target);
+                  const armor = Math.round(boss.c.armor * (1 - (boss.fx.armorBreak ?? 0)));
+                  const kind = target.weapon ? WEAPON_KIND[target.weapon] : null;
+                  const damage = own.damage * factor * takenBy(boss) * matchupFactor(boss.creatureId, kind);
+                  return rollHit({ ...own, damage }, { ...boss.c, armor }, rng).damage;
+                }
+              : null,
+          );
+          if (counter > 0 && boss.c.hp > 0) {
+            boss.c.hp = Math.max(0, boss.c.hp - counter);
+            target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
+            events.push({ type: "counter", heroId: target.id, damage: counter });
+          }
+        }
         // Wer allem ausgewichen ist, entgeht auch den Zusatzeffekten
         if (landed === 0) {
           knockDown(target);
