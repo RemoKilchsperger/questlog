@@ -39,14 +39,10 @@ import { rollDrop } from "./loot";
 import { BUFF_POTIONS, getPotion, potionHeal, type BuffKind, type PotionDef } from "./potions";
 import { addMaterials, creatureMaterials, type MaterialStock } from "./village";
 import {
-  bloodburstDamage,
   cooldownSkipChance,
   critMana,
   defendMana,
   defendTaken,
-  defendThorns,
-  dodgeChance,
-  dotTakenFactor,
   echoDue,
   interruptMana,
   manaRegen,
@@ -78,7 +74,6 @@ import {
   stolenStrike,
   turnAbility,
   untouchable,
-  CURSE_DAMAGE,
   CURSE_ROUNDS,
   EYE_REFLECT,
   PLATES_MAX,
@@ -87,15 +82,12 @@ import {
   type BossTurn,
 } from "./bossIntents";
 import type { BossAbilityDef } from "./bossAbilities";
-import { DRUM_BONUS, DRUM_MAX, phaseDue, RITUAL_HEAL, RITUAL_ROUNDS, SHIELD_EVERY, SHIELD_SHARE, type AddRole } from "./bossMechanics";
+import { phaseDue, type AddRole } from "./bossMechanics";
 import {
   eliteStats,
   enemyAdds,
   ELITE_REWARD_FACTOR,
   EXPLOSION_FACTOR,
-  POISON,
-  RAGE_BONUS,
-  SWIFT_SHARE,
   VAMPIRE_SHARE,
   type EliteAffix,
 } from "./elites";
@@ -119,17 +111,40 @@ import { attributeDamage, shieldArmorBonus } from "./weaponScaling";
 import { mainWeapon, matchupFactor, matchupOf, WEAPON_KIND, type DotKind } from "./matchups";
 import { BLESSING, stacks, type BlessingId } from "./tower";
 import {
+  abilityDots,
   bandage,
   canEndure,
+  curseBurstDamage,
+  damageTakenFactor,
+  dodges,
+  DOT_ORDER,
+  drainHeal,
+  drumFactor,
+  drumTurn,
+  elitePoison,
   eliteRegen,
+  eliteStrike,
+  guardedDamage,
+  guardRetort,
+  healerTurn,
   healShare,
+  heroDotDamage,
   heroRegenShare,
   layDot,
+  ritualHeal,
+  rollHit,
   secondWind,
+  shieldTurn,
+  strikeHero,
+  thornsDamage,
+  thornsShare,
   tickBuff,
+  tickDot,
   tickEnemyEffects,
+  tickFoeDots,
+  weakenFactor,
 } from "./combatCore";
-export { strongerDot } from "./combatCore";
+export { armorReduction, rollHit, strongerDot } from "./combatCore";
 import {
   critBurns,
   EFFECT,
@@ -137,7 +152,6 @@ import {
   effectDamageFactor,
   effectOf,
   has as hasEffect,
-  heroDotRounds,
   type ItemEffectId,
 } from "./itemEffects";
 
@@ -648,27 +662,6 @@ export function potionBlocker(state: BattleState, potion: PotionDef): string | n
   return null;
 }
 
-/**
- * Anteil des Schadens, den Rüstung abfängt. Je höher das Level des
- * Angreifers, desto mehr Rüstung braucht es für denselben Schutz.
- */
-export function armorReduction(armor: number, attackerLevel: number): number {
-  return armor / (armor + 50 + attackerLevel * 10);
-}
-
-export function rollHit(
-  attacker: Combatant,
-  defender: Combatant,
-  rng: () => number,
-  /** Skill „Durchschlag“: Kritische Treffer ignorieren die Rüstung */
-  critPierces = false,
-): { damage: number; crit: boolean } {
-  const crit = rng() < attacker.critChance;
-  const spread = 0.85 + rng() * 0.3;
-  const armor = crit && critPierces ? 0 : defender.armor;
-  const raw = attacker.damage * spread * (1 - armorReduction(armor, attacker.level));
-  return { damage: Math.max(1, Math.round(raw * (crit ? (attacker.critMultiplier ?? 1.5) : 1))), crit };
-}
 
 export type RoundResult = { state: BattleState; events: BattleEvent[] };
 
@@ -719,11 +712,6 @@ export function drinkPotion(state: BattleState, potion: PotionDef): RoundResult 
     },
     events: [event],
   };
-}
-
-/** Eine Runde Gift/Feuer/Bluten ist vorbei – nach der letzten verschwindet es. */
-function tickOverTime(effect: DamageOverTime): DamageOverTime | undefined {
-  return effect.roundsLeft > 1 ? { ...effect, roundsLeft: effect.roundsLeft - 1 } : undefined;
 }
 
 /** Gift, Feuer und Bluten – in dieser Reihenfolge wirken sie pro Runde. */
@@ -1251,34 +1239,25 @@ export function attackRound(
     extinguished = true;
   }
   for (const foe of foes) {
-    for (const kind of OVER_TIME) {
-      const effect = foe.fx[kind];
-      if (effect && foe.c.hp > 0 && standing()) {
-        const damage = Math.max(1, Math.round(effect.damage * vulnerableOf(foe) * takenBy(foe)));
+    tickFoeDots(foe, {
+      fightOn: standing,
+      scale: (damage) => damage * vulnerableOf(foe) * takenBy(foe),
+      sourceSkills: () => skills,
+      damage: (kind, damage, _effect, burst) => {
         foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - damage) };
-        events.push({ type: kind, target: "enemy", damage, ...foeTag(foe) });
-        const next = tickOverTime(effect);
-        foe.fx = { ...foe.fx, [kind]: next };
-        addDown(foe);
-        // Blutsturz: Läuft das Bluten aus, platzt die Wunde
-        const burst = kind === "bleed" && !next && foe.c.hp > 0 && standing() ? bloodburstDamage(skills, effect.damage) : 0;
-        if (burst > 0) {
-          const dealt = Math.max(1, Math.round(burst * vulnerableOf(foe) * takenBy(foe)));
-          foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - dealt) };
-          events.push({ type: "bleed", target: "enemy", damage: dealt, burst: true, ...foeTag(foe) });
-          addDown(foe);
-        }
-      }
-    }
+        events.push({ type: kind, target: "enemy", damage, ...(burst && { burst: true }), ...foeTag(foe) });
+      },
+      down: () => addDown(foe),
+    });
   }
-  for (const kind of OVER_TIME) {
+  for (const kind of DOT_ORDER) {
     const effect = heroEffects[kind];
     if (effect && standing() && hero.hp > 0) {
       // Gegengift: weniger Schaden durch Gift, Feuer und Bluten
-      const damage = Math.max(1, Math.round(effect.damage * dotTakenFactor(skills)));
+      const damage = heroDotDamage(effect, skills);
       hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
       events.push({ type: kind, target: "hero", damage });
-      heroEffects = { ...heroEffects, [kind]: tickOverTime(effect) };
+      heroEffects = { ...heroEffects, [kind]: tickDot(effect) };
     }
   }
 
@@ -1314,19 +1293,13 @@ export function attackRound(
   };
   const elite = state.elite ?? [];
   /** Schildwall/Wutschrei: Faktor auf den Schaden, den der Held erleidet – Abwehren halbiert (Fels: noch weniger) */
-  const hurt = Math.max(0, 1 + (heroEffects.damageTaken?.percent ?? 0)) * (defending ? defendTaken(skills, DEFEND_DAMAGE_TAKEN) : 1);
-  /** Schemen: Chance, einem Angriff auszuweichen */
-  const dodge = dodgeChance(skills);
+  const hurt = damageTakenFactor(heroEffects, defending, skills, DEFEND_DAMAGE_TAKEN);
   /** Zorn des Bollwerks: In dieser Runde abgewehrt, geblockt oder pariert */
   let warded = false;
   /** Turm-Segen „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst – Stachelwehr beim Abwehren. */
   const thorns = (foe: Foe, damage: number) => {
-    const share =
-      BLESSING.thorns * stacks(state.blessings, "thorns") +
-      (hasEffect(effects, "thorns") ? EFFECT.thorns : 0) +
-      (defending ? defendThorns(skills) : 0);
-    if (share <= 0 || damage <= 0 || foe.c.hp <= 0) return;
-    const back = Math.max(1, Math.round(damage * share));
+    const back = thornsDamage(damage, thornsShare(effects, state.blessings, defending, skills), foe.c.hp);
+    if (back === 0) return;
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - back) };
     events.push({ type: "thorns", damage: back, ...foeTag(foe) });
     addDown(foe);
@@ -1366,7 +1339,7 @@ export function attackRound(
       events.push({ type: "bossPhase", bossId: state.creatureId, ...(nextPhase.rally && { rally: rallied.map((f) => f.add!) }) });
     }
     // Trommler: Der Boss macht mehr Schaden, je lauter er trommelt (seine Wirbel aus den Runden davor)
-    const drums = 1 + DRUM_BONUS * adds.reduce((sum, f) => sum + (f.role === "drummer" && f.c.hp > 0 ? (f.cast ?? 0) : 0), 0);
+    const drums = drumFactor(adds);
     // Bollwerk blockt den ganzen gegnerischen Zug – Boss und Begleiter samt Zusatzeffekten.
     const bulwark = heroEffects.bulwark;
     let blocked = false;
@@ -1408,21 +1381,18 @@ export function attackRound(
         blocked = true;
         warded = true;
       } else {
-        // Geschwächte Gegner machen weniger Schaden
-        const weakened = 1 - (boss.fx.weaken?.percent ?? 0);
         // Elite: Rasend macht mehr Schaden (unter halben LP noch mehr), Flink schlägt zweimal schwächer zu
-        const rage = elite.includes("raging") ? 1 + (boss.c.hp < boss.c.maxHp / 2 ? RAGE_BONUS.low : RAGE_BONUS.base) : 1;
-        const swift = elite.includes("swift");
+        const { rage, swift, hits } = eliteStrike(elite, boss.c);
         const attacker = {
           ...boss.c,
           damage:
             boss.c.damage *
             (special?.multiplier ?? 1) *
-            weakened *
+            weakenFactor(boss.fx) *
             drums *
             rage *
             hurt *
-            (swift ? SWIFT_SHARE : 1) *
+            swift *
             // Item-Effekt „Standhaft“: Boss-Fähigkeiten treffen schwächer
             (special && hasEffect(effects, "steadfast") ? 1 - EFFECT.steadfast : 1),
         };
@@ -1433,15 +1403,15 @@ export function attackRound(
         let raw = 0;
         /** Treffer, denen der Held nicht ausgewichen ist (Schemen) */
         let landed = 0;
-        for (let i = 0; i < (special?.hits ?? (swift ? 2 : 1)) && hero.hp > 0; i++) {
-          if (dodge > 0 && rng() < dodge) {
+        for (let i = 0; i < (special?.hits ?? hits) && hero.hp > 0; i++) {
+          if (dodges(skills, rng)) {
             events.push({ type: "dodged" });
             continue;
           }
           landed++;
           const enemyHit = rollHit(attacker, defender, rng);
           // Parade/Vergeltung: nur ein Teil des Schadens kommt durch
-          const damage = guard ? Math.max(1, Math.round(enemyHit.damage * guard.reduce)) : enemyHit.damage;
+          const damage = guardedDamage(enemyHit.damage, guard);
           raw += enemyHit.damage;
           hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
           dealt += damage;
@@ -1453,11 +1423,16 @@ export function attackRound(
         if (guard && landed > 0) {
           heroEffects = { ...heroEffects, guard: undefined };
           events.push({ type: "guarded", prevented: raw - dealt });
-          let counter = guard.reflect ? Math.round(raw * guard.reflect) : 0;
-          if (guard.counter && hero.hp > 0) {
-            const damage = strong.damage * guard.counter * takenBy(boss) * matchupFactor(boss.creatureId, heroKind);
-            counter += rollHit({ ...strong, damage }, { ...boss.c, armor: armorOf(boss) }, rng).damage;
-          }
+          const counter = guardRetort(
+            guard,
+            raw,
+            hero.hp > 0
+              ? (factor) => {
+                  const damage = strong.damage * factor * takenBy(boss) * matchupFactor(boss.creatureId, heroKind);
+                  return rollHit({ ...strong, damage }, { ...boss.c, armor: armorOf(boss) }, rng).damage;
+                }
+              : null,
+          );
           if (counter > 0) {
             boss.c = { ...boss.c, hp: Math.max(0, boss.c.hp - counter) };
             events.push({ type: "counter", damage: counter });
@@ -1467,34 +1442,24 @@ export function attackRound(
         // Lebensentzug der Boss-Fähigkeit bzw. Elite „Vampirisch“
         const drain = special?.drain ?? (elite.includes("vampiric") ? VAMPIRE_SHARE : 0);
         if (drain > 0 && boss.c.hp > 0) {
-          const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(dealt * drain));
+          const heal = drainHeal(boss.c, dealt, drain);
           boss.c = { ...boss.c, hp: boss.c.hp + heal };
           if (heal > 0) events.push({ type: "drain", heal });
         }
         // Elite „Giftig“: Wer getroffen wird, ist vergiftet
-        if (elite.includes("poisonous") && dealt > 0 && hero.hp > 0) {
-          const rounds = heroDotRounds(effects, "poison", POISON.rounds);
-          heroEffects = { ...heroEffects, poison: { damage: Math.max(1, Math.round(boss.c.damage * POISON.percent)), roundsLeft: rounds } };
-        }
+        if (elite.includes("poisonous") && dealt > 0 && hero.hp > 0) heroEffects = { ...heroEffects, poison: elitePoison(boss.c.damage, effects) };
         // Wer ausweicht, entgeht auch den Zusatzeffekten
         if (special?.manaBurn && landed > 0) {
           const amount = Math.min(mana, special.manaBurn);
           mana -= amount;
           if (amount > 0) events.push({ type: "manaBurn", amount });
         }
-        for (const kind of OVER_TIME) {
-          const effect = special?.[kind];
-          if (!effect || landed === 0) continue;
-          const damage = Math.max(1, Math.round(boss.c.damage * drums * effect.percent));
-          // Reinheit kürzt, Drachenfeuer macht gegen Feuer immun
-          const rounds = heroDotRounds(effects, kind, effect.rounds);
-          if (rounds > 0) heroEffects = { ...heroEffects, [kind]: { damage, roundsLeft: rounds } };
-        }
+        if (landed > 0) for (const [kind, dot] of abilityDots(special, boss.c.damage * drums, effects)) heroEffects = { ...heroEffects, [kind]: dot };
       }
     }
     // Neferets Fluch bricht los – auch wenn sie betäubt ist; Bollwerk hilft nicht, Abwehren schon
     if (curse && !curseBroken && curse.roundsLeft <= 1 && hero.hp > 0 && boss.c.hp > 0) {
-      const damage = Math.max(1, Math.round(hero.maxHp * CURSE_DAMAGE * hurt));
+      const damage = curseBurstDamage(hero.maxHp, hurt);
       hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
       events.push({ type: "curseBurst", damage });
     }
@@ -1509,20 +1474,14 @@ export function attackRound(
           events.push({ type: "stunned", ...freezeOf(foe), ...tag });
           markStunned(foe);
         }
-        if (stunned.has(foe) || hitAdds.has(foe.add!)) {
-          events.push({ type: "interrupted", ...tag });
-          foe.cast = 0;
-          continue;
-        }
-        const cast = (foe.cast ?? 0) + 1;
-        if (cast >= RITUAL_ROUNDS) {
-          foe.cast = 0;
-          const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * RITUAL_HEAL));
+        const ritual = healerTurn(foe.cast, stunned.has(foe) || hitAdds.has(foe.add!));
+        foe.cast = ritual.cast;
+        if (ritual.act === "interrupted") events.push({ type: "interrupted", ...tag });
+        else if (ritual.act === "ritual") events.push({ type: "ritual", ...tag, roundsLeft: ritual.roundsLeft });
+        else {
+          const heal = ritualHeal(boss.c);
           boss.c = { ...boss.c, hp: boss.c.hp + heal };
           if (heal > 0) events.push({ type: "addHeal", ...tag, heal });
-        } else {
-          foe.cast = cast;
-          events.push({ type: "ritual", ...tag, roundsLeft: RITUAL_ROUNDS - cast });
         }
         continue;
       }
@@ -1538,27 +1497,27 @@ export function attackRound(
       }
       if (foe.role === "shield") {
         // Statt anzugreifen hebt er regelmässig den Schild – auch durch ein Bollwerk hindurch
-        const cast = (foe.cast ?? 0) + 1;
-        foe.cast = cast % SHIELD_EVERY;
-        if (cast >= SHIELD_EVERY) {
-          bossShield = Math.round(boss.c.maxHp * SHIELD_SHARE);
+        const raise = shieldTurn(foe.cast, boss.c.maxHp);
+        foe.cast = raise.cast;
+        if (raise.shield > 0) {
+          bossShield = raise.shield;
           events.push({ type: "bossShield", ...tag, shield: bossShield });
           continue;
         }
       }
       if (foe.role === "drummer") {
-        foe.cast = Math.min(DRUM_MAX, (foe.cast ?? 0) + 1);
+        foe.cast = drumTurn(foe.cast);
         events.push({ type: "drumming", ...tag, stacks: foe.cast });
       }
-      if (bulwark) {
+      const strike = strikeHero(foe.c, foe.fx, strong, { bulwark: !!bulwark, skills, hurt }, rng);
+      if ("blocked" in strike) {
         events.push({ type: "blocked", ...foeTag(foe) });
         blocked = true;
         warded = true;
-      } else if (dodge > 0 && rng() < dodge) {
+      } else if ("dodged" in strike) {
         events.push({ type: "dodged", ...foeTag(foe) });
       } else {
-        const weakened = 1 - (foe.fx.weaken?.percent ?? 0);
-        const enemyHit = rollHit({ ...foe.c, damage: foe.c.damage * weakened * hurt }, strong, rng);
+        const enemyHit = strike.hit;
         hero = { ...hero, hp: Math.max(0, hero.hp - enemyHit.damage) };
         events.push({ type: "hit", attacker: "enemy", ...enemyHit, ...foeTag(foe) });
         thorns(foe, enemyHit.damage);
