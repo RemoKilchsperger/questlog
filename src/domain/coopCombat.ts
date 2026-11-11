@@ -33,7 +33,6 @@ import {
   classAbility,
   CLERIC_POTION_FACTOR,
   PALADIN_THREAT,
-  lifestealShare,
   rageFactor,
   type HeroClassId,
 } from "./heroClasses";
@@ -134,6 +133,14 @@ import {
   tickFoeDots,
   weakenFactor,
   absorbShield,
+  abilityBuffs,
+  abilityHeal,
+  cleansed as pureOf,
+  debuffFoe,
+  defendGain,
+  extendDots,
+  heroLifesteal,
+  layAbilityDots,
   afterHeroHit,
   foeArmor,
   heroVolley,
@@ -141,7 +148,6 @@ import {
 } from "./combatCore";
 import {
   cooldownSkipChance,
-  defendMana,
   echoDue,
   interruptMana,
   manaRegen,
@@ -149,7 +155,6 @@ import {
   rankIn,
   riposteFactor,
   skillCostFactor,
-  skillLifesteal,
   wrathFactor,
   SKILL,
   type SkillRanks,
@@ -461,7 +466,6 @@ export function coopContent(id: string): { name: string; level: number; sprite: 
 }
 
 type OverTimeKind = "poison" | "burn" | "bleed";
-const OVER_TIME: readonly OverTimeKind[] = ["poison", "burn", "bleed"];
 
 /** Gift/Feuer/Bluten an Gegnern merken sich, wer sie verursacht hat (Bedrohung). */
 type SourcedDot = DamageOverTime & { sourceId: string };
@@ -1332,7 +1336,7 @@ export function resolveRound(
     hero.effects.riposte = undefined;
     // Abwehren: kein Angriff, dafür halber Schaden in dieser Runde und etwas Mana
     if (action.defend) {
-      const gain = Math.min(hero.maxMana - hero.mana, defendMana(skills, DEFEND_MANA));
+      const gain = defendGain(hero.mana, hero.maxMana, skills, DEFEND_MANA);
       hero.mana += gain;
       defending.add(hero.id);
       if (rankIn(skills, "riposte") > 0) hero.effects.riposte = riposteFactor(skills);
@@ -1385,49 +1389,33 @@ export function resolveRound(
         events.push({ type: "static", heroId: hero.id, charges: turn.static + abilitiesUsed });
       }
       if (ability.cleanse) cleansed.add(hero.id);
-      if (ability.guard) hero.effects.guard = ability.guard;
-      // +1, weil die Verstärkung erst ab der nächsten Runde zählt
-      if (ability.empower) hero.effects.empower = { percent: ability.empower.percent, roundsLeft: ability.empower.rounds + 1 };
+      // Parade, Verstärkung, Schildwall, Ausholen, Schattenschritt, Finte
+      hero.effects = { ...hero.effects, ...abilityBuffs(ability) };
       // Heilung – Arkane Heilung heilt die Mitspieler mit `groupHeal` mit
       const healed = ability.groupHeal ? heroes.filter((h) => !h.down) : [hero];
       for (const h of healed) {
         const share = h === hero ? 1 : ability.groupHeal!;
         if (ability.heal) {
-          const heal = Math.min(h.combatant.maxHp - h.combatant.hp, Math.round(h.combatant.maxHp * ability.heal * share));
+          const heal = abilityHeal(h.combatant.hp, h.combatant.maxHp, ability.heal, share);
           h.combatant.hp += heal;
           if (heal > 0) events.push({ type: "selfHeal", heroId: h.id, heal, ...(h !== hero && { by: hero.id }) });
         }
         if (ability.renew) h.effects.renew = { percent: ability.renew.percent * share, roundsLeft: ability.renew.rounds };
       }
-      if (ability.cleanse && (hero.effects.poison || hero.effects.burn || hero.effects.bleed)) {
-        hero.effects = { ...hero.effects, poison: undefined, burn: undefined, bleed: undefined };
+      const pure = ability.cleanse ? pureOf(hero.effects) : null;
+      if (pure) {
+        hero.effects = pure;
         events.push({ type: "cleansed", heroId: hero.id });
       }
-      if (ability.damageTaken) hero.effects.damageTaken = { percent: ability.damageTaken.percent, roundsLeft: ability.damageTaken.rounds };
-      if (ability.charge) hero.effects.charged = ability.charge;
-      if (ability.ambush) hero.effects.ambush = true;
-      if (ability.feint) hero.effects.feint = true;
       if (ability.manaGain) hero.mana = Math.min(hero.maxMana, hero.mana + ability.manaGain);
       if (ability.taunt) taunts.push(hero);
       // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner
       for (const foe of aoe === "all" ? living() : [target]) {
-        if (ability.weaken) foe.fx = { ...foe.fx, weaken: { percent: ability.weaken.percent, roundsLeft: ability.weaken.rounds } };
-        if (ability.vulnerable) {
-          foe.fx = { ...foe.fx, vulnerable: { percent: ability.vulnerable.percent, roundsLeft: ability.vulnerable.rounds } };
-        }
-        if (ability.armorBreak) foe.fx = { ...foe.fx, armorBreak: ability.armorBreak };
+        foe.fx = debuffFoe(foe.fx, ability);
+        // Die Betäubung würfelt hier – vor Gift und Feuer der Fähigkeit (Brennen macht sie wahrscheinlicher)
         if (stunLands(ability, rng, skills, !!foe.fx.burn)) stunAttempts.set(foe, { ability, hero });
-        // Fluch der Schwäche: Gift und Feuer auf dem Ziel halten länger
-        if (ability.extendDots) {
-          for (const kind of ["poison", "burn"] as const) {
-            const dot = foe.fx[kind];
-            if (dot) foe.fx = { ...foe.fx, [kind]: { ...dot, roundsLeft: dot.roundsLeft + ability.extendDots } };
-          }
-        }
-        for (const kind of OVER_TIME) {
-          const effect = ability[kind];
-          if (effect) applyDot(foe, kind, strong.damage * effect.percent, effect.rounds, hero.id);
-        }
+        foe.fx = extendDots(foe.fx, ability);
+        layAbilityDots(ability, strong.damage, (kind, base, rounds) => applyDot(foe, kind, base, rounds, hero.id));
       }
       if (ability.bulwark) {
         hero.effects.bulwark = true;
@@ -1546,13 +1534,9 @@ export function resolveRound(
     // (Duellant und Kettenblitz gibt es nur bei normalen Angriffen – sie ändern daran nichts)
     if (ability?.interrupt && dealtTo.has(boss)) interruptHit = true;
     // Lebensraub: Blutrausch, Plünderer, Item-Effekt „Seelenraub“ und Segen „Blutdurst“
-    const lifesteal =
-      lifestealShare(hero.heroClass, ability) +
-      (hasEffect(hero.itemEffects, "soulDrain") ? EFFECT.soulDrain : 0) +
-      skillLifesteal(skills) +
-      BLESSING.bloodthirst * stacks(hero.blessings, "bloodthirst");
+    const lifesteal = heroLifesteal(hero.heroClass, ability, hero.blessings, hero.itemEffects, skills);
     if (lifesteal > 0 && dealt > 0) {
-      const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(dealt * lifesteal));
+      const heal = drainHeal(hero.combatant, dealt, lifesteal);
       hero.combatant.hp += heal;
       if (heal > 0) events.push({ type: "selfHeal", heroId: hero.id, heal });
     }
