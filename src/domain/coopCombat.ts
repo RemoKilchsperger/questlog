@@ -1315,6 +1315,7 @@ export function resolveRound(
         target.combatant.hp = Math.max(1, potionHeal(potion, target.combatant.maxHp));
         events.push({ type: "potion", heroId: hero.id, targetId: target.id, potionId: potion.id, heal: target.combatant.hp, revive: true });
       } else if (potion.effect.kind === "heal") {
+        // Der Meisteralchemist des Dorfes (potionPower) wirkt bewusst nur im Solo – das Dorf ist Solo-Fortschritt
         const factor =
           (hero.heroClass === "cleric" ? CLERIC_POTION_FACTOR : 1) *
           (hasEffect(hero.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1) *
@@ -1756,11 +1757,6 @@ export function resolveRound(
           raw += rolled.damage;
           taken += hit.damage;
           events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
-          if (drain > 0 && boss.c.hp > 0) {
-            const heal = drainHeal(boss.c, hit.damage, drain);
-            boss.c.hp += heal;
-            if (heal > 0) events.push({ type: "drain", heal });
-          }
         }
         thorns(target, boss, taken);
         if (guard && landed > 0) {
@@ -1784,6 +1780,12 @@ export function resolveRound(
             target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
             events.push({ type: "counter", heroId: target.id, damage: counter });
           }
+        }
+        // Lebensentzug wie im Solo: einmal auf den Schaden aller Treffer an diesem Helden
+        if (drain > 0 && boss.c.hp > 0) {
+          const heal = drainHeal(boss.c, taken, drain);
+          boss.c.hp += heal;
+          if (heal > 0) events.push({ type: "drain", heal });
         }
         // Wer allem ausgewichen ist, entgeht auch den Zusatzeffekten
         if (landed === 0) {

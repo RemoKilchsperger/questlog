@@ -30,6 +30,7 @@ import { getCreatureStats, getCreatureXp, getDungeon } from "./creatures";
 import { blessCoopHero, coopDoors, voteDoor } from "./coopDungeonPaths";
 import { stepCreature } from "./dungeonPaths";
 import { HEROIC_HP } from "./heroic";
+import { VAMPIRE_SHARE } from "./elites";
 import { getCreatureSprite } from "../game/creatureSprites";
 import { hasBackground } from "../game/backgrounds";
 
@@ -505,5 +506,25 @@ describe("Koop-Kampf: Segen „Henker“", () => {
       return hit?.type === "hit" ? hit.damage : 0;
     };
     expect(heroHit(true)).toBeGreaterThan(heroHit(false));
+  });
+});
+
+describe("Koop-Kampf: Lebensentzug", () => {
+  it("wie im Solo einmal auf den Schaden aller Treffer", () => {
+    const bossId = COOP_BOSSES.find((b) => b.id !== HYDRA)!.id;
+    const base = tough(startCoopBattle("k", bossId, [player("a"), player("b")], 0));
+    // Flink und vampirisch: zwei Bisse auf a (b liegt), der Boss ist angeschlagen
+    const state: CoopBattleState = {
+      ...base,
+      elite: ["swift", "vampiric"],
+      boss: { ...base.boss, hp: 500_000 },
+      heroes: base.heroes.map((h) => (h.id === "a" ? h : { ...h, down: true, combatant: { ...h.combatant, hp: 0 } })),
+    };
+    const { events } = resolveRound(state, { a: { defend: true } }, rng(0.5), 0);
+    const bites = events.filter((e) => e.type === "hit" && e.attacker === BOSS).map((e) => (e.type === "hit" ? e.damage : 0));
+    const drains = events.filter((e) => e.type === "drain");
+    expect(bites.length).toBeGreaterThanOrEqual(2);
+    expect(drains).toHaveLength(1);
+    expect(drains[0].type === "drain" && drains[0].heal).toBe(Math.round(bites.reduce((s, d) => s + d, 0) * VAMPIRE_SHARE));
   });
 });
