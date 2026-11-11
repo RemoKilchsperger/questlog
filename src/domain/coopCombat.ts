@@ -32,9 +32,7 @@ import { freshStunImmunity, MANA_REGEN, type AbilityDef, type AbilityId, type Gu
 import {
   classAbility,
   CLERIC_POTION_FACTOR,
-  DUELIST_EXTRA_HIT,
   PALADIN_THREAT,
-  PLUNDERER_BLEED,
   lifestealShare,
   rageFactor,
   type HeroClassId,
@@ -65,19 +63,15 @@ import {
   bossTurnTakenFactor,
   firstBossTurn,
   nextBossTurn,
-  plateFactor,
   stolenStrike,
   turnAbility,
   COOP_STATIC_PER_HERO,
   CURSE_ROUNDS,
   type BossTurn,
 } from "./bossIntents";
-import { matchupFactor, matchupOf, WEAPON_KIND } from "./matchups";
+import { matchupFactor, WEAPON_KIND } from "./matchups";
 import {
-  critBurns,
   EFFECT,
-  effectCritBonus,
-  effectDamageFactor,
   has as hasEffect,
   heroDotRounds,
   type ItemEffectId,
@@ -139,25 +133,25 @@ import {
   tickEnemyEffects,
   tickFoeDots,
   weakenFactor,
+  absorbShield,
+  afterHeroHit,
+  foeArmor,
+  heroVolley,
+  strikeFactors,
 } from "./combatCore";
 import {
   cooldownSkipChance,
-  critMana,
   defendMana,
   echoDue,
   interruptMana,
   manaRegen,
-  melts,
   potionSkillFactor,
   rankIn,
   riposteFactor,
   skillCostFactor,
-  skillCritBonus,
-  skillDamageFactor,
   skillLifesteal,
   wrathFactor,
   SKILL,
-  type FoeState,
   type SkillRanks,
   type SkillWeapon,
 } from "./skills";
@@ -1350,7 +1344,6 @@ export function resolveRound(
     // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit halbem Schaden
     const echo = !!ability && echoDue(skills, hero.effects.casts);
     const wrath = wrathFactor(hero.effects.wrath);
-    let echoShare = 1;
     const fire = !!ability?.burn;
     const aoe = ability?.aoe;
     // Schadensart: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe (matchups.ts)
@@ -1445,69 +1438,54 @@ export function resolveRound(
     /** Getroffene Gegner dieses Helden */
     const dealtTo = new Set<Foe>();
     /** Ein Treffer des Helden – `share` < 1 bei Splash-Schaden auf Umstehende. */
-    const strike = (foe: Foe, share = 1) => {
-      // Finisher (Meucheln), Ausbluten und Verwundbarkeit des Gegners
-      const execute =
-        (ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1) *
-        (ability?.bleedBonus && foe.fx.bleed ? 1 + ability.bleedBonus : 1) *
-        // Heiliger Hammer: mehr Schaden gegen erschütterte Gegner
-        (ability?.shakenBonus && foe.fx.shaken ? 1 + ability.shakenBonus : 1) *
-        // Segen „Henker“: mehr Schaden gegen angeschlagene Gegner
-        (foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(hero.blessings, "executioner") : 1);
-      const vulnerable = 1 + (foe.fx.vulnerable?.percent ?? 0);
+    const strike = (foe: Foe, share: number, echoShare: number) => {
+      // Meucheln, Henker, Ausbluten, Heiliger Hammer, Richterstoss, Schwäche/Resistenz, Item-Effekte, Skilltree
+      const f = strikeFactors(
+        foe,
+        {
+          ability,
+          heroKind,
+          itemEffects: hero.itemEffects,
+          skills,
+          blessings: hero.blessings,
+          round: state.round,
+          critChance: strong.critChance,
+          fire,
+          riposte,
+          wrath,
+          echoShare,
+        },
+        {
+          isBoss: foe === boss,
+          realBoss: foe === boss && enemyIsBoss,
+          elite: foe === boss && (state.elite?.length ?? 0) > 0 && !state.heroic,
+          charging: turn?.intent === "charging",
+          plates,
+        },
+      );
+      const { matchup, kind, plate, vulnerable } = f;
+      const execute = f.finisher * f.bleedBonus * f.shakenBonus * f.headsman;
       const taken = takenBy(foe);
-      const effects = hero.itemEffects;
-      // Schwäche oder Resistenz gegen die Schadensart der Waffe – „Runenklinge“ zählt auch als Magie, wenn das wirksamer ist
-      const kind =
-        heroKind && hasEffect(effects, "runeblade") && matchupFactor(foe.creatureId, "magic") > matchupFactor(foe.creatureId, heroKind)
-          ? "magic"
-          : heroKind;
-      const matchup = kind ? matchupOf(foe.creatureId, kind) : null;
-      const kindFactor = matchupFactor(foe.creatureId, kind);
-      // Item-Effekte: Kriegstrommel, Henkersbeil, Aderlass, Elitejäger, Bossschlächter, Sog – dazu Allsehend (Krit)
-      const foeBoss = foe === boss && enemyIsBoss;
-      const itemFactor = effectDamageFactor(effects, {
-        round: state.round,
-        foeHp: foe.c.hp,
-        foeMaxHp: foe.c.maxHp,
-        foeBleeding: foe.fx.bleed !== undefined,
-        foeBoss,
-        foeElite: foe === boss && (state.elite?.length ?? 0) > 0 && !state.heroic,
-      });
-      // Skilltree: Hinrichter, Erschütterung, Pyromant, Kryomant, Schmelzen – dazu Gegenschlag, Zorn und Echo
-      const foeState: FoeState = {
-        hp: foe.c.hp,
-        maxHp: foe.c.maxHp,
-        bleeding: foe.fx.bleed !== undefined,
-        burning: foe.fx.burn !== undefined,
-        dazed: !!foe.fx.dazed,
-        chilled: !!foe.fx.chilled,
-      };
-      const skillFactor = skillDamageFactor(skills, foeState, fire) * riposte * wrath * echoShare;
-      const critChance = strong.critChance + effectCritBonus(effects, foeBoss) + skillCritBonus(skills, foeState);
-      // Panzerplatten des Erzkönigs – nur direkte Treffer auf den Boss
-      const plate = foe === boss ? plateFactor(plates) : 1;
-      // Schattenschritt: sicher kritisch – Richterstoss: stärker gegen einen aufladenden Boss
+      // Schattenschritt: sicher kritisch
       const sureCrit = ambush;
-      const charging = ability?.chargingBonus && foe === boss && turn?.intent === "charging" ? 1 + ability.chargingBonus : 1;
       const attacker: Combatant = ability
         ? {
             ...strong,
             damage:
-              strong.damage * ability.multiplier * execute * charge * charging * vulnerable * share * taken * plate * kindFactor * itemFactor * skillFactor,
-            critChance: ability.guaranteedCrit || sureCrit ? 1 : critChance,
+              strong.damage * ability.multiplier * execute * charge * f.charging * vulnerable * share * taken * plate * f.kindFactor * f.itemFactor * f.skillFactor,
+            critChance: ability.guaranteedCrit || sureCrit ? 1 : f.critChance,
           }
         : {
             ...strong,
-            damage: strong.damage * charge * share * vulnerable * taken * plate * kindFactor * itemFactor * skillFactor,
-            critChance: sureCrit ? 1 : critChance,
+            damage: strong.damage * charge * share * vulnerable * taken * plate * f.kindFactor * f.itemFactor * f.skillFactor,
+            critChance: sureCrit ? 1 : f.critChance,
           };
-      const armor = ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0)));
-      const rolled = rollHit(attacker, { ...foe.c, armor }, rng, rankIn(skills, "piercing") > 0);
+      const rolled = rollHit(attacker, { ...foe.c, armor: foeArmor(foe, ability) }, rng, rankIn(skills, "piercing") > 0);
       // Der Schild des Schildträgers schluckt direkte Treffer auf den Boss
-      const absorbed = foe === boss ? Math.min(bossShield, rolled.damage) : 0;
-      bossShield -= absorbed;
-      const hit = { ...rolled, damage: rolled.damage - absorbed };
+      const shield = foe === boss ? absorbShield(bossShield, rolled.damage) : { absorbed: 0, damage: rolled.damage, shield: bossShield };
+      const absorbed = shield.absorbed;
+      bossShield = shield.shield;
+      const hit = { ...rolled, damage: shield.damage };
       if (foe === boss) heroHitsOnBoss++;
       else {
         hitAdds.add(foe.id);
@@ -1533,68 +1511,39 @@ export function resolveRound(
         plates = Math.max(0, plates - (kind === "blunt" ? 2 : 1));
         if (plates === 0) events.push({ type: "platesBroken" });
       }
-      // Plünderer: kritische Treffer lassen bluten
-      if (hit.crit && hero.heroClass === "plunderer" && foe.c.hp > 0) {
-        const damage = strong.damage * PLUNDERER_BLEED.percent * matchupFactor(foe.creatureId, "bleed");
-        if (damage > 0 && (foe.fx.bleed?.damage ?? 0) <= damage) {
-          applyDot(foe, "bleed", strong.damage * PLUNDERER_BLEED.percent, PLUNDERER_BLEED.rounds, hero.id);
-        }
-      }
-      // Skills bei kritischen Treffern: Adrenalin (Mana), Schnitter (Bluten), Offene Wunde (länger bluten)
-      if (hit.crit) {
-        hero.mana = Math.min(hero.maxMana, hero.mana + critMana(skills));
-        if (foe.c.hp > 0 && rankIn(skills, "reaper") > 0 && (foe.fx.bleed?.damage ?? 0) <= strong.damage * SKILL.reaper.percent) {
-          applyDot(foe, "bleed", strong.damage * SKILL.reaper.percent, SKILL.reaper.rounds, hero.id);
-        }
-        const bleed = foe.fx.bleed;
-        if (foe.c.hp > 0 && foeState.bleeding && bleed && rankIn(skills, "openWound") > 0) {
-          foe.fx = { ...foe.fx, bleed: { ...bleed, roundsLeft: bleed.roundsLeft + 1 } };
-        }
-      }
-      // Schmelzen: Das Feuer taut den eingefrorenen Gegner auf
-      if (melts(skills, foeState.chilled, fire)) foe.fx = { ...foe.fx, chilled: undefined };
-      // Item-Effekte bei einem Treffer: Glut/Drachenfeuer, Giftzahn, Frostbiss, Manadieb
-      if (foe.c.hp > 0) {
-        if (hit.crit && critBurns(effects)) applyDot(foe, "burn", strong.damage * EFFECT.ember.percent, EFFECT.ember.rounds, hero.id);
-        if (hasEffect(effects, "venomFang") && rng() < EFFECT.venomFang.chance) {
-          applyDot(foe, "poison", strong.damage * EFFECT.venomFang.percent, EFFECT.venomFang.rounds, hero.id);
-        }
-        if (hasEffect(effects, "frostBite") && rng() < EFFECT.frostBite) frozenByItem.set(foe, hero);
-      }
-      if (hasEffect(effects, "manaThief")) hero.mana = Math.min(hero.maxMana, hero.mana + EFFECT.manaThief);
+      // Plünderer, Adrenalin, Schnitter, Offene Wunde, Schmelzen, Glut, Giftzahn, Frostbiss, Manadieb
+      afterHeroHit(
+        foe,
+        hit.crit,
+        { base: strong.damage, heroClass: hero.heroClass, itemEffects: hero.itemEffects, skills, fire, foeState: f.foeState },
+        rng,
+        {
+          dot: (on, kind, base, rounds) => applyDot(on, kind, base, rounds, hero.id),
+          mana: (amount) => (hero.mana = Math.min(hero.maxMana, hero.mana + amount)),
+          freeze: (frozen) => frozenByItem.set(frozen, hero),
+        },
+      );
       addDown(foe);
     };
-    const volley = () => {
-      for (let i = 0; i < abilityHits(ability, hero.combatant.hp, hero.combatant.maxHp) && boss.c.hp > 0; i++) {
-        if (aoe === "all") {
-          for (const foe of living()) strike(foe);
-        } else if (aoe === "spread") {
-          // Jeder Treffer geht an einen zufälligen Gegner
-          const options = living();
-          strike(options.length > 1 ? options[Math.floor(rng() * options.length)] : options[0]);
-        } else {
-          if (target.c.hp === 0) break;
-          strike(target);
-          if (typeof aoe === "object") for (const foe of living()) if (foe !== target) strike(foe, aoe.splash);
-        }
-      }
-    };
-    volley();
-    if (echo && ability && ability.multiplier > 0) {
-      echoShare = SKILL.echo.share;
-      volley();
-    }
-    // Finte: Der normale Angriff trifft ein zweites Mal
-    if (feint && target.c.hp > 0 && boss.c.hp > 0) strike(target);
+    // Mehrfachtreffer, Flächen, Echo, Finte, Duellant, Kettenblitz
+    heroVolley({
+      ability,
+      hits: () => abilityHits(ability, hero.combatant.hp, hero.combatant.maxHp),
+      target,
+      living,
+      volleyOn: () => boss.c.hp > 0,
+      fightOn: () => boss.c.hp > 0,
+      echo,
+      feint,
+      plain: !ability,
+      heroClass: hero.heroClass,
+      itemEffects: hero.itemEffects,
+      strike,
+      rng,
+    });
     // Wuchtiger Schlag hat den Boss getroffen – das bricht sein Aufladen ab
+    // (Duellant und Kettenblitz gibt es nur bei normalen Angriffen – sie ändern daran nichts)
     if (ability?.interrupt && dealtTo.has(boss)) interruptHit = true;
-    // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
-    if (!ability && hero.heroClass === "duelist" && target.c.hp > 0 && boss.c.hp > 0 && rng() < DUELIST_EXTRA_HIT) strike(target);
-    // Item-Effekt „Kettenblitz“: Ein normaler Angriff springt auf einen zweiten Gegner über
-    if (!ability && hasEffect(hero.itemEffects, "chainLightning") && boss.c.hp > 0 && rng() < EFFECT.chainLightning.chance) {
-      const others = living().filter((f) => f !== target);
-      if (others.length > 0) strike(others[Math.floor(rng() * others.length)], EFFECT.chainLightning.share);
-    }
     // Lebensraub: Blutrausch, Plünderer, Item-Effekt „Seelenraub“ und Segen „Blutdurst“
     const lifesteal =
       lifestealShare(hero.heroClass, ability) +

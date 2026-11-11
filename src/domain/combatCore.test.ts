@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { DamageOverTime } from "./combat";
+import type { AbilityDef } from "./abilities";
 import {
+  absorbShield,
+  afterHeroHit,
+  foeArmor,
+  heroVolley,
+  strikeFactors,
+  type StrikeFoe,
+  type StrikeSetup,
+  type StrikeTarget,
   abilityDots,
   bandage,
   canEndure,
@@ -244,5 +253,116 @@ describe("Kampfkern: Begleiter mit Aufgabe", () => {
     expect(drumTurn(undefined)).toBe(1);
     expect(drumTurn(99)).toBe(drumTurn(98));
     expect(drumFactor([{ role: "drummer", cast: 2, c: { hp: 1 } }, { role: "drummer", cast: 3, c: { hp: 0 } }])).toBeGreaterThan(1);
+  });
+});
+
+describe("Kampfkern: Treffer des Helden", () => {
+  const foe = (hp = 100, fx: StrikeFoe["fx"] = {}): StrikeFoe => ({
+    creatureId: NEUTRAL,
+    c: { name: "X", level: 10, maxHp: 100, hp, damage: 10, armor: 40, critChance: 0 },
+    fx,
+  });
+  const setup = (over: Partial<StrikeSetup> = {}): StrikeSetup => ({
+    ability: null,
+    heroKind: null,
+    itemEffects: undefined,
+    skills: undefined,
+    blessings: undefined,
+    round: 1,
+    critChance: 0.1,
+    fire: false,
+    riposte: 1,
+    wrath: 1,
+    echoShare: 1,
+    ...over,
+  });
+  const target: StrikeTarget = { isBoss: true, realBoss: true, elite: false, charging: false, plates: undefined };
+
+  it("ohne Besonderheiten sind alle Faktoren 1", () => {
+    const f = strikeFactors(foe(), setup(), target);
+    expect([f.finisher, f.headsman, f.bleedBonus, f.shakenBonus, f.charging, f.vulnerable, f.kindFactor, f.itemFactor, f.skillFactor, f.plate]).toEqual([
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    ]);
+    expect(f.critChance).toBeCloseTo(0.1);
+  });
+
+  it("Henker gegen angeschlagene Gegner, Verwundbarkeit, Echo", () => {
+    const low = strikeFactors(foe(5, { vulnerable: { percent: 0.3, roundsLeft: 1 } }), setup({ blessings: ["executioner"], echoShare: 0.5 }), target);
+    expect(low.headsman).toBeGreaterThan(1);
+    expect(low.vulnerable).toBeCloseTo(1.3);
+    expect(low.skillFactor).toBeCloseTo(0.5);
+  });
+
+  it("Rüstungsbruch mindert die Rüstung, manche Fähigkeiten ignorieren sie", () => {
+    expect(foeArmor(foe(100, { armorBreak: 0.5 }), null)).toBe(20);
+    expect(foeArmor(foe(), { ignoreArmor: true } as AbilityDef)).toBe(0);
+  });
+
+  it("der Schild schluckt erst, dann geht der Rest durch", () => {
+    expect(absorbShield(30, 50)).toEqual({ absorbed: 30, damage: 20, shield: 0 });
+    expect(absorbShield(80, 50)).toEqual({ absorbed: 50, damage: 0, shield: 30 });
+  });
+
+  it("nach dem Treffer: Plünderer blutet bei Krit, Manadieb gibt Mana", () => {
+    const dots: string[] = [];
+    let mana = 0;
+    const on = { dot: (_f: StrikeFoe, kind: string) => dots.push(kind), mana: (n: number) => (mana += n), freeze: () => undefined };
+    const state = strikeFactors(foe(), setup(), target).foeState;
+    afterHeroHit(foe(), true, { base: 50, heroClass: "plunderer", itemEffects: ["manaThief"], skills: undefined, fire: false, foeState: state }, () => 0.99, on);
+    expect(dots).toEqual(["bleed"]);
+    expect(mana).toBeGreaterThan(0);
+    dots.length = 0;
+    afterHeroHit(foe(), false, { base: 50, heroClass: "plunderer", itemEffects: undefined, skills: undefined, fire: false, foeState: state }, () => 0.99, on);
+    expect(dots).toEqual([]);
+  });
+});
+
+describe("Kampfkern: Trefferfolge", () => {
+  type T = { id: string; c: { hp: number } };
+  const play = (over: Partial<Parameters<typeof heroVolley<T>>[0]> = {}) => {
+    const a: T = { id: "a", c: { hp: 10 } };
+    const b: T = { id: "b", c: { hp: 10 } };
+    const hits: string[] = [];
+    heroVolley<T>({
+      ability: null,
+      hits: () => 1,
+      target: a,
+      living: () => [a, b].filter((f) => f.c.hp > 0),
+      volleyOn: () => true,
+      fightOn: () => true,
+      echo: false,
+      feint: false,
+      plain: true,
+      heroClass: null,
+      itemEffects: undefined,
+      strike: (foe, share, echoShare) => hits.push(`${foe.id}:${share}:${echoShare}`),
+      rng: () => 0,
+      ...over,
+    });
+    return hits;
+  };
+
+  it("ein normaler Angriff trifft das Ziel einmal", () => expect(play()).toEqual(["a:1:1"]));
+
+  it("Flächenwirkung trifft alle, Splash die Umstehenden schwächer", () => {
+    expect(play({ ability: { aoe: "all", multiplier: 1 } as AbilityDef, plain: false })).toEqual(["a:1:1", "b:1:1"]);
+    expect(play({ ability: { aoe: { splash: 0.5 }, multiplier: 1 } as AbilityDef, plain: false })).toEqual(["a:1:1", "b:0.5:1"]);
+  });
+
+  it("Echo: ein zweiter Durchgang mit halbem Schaden", () => {
+    const hits = play({ ability: { multiplier: 1 } as AbilityDef, echo: true, plain: false });
+    expect(hits).toHaveLength(2);
+    expect(hits[1]).toMatch(/^a:1:0\.\d+$/);
+  });
+
+  it("Finte, Duellant und Kettenblitz schlagen nach", () => {
+    expect(play({ feint: true })).toEqual(["a:1:1", "a:1:1"]);
+    expect(play({ heroClass: "duelist" })).toEqual(["a:1:1", "a:1:1"]);
+    expect(play({ itemEffects: ["chainLightning"] })[1]).toMatch(/^b:/);
+  });
+
+  it("Raserei: die Trefferzahl wird vor jedem Treffer neu bestimmt", () => {
+    let left = 3;
+    expect(play({ hits: () => left--, plain: false })).toHaveLength(2);
   });
 });

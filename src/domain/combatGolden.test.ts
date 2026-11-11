@@ -123,7 +123,11 @@ function recorder(name: string) {
 
 /* ───────────────────────── Solo ───────────────────────── */
 
-function playSolo(name: string, start: BattleState, seed: number): string {
+/**
+ * Spielt einen Kampf mit zufälligen, aber reproduzierbaren Entscheidungen. `reactive`: wartet ab
+ * (Abwehren) und schlägt zu, während der Boss auflädt – so brechen grosse Treffer seinen Ansturm.
+ */
+function playSolo(name: string, start: BattleState, seed: number, reactive = false): string {
   const rec = recorder(name);
   const fight = seededRng(seed);
   const choose = seededRng(seed ^ 0x5bd1e995);
@@ -148,7 +152,9 @@ function playSolo(name: string, start: BattleState, seed: number): string {
       if (state.status !== "active") break;
       const usable = state.abilities.filter((id) => abilityBlocker(state, id) === null);
       const roll = choose();
-      const action = roll < 0.15 ? DEFEND : roll < 0.6 && usable.length > 0 ? pick(choose, usable) : undefined;
+      const action = reactive
+        ? state.bossTurn?.intent === "charging" ? undefined : DEFEND
+        : roll < 0.15 ? DEFEND : roll < 0.6 && usable.length > 0 ? pick(choose, usable) : undefined;
       const r = attackRound(state, fight, action);
       rec.add(r.events);
       state = r.state;
@@ -203,6 +209,16 @@ describe("Golden Master: Solo-Kämpfe", () => {
           name += `:blessed(${blessings.join(",")})`;
         }
         results[name] = playSolo(name, battle, seed);
+      }
+      // Bosse gegen einen sehr starken, reaktiven Helden: grosse Treffer brechen Ansturm (Taumeln), Fluch und Panzer
+      if (creature.boss) {
+        const name = `${creature.id}#burst`;
+        const seed = hash(name);
+        const rng = seededRng(seed);
+        const hero = randomProfile(rng, Math.min(MAX_LEVEL, creature.level + 2));
+        const bossHp = startBattle("probe", "Held", hero, creature).enemy.maxHp;
+        const strong = { ...hero, damage: bossHp * 0.5, maxHp: hero.maxHp * 20 };
+        results[name] = playSolo(name, startBattle(`s${i}`, "Held", strong, creature), seed, true);
       }
     });
     expect(Object.keys(results).length).toBeGreaterThan(150);
