@@ -28,11 +28,10 @@
 // 25 % einen Kopf ab, der als Begleiter weiterkämpft (hydra.ts) – Begleiter kommen hier also auch
 // mitten im Kampf dazu.
 
-import { freshStunImmunity, MANA_REGEN, tickStunImmunity, type AbilityDef, type AbilityId, type Guard } from "./abilities";
+import { freshStunImmunity, MANA_REGEN, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
   classAbility,
   CLERIC_POTION_FACTOR,
-  CLERIC_REGEN,
   DUELIST_EXTRA_HIT,
   PALADIN_THREAT,
   PLUNDERER_BLEED,
@@ -50,7 +49,6 @@ import {
   freezeFlag,
   rollBattleReward,
   rollHit,
-  strongerDot,
   stunLands,
   tickCooldowns,
   type ActiveBuff,
@@ -92,7 +90,6 @@ import {
   EXPLOSION_FACTOR,
   POISON,
   RAGE_BONUS,
-  REGEN_SHARE,
   SWIFT_SHARE,
   VAMPIRE_SHARE,
   type EliteAffix,
@@ -115,8 +112,8 @@ import {
   type TrapChoice,
 } from "./dungeonPaths";
 import { BLESSING, stacks, type BlessingId } from "./tower";
+import { bandage, canEndure, eliteRegen, healShare, heroRegenShare, layDot, secondWind, tickEnemyEffects } from "./combatCore";
 import {
-  bandageHeal,
   bloodburstDamage,
   cooldownSkipChance,
   critMana,
@@ -129,17 +126,13 @@ import {
   interruptMana,
   manaRegen,
   melts,
-  ownDotFactor,
-  ownDotRounds,
   potionSkillFactor,
   rankIn,
   riposteFactor,
-  rotBurst,
   skillCostFactor,
   skillCritBonus,
   skillDamageFactor,
   skillLifesteal,
-  stackPoison,
   wrathFactor,
   SKILL,
   type FoeState,
@@ -1086,21 +1079,6 @@ function stolenAbility(hero: CoopHero | undefined, id: AbilityId): CoopBossAbili
   return { id: `stolen-${id}`, name: ability.name, icon: ability.icon, description: "", every: 0, ...stolenStrike(ability) };
 }
 
-/** Am Rundenende laufen Schwächung, Verwundbarkeit und Betäubungs-Immunität eine Runde ab. */
-function tickEnemyEffects(fx: CoopEnemyEffects): CoopEnemyEffects {
-  const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
-  const mark = (rounds: number | undefined) => (rounds && rounds > 1 ? rounds - 1 : undefined);
-  return {
-    ...fx,
-    weaken: tick(fx.weaken),
-    vulnerable: tick(fx.vulnerable),
-    stunImmunity: tickStunImmunity(fx.stunImmunity),
-    ...(fx.dazed !== undefined && { dazed: mark(fx.dazed) }),
-    ...(fx.chilled !== undefined && { chilled: mark(fx.chilled) }),
-    ...(fx.shaken !== undefined && { shaken: mark(fx.shaken) }),
-  };
-}
-
 /**
  * Löst eine Runde auf. Fehlende Aktionen (Zeit abgelaufen) gelten als normaler
  * Angriff; ungültige Tränke, Fähigkeiten oder Ziele werden ignoriert – der Held
@@ -1153,31 +1131,26 @@ export function resolveRound(
    * Der Skilltree des Verursachers macht es stärker oder länger; sein eigenes Gift stapelt sich und platzt (Fäulnis).
    */
   const applyDot = (foe: Foe, kind: OverTimeKind, base: number, rounds: number, sourceId: string) => {
-    const factor = matchupFactor(foe.creatureId, kind);
-    if (factor === 0) {
+    // Gestapelt wird nur das eigene Gift; ein schwächeres – auch eines Mitspielers – überschreibt kein stärkeres
+    const laid = layDot<SourcedDot, CoopEnemyEffects>(foe.fx, {
+      creatureId: foe.creatureId,
+      kind,
+      base,
+      rounds,
+      skills: sourceSkills(sourceId),
+      alive: foe.c.hp > 0,
+      own: foe.fx.poison?.sourceId === sourceId ? foe.fx.poison : undefined,
+      tag: { sourceId },
+    });
+    if (laid.immune) {
       events.push({ type: "immune", target: foe.id, kind });
       return;
     }
-    const skills = sourceSkills(sourceId);
-    const damage = Math.max(1, Math.round(base * factor * ownDotFactor(skills, kind)));
-    const length = ownDotRounds(skills, kind, rounds);
-    // Ein schwächeres Feuer, Gift oder Bluten – auch eines Mitspielers – überschreibt kein stärkeres
-    if (kind !== "poison") {
-      foe.fx = { ...foe.fx, [kind]: strongerDot(foe.fx[kind], { damage, roundsLeft: length, sourceId }) };
-      return;
-    }
-    const own = foe.fx.poison?.sourceId === sourceId ? foe.fx.poison : undefined;
-    const poison = stackPoison(skills, own, damage, length);
-    const burst = rotBurst(skills, poison);
-    if (burst > 0 && foe.c.hp > 0) {
-      const dealt = Math.max(1, Math.round(burst * (1 + (foe.fx.vulnerable?.percent ?? 0))));
-      foe.c.hp = Math.max(0, foe.c.hp - dealt);
-      foe.fx = { ...foe.fx, poison: undefined };
-      events.push({ type: "poison", target: foe.id, damage: dealt, burst: true });
-      addDown(foe);
-      return;
-    }
-    foe.fx = { ...foe.fx, poison: strongerDot(foe.fx.poison, { ...poison, sourceId }) };
+    foe.fx = laid.fx;
+    if (laid.burst === undefined) return;
+    foe.c.hp = Math.max(0, foe.c.hp - laid.burst);
+    events.push({ type: "poison", target: foe.id, damage: laid.burst, burst: true });
+    addDown(foe);
   };
   const foes = [boss, ...adds];
   let phase = state.phase;
@@ -1216,15 +1189,16 @@ export function resolveRound(
   const knockDown = (hero: CoopHero) => {
     if (hero.combatant.hp > 0 || hero.down) return;
     // Item-Effekt „Unbeugsam“: einmal pro Kampf mit 1 LP überleben
-    if (hasEffect(hero.itemEffects, "unyielding") && !hero.endured) {
+    if (canEndure(hero.itemEffects, hero.endured)) {
       hero.combatant.hp = 1;
       hero.endured = true;
       events.push({ type: "endured", heroId: hero.id });
       return;
     }
     // Segen „Zweiter Atem“: einmal pro Dungeon wieder aufstehen
-    if (stacks(hero.blessings, "secondWind") > 0 && !hero.secondWindUsed) {
-      hero.combatant.hp = Math.round(hero.combatant.maxHp * BLESSING.secondWind);
+    const standUp = secondWind(hero.blessings, hero.secondWindUsed, hero.combatant.maxHp);
+    if (standUp > 0) {
+      hero.combatant.hp = standUp;
       hero.secondWindUsed = true;
       events.push({ type: "secondWind", heroId: hero.id, heal: hero.combatant.hp });
       return;
@@ -2031,24 +2005,18 @@ export function resolveRound(
 
   // Elite „Regenerierend“: heilt sich am Ende der Runde – ausser er brennt
   const burning = boss.fx.burn !== undefined || events.some((e) => e.type === "burn" && e.target === BOSS);
-  if (status === "active" && elite.includes("regenerating") && !burning) {
-    const heal = Math.min(boss.c.maxHp - boss.c.hp, Math.round(boss.c.maxHp * REGEN_SHARE));
-    if (heal > 0) {
-      boss.c.hp += heal;
-      events.push({ type: "enemyRegen", heal });
-    }
+  const enemyHeal = status === "active" ? eliteRegen(boss.c, elite, burning) : 0;
+  if (enemyHeal > 0) {
+    boss.c.hp += enemyHeal;
+    events.push({ type: "enemyRegen", heal: enemyHeal });
   }
 
-  // Kleriker: Regeneration am Ende der Runde
   if (status === "active") {
+    // Kleriker, Item-Effekt „Lebensquell“ und Arkane Heilung: Regeneration am Ende der Runde
     for (const hero of heroes) {
-      // Kleriker, Item-Effekt „Lebensquell“ und Arkane Heilung
-      const regen =
-        (hero.heroClass === "cleric" ? CLERIC_REGEN : 0) +
-        (hasEffect(hero.itemEffects, "wellspring") ? EFFECT.wellspring : 0) +
-        (hero.effects.renew?.percent ?? 0);
+      const regen = heroRegenShare(hero.heroClass, hero.itemEffects, hero.effects.renew);
       if (hero.down || regen <= 0) continue;
-      const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(hero.combatant.maxHp * regen));
+      const heal = healShare(hero.combatant.hp, hero.combatant.maxHp, regen);
       if (heal > 0) {
         hero.combatant.hp += heal;
         events.push({ type: "regen", heroId: hero.id, heal });
@@ -2056,9 +2024,8 @@ export function resolveRound(
     }
     // Notverband: Wer zum ersten Mal unter 30 % fällt, heilt sich einmal pro Kampf
     for (const hero of heroes) {
-      const bandage = hero.down ? 0 : bandageHeal(hero.skills, hero.combatant.hp, hero.combatant.maxHp, hero.effects.bandaged);
-      if (bandage <= 0) continue;
-      const heal = Math.min(hero.combatant.maxHp - hero.combatant.hp, Math.round(hero.combatant.maxHp * bandage));
+      const heal = hero.down ? 0 : bandage(hero.skills, hero.combatant.hp, hero.combatant.maxHp, hero.effects.bandaged);
+      if (heal <= 0) continue;
       hero.combatant.hp += heal;
       hero.effects.bandaged = true;
       events.push({ type: "selfHeal", heroId: hero.id, heal });
