@@ -11,13 +11,16 @@ import {
   investedEssence,
   salvageItem,
   upgradeCost,
+  upgradeGoldCost,
   upgradeItem,
   UPGRADE_REFUND,
 } from "./forge";
-import { createItem, getItem, getItemStats, MAX_UPGRADE } from "./items";
+import { createItem, getItem, getItemStats, ITEMS, MAX_UPGRADE } from "./items";
 import type { Gear, OwnedItem } from "./types";
 
 const gearWith = (...items: OwnedItem[]): Gear => ({ inventory: items, equipment: EMPTY_EQUIPMENT });
+/** Genug Gold, damit nur die Essenz zählt. */
+const rich = (essence: number) => ({ essence, gold: 1_000_000 });
 
 describe("Schmied: Zerlegen", () => {
   it("erst ab der Seltenheit selten", () => {
@@ -93,12 +96,12 @@ describe("Schmied: Verbessern", () => {
       const cost = upgradeCost(gear.inventory[0]);
       expect(cost).toBeGreaterThan(lastCost);
       lastCost = cost;
-      ({ gear, essence } = upgradeItem(gear, essence, "s"));
+      ({ gear, essence } = upgradeItem(gear, rich(essence), "s"));
       expect(gear.inventory[0].upgrade).toBe(level);
     }
     expect(10_000 - essence).toBe(investedEssence(gear.inventory[0]));
     expect(canUpgrade(gear.inventory[0])).toBe(false);
-    expect(() => upgradeItem(gear, essence, "s")).toThrow();
+    expect(() => upgradeItem(gear, rich(essence), "s")).toThrow();
   });
 
   it("Essenz ist knapp: +1 kostet mehr, als ein seltenes Item gleichen Levels einbringt", () => {
@@ -110,13 +113,33 @@ describe("Schmied: Verbessern", () => {
 
   it("ohne genug Essenz geht es nicht", () => {
     const item = sword();
-    expect(() => upgradeItem(gearWith(item), upgradeCost(item) - 1, "s")).toThrow();
+    expect(() => upgradeItem(gearWith(item), rich(upgradeCost(item) - 1), "s")).toThrow(/Essenz/);
+  });
+
+  it("kostet zusätzlich Gold: 2 × (3 + Item-Level) pro Stufe, ohne genug Gold geht es nicht", () => {
+    const item = sword();
+    const level = getItem(item.itemId).requiredLevel;
+    expect(upgradeGoldCost(item)).toBe(2 * (3 + level));
+    expect(upgradeGoldCost({ ...item, upgrade: 4 })).toBe(2 * (3 + level) * 5);
+    const cost = upgradeGoldCost(item);
+    const result = upgradeItem(gearWith(item), { essence: 10_000, gold: cost + 7 }, "s");
+    expect(result.gold).toBe(7);
+    expect(() => upgradeItem(gearWith(item), { essence: 10_000, gold: cost - 1 }, "s")).toThrow(/Gold/);
+  });
+
+  it("Gold für +1 bis +5 auf Level 30: 30 × 33 = 990, die Meisterschmiede gibt 20 % Rabatt", () => {
+    const def = ITEMS.find((i) => i.type === "sword" && i.requiredLevel === 30)!;
+    const item = createItem(def.id, "rare", "x");
+    let total = 0;
+    for (let next = 1; next <= MAX_UPGRADE; next++) total += upgradeGoldCost(item, next);
+    expect(total).toBe(990);
+    expect(upgradeGoldCost(item, 5, 0.2)).toBe(Math.round(330 * 0.8));
   });
 
   it("angelegte Items lassen sich direkt verbessern", () => {
     const item = sword();
     const gear: Gear = { inventory: [], equipment: { ...EMPTY_EQUIPMENT, weapon1: item } };
-    const result = upgradeItem(gear, 10_000, "s");
+    const result = upgradeItem(gear, rich(10_000), "s");
     expect(result.gear.equipment.weapon1?.upgrade).toBe(1);
     expect(result.gear.inventory).toEqual([]);
   });

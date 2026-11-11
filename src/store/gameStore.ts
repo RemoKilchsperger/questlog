@@ -1528,11 +1528,11 @@ export const useGameStore = create<GameState>()(
           const { inventory, equipment, character } = get();
           const smith = SMITH_RULES[tiers().smith];
           if (!smith.open) throw new Error("Im Dorf gibt es noch keine Schmiede.");
-          const result = forgeUpgrade({ inventory, equipment }, character.essence, uid, smith);
+          const result = forgeUpgrade({ inventory, equipment }, { essence: character.essence, gold: character.gold }, uid, smith);
           set({
             inventory: result.gear.inventory,
             equipment: result.gear.equipment,
-            character: { ...character, essence: result.essence },
+            character: { ...character, essence: result.essence, gold: result.gold },
           });
           tradeEvent("upgrade", findItem(uid));
         }),
@@ -1554,7 +1554,7 @@ export const useGameStore = create<GameState>()(
       buyPotion: (potionId) =>
         attempt(() => {
           const { potions, character } = get();
-          const result = buyPotion(potions, character.gold, potionId, tiers().alchemist);
+          const result = buyPotion(potions, character.gold, potionId, tiers().alchemist, getLevel(character.totalXp));
           set({ potions: result.stock, character: { ...character, gold: result.gold } });
         }),
 

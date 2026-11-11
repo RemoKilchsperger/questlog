@@ -109,12 +109,31 @@ export function potionEffectText(potion: PotionDef): string {
   }
 }
 
-/** Kauft einen Trank – `alchemistTier`: Ausbaustufe des Alchemisten (village.ts). */
-export function buyPotion(stock: PotionStock, gold: number, id: string, alchemistTier = 1): { stock: PotionStock; gold: number } {
+/**
+ * Aufschlag pro Level über 1. Tränke wirken in Prozent und bleiben deshalb auf jedem Level
+ * gleich nützlich – mit festen Preisen kosteten sie auf Level 30 nur noch einen halben Kampf
+ * an Gold. Halb so steil wie beim Essen (food.ts), weil Heiltränke auch als Beute fallen.
+ */
+export const POTION_PRICE_PER_LEVEL = 0.05;
+
+/** Kaufpreis auf diesem Level: Grundpreis × (1 + (Level − 1) / 20) – Level 30 etwa ×2.5, Level 60 etwa ×4. */
+export function potionPrice(potion: PotionDef, level: number): number {
+  return Math.round(potion.price * (1 + Math.max(0, level - 1) * POTION_PRICE_PER_LEVEL));
+}
+
+/** Kauft einen Trank – `alchemistTier`: Ausbaustufe des Alchemisten (village.ts), `level`: Level des Helden. */
+export function buyPotion(
+  stock: PotionStock,
+  gold: number,
+  id: string,
+  alchemistTier = 1,
+  level = 1,
+): { stock: PotionStock; gold: number } {
   const potion = getPotion(id);
   if (potion.alchemist > alchemistTier) {
     throw new Error(`${potion.name} gibt es erst beim Alchemisten der Stufe ${potion.alchemist} – sonst nur als Beute.`);
   }
-  if (gold < potion.price) throw new Error("Nicht genug Gold.");
-  return { stock: { ...stock, [id]: (stock[id] ?? 0) + 1 }, gold: gold - potion.price };
+  const price = potionPrice(potion, level);
+  if (gold < price) throw new Error("Nicht genug Gold.");
+  return { stock: { ...stock, [id]: (stock[id] ?? 0) + 1 }, gold: gold - price };
 }

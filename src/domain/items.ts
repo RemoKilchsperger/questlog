@@ -564,11 +564,23 @@ export function getItemStats(owned: OwnedItem): ItemStats {
 export const SELL_RATE = 0.25;
 
 /**
- * Verkaufspreis beim Händler: ein Viertel des Kaufpreises (mind. 1 Gold), seltene Stücke sind mehr wert.
- * `bonus`: Aufschlag des ausgebauten Händlers (0.1 = +10 %).
+ * Obergrenze des Verkaufspreises: so viel Gold pro `3 + Item-Level` (mal Seltenheitsfaktor).
+ * Der Kaufpreis wächst etwa quadratisch mit dem Level, das Kampfgold nur linear (`3 + Level`).
+ * Ohne Grenze machte der Verkauf ab der Spielmitte 80–90 % des Einkommens aus und Gold
+ * verlor seinen Wert – mit ihr bleibt er etwa die Hälfte (docs/dorf-ausbau.md, „Gold-Balancing“).
+ */
+export const SELL_GOLD_PER_LEVEL = 1;
+
+/**
+ * Verkaufspreis beim Händler: ein Viertel des Kaufpreises, höchstens `SELL_GOLD_PER_LEVEL · (3 + Item-Level)`
+ * (beides mal Seltenheitsfaktor), mind. 1 Gold. Die alte Formel bleibt als Grenze, damit sich
+ * Kaufen und Wiederverkaufen nie lohnt. `bonus`: Aufschlag des ausgebauten Händlers (0.1 = +10 %).
  */
 export function sellPrice(owned: OwnedItem, bonus = 0): number {
-  return Math.max(1, Math.floor(getItem(owned.itemId).price * getRarity(owned.rarity).priceMultiplier * SELL_RATE * (1 + bonus)));
+  const def = getItem(owned.itemId);
+  const { priceMultiplier } = getRarity(owned.rarity);
+  const base = Math.min(def.price * SELL_RATE, SELL_GOLD_PER_LEVEL * (3 + def.requiredLevel)) * priceMultiplier;
+  return Math.max(1, Math.floor(base * (1 + bonus)));
 }
 
 /**

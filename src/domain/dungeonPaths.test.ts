@@ -13,6 +13,7 @@ import {
   isMimicChest,
   mainArmorClass,
   merchantHealPotion,
+  MERCHANT_MARKUP,
   merchantOffers,
   MIMIC_CHANCE,
   mimicReward,
@@ -27,6 +28,7 @@ import {
   TRAPS,
   type RoomKind,
 } from "./dungeonPaths";
+import { getPotion, potionPrice } from "./potions";
 
 describe("Wege durch die Dungeons", () => {
   it("Eingang, zwei Gabelungen, Zwischenboss, drei Gabelungen, Endboss", () => {
@@ -102,6 +104,8 @@ describe("Wege durch die Dungeons", () => {
     expect(offers.map((o) => o.kind)).toEqual(["potion", "potion", "care", "blessing"]);
     expect(offers[0].price).toBeGreaterThan(15);
     expect(offers.every((o) => o.price > 0)).toBe(true);
+    // Preis nach dem Mindest-Level des Dungeons, nicht nach dem Helden – im Koop für alle gleich
+    expect(offers[0].price).toBe(Math.round(potionPrice(getPotion("small"), DUNGEONS[0].minLevel) * MERCHANT_MARKUP));
   });
 
   it("Fallen und Rätsel kommen in einem Lauf nicht doppelt vor", () => {

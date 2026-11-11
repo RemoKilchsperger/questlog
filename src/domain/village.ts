@@ -151,7 +151,7 @@ export const BUILDINGS: readonly BuildingDef[] = [
       {
         name: "Meisterschmiede",
         icon: "🏛️",
-        effect: "Verbessern kostet 20 % weniger Essenz, beim Zerlegen 75 % statt 50 % zurück",
+        effect: "Verbessern kostet 20 % weniger Essenz und Gold, beim Zerlegen 75 % statt 50 % zurück",
         cost: cost(5000, { dragonOre: 30, hardwood: 15 }),
       },
     ],

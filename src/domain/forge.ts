@@ -10,6 +10,13 @@ import type { ArmorSlot, EquipSlot, Gear, ItemDef, OwnedItem, Rarity } from "./t
 
 /** Grundkosten einer Verbesserung – wachsen mit Item-Level und Stufe. */
 export const UPGRADE_COST_BASE = 5;
+/**
+ * Gold pro `3 + Item-Level` und Stufe, das eine Verbesserung zusätzlich zur Essenz kostet.
+ * Eine wiederkehrende Gold-Senke, die mit dem Level mitwächst: Ausrüstung wird alle paar
+ * Level ersetzt und neu verbessert. +1 … +5 kosten zusammen 30 × (3 + Level) – Lv. 30 → 990.
+ * Beim Zerlegen gibt es nur Essenz zurück, kein Gold.
+ */
+export const UPGRADE_GOLD_FACTOR = 2;
 /** Anteil der investierten Essenz, den man beim Zerlegen zurückbekommt. */
 export const UPGRADE_REFUND = 0.5;
 
@@ -47,6 +54,14 @@ export function upgradeCost(owned: OwnedItem, next = (owned.upgrade ?? 0) + 1, d
   return Math.round(UPGRADE_COST_BASE * (1 + getItem(owned.itemId).requiredLevel / 10) * next * (1 - discount));
 }
 
+/**
+ * Gold für die Verbesserung auf Stufe `next`: 2 × (3 + Item-Level) × Stufe, mit dem Rabatt der
+ * Meisterschmiede. Beispiel Lv.-30-Item: +1 → 66, +5 → 330.
+ */
+export function upgradeGoldCost(owned: OwnedItem, next = (owned.upgrade ?? 0) + 1, discount = 0): number {
+  return Math.round(UPGRADE_GOLD_FACTOR * (3 + getItem(owned.itemId).requiredLevel) * next * (1 - discount));
+}
+
 /** Ausbaustufe der Schmiede: höchste Verbesserung, Rabatt und Rückerstattung (village.ts). */
 export interface ForgeRules {
   maxUpgrade: number;
@@ -67,13 +82,13 @@ export function canUpgrade(owned: OwnedItem, maxUpgrade = MAX_UPGRADE): boolean 
   return (owned.upgrade ?? 0) < maxUpgrade;
 }
 
-/** Verbessert ein Item um eine Stufe – im Inventar oder angelegt. */
+/** Verbessert ein Item um eine Stufe – im Inventar oder angelegt. Kostet Essenz und Gold. */
 export function upgradeItem(
   gear: Gear,
-  essence: number,
+  wallet: { essence: number; gold: number },
   uid: string,
   rules: ForgeRules = DEFAULT_FORGE_RULES,
-): { gear: Gear; essence: number } {
+): { gear: Gear; essence: number; gold: number } {
   const slot = (Object.keys(gear.equipment) as EquipSlot[]).find((s) => gear.equipment[s]?.uid === uid);
   const owned = slot ? gear.equipment[slot] : gear.inventory.find((i) => i.uid === uid);
   if (!owned) throw new Error("Item nicht gefunden.");
@@ -85,13 +100,16 @@ export function upgradeItem(
     );
   }
   const cost = upgradeCost(owned, undefined, rules.discount);
-  if (essence < cost) throw new Error("Nicht genug Essenz.");
+  if (wallet.essence < cost) throw new Error("Nicht genug Essenz.");
+  const goldCost = upgradeGoldCost(owned, undefined, rules.discount);
+  if (wallet.gold < goldCost) throw new Error("Nicht genug Gold.");
   const upgraded: OwnedItem = { ...owned, upgrade: (owned.upgrade ?? 0) + 1 };
   return {
     gear: slot
       ? { ...gear, equipment: { ...gear.equipment, [slot]: upgraded } }
       : { ...gear, inventory: gear.inventory.map((i) => (i.uid === uid ? upgraded : i)) },
-    essence: essence - cost,
+    essence: wallet.essence - cost,
+    gold: wallet.gold - goldCost,
   };
 }
 

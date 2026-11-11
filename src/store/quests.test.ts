@@ -34,7 +34,7 @@ const trade = (action: TradeAction) => {
   const uid = crypto.randomUUID();
   useGameStore.setState({
     inventory: [...store().inventory, createItem("sword-5", "rare", uid)],
-    character: { ...store().character, essence: 10_000 },
+    character: { ...store().character, essence: 10_000, gold: store().character.gold + 10_000 },
   });
   if (action === "sell") store().sell(uid);
   if (action === "salvage") store().salvage(uid);
@@ -113,7 +113,7 @@ describe("Quests im Spielstand", () => {
     useGameStore.setState({ dailyQuests: daily, weeklyQuests: rollWeeklyQuests(weekKey(), 1) });
     // Rüstung zählt …
     const helmet = createItem("head-5", "rare", "helm");
-    useGameStore.setState({ inventory: [...store().inventory, helmet], character: { ...store().character, essence: 10_000 } });
+    useGameStore.setState({ inventory: [...store().inventory, helmet], character: { ...store().character, essence: 10_000, gold: store().character.gold + 10_000 } });
     if (goal.action === "sell") store().sell("helm");
     if (goal.action === "salvage") store().salvage("helm");
     if (goal.action === "upgrade") store().upgrade("helm");
