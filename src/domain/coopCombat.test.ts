@@ -492,3 +492,18 @@ describe("Koop-Kampf: Parade", () => {
     expect(notes[0].type === "guarded" && notes[0].prevented).toBe(plain.reduce((s, d, i) => s + d - guarded[i], 0));
   });
 });
+
+describe("Koop-Kampf: Segen „Henker“", () => {
+  it("wirkt wie im Solo auch auf normale Angriffe gegen angeschlagene Gegner", () => {
+    const bossId = COOP_BOSSES.find((b) => b.id !== HYDRA)!.id;
+    const base = tough(startCoopBattle("k", bossId, [player("a"), player("b")], 0));
+    // Der Boss ist fast besiegt – unter der Henker-Schwelle
+    const low = { ...base, boss: { ...base.boss, hp: 10_000, maxHp: 999_999 } };
+    const heroHit = (blessed: boolean) => {
+      const state = { ...low, heroes: low.heroes.map((h) => (blessed && h.id === "a" ? blessCoopHero(h, "executioner") : h)) };
+      const hit = resolveRound(state, { a: {}, b: { defend: true } }, rng(0.5), 0).events.find((e) => e.type === "hit" && e.attacker === "a");
+      return hit?.type === "hit" ? hit.damage : 0;
+    };
+    expect(heroHit(true)).toBeGreaterThan(heroHit(false));
+  });
+});

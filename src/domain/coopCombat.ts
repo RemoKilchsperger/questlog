@@ -1477,7 +1477,8 @@ export function resolveRound(
           }
         : {
             ...strong,
-            damage: strong.damage * charge * share * vulnerable * taken * plate * f.kindFactor * f.itemFactor * f.skillFactor,
+            // Segen „Henker“ wirkt wie im Solo auch auf normale Angriffe
+            damage: strong.damage * f.headsman * charge * share * vulnerable * taken * plate * f.kindFactor * f.itemFactor * f.skillFactor,
             critChance: sureCrit ? 1 : f.critChance,
           };
       const rolled = rollHit(attacker, { ...foe.c, armor: foeArmor(foe, ability) }, rng, rankIn(skills, "piercing") > 0);
