@@ -15,6 +15,7 @@ import type { ItemType } from "../domain/types";
 import type { CoopMember } from "../coop/protocol";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
+import { attachTempo, damageFontSize, type BattleTempo } from "./battleTempo";
 import { iconText } from "./phaserIcons";
 import { creatureImage, lastOpaqueRow } from "./creatureImages";
 import { getCreatureSprite } from "./creatureSprites";
@@ -133,6 +134,8 @@ export class CoopBattleScene extends Phaser.Scene {
   private looks = new Map<Unit, { overlay: Phaser.GameObjects.Image; pulse: Phaser.Tweens.Tween | null; key: string }>();
   /** Schild des Schildträgers über dem Boss */
   private shieldDome: Phaser.GameObjects.Graphics | null = null;
+  /** Abspieltempo und Hit-Stop (battleTempo.ts) */
+  private tempo!: BattleTempo;
 
   constructor() {
     super("coop-battle");
@@ -162,6 +165,7 @@ export class CoopBattleScene extends Phaser.Scene {
 
   create() {
     const { state, members, myId } = this.setup;
+    this.tempo = attachTempo(this);
     const def = getCoopEnemy(state.bossId);
     this.drawBackground(def.areaId);
 
@@ -1804,8 +1808,11 @@ export class CoopBattleScene extends Phaser.Scene {
     const dir = this.isFoe(unit) ? 1 : -1;
     this.tweens.add({ targets: unit.body, alpha: 0.3, duration: 70, yoyo: true, repeat: 1 });
     this.tweens.add({ targets: unit.body, x: unit.homeX + 8 * dir, duration: 60, yoyo: true });
-    if (crit) this.cameras.main.shake(160, 0.008);
-    this.float(unit, crit ? `KRITISCH! -${damage}` : `-${damage}`, crit ? "#f4c95d" : "#f0776a", crit ? 20 : 18);
+    if (crit && !this.tempo.instant()) this.cameras.main.shake(160, 0.008);
+    // Grosse Treffer, grosse Zahlen
+    const size = damageFontSize(damage, unit.maxHp, 15, 11);
+    this.float(unit, crit ? `KRITISCH! -${damage}` : `-${damage}`, crit ? "#f4c95d" : "#f0776a", crit ? size + 3 : size);
+    this.tempo.hitStop(crit);
   }
 
   private swing(weapon: Phaser.GameObjects.Image) {

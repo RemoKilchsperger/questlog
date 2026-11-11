@@ -403,12 +403,22 @@ export function ActionGroup({ label, hint, children }: { label: string; hint?: R
  * Knopf einer Fähigkeit: Symbol, Name, Manakosten – und warum sie gerade nicht geht.
  * Die Beschreibung steht nur im Tooltip, damit die Leiste ruhig bleibt.
  */
+/** Tastenkürzel auf einem Knopf – nur auf grösseren Bildschirmen, wo meist eine Tastatur dran ist. */
+export function Kbd({ children }: { children: string }) {
+  return (
+    <kbd className="num hidden shrink-0 rounded border border-night-600 bg-night-900/60 px-1 font-sans text-[10px] leading-4 text-muted sm:inline-block">
+      {children}
+    </kbd>
+  );
+}
+
 export function AbilityButton({
   ability,
   blocker,
   disabled,
   onClick,
   matchup = null,
+  hotkey,
 }: {
   ability: AbilityDef;
   blocker: string | null;
@@ -416,6 +426,8 @@ export function AbilityButton({
   onClick: () => void;
   /** Schwäche/Resistenz des Ziels gegen die Waffe der Fähigkeit */
   matchup?: "weak" | "resist" | "immune" | null;
+  /** Tastenkürzel, das auf dem Knopf steht */
+  hotkey?: string;
 }) {
   // "Abklingzeit: noch 2 Runden." → "2 Runden"
   const cooling = blocker?.match(/^Abklingzeit: noch (.+)\.$/)?.[1] ?? null;
@@ -457,6 +469,7 @@ export function AbilityButton({
         <span className="num shrink-0 text-xs text-intellect">
           {ability.manaCost} 💧
         </span>
+        {hotkey && <Kbd>{hotkey}</Kbd>}
       </motion.button>
     </Hint>
   );
