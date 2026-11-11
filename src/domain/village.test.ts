@@ -4,7 +4,7 @@ import { addToChest, drinkPotion, EMPTY_CHEST, rollBattleReward, startBattle, ty
 import { AREAS, getCreature } from "./creatures";
 import { upgradeItem } from "./forge";
 import { createItem } from "./items";
-import { buyPotion, getPotion, potionsForSale } from "./potions";
+import { buyPotion, getPotion, potionPrice, potionsForSale } from "./potions";
 import {
   applyBoardEvent,
   openBounty,
@@ -162,18 +162,20 @@ describe("Schmiede", () => {
     inventory: [{ ...createItem("sword-20", "rare", "s"), upgrade }],
     equipment: { head: null, chest: null, arms: null, legs: null, feet: null, weapon1: null, weapon2: null },
   });
+  const wallet = { essence: 10_000, gold: 10_000 };
 
   it("die Esse verbessert nur bis +2", () => {
     expect(SMITH_RULES[0].open).toBe(false);
-    expect(upgradeItem(gearWith(1), 10_000, "s", SMITH_RULES[1]).gear.inventory[0].upgrade).toBe(2);
-    expect(() => upgradeItem(gearWith(2), 10_000, "s", SMITH_RULES[1])).toThrow(/bis \+2/);
-    expect(upgradeItem(gearWith(2), 10_000, "s", SMITH_RULES[2]).gear.inventory[0].upgrade).toBe(3);
+    expect(upgradeItem(gearWith(1), wallet, "s", SMITH_RULES[1]).gear.inventory[0].upgrade).toBe(2);
+    expect(() => upgradeItem(gearWith(2), wallet, "s", SMITH_RULES[1])).toThrow(/bis \+2/);
+    expect(upgradeItem(gearWith(2), wallet, "s", SMITH_RULES[2]).gear.inventory[0].upgrade).toBe(3);
   });
 
-  it("die Meisterschmiede verlangt 20 % weniger Essenz", () => {
-    const normal = 10_000 - upgradeItem(gearWith(0), 10_000, "s", SMITH_RULES[2]).essence;
-    const master = 10_000 - upgradeItem(gearWith(0), 10_000, "s", SMITH_RULES[3]).essence;
-    expect(master).toBe(Math.round(normal * 0.8));
+  it("die Meisterschmiede verlangt 20 % weniger Essenz und Gold", () => {
+    const normal = upgradeItem(gearWith(0), wallet, "s", SMITH_RULES[2]);
+    const master = upgradeItem(gearWith(0), wallet, "s", SMITH_RULES[3]);
+    expect(10_000 - master.essence).toBe(Math.round((10_000 - normal.essence) * 0.8));
+    expect(10_000 - master.gold).toBe(Math.round((10_000 - normal.gold) * 0.8));
     expect(SMITH_RULES[3].refund).toBe(0.75);
   });
 });
@@ -186,6 +188,15 @@ describe("Alchemist", () => {
     expect(potionsForSale(3)).toHaveLength(11);
     expect(() => buyPotion({}, 99_999, "medium", 0)).toThrow(/Alchemisten/);
     expect(buyPotion({}, 99_999, "attack", 2).stock.attack).toBe(1);
+  });
+
+  it("Trankpreise steigen mit dem Level: × (1 + (Level − 1) / 20)", () => {
+    const medium = getPotion("medium");
+    expect(potionPrice(medium, 1)).toBe(45);
+    expect(potionPrice(medium, 30)).toBe(110);
+    expect(potionPrice(getPotion("large"), 60)).toBe(593);
+    expect(buyPotion({}, 1000, "medium", 1, 30).gold).toBe(1000 - 110);
+    expect(() => buyPotion({}, 109, "medium", 1, 30)).toThrow(/Gold/);
   });
 
   it("beim Meisteralchemisten wirken alle Tränke 25 % stärker", () => {

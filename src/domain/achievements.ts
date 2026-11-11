@@ -205,7 +205,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: "boss-collector", name: "Boss-Sammler", icon: "👑", category: "collection", description: "{n} Boss-Items gesammelt", tiers: [5, 20, BOSS_ITEMS.length], title: "Sammler", progress: (i) => i.bossCollection.length },
   { id: "rare-hunter", name: "Seltenheitenjäger", icon: "🎯", category: "collection", description: "{n} verschiedene seltene Gegner besiegt", tiers: [1, 12, RARES.length], title: "Seltenheitenjäger", progress: (i) => i.records.raresDefeated.length },
   { id: "master-smith", name: "Meisterschmied", icon: "⚒️", category: "collection", description: "{n} Items auf die höchste Stufe verbessert", tiers: [1, 5, 15], title: "Meisterschmied", progress: (i) => i.records.maxedSeen.length },
-  { id: "rich", name: "Wohlstand", icon: "🪙", category: "collection", description: "{n} Gold auf einmal besessen", tiers: [1000, 10000, 100000], title: "Goldbaron", progress: (i) => Math.max(i.records.maxGold, i.character.gold) },
+  { id: "rich", name: "Wohlstand", icon: "🪙", category: "collection", description: "{n} Gold auf einmal besessen", tiers: [1000, 5000, 25000], title: "Goldbaron", progress: (i) => Math.max(i.records.maxGold, i.character.gold) },
   // Koop
   { id: "together", name: "Gemeinsam stark", icon: "🤝", category: "coop", description: "{n} Koop-Siege", tiers: [1, 10, 50], title: "Gefährte", progress: (i) => i.coopStats.wins },
   { id: "raid-slayer", name: "Raidbezwinger", icon: "🐲", category: "coop", description: "{n} verschiedene Koop-Bosse besiegt", tiers: [1, 2, COOP_BOSSES.length], title: "Raidbezwinger", progress: (i) => i.coopStats.bosses.length },

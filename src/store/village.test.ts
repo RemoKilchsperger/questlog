@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getDungeon } from "../domain/creatures";
 import { createItem } from "../domain/items";
 import { dateKey } from "../domain/calendar";
+import { upgradeCost, upgradeGoldCost } from "../domain/forge";
+import { totalXpForLevel } from "../domain/leveling";
+import { getPotion, potionPrice } from "../domain/potions";
 import { rollDailyQuests } from "../domain/quests";
 import { EMPTY_VILLAGE } from "../domain/village";
 import { heroStatusChips } from "../components/BattleStatus";
@@ -72,6 +75,33 @@ describe("Dorf im Spielstand", () => {
     // Zu wenig für die nächste Stufe: nichts passiert
     store().build("merchant");
     expect(store().village.merchant).toBe(1);
+  });
+
+  it("Verbessern kostet Essenz und Gold – ohne genug Gold passiert nichts", () => {
+    const sword = createItem("sword-5", "rare", "s");
+    const goldCost = upgradeGoldCost(sword);
+    useGameStore.setState((s) => ({
+      inventory: [...s.inventory, sword],
+      village: { ...EMPTY_VILLAGE, smith: 1 },
+      character: { ...s.character, essence: 1000, gold: goldCost - 1 },
+    }));
+    store().upgrade("s");
+    expect(store().inventory.find((i) => i.uid === "s")?.upgrade ?? 0).toBe(0);
+    expect(store().character.essence).toBe(1000);
+    useGameStore.setState((s) => ({ character: { ...s.character, gold: goldCost + 5 } }));
+    store().upgrade("s");
+    expect(store().inventory.find((i) => i.uid === "s")?.upgrade).toBe(1);
+    expect(store().character.gold).toBe(5);
+    expect(store().character.essence).toBe(1000 - upgradeCost(sword));
+  });
+
+  it("Tränke kosten je nach Level mehr", () => {
+    useGameStore.setState((s) => ({
+      character: { ...s.character, gold: 1000, totalXp: totalXpForLevel(30) },
+      village: { ...EMPTY_VILLAGE, alchemist: 1 },
+    }));
+    store().buyPotion("medium");
+    expect(store().character.gold).toBe(1000 - potionPrice(getPotion("medium"), 30));
   });
 
   it("Tränke: ohne Alchemist nur kleine Heiltränke", () => {

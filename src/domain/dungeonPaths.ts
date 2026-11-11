@@ -6,7 +6,7 @@
 import { rollBattleReward, type BattleReward, type HeroCombatProfile } from "./combat";
 import { AREAS, DUNGEONS, type AreaDef, type CreatureDef } from "./creatures";
 import { ELITE_AFFIXES, type EliteAffix } from "./elites";
-import { getPotion, THROW_POTIONS } from "./potions";
+import { getPotion, potionPrice, THROW_POTIONS } from "./potions";
 import { hash, seededRng } from "./random";
 import { blessingOffer, type BlessingId } from "./tower";
 import type { ArmorClass } from "./types";
@@ -162,17 +162,18 @@ export function merchantHealPotion(dungeon: AreaDef): string {
 
 /**
  * Angebot des Händlers: ein Heiltrank und ein Wurftrank (je einmal kaufbar), Wundversorgung und ein
- * Segen. Bezahlt wird mit dem eigenen Gold. Die Preise richten sich nach dem Heiltrank des Dungeons.
+ * Segen. Bezahlt wird mit dem eigenen Gold. Die Preise richten sich nach dem Heiltrank des Dungeons
+ * auf seinem Mindest-Level – nicht nach dem Helden, damit im Koop alle dasselbe Angebot sehen.
  */
 export function merchantOffers(dungeon: AreaDef, seed: string, step: number, taken: readonly BlessingId[]): MerchantOffer[] {
   const rng = stepRng(seed, step, "merchant");
   const heal = getPotion(merchantHealPotion(dungeon));
   const throwable = THROW_POTIONS[Math.floor(rng() * THROW_POTIONS.length)];
   const [blessing] = blessingOffer(seed, step, taken, 1);
-  const unit = heal.price * MERCHANT_MARKUP;
+  const unit = potionPrice(heal, dungeon.minLevel) * MERCHANT_MARKUP;
   return [
     { kind: "potion", potionId: heal.id, price: Math.round(unit) },
-    { kind: "potion", potionId: throwable.id, price: Math.round(throwable.price * MERCHANT_MARKUP) },
+    { kind: "potion", potionId: throwable.id, price: Math.round(potionPrice(throwable, dungeon.minLevel) * MERCHANT_MARKUP) },
     { kind: "care", percent: CARE_HEAL, price: Math.round(unit * 2) },
     { kind: "blessing", blessing, price: Math.round(unit * 5) },
   ];

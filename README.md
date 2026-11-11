@@ -147,10 +147,12 @@ Stufe 2.
 
 - **Händler** (`shop.ts`): 8 Items passend zum Level, alle 4 Stunden neu, bis zu 5-mal täglich gegen
   Gold neu auswürfeln. Seltenheit pro Stück: 20 % selten, 5 % episch, 0,2 % legendär.
-  Verkauf für 25 % des Preises. Der Strassenhändler (Stufe 0) hat nur 4 Stück.
+  Verkauf für 25 % des Preises, höchstens `3 + Item-Level` Gold (beides × Seltenheitsfaktor, `SELL_GOLD_PER_LEVEL`) –
+  so wächst der Erlös wie das Kampfgold linear statt quadratisch. Der Strassenhändler (Stufe 0) hat nur 4 Stück.
 - **Schmied** (`forge.ts`): Items ab „selten“ zu Essenz zerlegen. Mit Essenz den Hauptwert verbessern
-  (Waffen Angriff, Rüstungen und Schilde Rüstung), +6 % pro Stufe bis +5.
-  Beim Zerlegen gibt es 50 % der investierten Essenz zurück. Ohne Schmiede (Stufe 0) geht beides nicht.
+  (Waffen Angriff, Rüstungen und Schilde Rüstung), +6 % pro Stufe bis +5. Jede Stufe kostet zusätzlich
+  `2 · (3 + Item-Level) · Stufe` Gold (Lv. 30 bis +5: 990 Gold), die Meisterschmiede 20 % weniger.
+  Beim Zerlegen gibt es 50 % der investierten Essenz zurück, aber kein Gold. Ohne Schmiede (Stufe 0) geht beides nicht.
 - **Anschlagtafel:** nur eine Stufe – sie bringt alle Tages- und Wochenaufträge samt Steckbriefen.
 - **Alchemist:** verkauft Tränke je nach Stufe, ohne ihn gibt es nur kleine Heiltränke.
 
@@ -209,7 +211,9 @@ Solo treffen beide den Helden, im Koop trifft die zweite alle – jeden mit Solo
 
 **Tränke:** Kleiner Heiltrank 20 % LP, Heiltrank 40 %, Grosser Heiltrank 60 %, Angriffstrank (+30 % Schaden,
 3 Runden) und Rüstungstrank (+100 % Rüstung, 3 Runden) verkauft der Alchemist, je nach Ausbaustufe. Bis er gebaut
-ist, hat der Händler kleine Heiltränke. Dazu fallen Tränke als Beute.
+ist, hat der Händler kleine Heiltränke. Dazu fallen Tränke als Beute. Preise steigen mit dem Level:
+`Grundpreis · (1 + (Level − 1) / 20)` – der Heiltrank kostet auf Level 1 45, auf Level 30 110 Gold. Der Händler im
+Dungeon rechnet mit dem Mindest-Level des Dungeons (× 1.5), damit im Koop alle dasselbe Angebot sehen.
 
 **Technik:** Die Kampflogik ist reine Domain-Logik (getestet, inkl. Balance-Simulation). Die Phaser-Szene
 (`src/game/BattleScene.ts`) zeichnet nur und animiert die Ereignisse, die der Store über den `EventBus`

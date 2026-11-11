@@ -59,7 +59,7 @@ Jedes Gebäude hat die Stufen 0 bis 3. Stufe 0 heisst „nicht gebaut“ bzw. be
 | 0 | – | nicht vorhanden: kein Zerlegen, kein Verbessern, kein Schmieden |
 | 1 | Esse | Zerlegen, Schmieden, Verbessern bis +2 |
 | 2 | Schmiede | heutiger Stand: Verbessern bis +5 |
-| 3 | Meisterschmiede | Verbessern und Schmieden kosten 20 % weniger Essenz, beim Zerlegen 75 % statt 50 % Rückerstattung |
+| 3 | Meisterschmiede | Verbessern und Schmieden kosten 20 % weniger Essenz (Verbessern auch 20 % weniger Gold), beim Zerlegen 75 % statt 50 % Rückerstattung |
 
 Ohne Schmiede fehlt anfangs wenig, weil man zum Zerlegen ohnehin erst seltene Items braucht.
 
@@ -90,8 +90,10 @@ alte Spielstände bekommen die Kosten der Stufen 2 und 3 zurück).
 |---|---|---|
 | 0 | – | nur kleine Heiltränke beim Strassenhändler |
 | 1 | Kräuterhütte | heutiger Stand: dazu Heiltränke |
-| 2 | Alchemistenlabor | Angriffs- und Rüstungstränke kaufbar (je 120 Gold) |
-| 3 | Meisteralchemist | grosse Heiltränke kaufbar (150 Gold), alle Tränke wirken 25 % stärker |
+| 2 | Alchemistenlabor | Angriffs- und Rüstungstränke kaufbar (je 120 Gold auf Level 1) |
+| 3 | Meisteralchemist | grosse Heiltränke kaufbar (150 Gold auf Level 1), alle Tränke wirken 25 % stärker |
+
+Die Trankpreise steigen mit dem Level des Helden (siehe „Gold-Balancing“).
 
 Hier ist Stufe 1 der heutige Stand, weil Angriffs- und Rüstungstränke heute nur als Beute fallen. Die
 stärkere Wirkung gilt für Heilung und Verstärkung, aber nur im Solo-Kampf (Gebiete, Dungeons, Turm).
@@ -197,6 +199,43 @@ Weil die Material-Stufen an Gebiete gebunden sind, braucht es **keine zusätzlic
 Wer Stufe 3 bauen will, muss in den Schattenruinen oder im Drachenhort bestehen.
 
 Gebaut wird **sofort**, ohne Wartezeit. Das passt besser zu kurzen Sitzungen.
+
+## Gold-Balancing
+
+Die Rechnung oben hat die Verkäufe unterschätzt. Der Kaufpreis eines Items wächst etwa quadratisch mit
+dem Level (Werte × `1 + 0.25 · (L − 1)`, Preis × `1 + L / 10`), das Kampfgold nur linear (`3 + L`). Mit
+einem festen Verkaufsanteil von 25 % kamen ab Level 8 mehr als die Hälfte und auf Level 60 rund 87 % des
+Golds aus Verkäufen. Bis Level 60 kamen so ~227'000 Gold zusammen, das Dorf kostet 42'850. Zwischen
+Level 10 und 21 gab es kaum eine Senke, Tränke kosteten auf jedem Level gleich viel.
+
+Drei Stellschrauben (Modell: Kämpfe gegen gleichstarke Kreaturen, 10 % Elite, 7 % Rudel, alles verkauft):
+
+| Änderung | Code | Wert |
+|---|---|---|
+| Verkaufspreis begrenzt | `sellPrice`, `SELL_GOLD_PER_LEVEL` (items.ts) | `min(25 % des Preises, 1 · (3 + Item-Level))` × Seltenheit, Grosshandel +10 % darauf |
+| Trankpreise nach Level | `potionPrice`, `POTION_PRICE_PER_LEVEL` (potions.ts) | Grundpreis × `(1 + (L − 1) / 20)`, Dungeon-Händler mit dem Mindest-Level des Dungeons |
+| Verbessern kostet Gold | `upgradeGoldCost`, `UPGRADE_GOLD_FACTOR` (forge.ts) | `2 · (3 + Item-Level) · Stufe`, Meisterschmiede −20 %, beim Zerlegen kein Gold zurück |
+
+| Level | Gold pro Kampf vorher | nachher | Anteil Verkauf nachher |
+|---|---|---|---|
+| 5 | 9 | 8 | 42 % |
+| 10 | 19 | 14 | 47 % |
+| 30 | 89 | 40 | 53 % |
+| 60 | 281 | 82 | 56 % |
+
+Bis Level 60 kommen damit ~83'000 Gold aus Kämpfen zusammen (vorher ~227'000). Ein Heiltrank kostet auf
+Level 30 110 Gold (knapp 3 Kämpfe), ein Lv.-30-Item bis +5 kostet 990 Gold. Der Erfolg „Wohlstand“
+verlangt deshalb 1'000 / 5'000 / 25'000 Gold statt 1'000 / 10'000 / 100'000.
+
+**Koop:** Die Beute würfelt wie bisher jeder selbst mit `rollBattleReward`, daran ändert sich nichts.
+Den Dungeon-Händler baut im Koop der Server (`coopDungeonPaths.ts`). Weil sich der Preis nach dem
+Dungeon richtet und nicht nach dem Helden, sehen alle dasselbe Angebot. Nach der Änderung
+`npm run functions:build` (und für den Live-Betrieb `functions:deploy`).
+
+**Im Playtest beobachten:** Kaufen Spieler auf Level 20–30 noch Tränke (Ziel: ja, mit kurzem Abwägen)?
+Ist Stufe 2 nach ein, zwei Sitzungen im neuen Gebiet bezahlbar? Wie viel Gold liegt auf Level 30 und 50
+typischerweise auf der Hand (Ziel: etwa 2–3 Stunden Einkommen)? Offen sind höhere Kosten für Stufe 2 und
+eine Senke zwischen Level 10 und 21 (z. B. Lagerhaus).
 
 ## Bestehende Spielstände
 

@@ -10,6 +10,7 @@ import {
   forgeCost,
   investedEssence,
   upgradeCost,
+  upgradeGoldCost,
   type ForgeTarget,
 } from "../domain/forge";
 import { ARMOR_SLOTS, getItemStats, MAX_UPGRADE, RARITIES, SLOT_ICONS, SLOT_LABELS, UPGRADE_STEP } from "../domain/items";
@@ -18,7 +19,7 @@ import type { ItemStats, OwnedItem, Rarity } from "../domain/types";
 import { getBuilding, SMITH_RULES } from "../domain/village";
 import { activeVillage, useGameStore } from "../store/gameStore";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { Essence } from "./Gold";
+import { Essence, Gold } from "./Gold";
 import { InventoryPanel } from "./InventoryPanel";
 import { ItemIcon } from "./ItemIcon";
 import { ItemRow } from "./ItemRow";
@@ -141,14 +142,14 @@ function UpgradeInfo({ onUpgrade }: { onUpgrade: (owned: OwnedItem) => ReactNode
   return (
     <>
       <p className="text-sm text-muted">
-        Mit Essenz schmiedet der Schmied deine Ausrüstung nach: Waffen bekommen mehr{" "}
+        Mit Essenz und etwas Gold schmiedet der Schmied deine Ausrüstung nach: Waffen bekommen mehr{" "}
         <span className="text-strength">Angriff</span>, Rüstungen und Schilde mehr{" "}
         <span className="text-intellect">Rüstung</span> – je Stufe +{Math.round(UPGRADE_STEP * 100)} %, bis{" "}
         <span className="text-parchment">+{rules.maxUpgrade}</span>
         {rules.maxUpgrade < MAX_UPGRADE && <> (ausgebaut bis +{MAX_UPGRADE})</>}. Jede Stufe kostet mehr als die vorige,
         also überleg dir gut, welches Stück es wert ist.
         {rules.discount > 0 && (
-          <span className="text-essence"> Die Meisterschmiede verlangt {Math.round(rules.discount * 100)} % weniger Essenz.</span>
+          <span className="text-essence"> Die Meisterschmiede verlangt {Math.round(rules.discount * 100)} % weniger Essenz und Gold.</span>
         )}
       </p>
       <h3 className="font-pixel mb-2 mt-4 text-lg">Angelegt</h3>
@@ -293,6 +294,7 @@ function ForgeInfo({ essence }: { essence: number }) {
 
 function UpgradeButton({ owned, essence, onClick }: { owned: OwnedItem; essence: number; onClick: () => void }) {
   const { rules } = useSmithRules();
+  const gold = useGameStore((s) => s.character.gold);
   if (!canUpgrade(owned)) return <span className="text-xs text-essence">max. +{MAX_UPGRADE}</span>;
   if (!canUpgrade(owned, rules.maxUpgrade)) {
     return (
@@ -302,26 +304,30 @@ function UpgradeButton({ owned, essence, onClick }: { owned: OwnedItem; essence:
     );
   }
   const cost = upgradeCost(owned, undefined, rules.discount);
-  const tooPoor = essence < cost;
+  const goldCost = upgradeGoldCost(owned, undefined, rules.discount);
+  const lacking = essence < cost ? "Nicht genug Essenz" : gold < goldCost ? "Nicht genug Gold" : null;
   return (
     <motion.button
       whileTap={{ scale: 0.9 }}
-      disabled={tooPoor}
+      disabled={lacking !== null}
       onClick={onClick}
-      title={tooPoor ? "Nicht genug Essenz" : `Auf +${(owned.upgrade ?? 0) + 1} verbessern`}
+      title={lacking ?? `Auf +${(owned.upgrade ?? 0) + 1} verbessern`}
       className="rounded-md border-2 border-essence/60 px-2 py-0.5 text-sm text-essence hover:bg-essence/15 disabled:cursor-not-allowed disabled:opacity-40"
     >
-      +{(owned.upgrade ?? 0) + 1} <Essence amount={cost} className="font-bold" />
+      +{(owned.upgrade ?? 0) + 1} <Essence amount={cost} className="font-bold" />{" "}
+      <Gold amount={goldCost} className="font-bold text-gold" />
     </motion.button>
   );
 }
 
 function UpgradeDialog({ owned, essence, onClose }: { owned: OwnedItem | null; essence: number; onClose: () => void }) {
   const upgrade = useGameStore((s) => s.upgrade);
+  const gold = useGameStore((s) => s.character.gold);
   const { rules } = useSmithRules();
   const before = owned ? getItemStats(owned) : null;
   const after = owned ? getItemStats({ ...owned, upgrade: (owned.upgrade ?? 0) + 1 }) : null;
   const cost = owned ? upgradeCost(owned, undefined, rules.discount) : 0;
+  const goldCost = owned ? upgradeGoldCost(owned, undefined, rules.discount) : 0;
 
   return (
     <ConfirmDialog
@@ -344,8 +350,11 @@ function UpgradeDialog({ owned, essence, onClose }: { owned: OwnedItem | null; e
             {mainStatText(before)} → <span className="font-bold text-xp">{mainStatText(after)}</span>
           </p>
           <p className="mt-2">
-            Kosten: <Essence amount={cost} className="font-bold text-essence" /> · danach übrig:{" "}
-            <Essence amount={essence - cost} />
+            Kosten: <Essence amount={cost} className="font-bold text-essence" /> und{" "}
+            <Gold amount={goldCost} className="font-bold text-gold" />
+          </p>
+          <p className="mt-1">
+            Danach übrig: <Essence amount={essence - cost} /> · <Gold amount={gold - goldCost} />
           </p>
         </>
       )}

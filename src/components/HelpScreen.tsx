@@ -28,11 +28,11 @@ import { FORK_ROOMS, MIMIC_CHANCE } from "../domain/dungeonPaths";
 import { AREA_CHEST_CHANCE } from "../domain/areaChests";
 import { COOP_DECIDE_SECONDS } from "../domain/coopDungeonPaths";
 import { FRAMES } from "../domain/achievements";
-import { FORGE_COST_FACTOR, forgeCost, UPGRADE_REFUND } from "../domain/forge";
+import { FORGE_COST_FACTOR, forgeCost, UPGRADE_GOLD_FACTOR, UPGRADE_REFUND } from "../domain/forge";
 import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
-import { MAX_UPGRADE, RARITIES, UPGRADE_STEP } from "../domain/items";
+import { MAX_UPGRADE, RARITIES, SELL_GOLD_PER_LEVEL, SELL_RATE, UPGRADE_STEP } from "../domain/items";
 import { MAX_LEVEL, POINTS_PER_LEVEL, xpForNextLevel } from "../domain/leveling";
-import { POTIONS, potionEffectText } from "../domain/potions";
+import { POTION_PRICE_PER_LEVEL, POTIONS, potionEffectText } from "../domain/potions";
 import {
   BOUNTY_AFFIXES,
   DAILY_BOUNTY_COUNT,
@@ -378,12 +378,17 @@ export function HelpScreen() {
               Ab dem Krämerladen kannst du gegen Gold sofort neue Ware auswürfeln, im Handelshaus bis zu{" "}
               {SHOP_REROLLS_PER_DAY}-mal am Tag.
             </li>
-            <li>Items, die du nicht brauchst, verkaufst du hier für einen Teil ihres Werts.</li>
+            <li>
+              Items, die du nicht brauchst, verkaufst du hier: für {pct(SELL_RATE)} des Preises, höchstens aber{" "}
+              {SELL_GOLD_PER_LEVEL === 1 ? "" : `${SELL_GOLD_PER_LEVEL} × `}(3 + Item-Level) Gold – beides mal Seltenheit (selten ×2,
+              episch ×4, legendär ×8).
+            </li>
           </ul>
           <H>⚗️ Alchemist und Tränke</H>
           <p>
             Tränke kaufst du beim Alchemisten (Dorf → Alchemist), je nach Stufe. Bis er gebaut ist, hat der Händler ein
-            paar kleine Heiltränke. Der
+            paar kleine Heiltränke. Die Preise steigen mit deinem Level um {pct(POTION_PRICE_PER_LEVEL)} pro Level (Lv. 30
+            etwa ×{(1 + 29 * POTION_PRICE_PER_LEVEL).toFixed(1)}), angegeben ist der Preis auf Level 1. Der
             Meisteralchemist macht alle Tränke {pct(MASTER_POTION_BONUS)} stärker (nur solo, nicht im Koop).
           </p>
           <p>
@@ -392,7 +397,7 @@ export function HelpScreen() {
             (Bosse bleiben danach eine Weile immun), und die Säure frisst sogar Panzerplatten weg.
           </p>
           <Table
-            head={["Trank", "Wirkung", "Preis", "Zu kaufen ab"]}
+            head={["Trank", "Wirkung", "Preis (Lv. 1)", "Zu kaufen ab"]}
             rows={POTIONS.map((p) => [
               `${p.icon} ${p.name}`,
               potionEffectText(p),
@@ -459,9 +464,11 @@ export function HelpScreen() {
               Angelegte Items musst du vorher ablegen.
             </li>
             <li>
-              <b>Verbessern:</b> Mit Essenz steigerst du den Hauptwert (Angriff oder Rüstung) eines Items um{" "}
+              <b>Verbessern:</b> Mit Essenz und Gold steigerst du den Hauptwert (Angriff oder Rüstung) eines Items um{" "}
               {pct(UPGRADE_STEP)} pro Stufe – mit der Esse bis +{SMITH_RULES[1].maxUpgrade}, ab der Schmiede bis +
-              {MAX_UPGRADE}. Jede Stufe kostet mehr als die vorige.
+              {MAX_UPGRADE}. Jede Stufe kostet mehr als die vorige: {UPGRADE_GOLD_FACTOR} × (3 + Item-Level) Gold mal die
+              Stufe, ein Lv.-30-Item bis +{MAX_UPGRADE} also {UPGRADE_GOLD_FACTOR * 15 * 33} Gold. Die Meisterschmiede verlangt{" "}
+              {pct(SMITH_RULES[3].discount)} weniger Essenz und Gold. Beim Zerlegen gibt es kein Gold zurück.
             </li>
             <li>
               <b>Schmieden:</b> Für Essenz bekommst du ein neues Item auf deinem Level – selten, episch oder legendär, du

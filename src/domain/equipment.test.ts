@@ -21,6 +21,9 @@ import {
   levelForIndex,
   migrateLegacyItemId,
   RARITIES,
+  SELL_GOLD_PER_LEVEL,
+  SELL_RATE,
+  sellPrice,
 } from "./items";
 import { MAX_LEVEL, POINTS_PER_LEVEL } from "./leveling";
 import { lootPool, rollDrop, rollRarity } from "./loot";
@@ -238,6 +241,26 @@ describe("Händler", () => {
     const sold = sellItem(bought.gear, bought.gold, "offer");
     expect(sold.gold).toBe(100 - price + Math.max(1, Math.floor(price / 4)));
     expect(sold.gear.inventory).toHaveLength(0);
+  });
+
+  it("Verkaufspreis: höchstens (3 + Item-Level) Gold mal Seltenheit, nie mehr als ein Viertel des Kaufpreises", () => {
+    for (const def of ITEMS.filter((_, i) => i % 97 === 0)) {
+      for (const { key, priceMultiplier } of RARITIES) {
+        const owned = createItem(def.id, key, "x");
+        const price = sellPrice(owned);
+        expect(price, `${def.id} ${key}`).toBeLessThanOrEqual(Math.max(1, Math.floor(def.price * priceMultiplier * SELL_RATE)));
+        expect(price, `${def.id} ${key}`).toBeLessThanOrEqual(Math.max(1, SELL_GOLD_PER_LEVEL * (3 + def.requiredLevel) * priceMultiplier));
+        expect(price).toBeLessThan(shopPrice(owned) || 1);
+      }
+    }
+  });
+
+  it("Verkaufspreis wächst ab der Spielmitte nur noch linear mit dem Level", () => {
+    const lv60 = ITEMS.find((i) => i.type === "greatsword" && i.requiredLevel === 60)!;
+    expect(sellPrice(createItem(lv60.id, "common", "x"))).toBe(63);
+    expect(sellPrice(createItem(lv60.id, "epic", "x"))).toBe(252);
+    // Grosshandel: +10 % auf den begrenzten Preis
+    expect(sellPrice(createItem(lv60.id, "common", "x"), 0.1)).toBe(69);
   });
 
   it("verkauft alle gewöhnlichen Items auf einmal, seltene und verbesserte bleiben", () => {

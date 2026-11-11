@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
-import { DRINK_POTIONS, potionEffectText, THROW_POTIONS, type PotionDef } from "../domain/potions";
+import { getLevel } from "../domain/leveling";
+import { DRINK_POTIONS, potionEffectText, potionPrice, THROW_POTIONS, type PotionDef } from "../domain/potions";
 import { getBuilding } from "../domain/village";
 import { getBuildingSprite } from "../game/villageSprites";
 import { activeVillage, useGameStore } from "../store/gameStore";
@@ -41,7 +42,7 @@ export function AlchemistScreen({ onOpenVillage }: { onOpenVillage: () => void }
       <p className="mb-2 text-xs text-muted">
         Heiltränke stellen im Kampf Lebenspunkte wieder her. Pro Runde darfst du einen Trank trinken – und jede Sorte nur
         einmal pro Kampf. Je weiter der Alchemist ausgebaut ist, desto mehr Sorten verkauft er. Sonst gibt es Tränke nur
-        als Kampfbeute.
+        als Kampfbeute. Die Preise steigen mit deinem Level.
         {tier >= 3 && <span className="text-xp"> Beim Meisteralchemisten wirken alle Tränke 25 % stärker.</span>}
       </p>
       <PotionList potions={DRINK_POTIONS} />
@@ -61,12 +62,14 @@ export function PotionList({ potions: offers }: { potions: readonly PotionDef[] 
   const potions = useGameStore((s) => s.potions);
   const buyPotion = useGameStore((s) => s.buyPotion);
   const alchemist = useGameStore((s) => activeVillage(s).alchemist);
+  const level = useGameStore((s) => getLevel(s.character.totalXp));
   const alchemistTiers = getBuilding("alchemist").tiers;
 
   return (
     <ul className="flex flex-col gap-2">
       {offers.map((p) => {
         const locked = p.alchemist > alchemist;
+        const price = potionPrice(p, level);
         return (
           <li
             key={p.id}
@@ -91,12 +94,12 @@ export function PotionList({ potions: offers }: { potions: readonly PotionDef[] 
             ) : (
               <motion.button
                 whileTap={{ scale: 0.9 }}
-                disabled={gold < p.price}
+                disabled={gold < price}
                 onClick={() => buyPotion(p.id)}
-                title={gold < p.price ? "Nicht genug Gold" : "Kaufen"}
+                title={gold < price ? "Nicht genug Gold" : "Kaufen"}
                 className="rounded-md border-2 border-gold bg-gold/15 px-2 py-0.5 text-sm text-gold hover:bg-gold/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <Gold amount={p.price} className="font-bold" />
+                <Gold amount={price} className="font-bold" />
               </motion.button>
             )}
           </li>
