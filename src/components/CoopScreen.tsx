@@ -753,7 +753,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               blocker={coopAbilityBlocker(me, id, turn, battle.round)}
               disabled={locked}
               onClick={() => send(id)}
-              matchup={against(abilityKind(getAbility(id)))}
+              matchup={against(abilityKind(getAbility(id), targetCreature))}
             />
           ))}
         </div>

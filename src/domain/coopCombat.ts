@@ -1346,7 +1346,7 @@ export function resolveRound(
     }
     const ability =
       action.ability && !coopAbilityBlocker(hero, action.ability, turn, state.round) ? classAbility(action.ability, hero.heroClass) : null;
-    // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit halbem Schaden
+    // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit 30 % Schaden (SKILL.echo.share)
     const echo = !!ability && echoDue(skills, hero.effects.casts);
     const wrath = wrathFactor(hero.effects.wrath);
     const fire = !!ability?.burn;

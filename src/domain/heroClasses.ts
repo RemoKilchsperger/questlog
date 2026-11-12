@@ -53,7 +53,7 @@ export const HERO_CLASSES: readonly HeroClassDef[] = [
   { id: "ranger", name: "Waldläufer", icon: "🏹", armorClass: "medium", weapons: "Bogen", bonus: "+12 % Schaden, Pfeilhagel schiesst 5 statt 4 Pfeile", matches: has("bow") },
   { id: "duelist", name: "Duellant", icon: "⚔️", armorClass: "medium", weapons: "zwei Schwerter", bonus: "+10 % Schaden, 35 % Chance auf einen zweiten Schlag bei jedem normalen Angriff", matches: (w) => w.filter((t) => t === "sword").length === 2 },
   { id: "plunderer", name: "Plünderer", icon: "🪓", armorClass: "medium", weapons: "Axt", bonus: "+20 % Schaden, heilt sich um 10 % des verursachten Schadens, kritische Treffer lassen den Gegner 2 Runden bluten, +25 % Gold", matches: has("axe") },
-  { id: "cleric", name: "Kleriker", icon: "✨", armorClass: "medium", weapons: "Streitkolben", bonus: "Heilt sich jede Runde um 2 % der Lebenspunkte, Heiltränke wirken 15 % stärker", matches: has("mace") },
+  { id: "cleric", name: "Kleriker", icon: "✨", armorClass: "medium", weapons: "Streitkolben", bonus: "Heilt sich jede Runde um 2 % der Lebenspunkte, Heiltränke wirken 15 % stärker, im Koop heilen Heiliges Licht und Läuterung alle Mitspieler halb so stark mit", matches: has("mace") },
   { id: "paladin", name: "Paladin", icon: "🛡️", armorClass: "heavy", weapons: "Streitkolben und Schild", bonus: "+10 % Schaden, +20 % Rüstung, Bollwerk kostet die Hälfte, Bollwerk und Vergeltung schlagen mit halbem Schaden zu (Schildstoss), im Koop doppelte Bedrohung", matches: (w) => w.includes("mace") && w.includes("shield") },
   { id: "berserker", name: "Berserker", icon: "💢", armorClass: "heavy", weapons: "Grossaxt", bonus: "Unter 50 % Lebenspunkten +30 % Schaden", matches: has("greataxe") },
   { id: "champion", name: "Champion", icon: "👑", armorClass: "heavy", weapons: "Zweihandschwert", bonus: "+15 % Schaden und +10 % Lebenspunkte", matches: has("greatsword") },
@@ -102,7 +102,8 @@ export function classStatBonus(id: HeroClassId | null): ClassStatBonus {
 /**
  * Fähigkeit so, wie die Klasse sie verändert: Magier (alle Fähigkeiten
  * günstiger und stärker), Hexer (stärkere, längere Zustände), Waldläufer
- * (Pfeilhagel mit 5 Pfeilen), Paladin (halbes Bollwerk, Schildstoss), Wächter (längere Schwächung).
+ * (Pfeilhagel mit 5 Pfeilen), Kleriker (Heilung für die Gruppe im Koop),
+ * Paladin (halbes Bollwerk, Schildstoss), Wächter (längere Schwächung).
  */
 export function classAbility(id: AbilityId, heroClass: HeroClassId | null | undefined): AbilityDef {
   const base = getAbility(id);
@@ -116,6 +117,9 @@ export function classAbility(id: AbilityId, heroClass: HeroClassId | null | unde
     }
     case "ranger":
       return id === "bow" ? { ...base, hits: 5 } : base;
+    case "cleric":
+      // Solo wirkt `groupHeal` nicht – dort heilt er wie bisher nur sich
+      return CLERIC_GROUP_HEALS.includes(id) ? { ...base, groupHeal: CLERIC_GROUP_HEAL } : base;
     case "paladin":
       if (id === "shield") return { ...base, manaCost: Math.round(base.manaCost / 2), ...SHIELD_BASH };
       return id === "shield-2" ? { ...base, ...SHIELD_BASH } : base;
@@ -137,6 +141,12 @@ export const PLUNDERER_LIFESTEAL = 0.1;
 /** Kleriker: Heilung pro Runde (Anteil der max. LP) und stärkere Heiltränke. */
 export const CLERIC_REGEN = 0.02;
 export const CLERIC_POTION_FACTOR = 1.15;
+/**
+ * Kleriker im Koop: Heiliges Licht und Läuterung heilen alle lebenden Mitspieler mit diesem Anteil mit
+ * (Review Nr. 5) – so gibt es neben der Arkanen Heilung des Stabs einen Heiler. Das Reinigen bleibt beim Kleriker.
+ */
+export const CLERIC_GROUP_HEAL = 0.5;
+const CLERIC_GROUP_HEALS: readonly AbilityId[] = ["mace-2", "mace-3"];
 /** Berserker: Schadensbonus unter dieser LP-Schwelle. */
 export const BERSERKER_THRESHOLD = 0.5;
 export const BERSERKER_RAGE = 0.3;

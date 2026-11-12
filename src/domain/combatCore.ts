@@ -18,7 +18,7 @@ import type { ActiveBuff, Combatant, DamageOverTime } from "./combat";
 import { POISON, RAGE_BONUS, REGEN_SHARE, SWIFT_SHARE, type EliteAffix } from "./elites";
 import { CLERIC_REGEN, DUELIST_EXTRA_HIT, lifestealShare, PLUNDERER_BLEED, type HeroClassId } from "./heroClasses";
 import { critBurns, EFFECT, effectCritBonus, effectDamageFactor, has as hasEffect, heroDotRounds, type ItemEffectId } from "./itemEffects";
-import { matchupFactor, matchupOf, type DamageKind, type DotKind } from "./matchups";
+import { bestKind, matchupFactor, matchupOf, type DamageKind, type DotKind } from "./matchups";
 import {
   bandageHeal,
   bloodburstDamage,
@@ -44,6 +44,15 @@ import {
 import { BLESSING, stacks, type BlessingId } from "./tower";
 
 /* ───────────────────────── Treffer ───────────────────────── */
+
+/** Obergrenze der Krit-Chance aus Grundwert, Charisma und Rüstung (getHeroCombatProfile). */
+export const CRIT_CAP_BASE = 0.3;
+/**
+ * Obergrenze der gesamten Krit-Chance – mit Klasse, Skilltree, Item-Effekten und Segen. Geprüft beim
+ * Würfeln des Treffers (`strikeFactors`), weil Blutgeruch, Allsehend und Präzision erst dort dazukommen.
+ * Sichere Krits (Schattenschritt, Fähigkeiten mit `guaranteedCrit`) gelten unabhängig davon.
+ */
+export const CRIT_CAP_TOTAL = 0.6;
 
 /**
  * Anteil des Schadens, den Rüstung abfängt. Je höher das Level des
@@ -416,7 +425,7 @@ export interface StrikeSetup {
   skills: SkillRanks | undefined;
   blessings: readonly BlessingId[] | undefined;
   round: number;
-  /** Krit-Chance des Helden vor Item- und Skill-Boni */
+  /** Krit-Chance des Helden vor Item- und Skill-Boni (mit Klasse und Segen) */
   critChance: number;
   /** Feuer-Fähigkeit (Pyromant, Schmelzen) */
   fire: boolean;
@@ -453,7 +462,7 @@ export interface StrikeFactors {
   charging: number;
   /** Verwundbarkeit des Gegners */
   vulnerable: number;
-  /** Schadensart, mit der getroffen wird – „Runenklinge“ zählt auch als Magie, wenn das wirksamer ist */
+  /** Schadensart, mit der getroffen wird – Heiliger Hammer und „Runenklinge“ zählen auch als Magie, wenn das wirksamer ist */
   kind: DamageKind | null;
   matchup: ReturnType<typeof matchupOf> | null;
   /** Schwäche oder Resistenz */
@@ -462,6 +471,7 @@ export interface StrikeFactors {
   itemFactor: number;
   /** Skilltree samt Gegenschlag, Zorn und Echo */
   skillFactor: number;
+  /** Krit-Chance des Treffers – höchstens CRIT_CAP_TOTAL */
   critChance: number;
   /** Panzerplatten – nur direkte Treffer auf den Boss */
   plate: number;
@@ -473,10 +483,10 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
   const { ability, itemEffects, skills } = s;
   const finisher = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
   const headsman = foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(s.blessings, "executioner") : 1;
-  const kind =
-    s.heroKind && hasEffect(itemEffects, "runeblade") && matchupFactor(foe.creatureId, "magic") > matchupFactor(foe.creatureId, s.heroKind)
-      ? "magic"
-      : s.heroKind;
+  // Heiliger Hammer (`altKind`) und Runenklinge zählen auch als Magie, wenn das wirksamer ist
+  const kind = s.heroKind
+    ? bestKind(foe.creatureId, [s.heroKind, ability?.altKind, hasEffect(itemEffects, "runeblade") ? "magic" : null])
+    : null;
   const foeState: FoeState = {
     hp: foe.c.hp,
     maxHp: foe.c.maxHp,
@@ -504,7 +514,7 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
       foeElite: t.elite,
     }),
     skillFactor: skillDamageFactor(skills, foeState, s.fire) * s.riposte * s.wrath * s.echoShare,
-    critChance: s.critChance + effectCritBonus(itemEffects, t.realBoss) + skillCritBonus(skills, foeState),
+    critChance: Math.min(CRIT_CAP_TOTAL, s.critChance + effectCritBonus(itemEffects, t.realBoss) + skillCritBonus(skills, foeState)),
     plate: t.isBoss ? plateFactor(t.plates) : 1,
     foeState,
   };
@@ -581,7 +591,7 @@ export function afterHeroHit<F extends StrikeFoe>(
 
 /**
  * Alle Treffer einer Aktion: Mehrfachtreffer und Flächenwirkung, Echo (zweiter Durchgang mit
- * halbem Schaden), Finte, Duellant und Kettenblitz. `strike(foe, share, echoShare)` führt einen Treffer aus.
+ * `SKILL.echo.share` = 30 % Schaden), Finte, Duellant und Kettenblitz. `strike(foe, share, echoShare)` führt einen Treffer aus.
  */
 export function heroVolley<F extends { c: { hp: number } }>(o: {
   ability: AbilityDef | null;

@@ -21,6 +21,7 @@ import {
   abilityDots,
   bandage,
   canEndure,
+  CRIT_CAP_TOTAL,
   damageTakenFactor,
   dodges,
   drainHeal,
@@ -292,6 +293,25 @@ describe("Kampfkern: Treffer des Helden", () => {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     ]);
     expect(f.critChance).toBeCloseTo(0.1);
+  });
+
+  it("Krit-Chance: Item-Effekte und Skills kommen dazu, die Summe ist bei 60 % gedeckelt", () => {
+    expect(strikeFactors(foe(), setup({ itemEffects: ["allSeeing"] }), target).critChance).toBeCloseTo(0.2);
+    expect(strikeFactors(foe(), setup({ critChance: 0.55, itemEffects: ["allSeeing"] }), target).critChance).toBe(CRIT_CAP_TOTAL);
+    // Blutgeruch gegen Blutende und Allsehend gegen Bosse über einer hohen Grundchance (Assassine mit Klinge-Pfad)
+    const bleeding = foe(100, { bleed: { damage: 5, roundsLeft: 2 } });
+    expect(strikeFactors(bleeding, setup({ critChance: 0.5, itemEffects: ["allSeeing"], skills: { bloodScent: 3 } }), target).critChance).toBe(CRIT_CAP_TOTAL);
+  });
+
+  it("Heiliger Hammer zählt als Wucht oder Magie – was gegen das Ziel wirksamer ist", () => {
+    const hammer = { altKind: "magic" } as AbilityDef;
+    const resistsMagic = ids.find((id) => matchupOf(id, "magic") === "resist" && matchupOf(id, "blunt") === null)!;
+    const weakToMagic = ids.find((id) => matchupOf(id, "magic") === "weak" && matchupOf(id, "blunt") === null)!;
+    const on = (creatureId: string) => strikeFactors({ ...foe(), creatureId }, setup({ ability: hammer, heroKind: "blunt" }), target);
+    expect(on(resistsMagic).kind).toBe("blunt");
+    expect(on(resistsMagic).kindFactor).toBe(1);
+    expect(on(weakToMagic).kind).toBe("magic");
+    expect(on(weakToMagic).matchup).toBe("weak");
   });
 
   it("Henker gegen angeschlagene Gegner, Verwundbarkeit, Echo", () => {

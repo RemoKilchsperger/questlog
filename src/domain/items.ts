@@ -81,7 +81,8 @@ export const ITEM_TYPES: readonly ItemTypeInfo[] = [
   weapon("dagger", "Dolch", "🔪", ["dolch", "stilett"], 3),
   weapon("sword", "Schwert", "🗡️", ["schwert", "klinge", "säbel"], 3),
   weapon("greatsword", "Zweihandschwert", "⚔️", ["zweihänder", "bihänder"], 6.5, true),
-  { ...weapon("shield", "Schild", "🛡️", ["schild", "rundschild", "turmschild"], 1.5), baseArmor: 3 },
+  // Schild: 2,2 statt 1,5 Angriff (Review Nr. 3) – sonst hat der Paladin den tiefsten Schaden aller Klassen
+  { ...weapon("shield", "Schild", "🛡️", ["schild", "rundschild", "turmschild"], 2.2), baseArmor: 3 },
   weapon("axe", "Axt", "🪓", ["axt", "beil"], 3),
   weapon("greataxe", "Grossaxt", "🪓", ["grossaxt", "doppelaxt"], 6.8, true),
   weapon("staff", "Stab", "🪄", ["stab"], 6, true),

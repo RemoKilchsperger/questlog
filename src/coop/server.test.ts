@@ -6,7 +6,7 @@ import { forkDoors, getMimic, getRiddle, isMimicChest, type RoomKind } from "../
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import { createItem } from "../domain/items";
 import { xpForNextLevel } from "../domain/leveling";
-import type { CoopCommand, CoopMember, CoopRow } from "./protocol";
+import { COOP_OUTDATED_MESSAGE, COOP_PROTOCOL_VERSION, type CoopCommand, type CoopMember, type CoopRow } from "./protocol";
 import { applyCommand, CoopError, dungeonDecider, memberFromSave, type ServerContext } from "./server";
 
 /** Gespeicherter Spielstand eines Helden auf Level `level`. */
@@ -40,6 +40,7 @@ const ctx = (userId: string, extra: Partial<ServerContext> = {}): ServerContext 
   member: member(userId),
   newId: () => `id-${userId}`,
   newCode: () => "ABCDEF",
+  protocol: COOP_PROTOCOL_VERSION,
   ...extra,
 });
 const run = (row: CoopRow | null, command: CoopCommand, userId: string, extra: Partial<ServerContext> = {}) =>
@@ -72,6 +73,18 @@ describe("Koop-Server: Kampfwerte aus dem Cloud-Spielstand", () => {
     const save = saveAt(30, "x");
     const fed = memberFromSave("x", { ...save, state: { ...save.state, meal: "stew" } }, null);
     expect(fed.profile.maxHp).toBe(Math.round(member("x", 30).profile.maxHp * 1.1));
+  });
+});
+
+describe("Koop-Server: Protokollversion", () => {
+  it("veraltete Clients (ohne oder mit älterer Version) müssen neu laden – aktuelle und neuere kommen durch", () => {
+    expect(() => run(null, { type: "create", bossId: "swamp-hydra" }, "a", { protocol: undefined })).toThrow(COOP_OUTDATED_MESSAGE);
+    expect(() => run(null, { type: "create", bossId: "swamp-hydra" }, "a", { protocol: COOP_PROTOCOL_VERSION - 1 })).toThrow(CoopError);
+    expect(run(null, { type: "create", bossId: "swamp-hydra" }, "a")).not.toBeNull();
+    expect(run(null, { type: "create", bossId: "swamp-hydra" }, "a", { protocol: COOP_PROTOCOL_VERSION + 1 })).not.toBeNull();
+    // Auch mitten im Kampf: ein Befehl des alten Clients ändert nichts
+    const lobby = run(null, { type: "create", bossId: "swamp-hydra" }, "a")!;
+    expect(() => run(lobby, { type: "leave" }, "a", { protocol: undefined })).toThrow(COOP_OUTDATED_MESSAGE);
   });
 });
 

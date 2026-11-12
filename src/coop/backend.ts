@@ -7,7 +7,7 @@
 
 import { supabase } from "../cloud/supabase";
 import { useGameStore } from "../store/gameStore";
-import { newLobbyCode, type CoopCommand, type CoopResponse, type CoopRow } from "./protocol";
+import { COOP_PROTOCOL_VERSION, newLobbyCode, type CoopCommand, type CoopRequest, type CoopResponse, type CoopRow } from "./protocol";
 import { applyCommand, COOP_ROW_TTL_HOURS, CoopError, memberFromSave } from "./server";
 
 export interface CoopBackend {
@@ -38,7 +38,8 @@ const cloudBackend: CoopBackend = {
 
   async send(command, id) {
     if (!supabase) throw new Error("Keine Cloud-Verbindung eingerichtet.");
-    const { data, error } = await supabase.functions.invoke<CoopResponse>("coop", { body: { command, id } });
+    const body: CoopRequest = { command, id, protocol: COOP_PROTOCOL_VERSION };
+    const { data, error } = await supabase.functions.invoke<CoopResponse>("coop", { body });
     if (error) {
       // Lesbare Meldung des Servers (z. B. „Die Lobby ist voll.“) aus der Antwort holen
       let message = "Der Koop-Server ist gerade nicht erreichbar.";
@@ -122,6 +123,7 @@ const localBackend: CoopBackend = {
         member,
         newId: () => crypto.randomUUID(),
         newCode: () => newLobbyCode(),
+        protocol: COOP_PROTOCOL_VERSION,
       });
       if (next !== row) {
         if (next) rows[next.id] = next;

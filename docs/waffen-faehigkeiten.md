@@ -30,14 +30,15 @@ Kampf-Fähigkeiten werden nicht mehr im Skilltree freigeschaltet, sondern liegen
 
 | Feld | Fähigkeit | Wirkung |
 |---|---|---|
-| `kind` | Heiliger Hammer | Eigene Schadensart (Magie statt Wucht) – zählt für Schwächen und Resistenzen |
+| `kind` | Mordschlag | Eigene Schadensart (Wucht statt Klinge) – zählt für Schwächen und Resistenzen |
+| `altKind` | Heiliger Hammer | Zählt zusätzlich als Magie, wenn das gegen das Ziel wirksamer ist (wie die Runenklinge) |
 | `cleanse` | Läuterung | Entfernt Gift, Feuer und Bluten vom Helden |
 | `damageTaken` | Schildwall, Wutschrei | Erlittener Schaden −50 % bzw. +20 % für einige Runden, ab sofort (Treffer, Explosionen) |
 | `taunt` | Schildwall | Zieht im Koop die Bedrohung auf sich wie Bollwerk |
 | `bleedBonus` | Ausbluten | +60 % Schaden gegen blutende Gegner |
 | `charge` | Titanenschlag | Ausholen: die nächste Aktion (Angriff oder Fähigkeit) macht dreifachen Schaden |
 | `renew` | Arkane Heilung | Heilung über Zeit am Rundenende |
-| `groupHeal` | Arkane Heilung | Im Koop bekommen alle Mitspieler die Hälfte der Heilung |
+| `groupHeal` | Arkane Heilung; beim Kleriker auch Heiliges Licht und Läuterung | Im Koop bekommen alle Mitspieler die Hälfte der Heilung |
 | `manaGain` | Arkaner Schild | Gibt Mana zurück |
 
 Eissplitter heisst jetzt **Eisstrahl**. Die neuen Fähigkeiten nutzen in den Kampfszenen die Animation einer
@@ -82,7 +83,7 @@ Der Item-Effekt „Kettenblitz“ traf den zweiten Gegner mit vollem statt 60 % 
 | 💫 | Betäubender Schlag | 30 | 3 | Betäubt den Gegner – er kann in dieser Runde nicht zurückschlagen. |
 | ✨ | Heiliges Licht | 35 | 4 | Heilt dich um 25 % deiner Lebenspunkte, dazu ein leichter Schlag. |
 | 🕊️ | **Läuterung** (geändert) | 25 | 3 | Ein Schlag mit 0,8-fachem Schaden, dann heilst du dich um 15 % deiner Lebenspunkte und befreist dich von Gift, Feuer und Bluten. |
-| 🌟 | **Heiliger Hammer** (geändert) | 30 | 2 | Ein Schlag voll heiliger Kraft mit 1,4-fachem Schaden – er zählt als Magie statt als Wucht. Gegen erschütterte Gegner (in den letzten 2 Runden betäubt) 30 % stärker. |
+| 🌟 | **Heiliger Hammer** (geändert) | 30 | 2 | Ein Schlag voll heiliger Kraft mit 1,5-fachem Schaden – er zählt als Wucht oder Magie, je nachdem, was gegen das Ziel wirksamer ist. Gegen erschütterte Gegner (in den letzten 2 Runden betäubt) 30 % stärker. *(G1, Review Nr. 6: vorher 1,4 und nur Magie – schlechter als keine Fähigkeit, weil 5 von 10 Bossen Magie widerstehen.)* |
 
 ### Zepter (4)
 

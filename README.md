@@ -114,7 +114,8 @@ Bei Händler-Aufträgen zählt jedes Ausrüstungsteil (Waffen und Rüstung).
 - **Waffen:** Dolch, Schwert, Zweihandschwert, Schild, Axt, Grossaxt, Stab, Zepter, Streitkolben,
   Grosshammer, Bogen
 - **Zweihandwaffen** (Zweihandschwert, Grossaxt, Stab, Grosshammer, Bogen) belegen beide Hände.
-- **Schilde** kommen in eine Waffenhand und geben Angriff und Rüstung. Es darf nur ein Schild getragen werden.
+- **Schilde** kommen in eine Waffenhand und geben Angriff (Grundwert 2,2, Einhandwaffen 2,8–3,1) und Rüstung.
+  Es darf nur ein Schild getragen werden.
 
 | Seltenheit | Rüstung/Angriff | Attributboni | Preis |
 |---|---|---|---|
@@ -132,7 +133,8 @@ Höhe eines Bonus: `Faktor · (1 + Item-Level / 4)` mit Faktor 1 / 1.5 / 2.5 (se
 | Schwer (Metall) | 100 % | – |
 
 - **Klassen** (`heroClasses.ts`): mindestens 3 Rüstungsteile einer Klasse plus passende Waffe, z. B.
-  leichte Rüstung + Stab → Magier. 11 Klassen, höchstens eine aktiv.
+  leichte Rüstung + Stab → Magier. 11 Klassen, höchstens eine aktiv. Im Koop heilen Heiliges Licht und
+  Läuterung des Klerikers alle Mitspieler mit 50 % mit. Neukonzept: docs/klassen-neukonzept.md.
 - **Boss-Items:** einzigartig und immer legendär, 10 % Chance pro Bosssieg. Mehrere Teile desselben
   Bosses geben Set-Boni (`bossSets.ts`).
 - **Gear Score:** Durchschnitt aus `Item-Level × Seltenheitsfaktor × (1 + 2 % pro Schmied-Stufe)`
@@ -166,7 +168,7 @@ Fähigkeit**, danach Gift/Feuer/Bluten und der Gegenangriff. Jeder Kampf beginnt
 | Lebenspunkte | `80 + 12 · (Level − 1) + 1.5 · Ausdauer` |
 | Schaden | `5 + Angriff + Attributbonus der Waffen`, ±15 % Streuung |
 | Attributbonus | `0.25 · Attribut der Waffe` (Ausdauer 0.15), bei zwei Waffen nach Anteil am Angriff |
-| Kritisch | `5 % + 0.2 % · Charisma` (max. 30 %), ×1.5 Schaden |
+| Kritisch | `5 % + 0.2 % · Charisma` (max. 30 %), ×1.5 Schaden. Klasse, Skilltree, Item-Effekte und Segen kommen dazu, insgesamt höchstens 60 % (`CRIT_CAP_TOTAL`) |
 | Mana | `40 + 2 · (Level − 1) + Intelligenz`, +6 pro Runde |
 | Rüstung | fängt `Rüstung / (Rüstung + 50 + 10 · Angreifer-Level)` des Schadens ab |
 | Gold-Bonus | `+0.5 % · Charisma` (max. +100 %) |
@@ -203,6 +205,8 @@ Endboss schon besiegt haben). Raid-Bosse gibt es nicht heroisch.
 Frostriese (40) oder Weltenverschlinger (60). Der Hydra schlägt die Gruppe bei 75/50/25 % einen Kopf ab,
 der als Begleiter weiterkämpft (`hydra.ts`, docs/raid-bosse.md). Der Boss greift nach Bedrohung an,
 Gefallene lassen sich mit einem Heiltrank wiederbeleben, jeder würfelt eigene Beute (×1.5 XP und Gold).
+Client und Server tragen eine Protokollversion (`COOP_PROTOCOL_VERSION` in `src/coop/protocol.ts`); ältere
+Clients lehnt der Server mit „bitte neu laden“ ab.
 Auch alle Dungeons gehen im Koop (Plan in `docs/koop-dungeons.md`): Gegner mit Lebenspunkten
 `× n × (1 + 0.1 · (n − 1))` und Schaden `× (1 + 0.4 · (n − 1))`, Gefallene stehen zwischen den Kämpfen
 mit 25 % LP auf, der Host entscheidet nach jedem Sieg über Weiter oder Aussteigen, jeder hat seine eigene Truhe.

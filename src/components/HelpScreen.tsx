@@ -493,7 +493,8 @@ export function HelpScreen() {
           </ol>
           <p>
             Rüstung fängt einen Teil des Schadens ab – gegen stärkere Gegner braucht es mehr Rüstung für denselben Schutz.
-            Kritische Treffer machen 1,5-fachen Schaden.
+            Kritische Treffer machen 1,5-fachen Schaden. Die Krit-Chance aus Charisma und Rüstung geht bis 30 %, mit
+            Klasse, Skills, Item-Effekten und Segen insgesamt bis 60 %.
           </p>
           <p>
             <b>Flucht</b> ist jederzeit möglich und kostet etwa so viel Gold, wie der Gegner im Schnitt fallen lässt.

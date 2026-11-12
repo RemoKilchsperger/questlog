@@ -11,6 +11,7 @@ import {
   bossTurnOf,
   BUFF_POTION_DROP_CHANCE,
   chestCount,
+  CRIT_CAP_TOTAL,
   DEFEND,
   defendEffect,
   fleeCost,
@@ -506,7 +507,8 @@ function HeroPanel() {
         <Value label="Lebenspunkte" value={hero.maxHp} icon="❤️" accent="text-xp" />
         <Value label="Schaden" value={Math.round(hero.damage)} icon="⚔️" accent="text-strength" />
         <Value label="Rüstung" value={hero.armor} icon="🛡️" accent="text-intellect" />
-        <Value label="Kritisch" value={`${Math.round(hero.critChance * 100)} %`} icon="💥" accent="text-gold" />
+        {/* Klasse und Skilltree dürfen über 60 % kommen, gewürfelt wird höchstens mit der Gesamt-Obergrenze */}
+        <Value label="Kritisch" value={`${Math.round(Math.min(CRIT_CAP_TOTAL, hero.critChance) * 100)} %`} icon="💥" accent="text-gold" />
         <Value label="Mana" value={hero.maxMana} icon="💧" accent="text-intellect" />
         <Value
           label="Fähigkeiten"
@@ -769,7 +771,7 @@ function Battle({ battle }: { battle: BattleState }) {
                   blocker={abilityBlocker(battle, id)}
                   disabled={busy}
                   onClick={() => act(() => attack(id))}
-                  matchup={matchupAgainst(battle, abilityKind(getAbility(id)))}
+                  matchup={matchupAgainst(battle, abilityKind(getAbility(id), targetCreature(battle)))}
                 />
               ))}
             </div>
@@ -866,11 +868,15 @@ function Battle({ battle }: { battle: BattleState }) {
   );
 }
 
+/** Kreatur des aktuellen Ziels: Boss oder gewählter Begleiter. */
+function targetCreature(battle: BattleState): string {
+  return battle.adds?.find((a) => a.uid === battle.target)?.creatureId ?? battle.creatureId;
+}
+
 /** Wie wirkt eine Schadensart gegen das aktuelle Ziel (Boss oder gewählter Begleiter)? */
 function matchupAgainst(battle: BattleState, kind: DamageKind | null) {
   if (!kind) return null;
-  const target = battle.adds?.find((a) => a.uid === battle.target)?.creatureId ?? battle.creatureId;
-  return matchupOf(target, kind);
+  return matchupOf(targetCreature(battle), kind);
 }
 
 /** Boss und Begleiter: Ziel wählen (auch per Klick in der Szene). */

@@ -117,6 +117,7 @@ import {
   strikeFactors,
   bandage,
   canEndure,
+  CRIT_CAP_BASE,
   curseBurstDamage,
   damageTakenFactor,
   dodges,
@@ -147,7 +148,7 @@ import {
   tickFoeDots,
   weakenFactor,
 } from "./combatCore";
-export { armorReduction, rollHit, strongerDot } from "./combatCore";
+export { armorReduction, CRIT_CAP_BASE, CRIT_CAP_TOTAL, rollHit, strongerDot } from "./combatCore";
 import {
   EFFECT,
   effectOf,
@@ -173,7 +174,7 @@ export interface HeroCombatProfile {
   abilities: AbilityId[];
   /** Aktive Klasse (heroClasses.ts) – oder null */
   heroClass: HeroClassId | null;
-  /** Schadensfaktor kritischer Treffer (1,5, Assassine 2) */
+  /** Schadensfaktor kritischer Treffer (1,5, Assassine 2,25 – classStatBonus) */
   critMultiplier: number;
   /** Hauptwaffe – ihre Schadensart zählt bei normalen Angriffen (matchups.ts). Fehlt bei älteren Profilen. */
   weapon?: SkillWeapon | null;
@@ -196,9 +197,9 @@ export function availableAbilities(equipment: Equipment): AbilityId[] {
  * - Jede Waffe: +0.25 Schaden pro Punkt in ihrem Attribut – Stärke (Schwerter,
  *   Äxte, Grosshammer), Intelligenz (Stab, Zepter), Ausdauer (Streitkolben,
  *   Schild), Charisma (Dolch, Bogen)
- * - Ausdauer:    +1.5 Lebenspunkte pro Punkt, Schilde +0.25 Rüstung pro Punkt
+ * - Ausdauer:    +1.5 Lebenspunkte pro Punkt, Schilde +0.1 Rüstung pro Punkt (SHIELD_ARMOR_PER_ENDURANCE)
  * - Intelligenz: +1 Mana pro Punkt
- * - Charisma:    +0.2 % kritische Trefferchance und +0.5 % Gold pro Sieg pro Punkt (max. +100 %)
+ * - Charisma:    +0.2 % kritische Trefferchance (bis CRIT_CAP_BASE) und +0.5 % Gold pro Sieg pro Punkt (max. +100 %)
  * Dazu kommen die Grundwerte aus dem Skilltree (Krit, Rüstung, LP, Mana – skills.ts)
  * und der Ausgleich leichter und mittlerer Rüstung (mehr Mana und Krit, siehe armorClasses.ts).
  */
@@ -217,8 +218,9 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
     maxHp: Math.round((80 + (level - 1) * 12 + stats.endurance * 1.5) * getSetHpMultiplier(equipment) * (1 + bonus.hp) * (1 + skill.hp)),
     damage: (5 + gear.attack + attributeDamage(stats, equipment)) * (1 + bonus.damage),
     armor: Math.round((gear.armor + shieldArmorBonus(stats, equipment)) * (1 + bonus.armor) * (1 + skill.armor)),
-    // Die Krit-Chance von Klasse und Skilltree kommt über die normale Obergrenze hinaus dazu
-    critChance: Math.min(0.3, 0.05 + stats.charisma * CRIT_PER_CHARISMA + armorClasses.crit) + bonus.crit + skill.crit,
+    // Klasse und Skilltree kommen über die Grund-Obergrenze hinaus dazu – gedeckelt wird die
+    // Summe erst beim Würfeln (CRIT_CAP_TOTAL in strikeFactors), wenn alle Boni bekannt sind
+    critChance: Math.min(CRIT_CAP_BASE, 0.05 + stats.charisma * CRIT_PER_CHARISMA + armorClasses.crit) + bonus.crit + skill.crit,
     goldBonus: Math.min(1, stats.charisma * 0.005) + bonus.gold + (hasEffect(itemEffects, "lucky") ? EFFECT.lucky : 0),
     maxMana:
       maxManaFor(level, stats.intellect) + armorClasses.mana + (hasEffect(itemEffects, "prepared") ? EFFECT.prepared : 0) + skill.mana,
@@ -911,7 +913,7 @@ export function attackRound(
   const riposte = heroEffects.riposte ?? 1;
   if (heroEffects.riposte) heroEffects = { ...heroEffects, riposte: undefined };
   if (defending && rankIn(skills, "riposte") > 0) heroEffects = { ...heroEffects, riposte: riposteFactor(skills) };
-  // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit halbem Schaden
+  // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit 30 % Schaden (SKILL.echo.share)
   const echo = !!ability && echoDue(skills, heroEffects.casts);
   if (ability && rankIn(skills, "echo") > 0) heroEffects = { ...heroEffects, casts: (heroEffects.casts ?? 0) + 1 };
   const wrath = wrathFactor(heroEffects.wrath);

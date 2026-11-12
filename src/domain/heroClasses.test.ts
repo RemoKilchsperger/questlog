@@ -4,8 +4,17 @@ import { attackRound, drinkPotion, getHeroCombatProfile, startBattle, type Battl
 import { resolveRound, startCoopBattle } from "./coopCombat";
 import { getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { classAbility, CLERIC_POTION_FACTOR, CLERIC_REGEN, detectHeroClass, HERO_CLASSES, PALADIN_SHIELD_BASH, PLUNDERER_LIFESTEAL } from "./heroClasses";
-import { createItem } from "./items";
+import {
+  classAbility,
+  CLERIC_GROUP_HEAL,
+  CLERIC_POTION_FACTOR,
+  CLERIC_REGEN,
+  detectHeroClass,
+  HERO_CLASSES,
+  PALADIN_SHIELD_BASH,
+  PLUNDERER_LIFESTEAL,
+} from "./heroClasses";
+import { createItem, ITEM_TYPES } from "./items";
 import { getPotion } from "./potions";
 import type { ArmorClass, Character, Equipment } from "./types";
 
@@ -173,6 +182,41 @@ describe("Klassen: Kampfmechanik", () => {
     const low = { ...fresh, hero: { ...fresh.hero, hp: 10 } };
     const damage = (s: BattleState) => attackRound(s, rng(0.5)).events.find((e) => e.type === "hit" && e.attacker === "hero");
     expect((damage(low) as { damage: number }).damage).toBeGreaterThan((damage(fresh) as { damage: number }).damage);
+  });
+
+  it("Schild: 2,2 Basisangriff – der Paladin macht damit spürbar mehr Schaden (Review Nr. 3)", () => {
+    expect(ITEM_TYPES.find((t) => t.type === "shield")!.baseAttack).toBe(2.2);
+    const paladin = getHeroCombatProfile(hero, gear("heavy", "mace-90", "shield-90"));
+    const maceOnly = getHeroCombatProfile(hero, gear("heavy", "mace-90"));
+    // Streitkolben 3,1 + Schild 2,2: Der Schild trägt rund 40 % des Waffenangriffs bei
+    expect(paladin.damage).toBeGreaterThan(maceOnly.damage * 1.3);
+  });
+
+  it("Kleriker: Heiliges Licht und Läuterung heilen im Koop die Mitspieler halb so stark mit – solo ändert sich nichts", () => {
+    expect(classAbility("mace-2", "cleric").groupHeal).toBe(CLERIC_GROUP_HEAL);
+    expect(classAbility("mace-3", "cleric").groupHeal).toBe(CLERIC_GROUP_HEAL);
+    expect(classAbility("mace", "cleric").groupHeal).toBeUndefined();
+    expect(classAbility("mace-2", "paladin").groupHeal).toBeUndefined();
+    const cleric = { ...getHeroCombatProfile(hero, gear("medium", "mace-90")), abilities: ["mace-2", "mace-3"] as AbilityId[] };
+    expect(cleric.heroClass).toBe("cleric");
+    const coop = (healer: typeof cleric) => {
+      const battle = startCoopBattle("k", "swamp-hydra", [
+        { id: "c", name: "C", profile: healer },
+        { id: "x", name: "X", profile: { ...healer, heroClass: null } },
+      ], 0);
+      return {
+        ...battle,
+        heroes: battle.heroes.map((h) => ({ ...h, mana: 999, combatant: { ...h.combatant, hp: 10, maxHp: 10_000 } })),
+        boss: { ...battle.boss, hp: 999_999, maxHp: 999_999, damage: 1 },
+        adds: [],
+      };
+    };
+    const { events } = resolveRound(coop(cleric), { c: { ability: "mace-2" } }, rng(0.5), 0);
+    expect(events).toContainEqual({ type: "selfHeal", heroId: "c", heal: 2_500 });
+    expect(events).toContainEqual({ type: "selfHeal", heroId: "x", heal: 1_250, by: "c" });
+    // Ohne Klasse heilt Heiliges Licht nur den Anwender
+    const plain = resolveRound(coop({ ...cleric, heroClass: null }), { c: { ability: "mace-2" } }, rng(0.5), 0).events;
+    expect(plain.some((e) => e.type === "selfHeal" && e.heroId === "x")).toBe(false);
   });
 
   it("Paladin erzeugt im Koop doppelte Bedrohung", () => {

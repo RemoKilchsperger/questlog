@@ -41,7 +41,7 @@ import { EMPTY_EQUIPMENT, getArmorClassSummary } from "../domain/equipment";
 import { sanitizeLooks } from "../domain/looks";
 import { convertLinearCurveXp, getLevel } from "../domain/leveling";
 import type { Character, Equipment } from "../domain/types";
-import type { CoopCommand, CoopMember, CoopRow } from "./protocol";
+import { COOP_OUTDATED_MESSAGE, COOP_PROTOCOL_VERSION, type CoopCommand, type CoopMember, type CoopRow } from "./protocol";
 
 /** Fehler, die der Spieler sehen soll (z. B. „Die Lobby ist voll.“). */
 export class CoopError extends Error {}
@@ -56,6 +56,8 @@ export interface ServerContext {
   members?: Record<string, CoopMember>;
   newId: () => string;
   newCode: () => string;
+  /** Protokollversion des Clients (COOP_PROTOCOL_VERSION) – fehlt bei alten Clients */
+  protocol: number | undefined;
 }
 
 /** Abgeschlossene oder verlassene Kämpfe räumt der Server nach dieser Zeit weg. */
@@ -102,6 +104,14 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
   };
 }
 
+/**
+ * Ältere Clients kennen neue Ereignisse und Aktionen nicht – sie müssen neu laden. Neuere Clients als der
+ * Server lässt er zu: Ihre Befehle sind eine Obermenge, und die Ereignisse kommen vom Server.
+ */
+export function checkProtocol(protocol: number | undefined): void {
+  if (typeof protocol !== "number" || protocol < COOP_PROTOCOL_VERSION) throw new CoopError(COOP_OUTDATED_MESSAGE);
+}
+
 /** Ist dieser Spieler Teil des Kampfs? */
 export function isParticipant(row: CoopRow, userId: string): boolean {
   return row.player_ids.includes(userId);
@@ -113,6 +123,7 @@ export function isParticipant(row: CoopRow, userId: string): boolean {
  * einen CoopError.
  */
 export function applyCommand(row: CoopRow | null, command: CoopCommand, ctx: ServerContext): CoopRow | null {
+  checkProtocol(ctx.protocol);
   if (command.type === "create") return create(command.bossId, ctx);
   if (!row) throw new CoopError("Diese Lobby gibt es nicht mehr.");
   if (command.type === "join" || command.type === "joinFriend") return join(row, ctx);

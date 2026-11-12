@@ -83,8 +83,10 @@ export interface AbilityDef {
   weaken?: { percent: number; rounds: number };
   /** Verwundbar: der Gegner erleidet `percent` mehr Schaden für `rounds` Runden */
   vulnerable?: { percent: number; rounds: number };
-  /** Schadensart der Fähigkeit statt der der Waffe (Heiliger Hammer: Magie) */
+  /** Schadensart der Fähigkeit statt der der Waffe (Mordschlag: Wucht) */
   kind?: DamageKind;
+  /** Zählt auch als diese Schadensart, wenn das gegen das Ziel wirksamer ist (Heiliger Hammer: Magie) */
+  altKind?: DamageKind;
   /** Entfernt Gift, Feuer und Bluten vom Helden */
   cleanse?: boolean;
   /**
@@ -600,10 +602,12 @@ export const ABILITIES: readonly AbilityDef[] = [
     icon: "🌟",
     manaCost: 30,
     cooldown: 2,
-    multiplier: 1.4,
-    kind: "magic",
+    // Review Nr. 6: Als reine Magie war er schlechter als keine Fähigkeit (5 von 10 Bossen widerstehen Magie)
+    multiplier: 1.5,
+    altKind: "magic",
     shakenBonus: 0.3,
-    description: "Ein Schlag voll heiliger Kraft mit 1,4-fachem Schaden – er zählt als Magie statt als Wucht. Gegen erschütterte Gegner (in den letzten 2 Runden betäubt) 30 % stärker.",
+    description:
+      "Ein Schlag voll heiliger Kraft mit 1,5-fachem Schaden – er zählt als Wucht oder Magie, je nachdem, was gegen das Ziel wirksamer ist. Gegen erschütterte Gegner (in den letzten 2 Runden betäubt) 30 % stärker.",
   },
   {
     id: "scepter-3",
