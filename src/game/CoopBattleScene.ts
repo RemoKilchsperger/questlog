@@ -10,6 +10,8 @@ import { BOSS, coopBossTurn, getCoopEnemy, type CoopBattleState, type CoopEvent 
 import { getCreature } from "../domain/creatures";
 import { getHydraHead, HYDRA_HEADS, HYDRA_ID, type HydraHeadKind } from "../domain/hydra";
 import { getPotion } from "../domain/potions";
+import { classKit } from "../domain/classKit";
+import { SIGNATURE_COLOR, SIGNATURE_STYLE } from "./signatureStyles";
 import { EMPTY_EQUIPMENT } from "../domain/equipment";
 import type { ItemType } from "../domain/types";
 import type { CoopMember } from "../coop/protocol";
@@ -505,7 +507,9 @@ export class CoopBattleScene extends Phaser.Scene {
       // Steinschlag, Fluchkreis und Strudel treffen erst nach ihrer Animation – dafür Zeit lassen
       const slowImpact = event.type === "hit" && event.attacker === BOSS && special !== null && SLOW_IMPACT.has(special);
       delay +=
-        event.type === "victory" || event.type === "wipe" || long
+        event.type === "charge"
+          ? 0
+          : event.type === "victory" || event.type === "wipe" || long
           ? long
             ? 1100
             : 900
@@ -769,10 +773,77 @@ export class CoopBattleScene extends Phaser.Scene {
         break;
       }
       case "shieldGained": {
-        // Lebensband: Überheilung wird zum Schild
+        // Lebensband bzw. Gruppenschild des Richtspruchs: Der Schild liegt um den Helden
         const hero = this.unit(event.heroId);
         this.float(hero, `SCHILD +${event.amount}`, "#a9c6ff", 14, 30);
-        fx.ring(this, this.center(hero), 0xa9c6ff, 45);
+        fx.ring(this, this.center(hero), event.by ? SIGNATURE_COLOR : 0xa9c6ff, 45);
+        break;
+      }
+      case "signature": {
+        // Signatur: goldenes Aufleuchten und die Ausholbewegung der Fähigkeit, deren Animation sie leiht
+        const hero = this.unit(event.heroId);
+        this.float(hero, `${classKit(event.classId).signature.name}!`, "#f5c542", 16, 40);
+        this.tint(hero, 0xffe28f, 450);
+        fx.ring(this, this.center(hero), SIGNATURE_COLOR, 70);
+        fx.burst(this, this.center(hero), SIGNATURE_COLOR, 12, 50);
+        sfx.ability();
+        this.announceAbility(hero, SIGNATURE_STYLE[event.classId]);
+        if (event.hpCost) this.setHp(hero, Math.max(1, hero.hp - event.hpCost));
+        break;
+      }
+      case "charge": {
+        if (event.value >= 4) fx.rise(this, this.center(this.unit(event.heroId)), SIGNATURE_COLOR, 6, 30);
+        break;
+      }
+      case "harvest": {
+        const foe = this.unit(event.target);
+        fx.siphon(this, this.center(foe), this.center(this.unit(event.heroId)), 0x9b5de5, 10);
+        this.setHp(foe, Math.max(0, foe.hp - event.damage));
+        this.float(foe, `👻 -${event.damage}`, "#b07cff", 20, 30);
+        sfx.drain();
+        break;
+      }
+      case "marked": {
+        const foe = this.unit(event.target);
+        this.float(foe, event.curse ? "VERFLUCHT" : "MARKIERT", event.curse ? "#b07cff" : "#f5c542", 16, 30);
+        fx.ring(this, this.center(foe), event.curse ? 0x9b5de5 : SIGNATURE_COLOR, 60);
+        break;
+      }
+      case "weakened": {
+        const foe = this.unit(event.target);
+        this.float(foe, "GESCHWÄCHT", "#a49cb8", 16, 30);
+        fx.burst(this, this.center(foe), 0xa49cb8, 12, 50);
+        break;
+      }
+      case "banner": {
+        const hero = this.unit(event.heroId);
+        this.float(hero, "BANNER", "#f5c542", 14, 40);
+        fx.rise(this, this.center(hero), SIGNATURE_COLOR, 10, 50);
+        sfx.buff();
+        break;
+      }
+      case "duel": {
+        const hero = this.unit(event.heroId);
+        this.float(hero, "DUELLHALTUNG", "#f5c542", 14, 40);
+        fx.ring(this, this.center(hero), SIGNATURE_COLOR, 55);
+        sfx.block();
+        break;
+      }
+      case "revived": {
+        const hero = this.unit(event.heroId);
+        this.setHp(hero, event.heal);
+        this.standUp(event.heroId);
+        this.float(hero, "GEBET – ZURÜCK!", "#f5c542", 16, 30);
+        fx.pillar(this, this.center(hero), 0xffe28f, 40);
+        sfx.heal();
+        break;
+      }
+      case "enrage": {
+        // Boss-Raserei: roter Puls am Boss, angekündigt mit gelbem
+        const raging = event.factor > 1;
+        this.float(this.boss, raging ? `RASEREI +${Math.round((event.factor - 1) * 100)} %` : `RASEREI IN ${event.roundsLeft}`, raging ? "#f0776a" : "#f5c542", 16, 50);
+        this.tint(this.boss, raging ? 0xff5040 : 0xffd27a, 450);
+        if (raging) fx.ring(this, this.center(this.boss), 0xff5040, 90);
         break;
       }
       case "regen": {

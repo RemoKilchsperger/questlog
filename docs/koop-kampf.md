@@ -280,3 +280,11 @@ Gegenüber dem Plan: Statt drei Functions gibt es eine (`coop`) mit Befehlen
   reichen für Freundesgruppen bei Weitem.
 - **Balance:** Bedrohung, Betäubung und Wiederbeleben brauchen Testspiele. Die Zahlen
   oben sind Startwerte.
+
+## Klassen-Kern und Boss-Raserei (G3)
+
+Seit dem Klassen-Kern (docs/klassen-neukonzept.md 4.5 und 11) gibt es die Aktion `signature` (der Server rechnet die
+Klassenleiste selbst), Gruppenwirkungen (Gebet, Gruppenschild, Kampfbanner, Markierung, Fluch), Spott der
+Duellhaltung (0,75), Bedrohung aus Heilung (50 % des Geheilten, `HEAL_THREAT`) und die **Boss-Raserei**: ab Runde 20
+(heroische Endbosse ab 30) +10 % Schaden pro Runde, additiv, angekündigt ab Runde 17, nicht für Begleiter und
+Hydra-Köpfe (`coopEnrageFactor`, aus `state.round`, kein neues Feld). Protokollversion 2 deckt G2 und G3 zusammen ab.

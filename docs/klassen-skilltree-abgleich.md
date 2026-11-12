@@ -1,7 +1,7 @@
 # Abgleich Klassen-Neukonzept und Skilltree-Überarbeitung
 
-Stand: 2026-11-12. Alle Fragen sind entschieden (Abschnitt 3). **G0, G1 und G2 sind umgesetzt** (Branch
-`feature/klassen-skilltree`), G3–G4 sind Plan.
+Stand: 2026-11-12. Alle Fragen sind entschieden (Abschnitt 3). **G0, G1, G2 und G3 sind umgesetzt** (Branch
+`feature/klassen-skilltree`), G4 ist Plan.
 Abgeglichen: docs/klassen-neukonzept.md (**[Skilltree]**-Stellen) und docs/skilltree-ueberarbeitung.md
 (**[K]**-Stellen). Grundlage beider: docs/balancing-review-waffen-klassen.md („Review“).
 
@@ -52,7 +52,7 @@ Koop/Server → Szene und Ereignisse → UI → Doku. Nach jeder Etappe `npx vit
 | **G0 Messbar machen** ✅ | Simulation als Test: Klassenspreizung (Review Nr. 22) als Leitplanken-Test `src/domain/classBalance.test.ts`, Budget-Messung (D pro Runde, Vergleich ohne Klasse), Skilltree- und Koop-Simulation; alles in der Hilfsdatei `src/test/classSim.ts`, Berichte in `src/domain/zzClassSim.test.ts` (`SIM_MODE`) | Klassen E0, Skilltree 9 | M (1 Tag) | – | – |
 | **G1 Sofortkorrekturen** ✅ | Krit-Gesamtobergrenze 60 %, Schild 2,2, Heiliger Hammer (Wucht oder Magie, 1,5), Kleriker-`groupHeal` im Koop, **Protokollversion** 1 in `protocol.ts`, veraltete Kommentare | Klassen E1 | S (½ Tag) | – | einmal erneuert (19 Kämpfe, alle mit Schild, Streitkolben, Kleriker oder hoher Krit-Chance) |
 | **G2 Skilltree-Release** ✅ | Skilltree-Etappen 1–4: Struktur (12 Punkte, Meisterschafts-Gabel, `validateSkills`, Migration **v24** mit Rückerstattung und Toast), Werte und Umbauten, neue Knoten, zweite Meisterschaften inkl. Wächterschwur 0,6, Schild-Topf `ward` und Tausend Schnitte mit gemeinsamem Koop-Stapel | Skilltree 8 | 4,5–6,5 Tage | **v24** | erneuert für Etappe 1+2 (242 Kämpfe), 3 (164) und 4 (34, mit Meisterschaft B im Golden Master); Gegenprobe ohne Skills unverändert. Koop-Protokoll 2 (gilt auch für G3) |
-| **G3 Klassen-Kern** | Klassen-Etappen 2–5: `ClassKit`, Leiste, 11 Signaturen (zwei Wellen), neue Passive, **Paladin mit Schwert** (Erkennung, Geweihte Klinge); Koop mit Aktion `signature`, Gruppenwirkungen, Spott-Reihenfolge, **Boss-Raserei ab Runde 20**; Darstellung samt **Quest „Finde deine Klasse“**; Abstimmen mit Simulation und Playtest | Klassen 9 | 8,5–11,5 Tage + Spielzeit | – | pro Welle, nur Kämpfe mit Klasse; Raserei getrennt (nur Koop-Kämpfe über Runde 20) |
+| **G3 Klassen-Kern** ✅ | Klassen-Etappen 2–5: `ClassKit`, Leiste, 11 Signaturen (zwei Wellen), neue Passive, **Paladin mit Schwert** (Erkennung, Geweihte Klinge); Koop mit Aktion `signature`, Gruppenwirkungen, Spott-Reihenfolge, **Boss-Raserei ab Runde 20**; Darstellung samt **Quest „Finde deine Klasse“**; Abstimmen mit Simulation und Playtest | Klassen 9 | 8,5–11,5 Tage + Spielzeit | – (keine Migration; die Quest ist eine neue Id) | erneuert in fünf Schritten: Welle 1 (226 Kämpfe), Welle 2 (50), Koop-Kern (44), Koop-Regeln Raserei + Heilungs-Bedrohung (42, auch klassenlose Koop-Kämpfe, getrennt), Abstimmung (114). Gegenprobe ohne Klassen nach jedem Klassen-Schritt unverändert. Koop-Protokoll bleibt 2 |
 | **G4 Verzahnen und Ausbau** | Leisten-Knoten (Skilltree-Etappe 6), Brückenknoten (Skilltree-Etappe 5), danach optional Klassen-Etappe 6 (Klassen-Item-Effekte, Signatur- und Meisterschafts-Erfolge und Klassenränge mit **v25**, Rüstung umschmieden, Turm-Segen, **Druide nach dem Playtest des Klerikers**) | Skilltree 8, Klassen 9 | je ½–2 Tage | **v25** (nur optional) | pro Teil |
 
 **Boss-Raserei im Koop (G3, Klassen-Etappe 3):** ab Runde 20 +10 % Schaden des Gegners pro Runde (additiv),

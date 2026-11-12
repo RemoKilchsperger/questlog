@@ -76,6 +76,9 @@ supabase/            Datenbankschema, Migrationen, Edge Functions
 Das **Questbuch** (`quests.ts`) hat pro Gebiet eine Jagd pro Kreatur (5, 6, 6 und 8 Siege), eine Boss-Quest
 und pro Dungeon eine Quest „bis zum Endboss abschliessen“ (solo oder Koop) – jede Quest gibt es einmal.
 Annehmen ab dem Mindest-Level des Gebiets, nur Siege nach dem Annehmen zählen, abgegeben wird im Quest-Tab.
+Dazu die Story-Quest **„Finde deine Klasse“** (ab Lv. 5, ohne Gebiet): einen Kampf mit aktiver Klasse gewinnen
+(solo oder Koop). Belohnung: XP und Gold wie eine Jagdquest auf Lv. 8 und ein seltenes Rüstungsteil der
+Rüstungsklasse, die zur angelegten Waffe passt (`classQuestArmor`).
 
 | Quest | Einheiten | Item beim Abgeben |
 |---|---|---|
@@ -136,9 +139,27 @@ Höhe eines Bonus: `Faktor · (1 + Item-Level / 4)` mit Faktor 1 / 1.5 / 2.5 (se
 | Mittel (Leder) | 75 % | +0,4 % Krit |
 | Schwer (Metall) | 100 % | – |
 
-- **Klassen** (`heroClasses.ts`): mindestens 3 Rüstungsteile einer Klasse plus passende Waffe, z. B.
-  leichte Rüstung + Stab → Magier. 11 Klassen, höchstens eine aktiv. Im Koop heilen Heiliges Licht und
-  Läuterung des Klerikers alle Mitspieler mit 50 % mit. Neukonzept: docs/klassen-neukonzept.md.
+- **Klassen** (`heroClasses.ts`, `classKit.ts`): mindestens 3 Rüstungsteile einer Klasse plus passende Waffe, z. B.
+  leichte Rüstung + Stab → Magier. 11 Klassen, höchstens eine aktiv; Paladin mit Streitkolben oder Schwert und
+  Schild (als Paladin skaliert das Schwert mit Ausdauer und hat 20 % Lebensraub, „Geweihte Klinge“).
+  Jede Klasse hat Rolle, Passiv, **Klassenleiste** (4 Ladungen, jeder Kampf beginnt leer, eigene Auslöser,
+  höchstens 2 pro Runde, die Signatur-Runde lädt nicht) und **Signatur** (volle Leiste, kein Mana, keine
+  Abklingzeit, waffenunabhängig, für Boss-Mechaniken immer sicher; für den Skilltree keine Fähigkeit).
+  Plan und Werte: docs/klassen-neukonzept.md.
+
+| Klasse | Passiv | Leiste | Signatur |
+|---|---|---|---|
+| Magier | Fähigkeiten −20 % Mana | +2 Fähigkeit, +1 Einfrieren | Arkane Entladung: 1,8 D, ignoriert Rüstung, Feuer oder Magie, bricht Aufladen |
+| Hexer | +5 %, eigene DoTs +40 % und +1 Runde, Gift↔Feuer gegen Immune (60 %) | +1 Runde mit DoT, +2 Zepter-Fähigkeit, +1 vergifteter Gegner fällt | Seelenernte: 0,7 D, DoTs wirken sofort, 25 % Heilung, Koop: Fluch +10 % |
+| Assassine | +10 % Krit, Krit ×2 | +1 Krit, +2 Dolch-Fähigkeit | Halsschnitt: 0,8 D sicher kritisch, ignoriert Rüstung, unter 30 % LP ×1,5 |
+| Waldläufer | +8 %, Pfeilhagel 5 Pfeile | +1 Runde mit Treffer, +1 nicht getroffen, +1 Bogen-Fähigkeit, +1 Krit auf Markierte | Beute markieren: 1,2 D, 3 Runden +15 % erlittener Schaden |
+| Duellant | +10 %, 40 % Zweitschlag | +1 Zweitschlag, +1 Konter, +2 Schwert-Fähigkeit | Duell: 1 D, 2 Gegnerzüge Duellhaltung (×0,7, Konter 0,6 D, Koop: Spott 75 %) |
+| Plünderer | +15 %, 8 % Lebensraub, Krit-Bluten, +25 % Gold | +1 Runde mit Bluten, +1 Krit, +2 Axt-Fähigkeit | Ausweiden: 1,4 D, gegen Blutende ×1,5, 50 % Lebensraub |
+| Kleriker | 2 % Regeneration, Tränke +15 %, Koop-Gruppenheilung 50 % | +1 pro Runde, +1 Heilfähigkeit | Gebet: 8 % Heilung, reinigt, 0,6 D (Wucht/Magie); Koop: alle 15 %, belebt einen Gefallenen (25 %) |
+| Paladin | +10 %, +20 % Rüstung, halbes Bollwerk, Schildstoss, Bedrohung ×2 | +1 Runde getroffen/abgewehrt, +1 Bollwerk-Block | Richtspruch: 1 D + 40 % des abgewehrten Schadens (max. +1,5 D); Koop: Schild 10 % für alle |
+| Berserker | +10 %, unter 50 % LP +20 %, 8 % Lebensraub | +1 Runde getroffen, +1 Krit, unter 50 % doppelt | Entfesseln: −10 % LP, 3 × 0,45 D (unter 50 %: 4), 20 % Lebensraub |
+| Champion | +8 %, +10 % LP | +1 Runde mit Treffer, +1 Krit, +1 Gegner fällt | Kampfbanner: 1,2 D, 3 Runden +15 % (Koop: Mitspieler +10 %) |
+| Wächter | +10 % Rüstung, Schwächungen +1 Runde | +2 Grosshammer-Fähigkeit, +1 Betäubung/Schwächung | Bergbrecher: 0,8 D an alle, Ziel sicher betäubt (immun: 2 Runden −30 % Schaden) |
 - **Boss-Items:** einzigartig und immer legendär, 10 % Chance pro Bosssieg. Mehrere Teile desselben
   Bosses geben Set-Boni (`bossSets.ts`).
 - **Gear Score:** Durchschnitt aus `Item-Level × Seltenheitsfaktor × (1 + 2 % pro Schmied-Stufe)`
@@ -208,7 +229,11 @@ Endboss schon besiegt haben). Raid-Bosse gibt es nicht heroisch.
 **Koop** (`coopCombat.ts`, Plan in `docs/koop-kampf.md`): 2–4 Spieler gegen Sumpfhydra (20),
 Frostriese (40) oder Weltenverschlinger (60). Der Hydra schlägt die Gruppe bei 75/50/25 % einen Kopf ab,
 der als Begleiter weiterkämpft (`hydra.ts`, docs/raid-bosse.md). Der Boss greift nach Bedrohung an,
-Gefallene lassen sich mit einem Heiltrank wiederbeleben, jeder würfelt eigene Beute (×1.5 XP und Gold).
+Gefallene lassen sich mit einem Heiltrank (oder dem Gebet des Klerikers) wiederbeleben, jeder würfelt eigene Beute (×1.5 XP und Gold).
+Heilfähigkeiten, Gebet und Gruppenschild erzeugen beim Heiler Bedrohung (50 % des Geheilten). Spott: Bollwerk,
+Schildwall und Duellhaltung 75 %, Wächterschwur 60 % – der höchste Anteil gewinnt. **Boss-Raserei:** ab Runde 20
+(heroische Endbosse ab 30) +10 % Schaden pro Runde (additiv), angekündigt ab Runde 17, nicht für Begleiter und
+Hydra-Köpfe (`coopEnrageFactor`). Die Klassenleiste rechnet der Server selbst, der Client schickt nur `signature`.
 Client und Server tragen eine Protokollversion (`COOP_PROTOCOL_VERSION` in `src/coop/protocol.ts`); ältere
 Clients lehnt der Server mit „bitte neu laden“ ab.
 Auch alle Dungeons gehen im Koop (Plan in `docs/koop-dungeons.md`): Gegner mit Lebenspunkten

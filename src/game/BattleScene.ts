@@ -11,6 +11,8 @@ import { bossTurnOf, type BattleEvent, type BattleState, type Side } from "../do
 import { getCreature } from "../domain/creatures";
 import { getPotion } from "../domain/potions";
 import { getRare, type RareLook } from "../domain/rares";
+import { classKit } from "../domain/classKit";
+import { SIGNATURE_COLOR, SIGNATURE_STYLE } from "./signatureStyles";
 import { BG_HEIGHT, BG_SCALE, BG_WIDTH, hasBackground, paintBackground } from "./backgrounds";
 import * as fx from "./battleEffects";
 import { attachTempo, damageFontSize, type BattleTempo } from "./battleTempo";
@@ -462,6 +464,11 @@ export class BattleScene extends Phaser.Scene {
         heroAbility = event.ability;
         mainTarget = null;
       }
+      // Die Signatur leiht sich für ihre Treffer die Animation einer passenden Fähigkeit (signatureStyles.ts)
+      if (event.type === "signature") {
+        heroAbility = SIGNATURE_STYLE[event.classId];
+        mainTarget = null;
+      }
       if (event.type === "bossAbility") bossAbility = event.abilityId;
       // Xal'Zar schlägt mit der verschlungenen Fähigkeit zu – im Stil seines Leerenschlunds
       if (event.type === "stolen") bossAbility = "void-lord";
@@ -476,7 +483,13 @@ export class BattleScene extends Phaser.Scene {
         (mainTarget ??= event.add ?? "enemy") !== (event.add ?? "enemy");
       this.time.delayedCall(delay, () => (sideHit ? this.sideImpact(event) : this.animate(event, special)));
       delay +=
-        event.type === "defeated" || event.type === "fled"
+        event.type === "charge"
+          ? 0
+          : event.type === "signature"
+            ? 700
+            : event.type === "harvest" || event.type === "marked" || event.type === "weakened" || event.type === "banner" || event.type === "duel"
+              ? 450
+              : event.type === "defeated" || event.type === "fled"
           ? event.type === "defeated" && (event.add || event.pack)
             ? 450
             : 900
@@ -554,6 +567,46 @@ export class BattleScene extends Phaser.Scene {
       this.showFlight(false);
     } else if (event.type === "ability") {
       this.announceHeroAbility(event.ability);
+    } else if (event.type === "signature") {
+      // Signatur: goldenes Aufleuchten, dann die Ausholbewegung der geliehenen Fähigkeit
+      const hero = this.fighters.hero;
+      this.announceHeroAbility(SIGNATURE_STYLE[event.classId], `${classKit(event.classId).signature.name}`);
+      fx.ring(this, this.center("hero"), SIGNATURE_COLOR, 120);
+      fx.burst(this, this.center("hero"), SIGNATURE_COLOR, 16, 70);
+      this.tint(hero, 0xffe28f, 500);
+      if (event.hpCost) {
+        this.setHp("hero", Math.max(1, hero.hp - event.hpCost));
+        this.floatText(hero.homeX, GROUND_Y - 95, `-${event.hpCost}`, "#e0405a", 20);
+      }
+    } else if (event.type === "charge") {
+      // Die Leiste zeigt die Oberfläche – hier nur ein kurzes goldenes Funkeln
+      if (event.value >= 4) this.sparkles(this.fighters.hero.homeX, GROUND_Y - 60, SIGNATURE_COLOR);
+    } else if (event.type === "harvest") {
+      const key = event.add ?? "enemy";
+      const target = this.fighters[key];
+      fx.siphon(this, this.center(key), this.center("hero"), 0x9b5de5, 12);
+      this.setHp(key, Math.max(0, target.hp - event.damage));
+      this.floatText(target.homeX, GROUND_Y - 110, `👻 -${event.damage}`, "#b07cff", 26);
+      this.tint(target, 0x9b5de5, 400);
+      sfx.drain();
+    } else if (event.type === "marked") {
+      const key = event.add ?? "enemy";
+      this.floatText(this.fighters[key].homeX, GROUND_Y - 135, "MARKIERT", "#f5c542", 22);
+      fx.ring(this, this.center(key), SIGNATURE_COLOR, 70);
+    } else if (event.type === "weakened") {
+      const key = event.add ?? "enemy";
+      this.floatText(this.fighters[key].homeX, GROUND_Y - 135, "GESCHWÄCHT", "#a49cb8", 22);
+      fx.burst(this, this.center(key), 0xa49cb8, 14, 60);
+    } else if (event.type === "banner") {
+      const hero = this.fighters.hero;
+      this.floatText(hero.homeX, GROUND_Y - 140, "BANNER", "#f5c542", 22);
+      fx.rise(this, this.center("hero"), SIGNATURE_COLOR, 12, 80);
+      sfx.buff();
+    } else if (event.type === "duel") {
+      const hero = this.fighters.hero;
+      this.floatText(hero.homeX, GROUND_Y - 140, "DUELLHALTUNG", "#f5c542", 20);
+      fx.ring(this, this.center("hero"), SIGNATURE_COLOR, 80);
+      sfx.block();
     } else if (event.type === "poison") {
       const key = event.add ?? event.target;
       const target = this.fighters[key];
@@ -1090,10 +1143,11 @@ export class BattleScene extends Phaser.Scene {
   /* ───────────── Fähigkeiten des Helden ───────────── */
 
   /** Ankündigung: Name, Aufleuchten und eine kleine Vorbereitung je nach Fähigkeit. */
-  private announceHeroAbility(id: AbilityId) {
+  /** `name`: Signatur, die sich die Animation dieser Fähigkeit leiht – ihr Name statt dem der Fähigkeit. */
+  private announceHeroAbility(id: AbilityId, name?: string) {
     const hero = this.fighters.hero;
     const ability = getAbility(id);
-    this.floatText(hero.homeX, GROUND_Y - 125, `${ability.name}!`, "#f4c95d", 26);
+    this.floatText(hero.homeX, GROUND_Y - 125, `${name ?? ability.name}!`, "#f4c95d", 26);
     this.tint(hero, 0xffe28f, 300);
     sfx.ability();
     const at = this.center("hero");

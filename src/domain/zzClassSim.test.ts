@@ -11,7 +11,7 @@
 //   master  Skilltree „Meisterpfad 13 + Zweitpfad 17“ (Plan pro Klasse: CLASS_SKILL_PLANS) gegen ohne Skills:
 //           Siegquote, D/Runde, Spreizung (SIM_MASTER=1: die zweite Meisterschaft der Gabel)
 //   coop    Koop-Kampfdauer: Runden pro Raid-Boss mit 2/3/4 Helden (SIM_COOP_CLASSES, SIM_LEVEL_OFFSET,
-//           SIM_DEFEND, SIM_ENRAGE – Vorschau der Boss-Raserei)
+//           SIM_DEFEND) – mit der Boss-Raserei des Spiels (ab Runde 20), Anteil der Siege nach Runde 20
 // Weitere Variablen: SIM_N (Kämpfe pro Zeile, Standard 100), SIM_RAR (Seltenheit, Standard rare),
 // SIM_BOSSES (Indizes der Gebiete, z. B. "0,2,5"), SIM_SEED.
 
@@ -64,7 +64,7 @@ describe.runIf(MODE)(`Klassen-Simulation (${MODE})`, () => {
     const lines = CLASS_BUILDS.map((build) => {
       const b = classBudget(build, { n: N, rarity: RARITY, seed: SEED, bosses: BOSSES });
       return (
-        `${build.id.padEnd(10)} Klasse ${b.withClass.meanD.toFixed(3)} D/R (${pad(pct(b.withClass.meanWin), 3)} %)` +
+        `${(build.label ?? build.id).padEnd(10)} Klasse ${b.withClass.meanD.toFixed(3)} D/R (${pad(pct(b.withClass.meanWin), 3)} %)` +
         ` | klassenlos ${b.classless.meanD.toFixed(3)} D/R (${pad(pct(b.classless.meanWin), 3)} %)` +
         ` | Mehrwert ${b.value >= 0 ? "+" : ""}${pct(b.value)} %, Siege ${b.withClass.meanWin >= b.classless.meanWin ? "+" : ""}${pct(b.withClass.meanWin - b.classless.meanWin)} Punkte`
       );
@@ -83,7 +83,7 @@ describe.runIf(MODE)(`Klassen-Simulation (${MODE})`, () => {
         const results = BOSSES.map((boss) => simulateSolo(build, boss, { n: N, rarity: RARITY, seed: SEED, skills }));
         return pad(pct(results.reduce((s, r) => s + r.win, 0) / results.length), 4);
       });
-      return `${build.id.padEnd(10)} ${cells.join(" ")}`;
+      return `${(build.label ?? build.id).padEnd(10)} ${cells.join(" ")}`;
     });
     console.log([`Skills: Seltenheit ${RARITY}, N=${N}; Spalten: ${plans.map(label).join(" | ")}`, ...lines].join("\n"));
   });
@@ -99,7 +99,7 @@ describe.runIf(MODE)(`Klassen-Simulation (${MODE})`, () => {
     });
     const lines = rows.map(
       (r) =>
-        `${r.build.id.padEnd(10)} ${`${r.plan.main}${"AB"[r.plan.fork]}★${r.plan.master}+${r.plan.second}${"AB"[r.plan.secondFork]}`.padEnd(18)}` +
+        `${(r.build.label ?? r.build.id).padEnd(10)} ${`${r.plan.main}${"AB"[r.plan.fork]}★${r.plan.master}+${r.plan.second}${"AB"[r.plan.secondFork]}`.padEnd(18)}` +
         ` ohne ${pad(pct(r.plain), 3)} % | Baum ${pad(pct(r.win), 3)} % (+${pct(r.win - r.plain)}) | D ${r.dPlain.toFixed(2)} → ${r.d.toFixed(2)} | ` +
         r.per.map((x) => pad(pct(x.win), 3)).join(" "),
     );
@@ -118,9 +118,6 @@ describe.runIf(MODE)(`Klassen-Simulation (${MODE})`, () => {
     // SIM_LEVEL_OFFSET: Helden so viele Level über dem Boss (Standard 0)
     const classes = (env.SIM_COOP_CLASSES ?? "champion,assassin,warden,plunderer").split(",") as HeroClassId[];
     const offset = Number(env.SIM_LEVEL_OFFSET ?? 0);
-    // SIM_ENRAGE="20:0.1" → Vorschau Boss-Raserei ab Runde 20, +10 % Schaden pro Runde
-    const [from, step] = (env.SIM_ENRAGE ?? "").split(":").map(Number);
-    const enrage = env.SIM_ENRAGE ? { from, step } : undefined;
     // SIM_DEFEND="0.5" → der erste Held wehrt mit dieser Chance pro Runde ab (Tank, der Zeit schindet)
     const defendChance = env.SIM_DEFEND ? { p0: Number(env.SIM_DEFEND) } : undefined;
     const lines: string[] = [];
@@ -129,18 +126,15 @@ describe.runIf(MODE)(`Klassen-Simulation (${MODE})`, () => {
         const rng = seededRng(hash(`${boss.id}|${size}|${SEED}`));
         const level = Math.min(60, boss.level + offset);
         const results = Array.from({ length: N }, (_, i) =>
-          fightCoop(boss.id, coopPlayers(classes.slice(0, size), level, `${boss.id}-${size}-${i}`, { rarity: RARITY }), rng, {
-            enrage,
-            defendChance,
-          }),
+          fightCoop(boss.id, coopPlayers(classes.slice(0, size), level, `${boss.id}-${size}-${i}`, { rarity: RARITY }), rng, { defendChance }),
         );
         const won = results.filter((r) => r.status === "won").map((r) => r.rounds).sort((a, b) => a - b);
         const q = (p: number) => (won.length ? won[Math.min(won.length - 1, Math.floor(p * won.length))] : NaN);
         lines.push(
-          `${boss.name.padEnd(20)} ${size} Helden: Siege ${pad(pct(won.length / N), 3)} % | Runden (Siege) Median ${q(0.5)}, 90 % ${q(0.9)}, max ${won.at(-1) ?? NaN}`,
+          `${boss.name.padEnd(20)} ${size} Helden: Siege ${pad(pct(won.length / N), 3)} % | Runden (Siege) Median ${q(0.5)}, 90 % ${q(0.9)}, max ${won.at(-1) ?? NaN} | nach Runde 20: ${pad(pct(won.filter((r) => r > 20).length / Math.max(1, won.length)), 3)} %`,
         );
       }
     }
-    console.log([`Koop: ${classes.join(", ")}, Seltenheit ${RARITY}, N=${N}, Raserei ${env.SIM_ENRAGE ?? "aus"}, Abwehr ${env.SIM_DEFEND ?? "0"}`, ...lines].join("\n"));
+    console.log([`Koop: ${classes.join(", ")}, Seltenheit ${RARITY}, N=${N}, Abwehr ${env.SIM_DEFEND ?? "0"}`, ...lines].join("\n"));
   });
 });

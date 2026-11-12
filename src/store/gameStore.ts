@@ -145,6 +145,8 @@ import {
   rollDailyQuests,
   rollWeeklyQuests,
   rollQuestLoot,
+  classQuestArmor,
+  CLASS_QUEST_ID,
   turnInBoardQuest,
   turnInQuest,
   visibleBoard,
@@ -989,7 +991,8 @@ export const useGameStore = create<GameState>()(
         const levelBefore = getLevel(character.totalXp);
         const totalXp = character.totalXp + xp;
         const levelAfter = getLevel(totalXp);
-        const loot = rollQuestLoot(def.reward, levelAfter, newId());
+        // „Finde deine Klasse“: ein festes Rüstungsteil passend zur Waffe statt zufälliger Beute
+        const loot = def.id === CLASS_QUEST_ID ? classQuestArmor(get().equipment, levelAfter, newId()) : rollQuestLoot(def.reward, levelAfter, newId());
         set({
           ...extra,
           character: { ...character, totalXp, gold: character.gold + def.reward.gold },
@@ -2131,6 +2134,8 @@ export const useGameStore = create<GameState>()(
           EventBus.emit("battle:events", { battle: result.state, events: result.events });
           if (result.state.status === "lost") loseRaid();
           if (result.state.status !== "won") return;
+          // „Finde deine Klasse“: jeder Sieg mit aktiver Klasse zählt (Gebiet, Dungeon, Turm, Überfall)
+          if (result.state.heroClass) questEvent({ kind: "classWin" });
 
           const { raid } = get();
           if (raid && battle.raidWave) {
@@ -2340,6 +2345,8 @@ export const useGameStore = create<GameState>()(
         const levels = grantRewards(chest.xp, chest.gold, chest.items, chest.potions, chest.materials);
         set((s) => ({ coopStats: recordCoopWin(s.coopStats, bossId) }));
         const questItems = questEvent({ kind: "kill", creatureId: bossId, boss: true });
+        // Der Koop-Server erkennt die Klasse aus derselben Ausrüstung
+        if (detectHeroClass(get().equipment)) questEvent({ kind: "classWin" });
         const treasureMap = findTreasureMap(true);
         if (levels.levelAfter > levels.levelBefore) {
           EventBus.emit("character:levelup", { from: levels.levelBefore, to: levels.levelAfter });
@@ -2368,6 +2375,7 @@ export const useGameStore = create<GameState>()(
           // Im Koop zählt der Endboss als besiegter Boss, dazu der abgeschlossene Dungeon
           questItems.push(...questEvent({ kind: "kill", creatureId: bossId, boss: true }));
           questEvent({ kind: "dungeon", dungeonId });
+          if (detectHeroClass(get().equipment)) questEvent({ kind: "classWin" });
         }
         // Wer bis zum Endboss dabei war, hat die Chance eines Bosssiegs – wer vorher aussteigt, die eines gewöhnlichen
         const treasureMap = findTreasureMap(completed);

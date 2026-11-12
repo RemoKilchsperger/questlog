@@ -15,8 +15,9 @@ Etappenplan und die Entscheidungen zu allen offenen Fragen stehen in docs/klasse
 Eingearbeitet sind auch die Entscheidungen, die von den Empfehlungen abweichen: Paladin auch mit Schwert +
 Schild (4.3, 4.7), Signatur immer sicher (4.1), rundenbasierte Boss-Raserei im Koop (4.5).
 
-**Stand der Umsetzung:** G0 (Simulation als Test) und G1 (Sofortkorrekturen: Krit-Gesamtobergrenze, Schild 2,2,
-Heiliger Hammer, Kleriker-Gruppenheilung im Koop, Protokollversion) sind umgesetzt, siehe Abschnitt 9.
+**Stand der Umsetzung:** G0 (Simulation als Test), G1 (Sofortkorrekturen) und **G3 (Klassen-Kern, Etappen 2–5)** sind
+umgesetzt, siehe Abschnitt 9 und 11. Die Zahlen in 4.3 sind **Startwerte**; die abgestimmten Endwerte, Ergebnisse
+und die bei der Umsetzung getroffenen Entscheidungen stehen in Abschnitt 11.
 
 ---
 
@@ -811,3 +812,117 @@ Alle Fragen sind am 2026-11-12 entschieden (gesammelt in docs/klassen-skilltree-
 
 Ausserdem entschieden: Modell C, Lebensband statt Gnade, Skilltree vor dem Klassen-Kern, G2 und G3 zusammen
 ausliefern, Erfolge für Signaturen und Meisterschaften zusammen mit v25.
+
+
+---
+
+## 11. Umsetzung G3 (Klassen-Kern)
+
+Code: `src/domain/classKit.ts` (Rollen, Leiste, Signaturen, `chargeGain`, `signatureAbility`), Passive in
+`heroClasses.ts`, Solo in `combat.ts` (Aktion `SIGNATURE`, `signatureBlocker`), Koop in `coopCombat.ts`
+(`CoopAction.signature`, `coopSignatureBlocker`, Gruppenwirkungen, `coopEnrageFactor`), Quest in `quests.ts`
+(`CLASS_QUEST_ID`, `classQuestArmor`), Darstellung in `src/components/ClassGauge.tsx`, `HeroClassInfo.tsx`,
+`src/game/signatureStyles.ts` und beiden Kampfszenen. Tests: `classKit.test.ts`, `classKitCoop.test.ts`,
+`quests.test.ts`, `src/store/quests.test.ts`, `src/coop/server.test.ts`, Leitplanken in `classBalance.test.ts`.
+Keine Spielstand-Migration (Kampfzustand wird nicht gespeichert, die Quest ist eine neue Id). Koop-Protokoll bleibt 2
+(G2 und G3 werden zusammen ausgeliefert).
+
+### 11.1 Endwerte nach dem Abstimmen
+
+| Klasse | Passiv | Leiste (gewichtet) | Signatur |
+|---|---|---|---|
+| Magier | Mana −20 % (Start −15 %) | Fähigkeit +2, Einfrieren +1 | Arkane Entladung 1,8 D (Start 1,6) |
+| Hexer | +5 % Schaden, eigene DoTs **+40 %** (Start +25 %), +1 Runde, Wandelbare Flüche 60 % | Runde mit DoT +1, **Zepter-Fähigkeit +2**, DoT-Gegner fällt +1 | Seelenernte 0,7 D (Start 0,3), DoTs einmal sofort, 25 % Heilung, Koop-Fluch +10 % |
+| Assassine | +10 % Krit, ×2,0 | Krit +1, Dolch-Fähigkeit **+2** | Halsschnitt unverändert |
+| Waldläufer | +8 % | Treffer-Runde +1, nicht getroffen +1, **Bogen-Fähigkeit +1**, Krit auf Markierte +1 | Beute markieren unverändert |
+| Duellant | +10 %, 40 % Zweitschlag | Zweitschlag +1, Konter +1, Schwert-Fähigkeit **+2** | Duell unverändert (1 D, ×0,7, Konter 0,6 D) |
+| Plünderer | **+15 %** (Start +12 %), 8 % Lebensraub | Bluten-Runde +1, Krit +1, **Axt-Fähigkeit +2** | Ausweiden unverändert |
+| Kleriker | unverändert | Runde +1, Heilfähigkeit +1 | Gebet: **8 %** Heilung (Start 20 %), **0,6 D** (Start 1,0); Koop 15 % für alle, Wiederbeleben 25 % |
+| Paladin | unverändert; **Geweihte Klinge: Schwert mit Ausdauer und 20 % Lebensraub** | Runde getroffen/abgewehrt +1, Bollwerk-Block +1 | Richtspruch unverändert, Koop-Schild 10 % |
+| Berserker | +10 %, unter 50 % +20 %, 8 % Lebensraub | **Runde getroffen** +1 (Start: pro Treffer), Krit +1, unter 50 % doppelt | Entfesseln **3 × 0,45 D** (Start 0,6), 20 % Lebensraub |
+| Champion | +8 %, +10 % LP | Treffer-Runde +1, Krit +1, Gegner fällt +1 | Kampfbanner unverändert |
+| Wächter | **+10 % Rüstung, kein LP-Bonus** (Start +15 % LP), Schwächungen +1 Runde | Grosshammer-Fähigkeit **+2**, Betäubung/Schwächung +1 | Bergbrecher **0,8 D** (Start 1,2) |
+
+**Warum die Gewichte:** Mit den Startauslösern füllten Magier, Hexer, Plünderer und Wächter die Leiste nur alle
+13–21 Runden (Mana erlaubt etwa jede zweite bis dritte Runde eine Fähigkeit, nicht jede). Die Fähigkeits-Auslöser
+zählen darum doppelt; jetzt kommt jede Klasse alle 4–7,5 Runden zur Signatur (1,3–2,9 Signaturen pro Bosskampf;
+Kleriker und Paladin mit den längsten Kämpfen am häufigsten).
+
+### 11.2 Simulation (Etappe 5)
+
+Solo, seltene Ausrüstung, alle Gebietsbosse, N = 150, Saat 1 und 7, die KI setzt die Signatur sofort ein:
+
+| | Siege ohne Skillpunkte | Runden | Mehrwert Schaden ggü. klassenlos | Voller Baum (13 + 17) |
+|---|---|---|---|---|
+| Magier | 51 % | 8,3 | +25 % | 72 % |
+| Hexer | 42–45 % | 8,9 | +19 % | 70 % |
+| Assassine | 58 % | 8,4 | +41 % | 74 % |
+| Waldläufer | 46–48 % | 8,1 | +16 % | 66 % |
+| Duellant | 52 % | 9,5 | +44 % | 86 % |
+| Plünderer | 57 % | 8,8 | +35 % | 89 % |
+| Kleriker | 54–56 % | 15,1 | −2 % | 78 % |
+| Paladin (Streitkolben) | 58–59 % | 14,8 | +22 % | 83 % |
+| Paladin (Schwert) | 53 % | 13,9 | +16 % | 77 % |
+| Berserker | 56–58 % | 8,5 | +36 % | 81 % |
+| Champion | 50–51 % | 9,3 | +14 % | 77 % |
+| Wächter | 58–59 % | 11,6 | +1 % | 81 % |
+
+- Abstand beste/schlechteste ohne Skillpunkte **13–17 Punkte** (vor G3: 50), alle Klassen 42–59 % (Ziel 40–60 % ✓).
+- Paladin-Varianten 5–6 Punkte auseinander (Ziel ≤ 5, knapp).
+- Klassenlos mit derselben Ausrüstung im Mittel 17 %, also **≈ 34 Punkte** unter dem Klassenmittel (Ziel 20–30,
+  etwas darüber – gewollt spürbar; die Quest „Finde deine Klasse“ führt früh zur ersten Klasse).
+- Kleriker 15 und Paladin 14–15 Runden (Ziel ≤ 16 ✓), alle anderen 8–12.
+- Voller Baum: 66–89 %, Abstand 23 Punkte, kein Wert über 95 %. Spitze sind Plünderer (Klinge) und Duellant
+  (Plage + Klinge) – die starken Klinge-Knoten aus G2 bleiben wie vereinbart vorerst unverändert.
+
+**Koop mit Raserei** (epische Ausrüstung auf Boss-Level, N = 100; in Klammern: Raserei testweise ausgeschaltet):
+
+| Gruppe | Boss | Helden | Siege mit Raserei (ohne) | Median Runden | Siege nach Runde 20 |
+|---|---|---|---|---|---|
+| Champion, Assassine, Wächter, Plünderer | alle drei | 2–4 | unverändert | 11–14 | 0 % |
+| Paladin, Kleriker, Wächter | Sumpfhydra | 3 | 63 % (82 %) | 23 | 97 % |
+| Paladin, Kleriker, Wächter | Weltenverschlinger | 3 | 79 % (82 %) | 20 | 43 % |
+| Paladin, Kleriker | Frostriese | 2 | 100 % (99 %) | 19 | 17 % |
+| Paladin + Kleriker, Paladin wehrt jede 2. Runde ab | Frostriese | 2 | 64 % (87 %) | 25 | 97 % |
+| Berserker, Magier (2 Schadensklassen) | Hydra / Riese / Verschlinger | 2 | 47 / 86 / 92 % | 9–11 | 0 % |
+
+Die Raserei trifft wie geplant nur Gruppen, die Kämpfe in die Länge ziehen; normale Gruppen enden nie nach Runde 20.
+Ziel „2 Schadensklassen ≥ 50 %“: knapp verfehlt nur gegen die Sumpfhydra zu zweit (47 %) – das liegt an der Hydra
+selbst (die Schadensgruppe Champion + Assassine schafft sie zu zweit nur zu 8 %), nicht an der Raserei.
+
+### 11.3 Bei der Umsetzung entschieden
+
+| # | Frage | Entscheidung | Grund |
+|---|---|---|---|
+| 1 | Wo steht der Kern? | Eigenes Modul `classKit.ts`; `heroClasses.ts` behält Erkennung und Passive, deren Texte aus dem Kit kommen | Übersicht |
+| 2 | Wie zählt die Leiste? | Pro Runde ein `ChargeTally`; Auslöser **gewichtet** (`Partial<Record<ChargeTrigger, number>>`, wie in der Skizze in 6). Ereignisse mit Zähler (Krit, Treffer) pro Ereignis, Runden-Auslöser einmal | ungewichtet war die Leiste bei Fähigkeits-Klassen zu langsam (11.1) |
+| 3 | Lädt die Runde der Signatur? | **Nein** | Sonst füllen sicher kritische (Halsschnitt) oder kontende (Duell) Signaturen die Leiste selbst wieder an |
+| 4 | Fällt ein Held im Koop | Leiste auf 0 | Wiederbelebte beginnen neu |
+| 5 | Schadensart der Signatur | Eigene, waffenunabhängige Art pro Klasse (Halsschnitt Stich, Duell Klinge, Richtspruch Wucht …); Arkane Entladung über `fireOrMagic` (Feuer-Schwäche statt Magie) | „waffenunabhängig“ |
+| 6 | Lebensraub der Signatur | **Zusätzlich** zum Lebensraub der Klasse (Ausweiden 50 % + 8 %, Entfesseln 20 % + 8 %) | einfach |
+| 7 | Hexer-Verderbnis | Wirkt beim **Legen jedes eigenen DoTs** (`layDot` mit `warlock`), auch Item-Effekte und Vergiftete Waffen; Wandelbare Flüche ebenda | „eigenes Gift“ (Abgleich #22) |
+| 8 | Seelenernte | Erntet nur **eigene** DoTs (Koop: `sourceId` oder Stapel in `stacksBy`); Fluch im Koop als Verwundbar 10 %, 2 Runden, höherer Wert zählt | kein Ernten fremder DoTs |
+| 9 | Markierung | `vulnerable` mit „höherer Wert zählt“ plus Feld `marked` für den Krit-Auslöser; 3 volle Runden nach dem Schuss | der Schuss selbst profitiert nicht (Rechnung 4.3) |
+| 10 | Duellhaltung | 2 Gegnerzüge (Signatur-Runde und nächste), wie eine nicht verbrauchte Parade (×0,7, Konter 0,6 D), **nur gegen den Boss**; im Koop nur gegen Einzelangriffe, Spott 0,75 in beiden Runden | wie Parade |
+| 11 | Kampfbanner | 3 Runden **ab der Runde danach**; Koop: Mitspieler +10 %, eigenes +15 %, mehrere Banner → höherer Wert | Rechnung 4.3 |
+| 12 | Richtspruch: was ist „abgewehrt“? | Minderung durch Abwehren/Schildwall, Parade/Vergeltung (verhindert), Bollwerk-Block als **Schätzung ohne Zufall** (Angriff × Rüstungsfaktor); nicht der Schild-Topf. Zusatz als Faktor auf den Treffer | kein zusätzlicher Würfelwurf |
+| 13 | Gruppenschild | Nur **Mitspieler**, nicht der Paladin selbst; gemeinsamer Topf `ward`, höchstens 15 % | „alle Mitspieler“ |
+| 14 | Gebet im Koop | Sich 8 %, Mitspieler 15 %, reinigt alle, belebt den ersten Gefallenen ohne Wiederbelebung (25 %) | Konzept |
+| 15 | Bergbrecher | Trifft alle; sichere Betäubung nur fürs Ziel; Immunität → Schwächung 30 %, 2 Runden; zählt für Kryomant als Einfrieren (ohne Einfrier-Anzeige) | Abgleich #12 |
+| 16 | Heilung erzeugt Bedrohung | 50 % von Heilfähigkeiten, Gebet und Gruppenschild (ohne Paladin-Faktor); **nicht** Tränke, Regeneration, Lebensraub, Heilung über Zeit | nur aktive Heilung zieht Angriffe |
+| 17 | Raserei | Faktor auf Angriffe, Fähigkeiten und Gift des Bosses (`abilityDots`, Elite „Giftig“), nicht auf Explosion, Fluch, Begleiter, Hydra-Köpfe. Ereignis `enrage` jede Runde ab 17 (`roundsLeft`) bzw. ab 20 (Faktor) | Konzept 4.5 |
+| 18 | Paladin mit Schwert | Zusätzlich zur Ausdauer-Skalierung **20 % Lebensraub mit dem Schwert** („Geweihte Klinge“) | Der Schwert-Pool hat keine Heilung; ohne Ausgleich lag die Variante 30 Punkte unter dem Streitkolben-Paladin |
+| 19 | Wächter | Passiv ohne LP-Bonus | Die sichere Betäubung trug ihn sonst auf 64–74 % |
+| 20 | Quest | Ohne Gebiet, eigener Abschnitt über den Gebieten im Questbuch, `minLevel` 5; Belohnung fest (`dropChance` 0 + `classQuestArmor`), Schild in den Waffen → schwere Rüstung; erfüllt durch jeden Sieg mit Klasse (Gebiet, Dungeon, Turm, Überfall, Koop) | keine Migration nötig |
+| 21 | Golden Master | Setzt die Signatur mit 70 % ein, wenn sie bereit ist – gewürfelt nur dann, damit Kämpfe ohne Klasse gleich bleiben | Gegenprobe möglich |
+| 22 | Test-KI „gut gespielter Champion“ (`combat.test.ts`) | Setzt die Signatur ein und wirkt keine Fähigkeit ins offene Höhlenauge; Grenze der Verlassenen Mine 60 → 55 | Champion +8 % statt +15 % |
+| 23 | Signatur-Knopf | Taste **F**, auf dem Handy über die volle Breite unter Angreifen/Abwehren, ab `sm` als dritter Knopf daneben | Entscheidung „Handy“ |
+
+### 11.4 Offen / Playtest
+
+- Fühlt sich das Gebet mit 8 % Eigenheilung noch nach Heiler an? (Solo bewusst klein, im Koop zählt die Gruppe.)
+- Wächter ohne LP-Bonus: zu zerbrechlich in Dungeons?
+- Klassenlose 34 Punkte unter dem Mittel – frustriert das frühe Spiel? Wann wird die Quest im Schnitt abgeschlossen?
+- Schwert-Paladin: Wird der Lebensraub als „Geweihte Klinge“ verstanden?
+- Sumpfhydra zu zweit ist für jede Gruppe schwer (8–47 %) – eigenes Raid-Balancing, nicht Teil von G3.
+- Eigene Signatur-Animationen (heute geliehene Fähigkeits-Animationen, `signatureStyles.ts`).

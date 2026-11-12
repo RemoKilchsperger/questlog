@@ -1,4 +1,6 @@
 import { getArmorClass } from "../domain/armorClasses";
+import { classKit, ROLE_LABELS } from "../domain/classKit";
+import type { HeroClassId } from "../domain/heroClasses";
 import { CLASS_ARMOR_PIECES, detectHeroClass, getHeroClass, HERO_CLASSES } from "../domain/heroClasses";
 import type { ArmorClass, Equipment } from "../domain/types";
 import { useGameStore } from "../store/gameStore";
@@ -7,13 +9,40 @@ import { Hint } from "./HoverCard";
 /** „3 Teile leichter Rüstung“ usw. – für die Voraussetzung einer Klasse */
 const ARMOR_ADJECTIVE: Record<ArmorClass, string> = { light: "leichter", medium: "mittlerer", heavy: "schwerer" };
 
+/** Rollen einer Klasse: „⚔️ Schaden / 💫 Kontrolle“ */
+export function roleText(id: HeroClassId): string {
+  return classKit(id).roles.map((r) => `${ROLE_LABELS[r].icon} ${ROLE_LABELS[r].name}`).join(" / ");
+}
+
+/** Passiv, Leiste und Signatur einer Klasse – im Panel und im Kodex. */
+function ClassKitDetails({ id }: { id: HeroClassId }) {
+  const kit = classKit(id);
+  return (
+    <div className="mt-1 flex flex-col gap-0.5 text-xs">
+      <p className="text-muted">Rolle: {roleText(id)}</p>
+      <p className="text-xp">
+        <b>{kit.passive.name}:</b> {kit.passive.text}
+      </p>
+      <p className="text-parchment">
+        <b>⚡ {kit.gauge.name}:</b> {kit.gauge.text}
+      </p>
+      <p className="text-gold">
+        <b>
+          {kit.signature.icon} {kit.signature.name}:
+        </b>{" "}
+        {kit.signature.description}
+      </p>
+    </div>
+  );
+}
+
 /** Kleines Abzeichen der aktiven Klasse – nichts, wenn keine aktiv ist. */
 export function HeroClassBadge({ equipment }: { equipment: Equipment }) {
   const id = detectHeroClass(equipment);
   if (!id) return null;
   const cls = getHeroClass(id);
   return (
-    <Hint heading={`${cls.icon} ${cls.name}`} text={cls.bonus}>
+    <Hint heading={`${cls.icon} ${cls.name} · ${roleText(id)}`} text={`${cls.bonus} Signatur: ${classKit(id).signature.name}.`}>
       <span className="rounded-md border-2 border-legendary/60 bg-legendary/10 px-2 py-0.5 text-sm text-legendary">
         {cls.icon} {cls.name}
       </span>
@@ -34,7 +63,7 @@ export function HeroClassPanel({ equipment }: { equipment: Equipment }) {
           <div className="font-pixel text-lg text-legendary">
             {cls.icon} {cls.name}
           </div>
-          <div className="text-xs text-xp">{cls.bonus}</div>
+          <ClassKitDetails id={cls.id} />
         </div>
       ) : (
         <div className="text-center text-xs text-muted">
@@ -66,7 +95,9 @@ export function ClassCodex() {
       </div>
       <p className="mb-4 text-sm text-muted">
         Trägst du mindestens {CLASS_ARMOR_PIECES} Rüstungsteile derselben Rüstungsklasse und die passende Waffe, wirst du zu
-        einer Klasse mit eigenem Bonus. Hier stehen alle, die du schon einmal warst – die übrigen findest du selbst heraus.
+        einer Klasse: mit Rolle, Passiv, einer Klassenleiste (4 Ladungen, jede Klasse füllt sie anders) und einer
+        Signatur, die die volle Leiste verbraucht – ohne Mana, unabhängig von der Waffe. Hier stehen alle, die du schon
+        einmal warst – die übrigen findest du selbst heraus.
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">
         {HERO_CLASSES.map((cls) => {
@@ -94,7 +125,7 @@ export function ClassCodex() {
               <p className="text-xs text-muted">
                 Braucht: {armor.icon} {CLASS_ARMOR_PIECES} Teile {ARMOR_ADJECTIVE[cls.armorClass]} Rüstung + {cls.weapons}
               </p>
-              <p className="mt-1 text-xs text-xp">{cls.bonus}</p>
+              <ClassKitDetails id={cls.id} />
             </li>
           );
         })}

@@ -17,9 +17,10 @@ import type { Equipment } from "../domain/types";
  * und Klassen-Kern (G3), siehe docs/klassen-skilltree-abgleich.md.
  *
  * 1: erste Version (Klassen-Sofortkorrekturen G1) – Clients ohne Versionsangabe gelten als veraltet.
- * 2: Skilltree-Release (G2) – neue Ereignisse `bloodMagic`, `shieldGained`, Felder `free` (Fähigkeit),
- *    `warded` (Treffer), `stacks` (Bluten). Werden G2 und G3 zusammen ausgeliefert, deckt diese eine
- *    Erhöhung beide ab (docs/klassen-skilltree-abgleich.md, Auslieferung).
+ * 2: Skilltree-Release (G2) und Klassen-Kern (G3), zusammen ausgeliefert (docs/klassen-skilltree-abgleich.md,
+ *    Auslieferung) – G2: Ereignisse `bloodMagic`, `shieldGained`, Felder `free` (Fähigkeit), `warded` (Treffer),
+ *    `stacks` (Bluten). G3: Aktion `signature`, Feld `charge` am Helden, Ereignisse `signature`, `charge`,
+ *    `harvest`, `marked`, `weakened`, `banner`, `duel`, `revived`, `enrage` (Boss-Raserei).
  */
 export const COOP_PROTOCOL_VERSION = 2;
 

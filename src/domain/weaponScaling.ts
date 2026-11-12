@@ -4,6 +4,7 @@
 // Ausdauer, auch seine Rüstung.
 
 import { getItem, getItemStats } from "./items";
+import type { HeroClassId } from "./heroClasses";
 import type { Equipment, StatKey, Stats, WeaponType } from "./types";
 
 export const WEAPON_STAT: Readonly<Record<WeaponType, StatKey>> = {
@@ -34,19 +35,27 @@ export const DAMAGE_PER_POINT: Readonly<Record<StatKey, number>> = {
 /** Zusätzliche Rüstung pro Ausdauer-Punkt und angelegtem Schild. */
 export const SHIELD_ARMOR_PER_ENDURANCE = 0.1;
 
-export function weaponStat(type: WeaponType): StatKey {
+/**
+ * Paladin „Geweihte Klinge“ (docs/klassen-neukonzept.md 4.3): Als Paladin skaliert das Schwert mit Ausdauer
+ * wie Streitkolben und Schild – sonst wäre der Schwert-Paladin bei gleichem Schaden ein zerbrechlicher Tank.
+ */
+export const PALADIN_SWORD_STAT: StatKey = "endurance";
+
+/** Attribut einer Waffe – beim Paladin zählt das Schwert mit Ausdauer (Geweihte Klinge). */
+export function weaponStat(type: WeaponType, heroClass?: HeroClassId | null): StatKey {
+  if (heroClass === "paladin" && type === "sword") return PALADIN_SWORD_STAT;
   return WEAPON_STAT[type];
 }
 
 /**
  * Bonusschaden aus Attributen. Bei zwei Waffen zählt jede nach ihrem Anteil am
  * Angriff mit ihrem Attribut – mit lauter Stärke-Waffen also genau
- * `0,25 · Stärke`. Ohne Waffe zählt Stärke.
+ * `0,25 · Stärke`. Ohne Waffe zählt Stärke. `heroClass`: die aktive Klasse (Geweihte Klinge des Paladins).
  */
-export function attributeDamage(stats: Stats, equipment: Equipment): number {
+export function attributeDamage(stats: Stats, equipment: Equipment, heroClass?: HeroClassId | null): number {
   const weapons = [equipment.weapon1, equipment.weapon2]
     .filter((o) => o !== null)
-    .map((o) => ({ stat: weaponStat(getItem(o.itemId).type as WeaponType), attack: getItemStats(o).attack }));
+    .map((o) => ({ stat: weaponStat(getItem(o.itemId).type as WeaponType, heroClass), attack: getItemStats(o).attack }));
   const total = weapons.reduce((sum, w) => sum + w.attack, 0);
   if (total <= 0) return stats.strength * DAMAGE_PER_POINT.strength;
   return weapons.reduce((sum, w) => sum + (w.attack / total) * stats[w.stat] * DAMAGE_PER_POINT[w.stat], 0);

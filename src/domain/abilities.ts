@@ -122,6 +122,8 @@ export interface AbilityDef {
   interrupt?: boolean;
   /** Einfrier-Chance gegen brennende Gegner statt `stunChance` (Eisstrahl) */
   freezeVsBurning?: number;
+  /** Zählt als Feuer statt als seine Schadensart, wenn das gegen das Ziel wirksamer ist (Signatur des Magiers) */
+  fireOrMagic?: boolean;
 }
 
 export type AbilityAoe = "all" | "spread" | { splash: number };

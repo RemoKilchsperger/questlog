@@ -166,8 +166,8 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 
 | # | Idee | Status |
 |---|---|---|
-| 86 | **Klassen mit Kern (Modell C):** Rolle, Klassenleiste mit 4 Ladungen, Signaturfähigkeit ohne Mana und ein mechanisches Passiv pro Klasse; Paladin auch mit Schwert + Schild | 🚧 G0 (Simulation) und G1 (Sofortkorrekturen) umgesetzt, Kern in G3 – docs/klassen-neukonzept.md, docs/klassen-skilltree-abgleich.md |
+| 86 | **Klassen mit Kern (Modell C):** Rolle, Klassenleiste mit 4 Ladungen, Signaturfähigkeit ohne Mana und ein mechanisches Passiv pro Klasse; Paladin auch mit Schwert + Schild | ✅ G0, G1 und G3 (Klassen-Kern: Leiste, 11 Signaturen, neue Passive, Paladin mit Schwert, Koop-Rollen) umgesetzt; optionale Teile in G4 – docs/klassen-neukonzept.md, docs/klassen-skilltree-abgleich.md |
 | 87 | **Skilltree-Überarbeitung:** Meisterschaft ab 12, zwei Meisterschaften pro Pfad, neue Knoten, Brücken, Leisten-Knoten | 🚧 G2 ✅ (Meisterschaft ab 12, zweite Meisterschaften, neue Knoten, v24) – Brücken und Leisten-Knoten in G4, docs/skilltree-ueberarbeitung.md |
-| 88 | **Boss-Raserei im Koop:** ab Runde 20 +10 % Schaden pro Runde, angekündigt ab Runde 17 – bremst endlose Kämpfe mit Heiler und Tank | 💡 G3 – docs/klassen-neukonzept.md 4.5 |
-| 89 | **Quest „Finde deine Klasse“:** frühe Story-Quest, die zur ersten Klasse führt (Sieg mit aktiver Klasse) | 💡 G3 – docs/klassen-neukonzept.md 4.7 |
+| 88 | **Boss-Raserei im Koop:** ab Runde 20 +10 % Schaden pro Runde, angekündigt ab Runde 17 – bremst endlose Kämpfe mit Heiler und Tank | ✅ G3 (`coopEnrageFactor`, heroische Endbosse ab Runde 30) – docs/klassen-neukonzept.md 4.5 |
+| 89 | **Quest „Finde deine Klasse“:** frühe Story-Quest, die zur ersten Klasse führt (Sieg mit aktiver Klasse) | ✅ G3 (Questbuch ohne Gebiet, Rüstungsteil passend zur Waffe) – docs/klassen-neukonzept.md 4.7 |
 | 90 | **Druide** (mittel + Stab) als zweiter Heiler | 💡 G4, nach dem Playtest des Klerikers |

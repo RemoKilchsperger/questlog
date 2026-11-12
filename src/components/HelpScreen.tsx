@@ -15,6 +15,11 @@ import { HEROIC_AFFIX, HEROIC_BOSS_LOOT_CHANCE, HEROIC_HP, HEROIC_REWARD_FACTOR 
 import { BOSS_ITEM_DROP_CHANCE, BUFF_POTION_DROP_CHANCE, DEFEND_DAMAGE_TAKEN, DEFEND_MANA } from "../domain/combat";
 import {
   BULWARK_SHARE,
+  COOP_ENRAGE_HEROIC_ROUND,
+  COOP_ENRAGE_ROUND,
+  COOP_ENRAGE_STEP,
+  COOP_ENRAGE_WARNING,
+  HEAL_THREAT,
   COOP_BOSSES,
   COOP_MAX_PLAYERS,
   COOP_MIN_PLAYERS,
@@ -29,12 +34,14 @@ import { AREA_CHEST_CHANCE } from "../domain/areaChests";
 import { COOP_DECIDE_SECONDS } from "../domain/coopDungeonPaths";
 import { FRAMES } from "../domain/achievements";
 import { FORGE_COST_FACTOR, forgeCost, UPGRADE_GOLD_FACTOR, UPGRADE_REFUND } from "../domain/forge";
-import { CLASS_ARMOR_PIECES } from "../domain/heroClasses";
+import { CLASS_ARMOR_PIECES, PALADIN_BLADE_LIFESTEAL } from "../domain/heroClasses";
+import { CHARGE_MAX, CHARGE_PER_ROUND } from "../domain/classKit";
 import { MAX_UPGRADE, RARITIES, SELL_GOLD_PER_LEVEL, SELL_RATE, UPGRADE_STEP } from "../domain/items";
 import { MAX_LEVEL, POINTS_PER_LEVEL, xpForNextLevel } from "../domain/leveling";
 import { POTION_PRICE_PER_LEVEL, POTIONS, potionEffectText } from "../domain/potions";
 import {
   BOUNTY_AFFIXES,
+  CLASS_QUEST_LEVEL,
   DAILY_BOUNTY_COUNT,
   DAILY_DROP_CHANCE,
   DAILY_HUNT_COUNT,
@@ -293,10 +300,32 @@ export function HelpScreen() {
           <H>Klassen</H>
           <p>
             Trägst du mindestens {CLASS_ARMOR_PIECES} Rüstungsteile derselben Rüstungsklasse und die passende Waffe, wirst
-            du zu einer Klasse mit eigenem Bonus – zum Beispiel leichte Rüstung und Stab: 🔮 Magier. Es gibt elf Klassen;
+            du zu einer Klasse – zum Beispiel leichte Rüstung und Stab: 🔮 Magier. Es gibt elf Klassen;
             welche Kombination was ergibt, findest du selbst heraus (oder schaust bei anderen Helden in der Rangliste). Entdeckte
-            Klassen stehen im Charakter-Tab – mit dem, was sie brauchen.
+            Klassen stehen im Charakter-Tab – mit dem, was sie brauchen. Ab Level {CLASS_QUEST_LEVEL} führt die Quest
+            „Finde deine Klasse“ im Questbuch zur ersten Klasse.
           </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <b>Rolle und Passiv:</b> Jede Klasse hat eine Rolle (Schaden, Tank, Heiler, Unterstützung, Kontrolle) und ein
+              Passiv, das zeigt, wie sie kämpft.
+            </li>
+            <li>
+              <b>⚡ Klassenleiste:</b> {CHARGE_MAX} Ladungen, jeder Kampf beginnt leer. Jede Klasse füllt sie auf ihre Art
+              (Krits, Abwehren, Gift, Fähigkeiten …), höchstens {CHARGE_PER_ROUND} pro Runde. Die Runde der Signatur lädt
+              nicht.
+            </li>
+            <li>
+              <b>Signatur</b> (Taste F): verbraucht die volle Leiste, kostet kein Mana, hat keine Abklingzeit und hängt nicht
+              an der Waffe. Für den Skilltree ist sie keine Fähigkeit (kein Echo, Nachhall, keine Blutmagie, Eröffnung,
+              Deckung, Mehrfachtreffer-Knoten oder Konzentration) – Knoten für Treffer und Krits gelten. Bosse können sie
+              nicht zurückwerfen, verschlingen oder sich an ihr aufladen.
+            </li>
+            <li>
+              Paladin geht mit Streitkolben <i>oder</i> Schwert und Schild – als Paladin skaliert das Schwert mit Ausdauer
+              und heilt um {pct(PALADIN_BLADE_LIFESTEAL)} des Schadens (Geweihte Klinge).
+            </li>
+          </ul>
           <H>Boss-Items & Sets</H>
           <p>
             Jeder Boss hat eigene, immer legendäre Items, die nur er fallen lässt (Chance {pct(BOSS_ITEM_DROP_CHANCE)} pro
@@ -721,14 +750,27 @@ export function HelpScreen() {
             <li>Alle wählen gleichzeitig ihre Aktion, {COOP_TURN_SECONDS} Sekunden lang. Wer nicht wählt, greift normal an.</li>
             <li>
               <b>Bedrohung:</b> Der Boss greift meist an, wer am meisten Schaden macht. Sie sinkt jede Runde um{" "}
-              {pct(THREAT_DECAY)}. Mit Bollwerk zieht ein Schildträger {pct(BULWARK_SHARE)} der Angriffe auf sich.
+              {pct(THREAT_DECAY)}. Mit Bollwerk zieht ein Schildträger {pct(BULWARK_SHARE)} der Angriffe auf sich, ebenso
+              der Duellant in Duellhaltung. Heilung erzeugt Bedrohung: {pct(HEAL_THREAT)} der geheilten LP beim Heiler.
+              Kritische Treffer der Assassine zählen nur halb.
+            </li>
+            <li>
+              <b>Klassen im Koop:</b> Das Gebet des Klerikers heilt die ganze Gruppe und holt einen Gefallenen zurück, der
+              Richtspruch des Paladins gibt allen einen Schild, das Kampfbanner des Champions stärkt alle, Markierung
+              (Waldläufer) und Fluch (Hexer) lassen das Ziel mehr Schaden nehmen. Gleiche Wirkungen stapeln nicht – der
+              höhere Wert zählt.
+            </li>
+            <li>
+              <b>😡 Raserei:</b> Ab Runde {COOP_ENRAGE_ROUND} (heroische Endbosse ab {COOP_ENRAGE_HEROIC_ROUND}) macht der
+              Gegner jede Runde {pct(COOP_ENRAGE_STEP)} mehr Schaden, angekündigt {COOP_ENRAGE_WARNING} Runden vorher.
+              Begleiter und Hydra-Köpfe rasen nicht; im Dungeon zählt jeder Kampf für sich.
             </li>
             <li>
               Die Fähigkeiten der Koop-Bosse treffen die ganze Gruppe. Dungeon-Bosse wechseln ab: eine Fähigkeit gegen ein
               Ziel, eine gegen alle. Wie solo zeigen sie jede Runde ihre Absicht und kämpfen mit eigener Taktik – und jeder
               kann abwehren.
             </li>
-            <li>Gefallene Mitspieler belebst du mit einem Heiltrank wieder – jeden höchstens einmal pro Kampf.</li>
+            <li>Gefallene Mitspieler belebst du mit einem Heiltrank (oder dem Gebet) wieder – jeden höchstens einmal pro Kampf.</li>
             <li>
               Bei einem Sieg würfelt jeder seine eigene Beute ({formatNumber(COOP_REWARD_FACTOR)}-fache XP und Gold eines
               Solo-Bosses) – auch wer gefallen ist. Fallen alle, gibt es nichts.

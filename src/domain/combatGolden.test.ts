@@ -15,6 +15,8 @@ import {
   attackRound,
   DEFEND,
   drinkPotion,
+  SIGNATURE,
+  signatureBlocker,
   getHeroCombatProfile,
   livingAdds,
   potionBlocker,
@@ -29,6 +31,7 @@ import {
   coopContent,
   coopAbilityBlocker,
   coopPotionBlocker,
+  coopSignatureBlocker,
   hasNextStage,
   HEROIC_SUFFIX,
   isCoopDungeon,
@@ -60,6 +63,8 @@ import type { Character, Equipment } from "./types";
 const WEAPONS = Object.keys(WEAPON_KIND) as SkillWeapon[];
 const CLASSES = [null, ...HERO_CLASSES.map((c) => c.id)];
 const PATHS = SKILL_PATHS.map((p) => p.id);
+/** Klassen, deren Signatur der Golden Master einsetzt (Klassen-Kern G3, in zwei Wellen erneuert) */
+const SIGNATURE_CLASSES = new Set<string | null | undefined>(HERO_CLASSES.map((c) => c.id));
 
 type Rng = () => number;
 const pick = <T,>(rng: Rng, list: readonly T[]): T => list[Math.floor(rng() * list.length)];
@@ -163,10 +168,14 @@ function playSolo(name: string, start: BattleState, seed: number, reactive = fal
       }
       if (state.status !== "active") break;
       const usable = state.abilities.filter((id) => abilityBlocker(state, id) === null);
+      // Volle Klassenleiste: meist die Signatur – gewürfelt nur dann, damit Kämpfe ohne Klasse gleich bleiben
+      const signature = !reactive && SIGNATURE_CLASSES.has(state.heroClass) && signatureBlocker(state) === null && choose() < 0.7;
       const roll = choose();
-      const action = reactive
-        ? state.bossTurn?.intent === "charging" ? undefined : DEFEND
-        : roll < 0.15 ? DEFEND : roll < 0.6 && usable.length > 0 ? pick(choose, usable) : undefined;
+      const action = signature
+        ? SIGNATURE
+        : reactive
+          ? state.bossTurn?.intent === "charging" ? undefined : DEFEND
+          : roll < 0.15 ? DEFEND : roll < 0.6 && usable.length > 0 ? pick(choose, usable) : undefined;
       const r = attackRound(state, fight, action);
       rec.add(r.events);
       state = r.state;
@@ -283,6 +292,8 @@ function playCoop(name: string, start: CoopBattleState, seed: number): string {
           const usable = hero.abilities.filter((id) => coopAbilityBlocker(hero, id, turn, state.round) === null);
           if (usable.length > 0) action.ability = pick(choose, usable);
         }
+        // Volle Klassenleiste: meist die Signatur – gewürfelt nur dann, damit Kämpfe ohne Klasse gleich bleiben
+        if (SIGNATURE_CLASSES.has(hero.heroClass) && coopSignatureBlocker(hero) === null && choose() < 0.7) action.signature = true;
         if (choose() < 0.15) {
           const potion = pick(choose, POTIONS);
           const on = pick(choose, [hero.id, ...state.heroes.map((h) => h.id), ...targets.filter((t) => t !== undefined)]);

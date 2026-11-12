@@ -7,10 +7,12 @@
 
 import { xpRewardBase } from "./leveling";
 import { rollDrop } from "./loot";
+import { HERO_CLASSES } from "./heroClasses";
+import { createItem, getItem, indexForLevel } from "./items";
 import { AREAS, DUNGEONS, getCreature, isAreaUnlocked, type AreaDef, type CreatureDef } from "./creatures";
 import { ELITE_AFFIXES, getEliteAffix, type EliteAffix } from "./elites";
 import { TOWER_MIN_LEVEL } from "./tower";
-import type { Loot, Rarity } from "./types";
+import type { ArmorClass, Equipment, Loot, OwnedItem, Rarity, WeaponType } from "./types";
 
 /** Händler und Schmied: Ausrüstung verkaufen, zerlegen oder verbessern. */
 export type TradeAction = "sell" | "salvage" | "upgrade";
@@ -37,7 +39,9 @@ export type QuestGoal =
    * Letztes Kapitel eines Dungeon-Besuchers (dungeonVisitors.ts): die Szene hinter der Geschichtstür
    * spielen und danach den Endboss besiegen. Kein Ereignis zählt dafür – das setzt der Store direkt.
    */
-  | { kind: "dungeonStory"; dungeonId: string };
+  | { kind: "dungeonStory"; dungeonId: string }
+  /** „Finde deine Klasse“: einen Kampf mit aktiver Klasse gewinnen (solo oder Koop) */
+  | { kind: "classWin" };
 
 export interface QuestReward {
   xp: number;
@@ -55,6 +59,8 @@ export interface QuestDef {
   description: string;
   /** Gebiet bzw. Dungeon, in dem die Quest spielt – fehlt bei allgemeinen Aufträgen */
   areaId?: string;
+  /** Questbuch-Quest ohne Gebiet: ab diesem Level annehmbar */
+  minLevel?: number;
   goal: QuestGoal;
   reward: QuestReward;
 }
@@ -77,7 +83,9 @@ export type QuestEvent =
   /** Ein Ausrüstungsteil wurde verkauft, zerlegt oder verbessert */
   | { kind: "trade"; action: TradeAction }
   /** Im Endlos-Turm wurde dieses Stockwerk geschafft */
-  | { kind: "towerFloor"; floor: number };
+  | { kind: "towerFloor"; floor: number }
+  /** Ein Kampf mit aktiver Klasse ist gewonnen */
+  | { kind: "classWin" };
 
 /* ───────────── Belohnungen ───────────── */
 
@@ -200,8 +208,62 @@ function dungeonQuest(dungeon: AreaDef): QuestDef {
   };
 }
 
-/** Alle Quests des Questbuchs: pro Gebiet eine Jagd pro Kreatur und der Boss, dazu jeder Dungeon. */
-export const QUESTS: readonly QuestDef[] = [...AREAS.flatMap(areaQuests), ...DUNGEONS.map(dungeonQuest)];
+/* ───────────── Finde deine Klasse ───────────── */
+
+/**
+ * Story-Quest „Finde deine Klasse“ (docs/klassen-neukonzept.md 4.7): führt klassenlose Helden zur ersten
+ * Klasse, weil Leiste und Signatur den Abstand zu Klassenlosen erst sichtbar machen. Ab Lv. 5, ohne Gebiet.
+ * Belohnung: Gold und Erfahrung wie eine Jagdquest auf Lv. 8 und ein seltenes Rüstungsteil der Rüstungsklasse,
+ * die zur Hauptwaffe passt (hilft beim dritten Teil). Keine Spielstand-Migration: neue Quest-Id.
+ */
+export const CLASS_QUEST_ID = "class-find";
+export const CLASS_QUEST_LEVEL = 5;
+const CLASS_QUEST_REWARD_LEVEL = 8;
+const CLASS_QUEST_UNITS = 6;
+
+const CLASS_QUEST: QuestDef = {
+  id: CLASS_QUEST_ID,
+  title: "Finde deine Klasse",
+  description:
+    "Der Ausbilder am Trainingsplatz sagt: Wer 3 Rüstungsteile einer Rüstungsklasse und die passende Waffe trägt, findet seine Klasse – mit Klassenleiste und Signatur. Der Klassen-Kodex in der Ausrüstung zeigt, was passt.",
+  minLevel: CLASS_QUEST_LEVEL,
+  goal: { kind: "classWin" },
+  // Das Item ist fest (classQuestArmor) – darum keine zufällige Beute
+  reward: questReward(CLASS_QUEST_REWARD_LEVEL, CLASS_QUEST_UNITS, 0, KILL_WEIGHTS),
+};
+
+/** Rüstungsklasse, die zu den Waffen passt – die der ersten Klasse mit diesen Waffen, sonst nach der Hauptwaffe. */
+export function classArmorFor(weapons: readonly WeaponType[]): ArmorClass {
+  // Wer einen Schild trägt, will Paladin werden (mittel + Streitkolben + Schild wäre nur Kleriker mit Schild)
+  const shielded = weapons.includes("shield") ? HERO_CLASSES.find((c) => c.id === "paladin" && c.matches([...weapons])) : undefined;
+  const exact = shielded ?? HERO_CLASSES.find((c) => c.matches([...weapons]));
+  if (exact) return exact.armorClass;
+  const main = weapons.find((w) => w !== "shield") ?? weapons[0];
+  const single = main ? HERO_CLASSES.find((c) => c.matches([main]) || c.matches([main, main])) : undefined;
+  return single?.armorClass ?? "heavy";
+}
+
+const ARMOR_SLOTS = ["chest", "legs", "head", "arms", "feet"] as const;
+
+/**
+ * Belohnung von „Finde deine Klasse“: ein seltenes Rüstungsteil der Rüstungsklasse der angelegten Waffen, auf dem
+ * Level des Helden – im ersten Platz, der noch nicht diese Rüstungsklasse trägt.
+ */
+export function classQuestArmor(equipment: Equipment, level: number, uid: string, rng: () => number = Math.random): OwnedItem {
+  const weapons = [equipment.weapon1, equipment.weapon2].filter((o) => o !== null).map((o) => getItem(o.itemId).type as WeaponType);
+  const armor = classArmorFor(weapons);
+  const worn = (slot: (typeof ARMOR_SLOTS)[number]) => {
+    const item = equipment[slot];
+    return item ? (getItem(item.itemId).armorClass ?? "heavy") : null;
+  };
+  const slot = ARMOR_SLOTS.find((s) => worn(s) !== armor) ?? "chest";
+  const idx = Math.max(1, indexForLevel(level));
+  const id = armor === "heavy" ? `${slot}-${idx}` : `${slot}-${armor}-${idx}`;
+  return createItem(id, "rare", uid, rng);
+}
+
+/** Alle Quests des Questbuchs: „Finde deine Klasse“, pro Gebiet eine Jagd pro Kreatur und der Boss, dazu jeder Dungeon. */
+export const QUESTS: readonly QuestDef[] = [CLASS_QUEST, ...AREAS.flatMap(areaQuests), ...DUNGEONS.map(dungeonQuest)];
 
 export function getQuest(id: string): QuestDef {
   const def = QUESTS.find((q) => q.id === id);
@@ -218,7 +280,9 @@ export function questArea(def: QuestDef): AreaDef {
 
 /** Ziel als Zahl: Anzahl Siege, Dungeons oder Ausrüstungsteile – beim bestimmten Dungeon 1. */
 export function questTarget(def: QuestDef): number {
-  return def.goal.kind === "dungeon" || def.goal.kind === "dungeonStory" ? 1 : def.goal.kind === "towerFloor" ? def.goal.floor : def.goal.count;
+  const { goal } = def;
+  if (goal.kind === "dungeon" || goal.kind === "dungeonStory" || goal.kind === "classWin") return 1;
+  return goal.kind === "towerFloor" ? goal.floor : goal.count;
 }
 
 const TRADE_GOAL_TEXT: Record<TradeAction, string> = {
@@ -254,6 +318,8 @@ export function questGoalText(def: QuestDef): string {
       const what = goal.count > 1 ? `${goal.count}× ${goal.item}` : goal.item;
       return `Bring ${what} (${creature.boss ? "Beute" : "fällt bei"}: ${creature.name})`;
     }
+    case "classWin":
+      return "Gewinne einen Kampf mit aktiver Klasse (3 Rüstungsteile einer Rüstungsklasse + passende Waffe)";
   }
 }
 
@@ -262,8 +328,9 @@ export function bountyAffixText(affixes: readonly EliteAffix[]): string {
   return affixes.map((a) => getEliteAffix(a).name).join(", ");
 }
 
-/** Quests eines Gebiets sind ab dessen Mindest-Level verfügbar. */
+/** Quests eines Gebiets sind ab dessen Mindest-Level verfügbar, Quests ohne Gebiet ab ihrem eigenen. */
 export function isQuestUnlocked(def: QuestDef, heroLevel: number): boolean {
+  if (def.minLevel !== undefined) return heroLevel >= def.minLevel;
   return isAreaUnlocked(questArea(def), heroLevel);
 }
 
@@ -294,6 +361,8 @@ function matchesGoal(goal: QuestGoal, event: QuestEvent): boolean {
     // Setzt der Store direkt, wenn nach der Szene der Endboss fällt (visitors.ts, completeStoryScene)
     case "dungeonStory":
       return false;
+    case "classWin":
+      return event.kind === "classWin";
   }
 }
 
@@ -309,7 +378,13 @@ export function acceptQuest(log: QuestLog, id: string, heroLevel: number): Quest
   const def = getQuest(id);
   if (log.completed.includes(id)) throw new Error("Diese Quest hast du schon abgeschlossen.");
   if (id in log.active) throw new Error("Diese Quest hast du schon angenommen.");
-  if (!isQuestUnlocked(def, heroLevel)) throw new Error(`${questArea(def).name} ist erst ab Level ${questArea(def).minLevel} zugänglich.`);
+  if (!isQuestUnlocked(def, heroLevel)) {
+    throw new Error(
+      def.minLevel !== undefined
+        ? `Diese Quest gibt es erst ab Level ${def.minLevel}.`
+        : `${questArea(def).name} ist erst ab Level ${questArea(def).minLevel} zugänglich.`,
+    );
+  }
   return { ...log, active: { ...log.active, [id]: 0 } };
 }
 

@@ -15,6 +15,8 @@ import {
   bossTurnOf,
   DEFEND,
   drinkPotion,
+  SIGNATURE,
+  signatureBlocker,
   getHeroCombatProfile,
   livingAdds,
   potionBlocker,
@@ -28,6 +30,7 @@ import {
   coopAbilityBlocker,
   coopBossTurn,
   coopPotionBlocker,
+  coopSignatureBlocker,
   resolveRound,
   startCoopBattle,
   type CoopAction,
@@ -35,6 +38,7 @@ import {
   type CoopHero,
   type CoopPlayer,
 } from "../domain/coopCombat";
+import { untouchable } from "../domain/bossIntents";
 import { AREAS, type CreatureDef } from "../domain/creatures";
 import { classAbility, classStatBonus, type HeroClassId } from "../domain/heroClasses";
 import { createItem, indexForLevel } from "../domain/items";
@@ -49,6 +53,8 @@ import { masterPathOrder, pathOrder, withSkills } from "./skills";
 /** Ausrüstung einer Klasse – Einhand-Klassen tragen zwei Waffen (Review, „Methode“). */
 export interface ClassBuild {
   id: HeroClassId;
+  /** Name der Zeile, wenn eine Klasse mehrere Varianten hat (Paladin mit Schwert) */
+  label?: string;
   armor: ArmorClass;
   weapons: readonly ItemType[];
   /** Attribut der Waffe: 60 % der Punkte, der Rest in Ausdauer (Ausdauer-Waffen: alles) */
@@ -64,6 +70,8 @@ export const CLASS_BUILDS: readonly ClassBuild[] = [
   { id: "plunderer", armor: "medium", weapons: ["axe", "axe"], main: "strength" },
   { id: "cleric", armor: "medium", weapons: ["mace", "mace"], main: "endurance" },
   { id: "paladin", armor: "heavy", weapons: ["mace", "shield"], main: "endurance" },
+  // Paladin mit Schwert und Schild (Klassen-Kern G3): Geweihte Klinge – das Schwert skaliert mit Ausdauer
+  { id: "paladin", label: "paladin-sw", armor: "heavy", weapons: ["sword", "shield"], main: "endurance" },
   { id: "berserker", armor: "heavy", weapons: ["greataxe"], main: "strength" },
   { id: "champion", armor: "heavy", weapons: ["greatsword"], main: "strength" },
   { id: "warden", armor: "heavy", weapons: ["greathammer"], main: "strength" },
@@ -213,8 +221,12 @@ function score(state: BattleState, id: AbilityId): number {
   return v;
 }
 
-/** Die KI: beste Fähigkeit, wenn sie deutlich mehr bringt als ein Angriff; gegen Abtauchen und Fähigkeiten abwehren. */
+/**
+ * Die KI: volle Klassenleiste sofort als Signatur, sonst die beste Fähigkeit, wenn sie deutlich mehr bringt als ein
+ * Angriff; gegen Abtauchen und Fähigkeiten abwehren.
+ */
 export function chooseSoloAction(state: BattleState): HeroAction | undefined {
+  if (signatureBlocker(state) === null && !untouchable(bossTurnOf(state))) return SIGNATURE;
   // Nach Finte oder Titanenschlag normal angreifen, sonst verpufft es
   if (state.heroEffects.feint || state.heroEffects.charged) return undefined;
   const turn = bossTurnOf(state);
@@ -273,13 +285,13 @@ export interface SoloSimOptions extends SimHeroOptions {
 /** Eine Klasse gegen einen Boss: `n` Kämpfe mit festem Zufall. */
 export function simulateSolo(build: ClassBuild, boss: CreatureDef, options: SoloSimOptions): SimResult {
   const seed = options.seed ?? 1;
-  const rng = seededRng(hash(`${build.id}|${boss.id}|${seed}`));
+  const rng = seededRng(hash(`${build.label ?? build.id}|${boss.id}|${seed}`));
   let wins = 0;
   let rounds = 0;
   let winRounds = 0;
   let d = 0;
   for (let i = 0; i < options.n; i++) {
-    const uid = `${build.id}-${boss.id}-${seed}-${i}`;
+    const uid = `${build.label ?? build.id}-${boss.id}-${seed}-${i}`;
     const profile = simHero(build, boss.level, uid, options);
     // D misst immer am klassenlosen Helden mit derselben Ausrüstung – so ist der Klassenbonus sichtbar
     const unit = options.classless ? profile.damage : withoutClass(profile).damage;
@@ -295,7 +307,8 @@ export function simulateSolo(build: ClassBuild, boss: CreatureDef, options: Solo
 }
 
 export interface ClassRow {
-  id: HeroClassId | "classless";
+  /** Klasse bzw. Variante (ClassBuild.label) oder "classless" */
+  id: string;
   /** Pro Boss in der Reihenfolge von `bosses` */
   results: SimResult[];
   /** Mittlere Siegquote über alle Bosse, 0–1 */
@@ -319,7 +332,7 @@ function row(id: ClassRow["id"], results: SimResult[]): ClassRow {
 /** Alle Klassen gegen die Bosse – die Klassenspreizung (Review Nr. 22). */
 export function classSpread(options: SoloSimOptions & { bosses?: readonly CreatureDef[]; builds?: readonly ClassBuild[] }): ClassRow[] {
   const bosses = options.bosses ?? AREA_BOSSES;
-  return (options.builds ?? CLASS_BUILDS).map((build) => row(build.id, bosses.map((boss) => simulateSolo(build, boss, options))));
+  return (options.builds ?? CLASS_BUILDS).map((build) => row(build.label ?? build.id, bosses.map((boss) => simulateSolo(build, boss, options))));
 }
 
 /**
@@ -331,7 +344,7 @@ export function classBudget(
   options: SoloSimOptions & { bosses?: readonly CreatureDef[] },
 ): { withClass: ClassRow; classless: ClassRow; value: number } {
   const bosses = options.bosses ?? AREA_BOSSES;
-  const withClass = row(build.id, bosses.map((boss) => simulateSolo(build, boss, options)));
+  const withClass = row(build.label ?? build.id, bosses.map((boss) => simulateSolo(build, boss, options)));
   const classless = row("classless", bosses.map((boss) => simulateSolo(build, boss, { ...options, classless: true })));
   return { withClass, classless, value: withClass.meanD / classless.meanD - 1 };
 }
@@ -368,11 +381,6 @@ export interface CoopSimOptions {
   maxRounds?: number;
   /** Wer abwehrt, statt anzugreifen (z. B. ein Tank, der den Kampf in die Länge zieht): Held → Chance pro Runde */
   defendChance?: Record<string, number>;
-  /**
-   * Vorschau der rundenbasierten Boss-Raserei (G3, docs/klassen-skilltree-abgleich.md): ab Runde `from`
-   * macht der Boss `step` mehr Schaden pro Runde (additiv). Nur hier im Simulator, noch nicht im Spiel.
-   */
-  enrage?: { from: number; step: number };
 }
 
 /**
@@ -384,13 +392,7 @@ export function fightCoop(contentId: string, players: CoopPlayer[], rng: () => n
   const maxRounds = options.maxRounds ?? SIM_MAX_ROUNDS;
   let now = 0;
   const heals = ["large", "medium", "small"];
-  let rage = 1;
   while (state.status === "active" && state.round <= maxRounds) {
-    if (options.enrage && state.round >= options.enrage.from) {
-      const next = 1 + options.enrage.step * (state.round - options.enrage.from + 1);
-      state = { ...state, boss: { ...state.boss, damage: (state.boss.damage / rage) * next } };
-      rage = next;
-    }
     const turn = coopBossTurn(state);
     const actions: Record<string, CoopAction> = {};
     for (const hero of state.heroes) {
@@ -403,6 +405,7 @@ export function fightCoop(contentId: string, players: CoopPlayer[], rng: () => n
       if (revive && fallen) action.potion = { potionId: revive, targetId: fallen.id };
       else if (drink) action.potion = { potionId: drink, targetId: hero.id };
       if (rng() < (options.defendChance?.[hero.id] ?? 0)) action.defend = true;
+      else if (coopSignatureBlocker(hero) === null) action.signature = true;
       else {
         let best: AbilityId | undefined;
         let bestValue = 1.2;

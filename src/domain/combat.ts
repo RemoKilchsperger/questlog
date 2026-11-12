@@ -104,12 +104,31 @@ import {
   rageFactor,
   type HeroClassId,
 } from "./heroClasses";
+import {
+  bannerShare,
+  chargeGain,
+  emptyTally,
+  nextCharge,
+  signatureAbility,
+  signatureBlocker as kitSignatureBlocker,
+  strongerVulnerable,
+  unleashCost,
+  verdictBonus,
+  CHAMPION_BANNER,
+  CLERIC_PRAYER,
+  DUELIST_DUEL,
+  RANGER_MARK,
+  WARDEN_BREAKER_WEAKEN,
+  WARLOCK_HARVEST,
+  type ChargeTally,
+} from "./classKit";
 import type { Character, Equipment, Loot, OwnedItem } from "./types";
 import { attributeDamage, shieldArmorBonus } from "./weaponScaling";
 import { mainWeapon, matchupFactor, WEAPON_KIND, type DotKind } from "./matchups";
 import { BLESSING, stacks, type BlessingId } from "./tower";
 import {
   abilityBuffs,
+  armorReduction,
   absorbWard,
   wardGain,
   cleansed,
@@ -225,7 +244,7 @@ export function getHeroCombatProfile(character: Character, equipment: Equipment)
   return {
     level,
     maxHp: Math.round((80 + (level - 1) * 12 + stats.endurance * 1.5) * getSetHpMultiplier(equipment) * (1 + bonus.hp) * (1 + skill.hp)),
-    damage: (5 + gear.attack + attributeDamage(stats, equipment)) * (1 + bonus.damage),
+    damage: (5 + gear.attack + attributeDamage(stats, equipment, heroClass)) * (1 + bonus.damage),
     armor: Math.round((gear.armor + shieldArmorBonus(stats, equipment)) * (1 + bonus.armor) * (1 + skill.armor)),
     // Klasse und Skilltree kommen über die Grund-Obergrenze hinaus dazu – gedeckelt wird die
     // Summe erst beim Würfeln (CRIT_CAP_TOTAL in strikeFactors), wenn alle Boni bekannt sind
@@ -400,7 +419,23 @@ export type BattleEvent =
   | { type: "defeated"; side: Side; add?: string; pack?: true }
   | { type: "fled"; goldLost: number }
   /** Klassen-Regeneration (Kleriker) am Ende der Runde */
-  | { type: "regen"; heal: number };
+  | { type: "regen"; heal: number }
+  /**
+   * Der Held setzt die Signatur seiner Klasse ein (classKit.ts) – die Treffer folgen als "hit".
+   * `hpCost`: Entfesseln kostet LP, `absorbed`: Richtspruch – so viel abgewehrter Schaden fliesst ein.
+   */
+  | { type: "signature"; classId: HeroClassId; hpCost?: number; absorbed?: number }
+  /** Die Klassenleiste füllt sich um `gained` auf `value` Ladungen */
+  | { type: "charge"; gained: number; value: number }
+  /** Seelenernte: Gift, Feuer und Bluten am Ziel wirken sofort – zusammen `damage` */
+  | { type: "harvest"; damage: number; add?: string }
+  /** Beute markieren: Das Ziel erleidet mehr Schaden */
+  | { type: "marked"; add?: string }
+  /** Bergbrecher am betäubungsimmunen Ziel: Es macht weniger Schaden */
+  | { type: "weakened"; add?: string }
+  /** Kampfbanner bzw. Duellhaltung beginnt */
+  | { type: "banner" }
+  | { type: "duel" };
 
 /** Schaden pro Runde (Gift, Feuer, Bluten) – ignoriert Rüstung */
 export interface DamageOverTime {
@@ -438,6 +473,8 @@ export interface EnemyEffects {
   chilled?: number;
   /** Erschüttert: in den letzten 2 Runden betäubt – für den Heiligen Hammer */
   shaken?: number;
+  /** Beute markieren (Waldläufer): so viele Runden noch markiert – Krits dagegen laden seine Leiste */
+  marked?: number;
 }
 
 /** Ein Begleiter des Bosses – eine normale Kreatur, die mitkämpft. */
@@ -476,6 +513,8 @@ export interface BattleState {
   cooldowns?: Partial<Record<AbilityId, number>>;
   /** Aktive Klasse des Helden (fehlt bei älteren Kämpfen) */
   heroClass?: HeroClassId | null;
+  /** Klassenleiste: Ladungen (0 bis CHARGE_MAX) – fehlt ohne Klasse */
+  charge?: number;
   /** Wirkungen der Fähigkeiten auf den Gegner (den Boss) */
   enemyEffects: EnemyEffects;
   /** Begleiter des Bosses – auch besiegte (LP 0). Fehlt bei älteren Kämpfen. */
@@ -548,6 +587,12 @@ export interface BattleState {
     bladeDance?: number;
     /** Schild-Topf (Lebensband): fängt Treffer vor den LP ab, höchstens WARD_MAX_SHARE der max. LP */
     ward?: number;
+    /** Duellhaltung (Duellant): so viele Gegnerzüge noch */
+    duel?: number;
+    /** Kampfbanner (Champion): mehr Schaden ab der Runde nach dem Aufstellen */
+    banner?: ActiveBuff;
+    /** Paladin: abgewehrter, geblockter und geminderter Schaden seit dem letzten Richtspruch */
+    absorbed?: number;
   };
   status: BattleStatus;
   /** Alle Ereignisse mit Rundennummer – für das Kampfprotokoll. */
@@ -593,6 +638,8 @@ export function startBattle(
     abilities: hero.abilities,
     cooldowns: {},
     heroClass: hero.heroClass,
+    // Die Klassenleiste beginnt jeden Kampf leer – auch im Turm und zwischen Dungeon-Kämpfen
+    ...(hero.heroClass && { charge: 0 }),
     heroWeapon: hero.weapon ?? null,
     ...(hero.itemEffects?.length && { itemEffects: hero.itemEffects }),
     ...(hero.potionPower && hero.potionPower !== 1 && { potionPower: hero.potionPower }),
@@ -643,7 +690,15 @@ export function defendEffect(skills: SkillRanks | undefined): { taken: number; m
 }
 /** Statt einer Fähigkeit: abwehren. */
 export const DEFEND = "defend";
-export type HeroAction = AbilityId | typeof DEFEND;
+/** Statt einer Fähigkeit: die Signatur der Klasse (volle Leiste, classKit.ts). */
+export const SIGNATURE = "signature";
+export type HeroAction = AbilityId | typeof DEFEND | typeof SIGNATURE;
+
+/** Warum die Signatur gerade nicht geht – oder null. */
+export function signatureBlocker(state: BattleState): string | null {
+  if (state.status !== "active") return "Der Kampf ist vorbei.";
+  return kitSignatureBlocker(state.heroClass, state.charge);
+}
 
 /** Lebende Begleiter. */
 export function livingAdds(state: BattleState): BattleAdd[] {
@@ -854,12 +909,29 @@ export function attackRound(
 ): RoundResult {
   assertActive(state);
   const defending = action === DEFEND;
-  const abilityId = defending ? undefined : action;
+  const signature = action === SIGNATURE;
+  const abilityId = action === DEFEND || action === SIGNATURE ? undefined : action;
   const ability = abilityId ? classAbility(abilityId, state.heroClass) : null;
   if (abilityId) {
     const blocker = abilityBlocker(state, abilityId);
     if (blocker) throw new Error(blocker);
   }
+  if (signature) {
+    const blocker = signatureBlocker(state);
+    if (blocker) throw new Error(blocker);
+  }
+  /**
+   * Signatur der Klasse (classKit.ts): trifft wie eine Fähigkeit, ist für alles andere aber keine – kein
+   * Mana, keine Abklingzeit, kein Echo, kein Nachhall, keine Mehrfachtreffer-Knoten, und Boss-Mechaniken
+   * (Zurückwerfen, Verschlingen, Aufladen) greifen nicht.
+   */
+  const sig = signature && state.heroClass ? signatureAbility(state.heroClass, state.heroWeapon) : null;
+  /** Was trifft: die Fähigkeit oder die Signatur – null beim normalen Angriff und beim Abwehren */
+  const act = ability ?? sig;
+  /** Klassenleiste: Auslöser dieser Runde – nur mit Klasse gezählt */
+  const tally: ChargeTally = { ...emptyTally(), signature };
+  /** Richtspruch: Faktor aus dem abgewehrten Schaden auf die Signatur */
+  let sigBoost = 1;
   const turn = bossTurnOf(state);
   /** Treffer des Helden auf den Boss – für die Wut des Krummzahn */
   let heroHitsOnBoss = 0;
@@ -915,7 +987,17 @@ export function attackRound(
    */
   const applyDot = (foe: Foe, kind: DotKind, base: number, rounds: number, stack = false) => {
     // Im Solo gibt es nur eine Quelle – neues Gift stapelt sich auf das vorhandene
-    const laid = layDot(foe.fx, { creatureId: foe.creatureId, kind, base, rounds, skills, alive: foe.c.hp > 0, own: foe.fx.poison, stackBleed: stack });
+    const laid = layDot(foe.fx, {
+      creatureId: foe.creatureId,
+      kind,
+      base,
+      rounds,
+      skills,
+      alive: foe.c.hp > 0,
+      own: foe.fx.poison,
+      stackBleed: stack,
+      warlock: state.heroClass === "warlock",
+    });
     if (laid.immune) {
       events.push({ type: "immune", kind, ...foeTag(foe) });
       return;
@@ -928,12 +1010,12 @@ export function attackRound(
   };
   /** Schadensart des Helden in dieser Runde: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe */
   const heroKind = (() => {
-    if (ability?.kind) return ability.kind;
+    if (act?.kind) return act.kind;
     const weapon = ability?.weapon ?? state.heroWeapon;
     return weapon ? WEAPON_KIND[weapon] : null;
   })();
   // Titanenschlag: Der nächste normale Angriff nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
-  const plainAttack = !ability && !defending;
+  const plainAttack = !ability && !defending && !signature;
   const charge = plainAttack ? (heroEffects.charged ?? 1) : 1;
   if (plainAttack && heroEffects.charged) heroEffects = { ...heroEffects, charged: undefined };
   // Schattenschritt: Die nächste Aktion trifft sicher kritisch – Finte: der nächste normale Angriff doppelt
@@ -965,14 +1047,18 @@ export function attackRound(
   /** Ohne gewähltes Ziel geht es gegen den Boss – im Rudel gegen das nächste Tier, wenn das erste liegt */
   const fallback = boss.c.hp > 0 || !pack ? boss : (adds.find((f) => f.c.hp > 0) ?? boss);
   const target = adds.find((f) => f.add === state.target && f.c.hp > 0) ?? fallback;
-  const aoe = ability?.aoe;
+  const aoe = act?.aoe;
   // Verstärkungen wirken auf Schaden und Rüstung, die Lebenspunkte bleiben die echten.
   const strongBase = buffedHero(state);
   // Berserker: bei wenig Lebenspunkten mehr Schaden; Kriegsschrei: Verstärkung
   const strong = {
     ...strongBase,
     damage:
-      strongBase.damage * rageFactor(state.heroClass, hero.hp, hero.maxHp) * (1 + (heroEffects.empower?.percent ?? 0)),
+      strongBase.damage *
+      rageFactor(state.heroClass, hero.hp, hero.maxHp) *
+      (1 + (heroEffects.empower?.percent ?? 0)) *
+      // Kampfbanner des Champions – ab der Runde nach dem Aufstellen
+      (1 + bannerShare(heroEffects.banner)),
     // Item-Effekt „Letztes Gefecht“: mehr Rüstung bei wenig Lebenspunkten
     armor:
       hasEffect(state.itemEffects, "lastStand") && hero.hp < hero.maxHp * EFFECT.lastStand.threshold
@@ -1090,6 +1176,40 @@ export function attackRound(
       foe.fx = extendDots(debuffFoe(foe.fx, ability), ability);
       layAbilityDots(ability, strong.damage, (kind, base, rounds) => applyDot(foe, kind, base, rounds));
     }
+    // Klassenleiste: Fähigkeit eingesetzt, Heilfähigkeit, Schwächung
+    tally.ability = ability.weapon;
+    tally.healAbility = !!(ability.heal || ability.renew);
+    if (ability.weaken) tally.weakens++;
+  }
+  // Signatur: was sie vor den Treffern tut – LP-Kosten, Heilen, Haltungen, Richtspruch
+  if (sig && state.heroClass) {
+    const heroClass = state.heroClass;
+    // Entfesseln kostet LP – keine Blutmagie, nie tödlich
+    const hpCost = heroClass === "berserker" ? unleashCost(hero.hp) : 0;
+    if (hpCost > 0) hero = { ...hero, hp: hero.hp - hpCost };
+    const absorbed = heroClass === "paladin" ? Math.round(heroEffects.absorbed ?? 0) : 0;
+    if (heroClass === "paladin") {
+      sigBoost = 1 + verdictBonus(absorbed, strong.damage) / sig.multiplier;
+      heroEffects = { ...heroEffects, absorbed: 0 };
+    }
+    events.push({ type: "signature", classId: heroClass, ...(hpCost > 0 && { hpCost }), ...(absorbed > 0 && { absorbed }) });
+    if (heroClass === "cleric") {
+      mend(Math.round(hero.maxHp * CLERIC_PRAYER.self), (heal) => heal > 0 && events.push({ type: "selfHeal", heal }));
+      const pure = cleansed(heroEffects);
+      if (pure) {
+        heroEffects = pure;
+        events.push({ type: "cleansed" });
+      }
+    }
+    if (heroClass === "duelist") {
+      heroEffects = { ...heroEffects, duel: DUELIST_DUEL.rounds };
+      events.push({ type: "duel" });
+    }
+    if (heroClass === "champion") {
+      // Eine Runde mehr: Das Banner zählt erst ab der nächsten Runde (bannerShare)
+      heroEffects = { ...heroEffects, banner: { percent: CHAMPION_BANNER.self, roundsLeft: CHAMPION_BANNER.rounds + 1 } };
+      events.push({ type: "banner" });
+    }
   }
   const vulnerableOf = (foe: Foe) => 1 + (foe.fx.vulnerable?.percent ?? 0);
   const armorOf = (foe: Foe) => (ability?.ignoreArmor ? 0 : Math.round(foe.c.armor * (1 - (foe.fx.armorBreak ?? 0))));
@@ -1123,7 +1243,7 @@ export function attackRound(
     const f = strikeFactors(
       foe,
       {
-        ability,
+        ability: act,
         heroKind,
         itemEffects: effects,
         skills,
@@ -1154,19 +1274,19 @@ export function attackRound(
     const plate = f.plate;
     const air = foe === boss ? airborneFactor(turn, ability?.weapon ?? state.heroWeapon) : 1;
     const direct = taken * plate * air;
-    const attacker: Combatant = ability
+    const attacker: Combatant = act
       ? {
           ...strong,
           damage:
-            strong.damage * ability.multiplier * execute * charge * f.charging * f.vulnerable * share * direct * f.kindFactor * f.itemFactor * f.skillFactor,
-          critChance: ability.guaranteedCrit || sureCrit ? 1 : f.critChance,
+            strong.damage * act.multiplier * sigBoost * execute * charge * f.charging * f.vulnerable * share * direct * f.kindFactor * f.itemFactor * f.skillFactor,
+          critChance: act.guaranteedCrit || sureCrit ? 1 : f.critChance,
         }
       : {
           ...strong,
           damage: strong.damage * f.headsman * charge * share * f.vulnerable * direct * f.kindFactor * f.itemFactor * f.skillFactor,
           critChance: sureCrit ? 1 : f.critChance,
         };
-    const heroHit = rollHit(attacker, { ...foe.c, armor: foeArmor(foe, ability) }, rng, rankIn(skills, "piercing") > 0);
+    const heroHit = rollHit(attacker, { ...foe.c, armor: foeArmor(foe, act) }, rng, rankIn(skills, "piercing") > 0);
     // Das offene Höhlenauge wirft Fähigkeiten zurück – der Held erleidet einen Teil, das Auge nichts
     if (foe === boss && ability && reflectsAbilities(turn)) {
       const damage = Math.max(1, Math.round(heroHit.damage * EYE_REFLECT));
@@ -1180,7 +1300,12 @@ export function attackRound(
     bossShield = shield.shield;
     if (foe === boss) heroHitsOnBoss++;
     else if (foe.add) hitAdds.add(foe.add);
-    if (foe === boss && ability?.interrupt) interruptHit = true;
+    if (foe === boss && act?.interrupt) interruptHit = true;
+    // Klassenleiste: kritische Treffer – Waldläufer auch gegen markierte Ziele
+    if (heroHit.crit) {
+      tally.crits++;
+      if (foe.fx.marked) tally.markedCrits++;
+    }
     dealtByHero += Math.min(foe.c.hp, damage);
     foe.c = { ...foe.c, hp: Math.max(0, foe.c.hp - damage) };
     events.push({
@@ -1222,8 +1347,8 @@ export function attackRound(
   };
   // Mehrfachtreffer, Flächen, Echo, Finte, Duellant, Kettenblitz – wer abwehrt, greift nicht an
   heroVolley({
-    ability,
-    hits: () => (defending ? 0 : abilityHits(ability, hero.hp, hero.maxHp)),
+    ability: act,
+    hits: () => (defending ? 0 : abilityHits(act, hero.hp, hero.maxHp)),
     target,
     living,
     volleyOn: () => standing() && hero.hp > 0,
@@ -1235,9 +1360,34 @@ export function attackRound(
     itemEffects: effects,
     strike,
     rng,
+    onExtraHit: () => tally.extraHits++,
   });
-  // Lebensraub: Blutrausch und Plünderer
-  const lifesteal = heroLifesteal(state.heroClass, ability, state.blessings, effects, skills);
+  // Signatur: was sie nach den Treffern am Ziel tut – Seelenernte, Markierung
+  if (sig && target.c.hp > 0 && !(target === boss && hidden)) {
+    if (state.heroClass === "warlock") {
+      // Seelenernte: Jedes DoT am Ziel wirkt sofort eine Runde – die Laufzeit bleibt
+      let harvested = 0;
+      for (const kind of DOT_ORDER) {
+        const dot = target.fx[kind];
+        if (!dot || target.c.hp <= 0) continue;
+        const damage = Math.max(1, Math.round(dot.damage * WARLOCK_HARVEST.rounds * vulnerableOf(target) * takenBy(target)));
+        target.c = { ...target.c, hp: Math.max(0, target.c.hp - damage) };
+        harvested += damage;
+      }
+      if (harvested > 0) {
+        events.push({ type: "harvest", damage: harvested, ...foeTag(target) });
+        addDown(target);
+        mend(Math.round(harvested * WARLOCK_HARVEST.selfHeal), (heal) => heal > 0 && events.push({ type: "selfHeal", heal }));
+      }
+    } else if (state.heroClass === "ranger") {
+      // Beute markieren: ab jetzt 3 volle Runden – der höhere Wert mit Jägermal zählt
+      const rounds = RANGER_MARK.rounds + 1;
+      target.fx = { ...target.fx, vulnerable: strongerVulnerable(target.fx.vulnerable, { percent: RANGER_MARK.percent, roundsLeft: rounds }), marked: rounds };
+      events.push({ type: "marked", ...foeTag(target) });
+    }
+  }
+  // Lebensraub: Blutrausch, Signatur, Plünderer und Berserker
+  const lifesteal = heroLifesteal(state.heroClass, act, state.blessings, effects, skills, state.heroWeapon);
   if (lifesteal > 0 && dealtByHero > 0) {
     mend(Math.round(dealtByHero * lifesteal), (heal) => heal > 0 && events.push({ type: "selfHeal", heal }));
   }
@@ -1286,7 +1436,9 @@ export function attackRound(
   const bossDamageTaken = state.enemy.hp - boss.c.hp;
   // Neferets Fluch bricht, wenn sie genug LP verloren hat oder der Held sich läutert
   const curse = turn?.curse;
-  const curseBroken = !!curse && boss.c.hp > 0 && (boss.c.hp <= curse.breakAt || !!ability?.cleanse);
+  // Läuterung und das Gebet des Klerikers reinigen
+  const cleansing = !!ability?.cleanse || (!!sig && state.heroClass === "cleric");
+  const curseBroken = !!curse && boss.c.hp > 0 && (boss.c.hp <= curse.breakAt || cleansing);
   if (curseBroken) events.push({ type: "curseBroken", ...(boss.c.hp > curse.breakAt && { cleansed: true }) });
   let bossStunned = false;
   /** Xal'Zar hat diese Fähigkeit verschlungen */
@@ -1300,6 +1452,14 @@ export function attackRound(
       if (foe.c.hp > 0 && !(foe === boss && hidden) && stunLands(ability, rng, skills, !!foe.fx.burn)) stunned.add(foe);
     }
     for (const foe of frozenByItem) if (foe.c.hp > 0) stunned.add(foe);
+    // Bergbrecher: Das Ziel ist sicher betäubt – ist es immun, macht es stattdessen weniger Schaden
+    if (sig && state.heroClass === "warden" && target.c.hp > 0 && !(target === boss && hidden)) {
+      if (target.fx.stunImmunity) {
+        target.fx = { ...target.fx, weaken: { percent: WARDEN_BREAKER_WEAKEN.percent, roundsLeft: WARDEN_BREAKER_WEAKEN.rounds } };
+        events.push({ type: "weakened", ...foeTag(target) });
+        tally.weakens++;
+      } else stunned.add(target);
+    }
   }
   /** Skills: Betäubte (Erschütterung) und Eingefrorene (Kryomant, Schmelzen) sind in der Runde danach markiert */
   const markStunned = (foe: Foe) => {
@@ -1307,7 +1467,8 @@ export function attackRound(
     foe.fx = { ...foe.fx, shaken: 3 };
     if (rankIn(skills, "concussion") > 0) foe.fx = { ...foe.fx, dazed: 2 };
     // Kryomant: Jede Betäubung zählt als Einfrieren
-    const frozen = frozenByItem.has(foe) || !!ability?.freeze;
+    // Bergbrecher zählt für Kryomant als Einfrieren (docs/skilltree-ueberarbeitung.md 5.1)
+    const frozen = frozenByItem.has(foe) || !!ability?.freeze || (!!sig && state.heroClass === "warden" && foe === target);
     if (chillsOnStun(skills, frozen)) foe.fx = { ...foe.fx, chilled: 2 };
   };
   const elite = state.elite ?? [];
@@ -1315,6 +1476,13 @@ export function attackRound(
   const hurt = damageTakenFactor(heroEffects, defending, skills, DEFEND_DAMAGE_TAKEN);
   /** Zorn des Bollwerks: In dieser Runde abgewehrt, geblockt oder pariert */
   let warded = false;
+  /** Paladin: abgewehrter, geblockter und geminderter Schaden dieser Runde (für den Richtspruch) */
+  let absorbedNow = 0;
+  const paladin = state.heroClass === "paladin";
+  /** Was ein geblockter Angriff etwa gemacht hätte – ohne Zufall, damit der Kampf sonst gleich bleibt */
+  const blockedEstimate = (c: Combatant, factor: number) => c.damage * factor * (1 - armorReduction(strong.armor, c.level));
+  /** Was Abwehren und Schildwall an einem Treffer gemindert haben */
+  const softened = (damage: number) => (hurt > 0 && hurt < 1 ? (damage * (1 - hurt)) / hurt : 0);
   /** Turm-Segen „Dornen“: Wer den Helden trifft, erleidet einen Teil davon selbst – Stachelwehr beim Abwehren. */
   const thorns = (foe: Foe, damage: number) => {
     const back = thornsDamage(damage, thornsShare(effects, state.blessings, defending, skills), foe.c.hp);
@@ -1399,6 +1567,7 @@ export function attackRound(
         events.push({ type: "blocked" });
         blocked = true;
         warded = true;
+        if (paladin) absorbedNow += blockedEstimate(boss.c, (special?.multiplier ?? 1) * (special?.hits ?? 1) * weakenFactor(boss.fx) * drums);
       } else {
         // Elite: Rasend macht mehr Schaden (unter halben LP noch mehr), Flink schlägt zweimal schwächer zu
         const { rage, swift, hits } = eliteStrike(elite, boss.c);
@@ -1416,8 +1585,10 @@ export function attackRound(
             (special && hasEffect(effects, "steadfast") ? 1 - EFFECT.steadfast : 1),
         };
         const defender = special?.ignoreArmor ? { ...strong, armor: 0 } : strong;
-        // Parade/Vergeltung wirkt nur gegen den Boss – den grossen Treffer
-        const guard = heroEffects.guard;
+        // Parade/Vergeltung wirkt nur gegen den Boss – den grossen Treffer. Die Duellhaltung wirkt wie eine
+        // Parade, die nicht verbraucht wird (zählt auch für Zorn des Bollwerks).
+        const duel: Guard | undefined = heroEffects.duel ? { reduce: DUELIST_DUEL.reduce, counter: DUELIST_DUEL.counter } : undefined;
+        const guard = heroEffects.guard ?? duel;
         let dealt = 0;
         let raw = 0;
         /** Treffer, denen der Held nicht ausgewichen ist (Schemen) */
@@ -1435,6 +1606,7 @@ export function attackRound(
           raw += enemyHit.damage;
           hero = { ...hero, hp: Math.max(0, hero.hp - damage) };
           dealt += damage;
+          if (paladin) absorbedNow += softened(enemyHit.damage);
           events.push({ type: "hit", attacker: "enemy", ...enemyHit, ...shielded });
         }
         if (landed > 0 && (defending || guard)) warded = true;
@@ -1443,6 +1615,7 @@ export function attackRound(
         if (guard && landed > 0) {
           heroEffects = { ...heroEffects, guard: undefined };
           events.push({ type: "guarded", prevented: raw - dealt });
+          if (paladin) absorbedNow += raw - dealt;
           const counter = guardRetort(
             guard,
             raw,
@@ -1534,10 +1707,12 @@ export function attackRound(
         events.push({ type: "blocked", ...foeTag(foe) });
         blocked = true;
         warded = true;
+        if (paladin) absorbedNow += blockedEstimate(foe.c, weakenFactor(foe.fx));
       } else if ("dodged" in strike) {
         events.push({ type: "dodged", ...foeTag(foe) });
       } else {
         const enemyHit = { ...strike.hit, ...wardHit(strike.hit.damage) };
+        if (paladin) absorbedNow += softened(strike.hit.damage);
         hero = { ...hero, hp: Math.max(0, hero.hp - enemyHit.damage) };
         events.push({ type: "hit", attacker: "enemy", ...enemyHit, ...foeTag(foe) });
         thorns(foe, enemyHit.damage);
@@ -1631,11 +1806,28 @@ export function attackRound(
   if (status === "active" && interrupted) mana = Math.min(state.maxMana, mana + interruptMana(skills));
   const cooldownUsed = ability;
 
+  // Paladin: abgewehrter Schaden sammelt sich bis zum nächsten Richtspruch
+  if (paladin && absorbedNow > 0) heroEffects = { ...heroEffects, absorbed: (heroEffects.absorbed ?? 0) + Math.round(absorbedNow) };
+  // Klassenleiste: Auslöser dieser Runde (classKit.ts) – die Signatur verbraucht die volle Leiste
+  let gauge = state.charge;
+  if (gauge !== undefined) {
+    if (signature) gauge = 0;
+    const foesBefore = [state.enemy, ...(state.adds ?? []).map((a) => a.combatant)];
+    const dotFoesDown = foes.filter((f, i) => (foesBefore[i]?.hp ?? 0) > 0 && f.c.hp === 0 && !!(f.fx.poison || f.fx.burn)).length;
+    const roundTally = soloTally(tally, events, { dealt: dealtByHero > 0, low: hero.hp < hero.maxHp * 0.5, dotFoesDown });
+    const gained = status === "active" ? chargeGain(state.heroClass, roundTally) : 0;
+    if (gained > 0) {
+      gauge = nextCharge(gauge, gained);
+      events.push({ type: "charge", gained, value: gauge });
+    }
+  }
+
   return {
     state: {
       ...state,
       ...(secondWindUsed && { secondWindUsed }),
       ...(endured && { endured }),
+      ...(gauge !== undefined && { charge: gauge }),
       hero,
       enemy: boss.c,
       enemyEffects: tickEnemyEffects(boss.fx),
@@ -1657,9 +1849,11 @@ export function attackRound(
         empower: tickBuff(heroEffects.empower),
         damageTaken: tickBuff(heroEffects.damageTaken),
         renew: tickBuff(heroEffects.renew),
+        ...(heroEffects.banner && { banner: tickBuff(heroEffects.banner) }),
+        ...(heroEffects.duel !== undefined && { duel: heroEffects.duel > 1 ? heroEffects.duel - 1 : undefined }),
       },
-      // Konzentration: mehr Mana in einer Runde ohne Fähigkeit (Angriff oder Abwehren)
-      mana: Math.min(state.maxMana, mana + manaRegen(skills, MANA_REGEN, !ability)),
+      // Konzentration: mehr Mana in einer Runde ohne Fähigkeit (Angriff oder Abwehren) – die Signatur zählt nicht
+      mana: Math.min(state.maxMana, mana + manaRegen(skills, MANA_REGEN, !ability && !signature)),
       // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen
       cooldowns: tickCooldowns(
         state.cooldowns,
@@ -1675,6 +1869,29 @@ export function attackRound(
     },
     events,
   };
+}
+
+/**
+ * Klassenleiste solo: Was die Runde ausgelöst hat – aus den Zählern des Kampfs und seinen Ereignissen.
+ * Im Solo hat alles am Gegner der Held verursacht.
+ */
+function soloTally(tally: ChargeTally, events: readonly BattleEvent[], o: { dealt: boolean; low: boolean; dotFoesDown: number }): ChargeTally {
+  const t: ChargeTally = { ...tally, dealt: o.dealt, low: o.low, dotFoesDown: o.dotFoesDown };
+  for (const e of events) {
+    if (e.type === "hit" && e.attacker === "enemy") t.hitsTaken++;
+    else if (e.type === "defend" || e.type === "guarded") t.guarded = true;
+    else if (e.type === "blocked") t.guarded = t.bulwarkBlock = true;
+    else if ((e.type === "poison" || e.type === "burn" || e.type === "bleed") && e.target === "enemy") {
+      t.dotTicked = true;
+      if (e.type === "bleed") t.bleedTicked = true;
+    } else if (e.type === "harvest") t.dotTicked = true;
+    else if (e.type === "stunned") {
+      t.stuns++;
+      if (e.freeze) t.freezes++;
+    } else if (e.type === "counter") t.counters++;
+    else if (e.type === "defeated" && e.side === "enemy") t.foesDown++;
+  }
+  return t;
 }
 
 /**

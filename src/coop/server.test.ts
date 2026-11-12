@@ -421,3 +421,35 @@ describe("Skilltree aus dem Cloud-Spielstand", () => {
     expect(Object.values(skills).reduce((s, r) => s + (r ?? 0), 0)).toBe(5);
   });
 });
+
+describe("Koop-Server: Klassenleiste und Signatur", () => {
+  /** Spielstand eines Champions: 3 schwere Rüstungsteile und ein Zweihandschwert */
+  const championSave = (level: number) => {
+    const save = saveAt(level);
+    const piece = (slot: string) => createItem(`${slot}-20`, "common", slot);
+    return {
+      ...save,
+      state: {
+        ...save.state,
+        equipment: { ...EMPTY_EQUIPMENT, head: piece("head"), chest: piece("chest"), legs: piece("legs"), weapon1: createItem("greatsword-20", "common", "g") },
+      },
+    };
+  };
+
+  it("die Klasse kommt aus dem Cloud-Spielstand, die Leiste rechnet der Server – eine behauptete Signatur zählt nicht", () => {
+    const champion = memberFromSave("a", championSave(25), null);
+    expect(champion.profile.heroClass).toBe("champion");
+    let row = readyLobby();
+    row = run(row, { type: "start" }, "a", { members: { a: champion, b: member("b") } })!;
+    expect(row.state!.heroes.find((h) => h.id === "a")!.charge).toBe(0);
+    // Leere Leiste: die Signatur wird ignoriert, der Held greift normal an
+    row = run(run(row, { type: "act", round: 1, action: { signature: true } }, "a"), { type: "act", round: 1, action: {} }, "b")!;
+    expect(row.last_events.some((e) => e.type === "signature")).toBe(false);
+    expect(row.state!.heroes.find((h) => h.id === "a")!.charge).toBeGreaterThan(0);
+    // Mit voller Leiste (im Kampfzustand des Servers) geht sie
+    const full = { ...row, state: { ...row.state!, heroes: row.state!.heroes.map((h) => (h.id === "a" ? { ...h, charge: 4 } : h)) } };
+    const next = run(run(full, { type: "act", round: 2, action: { signature: true } }, "a"), { type: "act", round: 2, action: {} }, "b")!;
+    expect(next.last_events).toContainEqual({ type: "signature", heroId: "a", classId: "champion" });
+    expect(next.state!.heroes.find((h) => h.id === "a")!.charge).toBe(0);
+  });
+});

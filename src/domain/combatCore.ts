@@ -16,9 +16,10 @@ import { DRUM_BONUS, DRUM_MAX, RITUAL_HEAL, RITUAL_ROUNDS, SHIELD_EVERY, SHIELD_
 import { CURSE_DAMAGE, plateFactor } from "./bossIntents";
 import type { ActiveBuff, Combatant, DamageOverTime } from "./combat";
 import { POISON, RAGE_BONUS, REGEN_SHARE, SWIFT_SHARE, type EliteAffix } from "./elites";
-import { CLERIC_REGEN, DUELIST_EXTRA_HIT, lifestealShare, PLUNDERER_BLEED, type HeroClassId } from "./heroClasses";
+import { CLERIC_REGEN, DUELIST_EXTRA_HIT, lifestealShare, PLUNDERER_BLEED, WARLOCK_DOT, WARLOCK_SWAP, type HeroClassId } from "./heroClasses";
 import { critBurns, EFFECT, effectCritBonus, effectDamageFactor, has as hasEffect, heroDotRounds, type ItemEffectId } from "./itemEffects";
 import { bestKind, matchupFactor, matchupOf, type DamageKind, type DotKind } from "./matchups";
+import type { SkillWeapon } from "./skills";
 import {
   bandageHeal,
   bloodburstDamage,
@@ -98,6 +99,8 @@ export interface TickingEnemyEffects {
   dazed?: number;
   chilled?: number;
   shaken?: number;
+  /** Beute markieren (Waldläufer): so viele Runden noch markiert */
+  marked?: number;
 }
 
 /** Am Rundenende laufen Schwächung, Verwundbarkeit und Betäubungs-Immunität eine Runde ab. */
@@ -110,6 +113,7 @@ export function tickEnemyEffects<F extends TickingEnemyEffects>(fx: F): F {
     ...(fx.dazed !== undefined && { dazed: tickMark(fx.dazed) }),
     ...(fx.chilled !== undefined && { chilled: tickMark(fx.chilled) }),
     ...(fx.shaken !== undefined && { shaken: tickMark(fx.shaken) }),
+    ...(fx.marked !== undefined && { marked: tickMark(fx.marked) }),
   };
 }
 
@@ -145,6 +149,11 @@ export interface LayDot<D extends DamageOverTime> {
    * Bluten ohne Stapel (Axtwurf, Schnitter) bleibt, solange es stärker ist als der neue Stapel.
    */
   stackBleed?: boolean;
+  /**
+   * Der Verursacher ist Hexer („Verderbnis“): stärker und eine Runde länger – und „Wandelbare Flüche“: Ist das
+   * Ziel gegen Gift immun, wird es Feuer mit WARLOCK_SWAP der Stärke (und umgekehrt).
+   */
+  warlock?: boolean;
 }
 
 export type LayDotResult<F> =
@@ -162,9 +171,14 @@ export type LayDotResult<F> =
  */
 export function layDot<D extends DamageOverTime, F extends DotEffects<D>>(fx: F, o: LayDot<D>): LayDotResult<F> {
   const factor = matchupFactor(o.creatureId, o.kind);
-  if (factor === 0) return { immune: true };
-  const damage = Math.max(1, Math.round(o.base * factor * ownDotFactor(o.skills, o.kind)));
-  const length = ownDotRounds(o.skills, o.kind, o.rounds);
+  if (factor === 0) {
+    const swap = o.warlock && o.kind !== "bleed" ? (o.kind === "poison" ? "burn" : "poison") : null;
+    if (swap && matchupFactor(o.creatureId, swap) > 0) return layDot(fx, { ...o, kind: swap, base: o.base * WARLOCK_SWAP });
+    return { immune: true };
+  }
+  const warlock = o.warlock ? WARLOCK_DOT : { factor: 1, rounds: 0 };
+  const damage = Math.max(1, Math.round(o.base * warlock.factor * factor * ownDotFactor(o.skills, o.kind)));
+  const length = ownDotRounds(o.skills, o.kind, o.rounds + warlock.rounds);
   const tagged = (dot: DamageOverTime) => ({ ...dot, ...o.tag }) as D;
   if (o.kind === "bleed" && o.stackBleed) {
     const current = fx.bleed;
@@ -533,6 +547,13 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
     dazed: !!foe.fx.dazed,
     chilled: !!foe.fx.chilled,
   };
+  let kindFactor = matchupFactor(foe.creatureId, kind);
+  let matchup = kind ? matchupOf(foe.creatureId, kind) : null;
+  // Arkane Entladung (Magier): zählt als Feuer, wenn das wirksamer ist als Magie
+  if (ability?.fireOrMagic && matchupFactor(foe.creatureId, "burn") > kindFactor) {
+    kindFactor = matchupFactor(foe.creatureId, "burn");
+    matchup = matchupOf(foe.creatureId, "burn");
+  }
   return {
     finisher,
     headsman,
@@ -541,8 +562,8 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
     charging: ability?.chargingBonus && t.isBoss && t.charging ? 1 + ability.chargingBonus : 1,
     vulnerable: 1 + (foe.fx.vulnerable?.percent ?? 0),
     kind,
-    matchup: kind ? matchupOf(foe.creatureId, kind) : null,
-    kindFactor: matchupFactor(foe.creatureId, kind),
+    matchup,
+    kindFactor,
     itemFactor: effectDamageFactor(itemEffects, {
       round: s.round,
       foeHp: foe.c.hp,
@@ -665,6 +686,8 @@ export function heroVolley<F extends { c: { hp: number } }>(o: {
   itemEffects: readonly ItemEffectId[] | undefined;
   strike: (foe: F, share: number, echoShare: number) => void;
   rng: () => number;
+  /** Der Duellant schlägt ein zweites Mal zu (Klassenleiste „Rhythmus“) */
+  onExtraHit?: () => void;
 }): void {
   const { ability, target, living, rng } = o;
   const aoe = ability?.aoe;
@@ -688,7 +711,10 @@ export function heroVolley<F extends { c: { hp: number } }>(o: {
   // Finte: Der normale Angriff trifft ein zweites Mal
   if (o.feint && target.c.hp > 0 && o.fightOn()) o.strike(target, 1, 1);
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
-  if (o.plain && o.heroClass === "duelist" && target.c.hp > 0 && o.fightOn() && rng() < DUELIST_EXTRA_HIT) o.strike(target, 1, 1);
+  if (o.plain && o.heroClass === "duelist" && target.c.hp > 0 && o.fightOn() && rng() < DUELIST_EXTRA_HIT) {
+    o.strike(target, 1, 1);
+    o.onExtraHit?.();
+  }
   // Item-Effekt „Kettenblitz“: Ein normaler Angriff springt auf einen zweiten Gegner über
   if (o.plain && hasEffect(o.itemEffects, "chainLightning") && o.fightOn() && rng() < EFFECT.chainLightning.chance) {
     const others = living().filter((f) => f !== target);
@@ -774,9 +800,11 @@ export function heroLifesteal(
   blessings: readonly BlessingId[] | undefined,
   itemEffects: readonly ItemEffectId[] | undefined,
   skills: SkillRanks | undefined,
+  /** Hauptwaffe des Helden (Geweihte Klinge des Paladins) */
+  weapon?: SkillWeapon | null,
 ): number {
   return (
-    lifestealShare(heroClass, ability) +
+    lifestealShare(heroClass, ability, weapon) +
     BLESSING.bloodthirst * stacks(blessings, "bloodthirst") +
     (hasEffect(itemEffects, "soulDrain") ? EFFECT.soulDrain : 0) +
     skillLifesteal(skills)

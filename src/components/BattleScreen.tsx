@@ -17,8 +17,12 @@ import {
   fleeCost,
   getHeroCombatProfile,
   potionBlocker,
+  SIGNATURE,
+  signatureBlocker,
   type BattleState,
 } from "../domain/combat";
+import { classKit } from "../domain/classKit";
+import { SignatureButton, SIGNATURE_KEY } from "./ClassGauge";
 import {
   AREAS,
   DUNGEONS,
@@ -88,7 +92,7 @@ import {
 } from "./BattleStatus";
 import { ADD_SKILLS, addIntentText, getBossPhase } from "../domain/bossMechanics";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
-import { classAbility } from "../domain/heroClasses";
+import { classAbility, getHeroClass } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestItemFinds } from "./QuestItemFinds";
 import { TreasureMapFind } from "./TreasureMaps";
@@ -608,7 +612,7 @@ function Battle({ battle }: { battle: BattleState }) {
       ? "Keine mehr im Vorrat – Nachschub beim Händler."
       : potionBlocker(battle, p);
 
-  // Tastenkürzel: A angreifen, D abwehren, 1–9 Fähigkeiten, Q–R Tränke, T Ziel wechseln, S Tempo
+  // Tastenkürzel: A angreifen, D abwehren, F Signatur, 1–9 Fähigkeiten, Q–R Tränke, T Ziel wechseln, S Tempo
   const cycleSpeed = useBattleSpeedStore((s) => s.cycleSpeed);
   const chooseTarget = useGameStore((s) => s.battleTarget);
   useHotkeys((key) => {
@@ -619,7 +623,10 @@ function Battle({ battle }: { battle: BattleState }) {
     if (confirmFlee || busy || !active) return false;
     if (key === "a") act(() => attack());
     else if (key === "d") act(() => attack(DEFEND));
-    else if (ABILITY_KEYS.includes(key)) {
+    else if (key === SIGNATURE_KEY) {
+      if (signatureBlocker(battle) !== null) return false;
+      act(() => attack(SIGNATURE));
+    } else if (ABILITY_KEYS.includes(key)) {
       const id = battle.abilities[ABILITY_KEYS.indexOf(key)];
       if (!id || abilityBlocker(battle, id) !== null) return false;
       act(() => attack(id));
@@ -733,7 +740,7 @@ function Battle({ battle }: { battle: BattleState }) {
           {(battle.adds?.length ?? 0) > 0 && <BattleTargets battle={battle} disabled={!active} />}
           <PhaseWarning bossId={battle.creatureId} phase={battle.phase} boss={battle.enemy} />
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid gap-2 ${battle.heroClass ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"}`}>
             <Hint heading="⚔️ Angreifen" text="Normaler Angriff mit deiner Waffe – danach schlägt der Gegner zurück." className="flex">
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -759,6 +766,14 @@ function Battle({ battle }: { battle: BattleState }) {
                 🛡️ Abwehren <Kbd>D</Kbd>
               </motion.button>
             </Hint>
+            <SignatureButton
+              heroClass={battle.heroClass}
+              charge={battle.charge}
+              blocker={signatureBlocker(battle)}
+              disabled={busy || !active}
+              onClick={() => act(() => attack(SIGNATURE))}
+              className="col-span-2 sm:col-span-1"
+            />
           </div>
 
           <ActionGroup label="Fähigkeiten">
@@ -1520,5 +1535,22 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `${enemy} schlägt mit ${getAbility(e.ability).name} zu!`;
     case "freed":
       return `Du entreisst ${enemy} ${getAbility(e.ability).name}!`;
+    case "signature": {
+      const { signature } = classKit(e.classId);
+      const extra = e.hpCost ? ` – sie kostet dich ${e.hpCost} LP` : e.absorbed ? ` – ${e.absorbed} abgewehrter Schaden fliesst ein` : "";
+      return `${signature.icon} ${getHeroClass(e.classId).name}: ${signature.name}!${extra}`;
+    }
+    case "charge":
+      return `Deine Klassenleiste füllt sich (+${e.gained}, ${e.value}/4).`;
+    case "harvest":
+      return `Seelenernte: Deine Flüche an ${enemy} wirken sofort – ${e.damage} Schaden.`;
+    case "marked":
+      return `${enemy} ist markiert und erleidet mehr Schaden.`;
+    case "weakened":
+      return `${enemy} ist gegen Betäubung immun – der Bergbrecher schwächt ihn stattdessen.`;
+    case "banner":
+      return "Du stellst dein Kampfbanner auf – ab der nächsten Runde machst du mehr Schaden.";
+    case "duel":
+      return "Du gehst in Duellhaltung: Angriffe des Gegners werden gemindert und gekontert.";
   }
 }
