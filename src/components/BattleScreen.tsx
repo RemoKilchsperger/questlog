@@ -1406,7 +1406,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "hit":
       return e.attacker === "hero"
         ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.grazed ? " – in der Luft streifst du ihn nur" : ""}.`
-        : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden.`;
+        : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden${e.warded ? ` – dein Schild fängt ${e.warded} ab` : ""}.`;
     case "addHeal":
       return `${enemy} heilt ${battle.enemy.name} um ${e.heal} LP.`;
     case "enemyRegen":
@@ -1440,7 +1440,9 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "ability":
       return e.echo
         ? `🔮 Echo! Du setzt ${getAbility(e.ability).name} ein – ohne Mana, und es hallt nach.`
-        : `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
+        : e.free
+          ? `🔁 Nachhall! Du setzt ${getAbility(e.ability).name} ein – ohne Mana.`
+          : `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
     case "dodged":
       return `👻 Du weichst dem Angriff von ${enemy} aus.`;
     case "selfHeal":
@@ -1456,6 +1458,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return e.target === "enemy" ? `Gift fügt ${enemy} ${e.damage} Schaden zu.` : `Gift fügt dir ${e.damage} Schaden zu.`;
     case "bleed":
       if (e.burst) return `💥 Blutsturz! Die Wunde von ${enemy} platzt: ${e.damage} Schaden.`;
+      if (e.stacks) return `🗡️ ${enemy} blutet aus ${e.stacks} Schnitten und erleidet ${e.damage} Schaden.`;
       return e.target === "enemy" ? `${enemy} blutet und erleidet ${e.damage} Schaden.` : `Du blutest und erleidest ${e.damage} Schaden.`;
     case "burn":
       return e.target === "enemy" ? `Feuer fügt ${enemy} ${e.damage} Schaden zu.` : `Feuer fügt dir ${e.damage} Schaden zu.`;
@@ -1473,6 +1476,10 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `${enemy} raubt dir ${e.amount} Mana.`;
     case "regen":
       return `Du regenerierst ${e.heal} LP.`;
+    case "bloodMagic":
+      return `🧛 Blutmagie! Dein Mana reicht nicht – du zahlst ${e.damage} LP.`;
+    case "shieldGained":
+      return `🔗 Lebensband: Die überschüssige Heilung wird zu einem Schild (+${e.amount}).`;
     case "defend":
       return `Du wehrst ab${e.mana > 0 ? ` und sammelst ${e.mana} Mana` : ""}.`;
     case "reflected":

@@ -154,7 +154,11 @@ describe("Spielstand v17 → v18", () => {
 
   it("lässt eine Tafel auf Stufe 0 oder 1 unverändert", () => {
     const old = { ...store(), village: { ...EMPTY_VILLAGE, board: 1 } };
-    expect(migrateSave(old, 17)).toBe(old);
+    // Die Tafel bleibt – spätere Schritte (v24: Skillpunkte zurück) ändern nur den Charakter
+    const migrated = migrateSave(old, 17);
+    expect(migrated.village).toBe(old.village);
+    expect(migrated.materials).toBe(old.materials);
+    expect(migrated.character.gold).toBe(old.character.gold);
   });
 });
 

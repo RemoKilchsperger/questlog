@@ -63,7 +63,7 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | # | Idee | Status |
 |---|---|---|
 | 32 | **Vier Pfade statt +2 % Schaden:** Klinge, Wehr, Arkan, Plage – aufeinander aufbauend mit Stufen, Gabelung und einer Meisterschaft. Enthält Idee 5 (Schmelzen, Gift platzen lassen) | ✅ `skills.ts`, docs/skilltree.md, solo und Koop |
-| 33 | **Mehr Gabelungen und Erfolge:** Gabelung auch auf Stufe 4, Erfolge für Meisterschaften, Stapel (Zorn, Gift) im Kampfbild sichtbar | 💡 Teil von #87 (Meisterschafts-Gabel G2, Erfolge mit v25) |
+| 33 | **Mehr Gabelungen und Erfolge:** Gabelung auch auf Stufe 4, Erfolge für Meisterschaften, Stapel (Zorn, Gift) im Kampfbild sichtbar | 🚧 Meisterschafts-Gabel ✅ (G2), Stapel im Kampfbild ✅ (Bluten-Stapel, Schild); Erfolge mit v25 (G4) |
 
 ## Tränke (2026-11-02)
 
@@ -167,7 +167,7 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | # | Idee | Status |
 |---|---|---|
 | 86 | **Klassen mit Kern (Modell C):** Rolle, Klassenleiste mit 4 Ladungen, Signaturfähigkeit ohne Mana und ein mechanisches Passiv pro Klasse; Paladin auch mit Schwert + Schild | 🚧 G0 (Simulation) und G1 (Sofortkorrekturen) umgesetzt, Kern in G3 – docs/klassen-neukonzept.md, docs/klassen-skilltree-abgleich.md |
-| 87 | **Skilltree-Überarbeitung:** Meisterschaft ab 12, zwei Meisterschaften pro Pfad, neue Knoten, Brücken, Leisten-Knoten | 💡 G2/G4 – docs/skilltree-ueberarbeitung.md |
+| 87 | **Skilltree-Überarbeitung:** Meisterschaft ab 12, zwei Meisterschaften pro Pfad, neue Knoten, Brücken, Leisten-Knoten | 🚧 G2 ✅ (Meisterschaft ab 12, zweite Meisterschaften, neue Knoten, v24) – Brücken und Leisten-Knoten in G4, docs/skilltree-ueberarbeitung.md |
 | 88 | **Boss-Raserei im Koop:** ab Runde 20 +10 % Schaden pro Runde, angekündigt ab Runde 17 – bremst endlose Kämpfe mit Heiler und Tank | 💡 G3 – docs/klassen-neukonzept.md 4.5 |
 | 89 | **Quest „Finde deine Klasse“:** frühe Story-Quest, die zur ersten Klasse führt (Sieg mit aktiver Klasse) | 💡 G3 – docs/klassen-neukonzept.md 4.7 |
 | 90 | **Druide** (mittel + Stab) als zweiter Heiler | 💡 G4, nach dem Playtest des Klerikers |

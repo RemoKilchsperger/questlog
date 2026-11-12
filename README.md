@@ -33,7 +33,7 @@ src/
     quests.ts        Questbuch (Jagd-, Boss- und Dungeon-Quests), Tages- und Wochenaufträge, Belohnungen
     stats.ts         Namen der Attribute
     leveling.ts      Level-Kurve, Attributpunkte
-    skills.ts        Skilltree: vier Pfade mit Stufen, Gabelung und Meisterschaft
+    skills.ts        Skilltree: vier Pfade mit Stufen, Gabelungen, zwei Meisterschaften pro Pfad, validateSkills
     abilities.ts     Kampf-Fähigkeiten (Pool von 4 pro Waffentyp, 6 bei Zweihand; jede Waffe trägt die Hälfte), Mana
     items.ts         Item-Katalog, Seltenheit, Boss-Items, Verbesserungsstufen
     armorClasses.ts  Leichte, mittlere und schwere Rüstung
@@ -102,8 +102,12 @@ Bei Händler-Aufträgen zählt jedes Ausrüstungsteil (Waffen und Rüstung).
 - Gegner mehr als 3 Level unter dem Helden geben 15 % weniger XP pro Level, mindestens 10 %.
 - Pro Level-up: 2 Attributpunkte, alle 2 Level 1 Skillpunkt (Level 60: 30).
 - **Skills:** vier Pfade (Klinge, Wehr, Arkan, Plage), die verändern, wie die Kampf-Mechaniken wirken.
-  Stufen öffnen sich mit 3 / 6 / 9 Punkten im Pfad, die Meisterschaft mit 15 – nur eine im ganzen Baum.
-  Auf Stufe 3 gabelt sich jeder Pfad. Details: [docs/skilltree.md](docs/skilltree.md).
+  Stufen öffnen sich mit 3 / 6 / 9 Punkten im Pfad, die Meisterschaft mit 12 (jeder Pfad hat 18–20 Ränge davor).
+  Auf Stufe 3 gabelt sich jeder Pfad, die Meisterschaft ist ebenfalls eine Gabel (zwei pro Pfad) – nur eine im
+  ganzen Baum. Neue Meisterschaften: Tausend Schnitte (Bluten-Stapel, bis 5), Wächterschwur (Abwehren heilt 4 %,
+  im Koop Spott mit 60 %), Blutmagie (2 LP pro fehlendem Mana, nicht unter 25 % LP, −15 % Mana) und Lebensband
+  (Überheilung wird zum Schild, höchstens 15 % der LP). Details: [docs/skilltree.md](docs/skilltree.md).
+  Spielstand v24 hat alle Skillpunkte zurückerstattet.
   Zurücksetzen kostet `12.5 · Level · (1 + Level / 10)` Gold.
 
 ### Items

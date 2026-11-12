@@ -225,12 +225,20 @@ export function HelpScreen() {
           </p>
           <ul className="list-disc space-y-1 pl-5">
             <li>
-              Jeder Pfad hat vier Stufen und eine Meisterschaft. Die Stufen öffnen sich mit {TIER_POINTS[2]}, {TIER_POINTS[3]}{" "}
-              und {TIER_POINTS[4]} Punkten im selben Pfad, die Meisterschaft mit {TIER_POINTS[5]}.
+              Jeder Pfad hat vier Stufen und zwei Meisterschaften. Die Stufen öffnen sich mit {TIER_POINTS[2]},{" "}
+              {TIER_POINTS[3]} und {TIER_POINTS[4]} Punkten im selben Pfad, die Meisterschaft mit {TIER_POINTS[5]}. Vor der
+              Meisterschaft hat jeder Pfad 18–20 Ränge: Wer meistert, lässt bewusst einige liegen und steckt den Rest in
+              einen zweiten Pfad.
             </li>
             <li>Die meisten Knoten brauchen einen Knoten darüber – im Baum sind sie mit Linien verbunden.</li>
-            <li>Auf Stufe 3 gabelt sich jeder Pfad: Du wählst einen der beiden Knoten.</li>
-            <li>Von den vier Meisterschaften kannst du nur eine lernen.</li>
+            <li>Auf Stufe 3 gabelt sich jeder Pfad: Du wählst einen der beiden Knoten. Auch die Meisterschaft ist eine Gabel.</li>
+            <li>Von den acht Meisterschaften kannst du nur eine lernen.</li>
+            <li>
+              Die neuen Meisterschaften: 🗡️ Tausend Schnitte (Mehrfachtreffer legen Bluten-Stapel, bis 5 – im Koop ein
+              gemeinsamer Stapel pro Gegner), 🔰 Wächterschwur (Abwehren heilt, im Koop ziehst du die Angriffe auf dich),
+              🧛 Blutmagie (fehlendes Mana zahlst du mit LP, nicht unter 25 %) und 🔗 Lebensband (Überheilung wird zu
+              einem Schild bis 15 % deiner LP, im Koop auch bei Mitspielern).
+            </li>
           </ul>
           <H>Fähigkeiten</H>
           <p>

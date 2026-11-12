@@ -807,6 +807,18 @@ export class BattleScene extends Phaser.Scene {
       fx.slashes(this, this.center("enemy"), 0xf4c95d, 2);
       this.tint(enemy, 0xffffff, 120);
       sfx.hit(true);
+    } else if (event.type === "bloodMagic") {
+      // Blutmagie: Die Fähigkeit kostet LP statt Mana
+      const hero = this.fighters.hero;
+      this.setHp("hero", Math.max(0, hero.hp - event.damage));
+      this.floatText(hero.homeX, GROUND_Y - 120, `BLUTMAGIE -${event.damage}`, "#e0405a", 20);
+      fx.burst(this, this.center("hero"), 0xe0405a, 10, 40);
+      this.tint(hero, 0xe0405a, 250);
+    } else if (event.type === "shieldGained") {
+      // Lebensband: Überheilung wird zum Schild
+      const hero = this.fighters.hero;
+      this.floatText(hero.homeX, GROUND_Y - 120, `SCHILD +${event.amount}`, "#a9c6ff", 20);
+      fx.ring(this, this.center("hero"), 0xa9c6ff, 60);
     } else if (event.type === "regen") {
       const hero = this.fighters.hero;
       this.setHp("hero", hero.hp + event.heal);

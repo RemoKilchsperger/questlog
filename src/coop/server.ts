@@ -86,7 +86,9 @@ export function memberFromSave(id: string, save: unknown, username: string | nul
     essence: raw.essence ?? 0,
     stats: { strength: 1, intellect: 1, endurance: 1, charisma: 1, ...raw.stats },
     spentPoints: raw.spentPoints ?? 0,
-    skills: raw.skills ?? {},
+    // Stände vor v24 haben Ränge des alten Skilltrees – der Client erstattet sie beim Laden zurück, also zählen
+    // sie hier nicht. Neuere prüft getHeroCombatProfile gegen die Regeln des Baums (validateSkills).
+    skills: typeof saved?.version === "number" && saved.version < 24 ? {} : (raw.skills ?? {}),
     looks: sanitizeLooks(raw.looks),
   };
   const equipment: Equipment = { ...EMPTY_EQUIPMENT, ...state.equipment };

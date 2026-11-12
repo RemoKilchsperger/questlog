@@ -273,6 +273,8 @@ interface GameState {
   learnSkill: (id: SkillId) => void;
   /** Setzt alle Skillpunkte gegen Gold zurück (siehe `skillResetCost`) – braucht den Trainingsplatz. */
   resetSkills: () => void;
+  /** Der Hinweis auf die Rückerstattung der Skillpunkte (v24) ist gesehen. */
+  dismissSkillTreeNotice: () => void;
   dismissReward: () => void;
   resetGame: () => void;
 
@@ -670,8 +672,9 @@ export function repairSave(saved: Partial<SaveState>): Partial<SaveState> {
     named: savedCharacter.named ?? true,
     looks: sanitizeLooks(savedCharacter.looks),
     stats: { ...fresh.stats, ...saved.character.stats },
-    // Neuer Skilltree: Ränge des alten (pro Waffentyp) fallen weg, zu hohe werden gekappt – die Punkte sind wieder frei.
-    skills: sanitizeSkills(saved.character.skills),
+    // Ränge, die gegen die Regeln des Baums verstossen (alte Knoten, zu hohe Ränge, Gabeln, mehr Punkte als
+    // verdient), fallen weg – die Punkte sind wieder frei (validateSkills).
+    skills: sanitizeSkills(saved.character.skills, getLevel(saved.character.totalXp ?? 0)),
   };
   // Erfolge, die es nicht mehr gibt (z. B. Serien der früheren To-dos), fallen weg – samt Titel.
   const achievements = Object.fromEntries(
@@ -861,6 +864,11 @@ export function migrateSave(persisted: unknown, version: number): SaveState {
   }
   // v21 → v22: Überfälle und Wehranlage – `raids` und `village.walls` ergänzt repairSave.
   // v22 → v23: Schatzkarten – die leere Liste ergänzt repairSave.
+  // v23 → v24: Skilltree überarbeitet (Meisterschaft ab 12, neue Knoten, zweite Meisterschaften) – alle
+  // Skillpunkte zurück, kostenlos. Ein Toast weist einmal darauf hin (skillTreeNotice).
+  if (version < 24) {
+    state = { ...state, character: { ...state.character, skills: {}, skillTreeNotice: true } };
+  }
   return state;
 }
 
@@ -1346,6 +1354,13 @@ export const useGameStore = create<GameState>()(
 
 
       resetSkills: () => attempt(() => set((s) => ({ character: resetSkills(s.character, activeVillage(s).training) }))),
+
+      dismissSkillTreeNotice: () =>
+        set((s) => {
+          if (!s.character.skillTreeNotice) return {};
+          const { skillTreeNotice: _seen, ...character } = s.character;
+          return { character };
+        }),
 
       dismissReward: () => set({ lastReward: null }),
 
@@ -2365,7 +2380,7 @@ export const useGameStore = create<GameState>()(
     },
     {
       name: SAVE_KEY,
-      version: 23,
+      version: 24,
       partialize: (s) => ({
         character: s.character,
         questLog: s.questLog,

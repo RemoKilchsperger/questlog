@@ -760,6 +760,21 @@ export class CoopBattleScene extends Phaser.Scene {
         fx.slashes(this, this.center(this.boss), 0xf4c95d, 2);
         sfx.hit(true);
         break;
+      case "bloodMagic": {
+        // Blutmagie: Die Fähigkeit kostet LP statt Mana
+        const hero = this.unit(event.heroId);
+        this.setHp(hero, Math.max(0, hero.hp - event.damage));
+        this.float(hero, `BLUTMAGIE -${event.damage}`, "#e0405a", 14, 30);
+        fx.burst(this, this.center(hero), 0xe0405a, 8, 30);
+        break;
+      }
+      case "shieldGained": {
+        // Lebensband: Überheilung wird zum Schild
+        const hero = this.unit(event.heroId);
+        this.float(hero, `SCHILD +${event.amount}`, "#a9c6ff", 14, 30);
+        fx.ring(this, this.center(hero), 0xa9c6ff, 45);
+        break;
+      }
       case "regen": {
         const hero = this.unit(event.heroId);
         this.setHp(hero, hero.hp + event.heal);

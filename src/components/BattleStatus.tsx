@@ -38,6 +38,10 @@ interface HeroEffects {
   charged?: number;
   renew?: ActiveBuff;
   corroded?: ActiveBuff;
+  /** Lebensband: Schild-Topf */
+  ward?: number;
+  /** Klingentanz: Faktor auf den nächsten normalen Angriff */
+  bladeDance?: number;
 }
 
 /** Plakette für eine Abwehr gegen den nächsten Angriff (Parade, Vergeltung, Ausweichschuss, …). */
@@ -99,6 +103,10 @@ export function heroStatusChips(
     chips.push({ key: "renew", icon: "💚", text: `+${pct(effects.renew.percent)} LP pro Runde`, rounds: effects.renew.roundsLeft, tone: "good", title: "Arkane Heilung" });
   }
   if (effects.bulwark) chips.push({ key: "bulwark", icon: "🛡️", text: "Bollwerk", tone: "good", title: "Blockt den nächsten Angriff komplett" });
+  if (effects.ward) chips.push({ key: "ward", icon: "🔗", text: `Schild ${effects.ward}`, tone: "good", title: "Lebensband: fängt Treffer ab, bevor sie deine LP erreichen – bis zum Kampfende" });
+  if (effects.bladeDance) {
+    chips.push({ key: "bladeDance", icon: "🤺", text: `+${pct(effects.bladeDance - 1)} nächster Angriff`, tone: "good", title: "Klingentanz: Dein nächster normaler Angriff macht mehr Schaden" });
+  }
   if (effects.guard) chips.push(guardChip(effects.guard));
   const dots = [
     ["poison", "☠️", "Gift"],
@@ -132,7 +140,7 @@ export function enemyStatusChips(effects: EnemyEffects): StatusChip[] {
   ] as const;
   for (const [kind, icon, label] of dots) {
     const effect = effects[kind];
-    if (effect) chips.push({ key: kind, icon, text: `${label} −${effect.damage}`, rounds: effect.roundsLeft, tone: "foe", title: `${label}: ${effect.damage} Schaden pro Runde` });
+    if (effect) chips.push({ key: kind, icon, text: `${label}${(effect.stacks ?? 1) > 1 ? ` ×${effect.stacks}` : ""} −${effect.damage}`, rounds: effect.roundsLeft, tone: "foe", title: `${label}: ${effect.damage} Schaden pro Runde` });
   }
   if (effects.armorBreak) {
     chips.push({ key: "armorBreak", icon: "💥", text: `Rüstung −${pct(effects.armorBreak)}`, tone: "foe", title: "Bis zum Ende des Kampfes" });

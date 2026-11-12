@@ -397,3 +397,27 @@ describe("Koop-Server: Dungeons", () => {
     expect(row.phase).toBe("finished");
   });
 });
+
+describe("Skilltree aus dem Cloud-Spielstand", () => {
+  const withSkills = (version: number, skills: Record<string, number>) => {
+    const save = saveAt(60);
+    return { ...save, version, state: { ...save.state, character: { ...save.state.character, skills } } };
+  };
+
+  it("Stände vor v24 zählen ohne Ränge – der Client erstattet sie zurück", () => {
+    expect(memberFromSave("a", withSkills(23, { keenEdge: 3, openWound: 1 }), null).profile.skills).toBeUndefined();
+  });
+
+  it("neuere Stände werden gegen die Regeln geprüft: manipulierte Ränge sind harmlos", () => {
+    // Meisterschaft ohne Punkte im Pfad, zwei Meisterschaften, zu hohe Ränge
+    const profile = memberFromSave("a", withSkills(24, { keenEdge: 9, bloodburst: 1, echo: 1, lifebond: 1 }), null).profile;
+    expect(profile.skills).toEqual({ keenEdge: 3 });
+  });
+
+  it("mehr Punkte als verdient fallen weg", () => {
+    const save = saveAt(10);
+    const greedy = { ...save, version: 24, state: { ...save.state, character: { ...save.state.character, skills: { keenEdge: 3, serratedEdge: 3, whirlingBlades: 2 } } } };
+    const skills = memberFromSave("a", greedy, null).profile.skills ?? {};
+    expect(Object.values(skills).reduce((s, r) => s + (r ?? 0), 0)).toBe(5);
+  });
+});

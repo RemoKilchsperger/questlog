@@ -35,6 +35,11 @@ export interface Character {
   attributeResets?: number;
   /** Ränge im Skilltree pro Knoten (src/domain/skills.ts). */
   skills: SkillRanks;
+  /**
+   * Der Skilltree wurde überarbeitet und die Skillpunkte zurückerstattet (Migration v24) – der Toast
+   * dazu ist noch nicht gesehen. Fehlt, sobald er weg ist.
+   */
+  skillTreeNotice?: true;
 }
 
 /** Rüstungsplätze am Körper. */

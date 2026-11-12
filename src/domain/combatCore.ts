@@ -31,13 +31,16 @@ import {
   melts,
   ownDotFactor,
   ownDotRounds,
+  poisonedWeaponsChance,
   rankIn,
   rotBurst,
   SKILL,
   skillCritBonus,
   skillDamageFactor,
   skillLifesteal,
+  stackDot,
   stackPoison,
+  WARD_MAX_SHARE,
   type FoeState,
   type SkillRanks,
 } from "./skills";
@@ -136,6 +139,12 @@ export interface LayDot<D extends DamageOverTime> {
   own: DamageOverTime | undefined;
   /** Zusätzliche Felder der neuen Wirkung (im Koop der Verursacher) */
   tag?: Omit<D, keyof DamageOverTime>;
+  /**
+   * Tausend Schnitte: ein Bluten-Stapel. Er stapelt sich auf ein liegendes gestapeltes Bluten – egal wer es
+   * gelegt hat (im Koop ein gemeinsamer Stapel pro Gegner) – bis SKILL.thousandCuts.max. Ein liegendes
+   * Bluten ohne Stapel (Axtwurf, Schnitter) bleibt, solange es stärker ist als der neue Stapel.
+   */
+  stackBleed?: boolean;
 }
 
 export type LayDotResult<F> =
@@ -157,6 +166,11 @@ export function layDot<D extends DamageOverTime, F extends DotEffects<D>>(fx: F,
   const damage = Math.max(1, Math.round(o.base * factor * ownDotFactor(o.skills, o.kind)));
   const length = ownDotRounds(o.skills, o.kind, o.rounds);
   const tagged = (dot: DamageOverTime) => ({ ...dot, ...o.tag }) as D;
+  if (o.kind === "bleed" && o.stackBleed) {
+    const current = fx.bleed;
+    if (current?.stacks) return { immune: false, fx: { ...fx, bleed: tagged(stackDot(SKILL.thousandCuts.max, current, damage, length)) } };
+    return { immune: false, fx: { ...fx, bleed: strongerDot(current, tagged({ damage, roundsLeft: length, stacks: 1 })) } };
+  }
   if (o.kind !== "poison") {
     return { immune: false, fx: { ...fx, [o.kind]: strongerDot(fx[o.kind], tagged({ damage, roundsLeft: length })) } };
   }
@@ -170,6 +184,26 @@ export function layDot<D extends DamageOverTime, F extends DotEffects<D>>(fx: F,
 }
 
 /* ───────────────────────── Rundenende ───────────────────────── */
+
+/* ───────────────────────── Schild-Topf (Lebensband) ───────────────────────── */
+
+/**
+ * Lebensband: So viel einer Heilung von `raw` LP wird zum Schild – der Teil über dem LP-Maximum, solange
+ * der Schild-Topf unter WARD_MAX_SHARE der max. LP bleibt. Vor dem Heilen aufrufen (mit den LP davor).
+ */
+export function wardGain(c: { hp: number; maxHp: number }, raw: number, ward: number | undefined, lifebond: boolean): number {
+  if (!lifebond || raw <= 0) return 0;
+  const over = raw - Math.max(0, c.maxHp - c.hp);
+  const room = Math.round(c.maxHp * WARD_MAX_SHARE) - (ward ?? 0);
+  return Math.max(0, Math.min(over, room));
+}
+
+/** Der Schild fängt einen Treffer ab, bevor er die LP erreicht. */
+export function absorbWard(ward: number | undefined, damage: number): { damage: number; warded: number; ward: number | undefined } {
+  const warded = Math.min(ward ?? 0, damage);
+  const left = (ward ?? 0) - warded;
+  return { damage: damage - warded, warded, ward: left > 0 ? left : undefined };
+}
 
 /** Heilung um einen Anteil der maximalen LP – nie über das Maximum. */
 export const healShare = (hp: number, maxHp: number, share: number): number =>
@@ -433,6 +467,10 @@ export interface StrikeSetup {
   riposte: number;
   wrath: number;
   echoShare: number;
+  /** Fähigkeit mit mindestens 2 Treffern (Wirbelnde Klingen) – fehlt: nein */
+  multiHit?: boolean;
+  /** Klingentanz: Faktor auf diesen normalen Angriff – fehlt: 1 */
+  dance?: number;
 }
 
 export interface StrikeTarget {
@@ -469,7 +507,7 @@ export interface StrikeFactors {
   kindFactor: number;
   /** Item-Effekte: Kriegstrommel, Henkersbeil, Aderlass, Elitejäger, Bossschlächter, Sog */
   itemFactor: number;
-  /** Skilltree samt Gegenschlag, Zorn und Echo */
+  /** Skilltree samt Gegenschlag, Zorn, Echo und Klingentanz */
   skillFactor: number;
   /** Krit-Chance des Treffers – höchstens CRIT_CAP_TOTAL */
   critChance: number;
@@ -513,7 +551,7 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
       foeBoss: t.realBoss,
       foeElite: t.elite,
     }),
-    skillFactor: skillDamageFactor(skills, foeState, s.fire) * s.riposte * s.wrath * s.echoShare,
+    skillFactor: skillDamageFactor(skills, foeState, s.fire, s.multiHit) * s.riposte * s.wrath * s.echoShare * (s.dance ?? 1),
     critChance: Math.min(CRIT_CAP_TOTAL, s.critChance + effectCritBonus(itemEffects, t.realBoss) + skillCritBonus(skills, foeState)),
     plate: t.isBoss ? plateFactor(t.plates) : 1,
     foeState,
@@ -532,17 +570,23 @@ export function absorbShield(shield: number, damage: number): { absorbed: number
 
 /** Wie der Treffer weiterwirkt – Solo und Koop melden und verbuchen es auf ihre Art. */
 export interface AfterHit<F> {
-  /** Gift, Feuer oder Bluten legen */
-  dot: (foe: F, kind: DotKind, base: number, rounds: number) => void;
+  /** Gift, Feuer oder Bluten legen – `stack`: ein Stapel von Tausend Schnitte */
+  dot: (foe: F, kind: DotKind, base: number, rounds: number, stack?: boolean) => void;
   /** Mana für den Helden */
   mana: (amount: number) => void;
   /** Frostbiss: der Gegner setzt diese Runde aus */
   freeze: (foe: F) => void;
+  /**
+   * Schnitter: Das liegende, stärkere Bluten hält eine Runde länger – höchstens einmal pro Runde und Gegner
+   * (der Aufrufer merkt sich das), sonst strecken Mehrfachtreffer es endlos.
+   */
+  extendBleed: (foe: F) => void;
 }
 
 /**
- * Was ein Treffer nach sich zieht: Plünderer und Schnitter lassen bluten, Adrenalin gibt Mana,
- * Offene Wunde verlängert das Bluten, Schmelzen taut auf, Glut/Drachenfeuer, Giftzahn, Frostbiss, Manadieb.
+ * Was ein Treffer nach sich zieht: Plünderer und Schnitter lassen bluten (blutet der Gegner schon stärker,
+ * verlängert der Schnitter jenes Bluten), Adrenalin gibt Mana, Schmelzen taut auf, Glut/Drachenfeuer,
+ * Giftzahn, Frostbiss, Manadieb.
  * `base`: Schaden des Helden (für die Stärke von Gift, Feuer, Bluten).
  */
 export function afterHeroHit<F extends StrikeFoe>(
@@ -555,6 +599,10 @@ export function afterHeroHit<F extends StrikeFoe>(
     skills: SkillRanks | undefined;
     fire: boolean;
     foeState: FoeState;
+    /** Treffer eines normalen Angriffs (Vergiftete Waffen) – fehlt: nein */
+    plain?: boolean;
+    /** Treffer einer Fähigkeit mit mindestens 2 Treffern (Tausend Schnitte) – fehlt: nein */
+    multiHit?: boolean;
   },
   rng: () => number,
   on: AfterHit<F>,
@@ -565,16 +613,17 @@ export function afterHeroHit<F extends StrikeFoe>(
     const damage = base * PLUNDERER_BLEED.percent * matchupFactor(foe.creatureId, "bleed");
     if (damage > 0 && (foe.fx.bleed?.damage ?? 0) <= damage) on.dot(foe, "bleed", base * PLUNDERER_BLEED.percent, PLUNDERER_BLEED.rounds);
   }
-  // Skills bei kritischen Treffern: Adrenalin (Mana), Schnitter (Bluten), Offene Wunde (länger bluten)
+  // Skills bei kritischen Treffern: Adrenalin (Mana), Schnitter (Bluten – oder ein stärkeres verlängern)
   if (crit) {
     on.mana(critMana(skills));
-    if (foe.c.hp > 0 && rankIn(skills, "reaper") > 0 && (foe.fx.bleed?.damage ?? 0) <= base * SKILL.reaper.percent) {
-      on.dot(foe, "bleed", base * SKILL.reaper.percent, SKILL.reaper.rounds);
+    if (foe.c.hp > 0 && rankIn(skills, "reaper") > 0) {
+      if ((foe.fx.bleed?.damage ?? 0) <= base * SKILL.reaper.percent) on.dot(foe, "bleed", base * SKILL.reaper.percent, SKILL.reaper.rounds);
+      else on.extendBleed(foe);
     }
-    const bleed = foe.fx.bleed;
-    if (foe.c.hp > 0 && o.foeState.bleeding && bleed && rankIn(skills, "openWound") > 0) {
-      foe.fx = { ...foe.fx, bleed: { ...bleed, roundsLeft: bleed.roundsLeft + 1 } };
-    }
+  }
+  // Tausend Schnitte: Jeder Treffer einer Mehrfachtreffer-Fähigkeit legt einen Bluten-Stapel
+  if (o.multiHit && foe.c.hp > 0 && rankIn(skills, "thousandCuts") > 0) {
+    on.dot(foe, "bleed", base * SKILL.thousandCuts.percent, SKILL.thousandCuts.rounds, true);
   }
   // Schmelzen: Das Feuer taut den eingefrorenen Gegner auf
   if (melts(skills, o.foeState.chilled, o.fire)) foe.fx = { ...foe.fx, chilled: undefined };
@@ -585,6 +634,11 @@ export function afterHeroHit<F extends StrikeFoe>(
       on.dot(foe, "poison", base * EFFECT.venomFang.percent, EFFECT.venomFang.rounds);
     }
     if (hasEffect(itemEffects, "frostBite") && rng() < EFFECT.frostBite) on.freeze(foe);
+    // Vergiftete Waffen: normale Angriffe vergiften manchmal – gewürfelt nur, wer den Knoten hat
+    const venomChance = o.plain ? poisonedWeaponsChance(skills) : 0;
+    if (venomChance > 0 && rng() < venomChance) {
+      on.dot(foe, "poison", base * SKILL.poisonedWeapons.percent, SKILL.poisonedWeapons.rounds);
+    }
   }
   if (hasEffect(itemEffects, "manaThief")) on.mana(EFFECT.manaThief);
 }

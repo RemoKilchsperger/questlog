@@ -334,7 +334,7 @@ describe("Kampfkern: Treffer des Helden", () => {
   it("nach dem Treffer: Plünderer blutet bei Krit, Manadieb gibt Mana", () => {
     const dots: string[] = [];
     let mana = 0;
-    const on = { dot: (_f: StrikeFoe, kind: string) => dots.push(kind), mana: (n: number) => (mana += n), freeze: () => undefined };
+    const on = { dot: (_f: StrikeFoe, kind: string) => dots.push(kind), mana: (n: number) => (mana += n), freeze: () => undefined, extendBleed: () => undefined };
     const state = strikeFactors(foe(), setup(), target).foeState;
     afterHeroHit(foe(), true, { base: 50, heroClass: "plunderer", itemEffects: ["manaThief"], skills: undefined, fire: false, foeState: state }, () => 0.99, on);
     expect(dots).toEqual(["bleed"]);

@@ -8,6 +8,8 @@
 //   spread  Klassenspreizung: Siegquote, Runden und D/Runde pro Klasse und Gebietsboss (Review Nr. 22)
 //   budget  Budget-Messung: Schaden pro Runde in D mit Klasse und ohne, Mehrwert in % (klassen-neukonzept.md 4.2)
 //   skills  Skilltree: Siegquote pro Klasse mit Haupt- und Zweitpfad (SIM_SKILLS, Standard: je Pfad A/B allein)
+//   master  Skilltree „Meisterpfad 13 + Zweitpfad 17“ (Plan pro Klasse: CLASS_SKILL_PLANS) gegen ohne Skills:
+//           Siegquote, D/Runde, Spreizung (SIM_MASTER=1: die zweite Meisterschaft der Gabel)
 //   coop    Koop-Kampfdauer: Runden pro Raid-Boss mit 2/3/4 Helden (SIM_COOP_CLASSES, SIM_LEVEL_OFFSET,
 //           SIM_DEFEND, SIM_ENRAGE – Vorschau der Boss-Raserei)
 // Weitere Variablen: SIM_N (Kämpfe pro Zeile, Standard 100), SIM_RAR (Seltenheit, Standard rare),
@@ -22,6 +24,7 @@ import type { Rarity } from "./types";
 import {
   AREA_BOSSES,
   CLASS_BUILDS,
+  CLASS_SKILL_PLANS,
   classBudget,
   classSpread,
   coopPlayers,
@@ -84,6 +87,31 @@ describe.runIf(MODE)(`Klassen-Simulation (${MODE})`, () => {
     });
     console.log([`Skills: Seltenheit ${RARITY}, N=${N}; Spalten: ${plans.map(label).join(" | ")}`, ...lines].join("\n"));
   });
+
+  it.runIf(MODE === "master")("Meisterpfad + Zweitpfad", () => {
+    const master = (env.SIM_MASTER === "1" ? 1 : 0) as 0 | 1;
+    const rows = CLASS_BUILDS.map((build) => {
+      const plan = { ...CLASS_SKILL_PLANS[build.id], master };
+      const plain = BOSSES.map((boss) => simulateSolo(build, boss, { n: N, rarity: RARITY, seed: SEED }));
+      const tree = BOSSES.map((boss) => simulateSolo(build, boss, { n: N, rarity: RARITY, seed: SEED, plan }));
+      const avg = (rs: typeof plain, f: (r: (typeof plain)[number]) => number) => rs.reduce((s, r) => s + f(r), 0) / rs.length;
+      return { build, plan, plain: avg(plain, (r) => r.win), win: avg(tree, (r) => r.win), d: avg(tree, (r) => r.dPerRound), dPlain: avg(plain, (r) => r.dPerRound), per: tree };
+    });
+    const lines = rows.map(
+      (r) =>
+        `${r.build.id.padEnd(10)} ${`${r.plan.main}${"AB"[r.plan.fork]}★${r.plan.master}+${r.plan.second}${"AB"[r.plan.secondFork]}`.padEnd(18)}` +
+        ` ohne ${pad(pct(r.plain), 3)} % | Baum ${pad(pct(r.win), 3)} % (+${pct(r.win - r.plain)}) | D ${r.dPlain.toFixed(2)} → ${r.d.toFixed(2)} | ` +
+        r.per.map((x) => pad(pct(x.win), 3)).join(" "),
+    );
+    const wins = rows.map((r) => r.win);
+    console.log(
+      [
+        `Meisterpfad + Zweitpfad: Seltenheit ${RARITY}, N=${N}, Meisterschaft ${master}`,
+        ...lines,
+        `Mittel Baum ${pct(wins.reduce((s, v) => s + v, 0) / wins.length)} %, Zuwachs Ø ${pct(rows.reduce((s, r) => s + r.win - r.plain, 0) / rows.length)} Punkte, Abstand ${pct(Math.max(...wins) - Math.min(...wins))} Punkte`,
+      ].join("\n"),
+    );
+  }, 600_000);
 
   it.runIf(MODE === "coop")("Koop-Kampfdauer", () => {
     // SIM_COOP_CLASSES="champion,assassin,warden,plunderer" – die ersten 2/3/4 bilden die Gruppe

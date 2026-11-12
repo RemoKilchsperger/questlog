@@ -17,8 +17,11 @@ import type { Equipment } from "../domain/types";
  * und Klassen-Kern (G3), siehe docs/klassen-skilltree-abgleich.md.
  *
  * 1: erste Version (Klassen-Sofortkorrekturen G1) – Clients ohne Versionsangabe gelten als veraltet.
+ * 2: Skilltree-Release (G2) – neue Ereignisse `bloodMagic`, `shieldGained`, Felder `free` (Fähigkeit),
+ *    `warded` (Treffer), `stacks` (Bluten). Werden G2 und G3 zusammen ausgeliefert, deckt diese eine
+ *    Erhöhung beide ab (docs/klassen-skilltree-abgleich.md, Auslieferung).
  */
-export const COOP_PROTOCOL_VERSION = 1;
+export const COOP_PROTOCOL_VERSION = 2;
 
 /** Meldung an veraltete Clients. */
 export const COOP_OUTDATED_MESSAGE = "Questlog wurde aktualisiert – bitte lade die Seite neu, um im Koop weiterzuspielen.";

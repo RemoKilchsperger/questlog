@@ -90,7 +90,9 @@ const gearAt = (level: number): Equipment => {
 function randomProfile(rng: Rng, level: number): HeroCombatProfile {
   const first = pick(rng, PATHS);
   const second = pick(rng, PATHS);
-  const order = [...pathOrder(first, rng() < 0.5 ? 0 : 1), ...pathOrder(second, rng() < 0.5 ? 0 : 1)];
+  // Meisterschaft der Gabel nach dem Level – ohne zusätzlichen Zufall, damit der übrige Ablauf gleich bleibt
+  const master = (level % 2) as 0 | 1;
+  const order = [...pathOrder(first, rng() < 0.5 ? 0 : 1, master), ...pathOrder(second, rng() < 0.5 ? 0 : 1, master)];
   const character = withSkills(heroAt(level), order);
   const base = getHeroCombatProfile(character, gearAt(level));
   const weapon = pick(rng, WEAPONS);

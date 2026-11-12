@@ -20,6 +20,7 @@ import {
   spentSkillPoints,
   TIER_POINTS,
   unspentSkillPoints,
+  validateSkills,
   type SkillId,
 } from "./skills";
 import type { Character, Equipment } from "./types";
@@ -50,11 +51,18 @@ describe("Skilltree: Aufbau", () => {
     for (const path of SKILL_PATHS) {
       const nodes = SKILL_TREE.filter((n) => n.path === path.id);
       expect(new Set(nodes.map((n) => n.tier)), path.id).toEqual(new Set([1, 2, 3, 4, 5]));
-      expect(nodes.filter((n) => n.fork).length, path.id).toBe(2);
-      expect(nodes.filter((n) => n.tier === 5).length, path.id).toBe(1);
-      // Bis zur Meisterschaft muss es genug Ränge geben – mit einem Weg der Gabelung
+      // Gabelung auf Stufe 3 und zwei Meisterschaften als Gabel
+      expect(nodes.filter((n) => n.fork && n.tier === 3).length, path.id).toBe(2);
+      const masters = nodes.filter((n) => n.tier === 5);
+      expect(masters.length, path.id).toBe(2);
+      expect(masters.every((n) => n.fork === `${path.id}-master`), path.id).toBe(true);
+      // Vor der Meisterschaft 18–20 Ränge (mit einem Weg der Gabelung) – deutlich mehr als die Schwelle von 12
       const before = nodes.filter((n) => n.tier < 5 && n !== nodes.filter((f) => f.fork)[1]).reduce((s, n) => s + n.maxRank, 0);
-      expect(before, path.id).toBeGreaterThanOrEqual(TIER_POINTS[5]);
+      expect(before, path.id).toBeGreaterThanOrEqual(18);
+      expect(before, path.id).toBeLessThanOrEqual(20);
+      expect(TIER_POINTS[5]).toBe(12);
+      // Stufe 1 hat in jedem Pfad drei Knoten
+      expect(nodes.filter((n) => n.tier === 1).map((n) => n.col).sort(), path.id).toEqual([0, 1, 2]);
     }
   });
 
@@ -126,13 +134,24 @@ describe("Lernen", () => {
     expect(skillRank(hero, "reaper")).toBe(1);
     expect(skillBlocker(hero, "piercing")).toMatch(/Schnitter/);
     // Was danach kommt, geht über jeden der beiden Wege
-    expect(skillBlocker(hero, "openWound")).toBeNull();
+    expect(skillBlocker(hero, "bladeDance")).toBeNull();
+  });
+
+  it("die Meisterschaft öffnet bei 12 Punkten im Pfad – nur eine der Gabel", () => {
+    const order = pathOrder("blade");
+    const eleven = withSkills(heroAt(60), [...order.slice(0, 10), "reaper"]);
+    expect(spentSkillPoints(eleven, "blade")).toBe(11);
+    const ready = withSkills(eleven, ["bladeDance"]);
+    expect(skillBlocker(eleven, "bloodburst")).toMatch(/12 Punkte/);
+    expect(skillBlocker(ready, "thousandCuts")).toBeNull();
+    const cuts = learnSkill(ready, "thousandCuts");
+    expect(skillBlocker(cuts, "bloodburst")).toMatch(/Tausend Schnitte/);
   });
 
   it("nur eine Meisterschaft im ganzen Baum", () => {
     const blade = withSkills(heroAt(60), pathOrder("blade"));
     expect(skillRank(blade, "bloodburst")).toBe(1);
-    expect(spentSkillPoints(blade, "blade")).toBe(18);
+    expect(spentSkillPoints(blade, "blade")).toBe(21);
     // Wehr bis vor die Meisterschaft – mehr Punkte, als es gibt, nur um die Sperre zu prüfen
     const guard = withSkills(heroAt(60), pathOrder("guard")).skills;
     const both = { ...blade, skills: { ...guard, wrath: 0, ...blade.skills } };
@@ -148,16 +167,56 @@ describe("Grundwerte aus dem Skilltree", () => {
   it("Krit, Rüstung, Lebenspunkte und Mana", () => {
     const plain = getHeroCombatProfile(heroAt(30), equipment);
     const trained = getHeroCombatProfile(
-      { ...heroAt(30), skills: { keenEdge: 3, ironSkin: 3, toughness: 3, deepWell: 2 } },
+      { ...heroAt(30), skills: { keenEdge: 3, ironSkin: 3, toughness: 2, deepWell: 2 } },
       equipment,
     );
     expect(trained.critChance).toBeCloseTo(plain.critChance + 3 * SKILL.keenEdge);
     expect(trained.armor).toBe(Math.round(plain.armor * (1 + 3 * SKILL.ironSkin)));
-    expect(trained.maxHp).toBeCloseTo(plain.maxHp * (1 + 3 * SKILL.toughness), -0.5);
+    expect(trained.maxHp).toBeCloseTo(plain.maxHp * (1 + 2 * SKILL.toughness), -0.5);
     expect(trained.maxMana).toBe(plain.maxMana + 2 * SKILL.deepWell);
     expect(trained.damage).toBeCloseTo(plain.damage);
-    expect(trained.skills).toEqual({ keenEdge: 3, ironSkin: 3, toughness: 3, deepWell: 2 });
+    expect(trained.skills).toEqual({ keenEdge: 3, ironSkin: 3, toughness: 2, deepWell: 2 });
     expect(plain.skills).toBeUndefined();
+  });
+
+  it("Blutmagie: weniger Mana-Maximum", () => {
+    const blood = getHeroCombatProfile({ ...heroAt(60), skills: withSkills(heroAt(60), pathOrder("arcane", 0, 1)).skills }, equipment);
+    const echo = getHeroCombatProfile({ ...heroAt(60), skills: withSkills(heroAt(60), pathOrder("arcane", 0, 0)).skills }, equipment);
+    expect(blood.skills?.bloodMagic).toBe(1);
+    expect(blood.maxMana).toBe(Math.round(echo.maxMana * (1 - SKILL.bloodMagic.mana)));
+  });
+});
+
+describe("validateSkills: alte und manipulierte Stände", () => {
+  it("wirft unbekannte Knoten weg und kappt zu hohe Ränge (Offene Wunde, Zähigkeit 3)", () => {
+    expect(validateSkills({ openWound: 1, toughness: 3, sword: 5 })).toEqual({ toughness: 2 });
+  });
+
+  it("verwirft Knoten ohne genug Punkte darüber oder ohne Voraussetzung – bis der Stand stabil ist", () => {
+    // Schnitter braucht 6 Punkte in Stufe 1–2 und Adrenalin oder Blutgeruch; Blutsturz hängt daran
+    expect(validateSkills({ keenEdge: 3, reaper: 1, bladeDance: 2, bloodburst: 1 })).toEqual({ keenEdge: 3 });
+    const fine = withSkills(heroAt(60), pathOrder("blade")).skills;
+    expect(validateSkills(fine)).toEqual(fine);
+  });
+
+  it("nur ein Knoten pro Gabelung und eine Meisterschaft im ganzen Baum", () => {
+    const blade = withSkills(heroAt(60), pathOrder("blade")).skills;
+    expect(validateSkills({ ...blade, piercing: 1 }).piercing).toBeUndefined();
+    expect(validateSkills({ ...blade, thousandCuts: 1 }).thousandCuts).toBeUndefined();
+    const guard = withSkills(heroAt(60), pathOrder("guard")).skills;
+    const both = validateSkills({ ...blade, ...guard });
+    expect(both.bloodburst).toBe(1);
+    expect(both.wrath).toBeUndefined();
+  });
+
+  it("mit Level: mehr Punkte als verdient – die tiefsten fallen zuerst weg", () => {
+    const blade = withSkills(heroAt(60), pathOrder("blade")).skills;
+    const trimmed = validateSkills(blade, 30);
+    expect(Object.values(trimmed).reduce((s, r) => s + (r ?? 0), 0)).toBeLessThanOrEqual(15);
+    expect(trimmed.bloodburst).toBeUndefined();
+    expect(trimmed.keenEdge).toBe(3);
+    // sanitizeSkills tut dasselbe
+    expect(sanitizeSkills(blade, 30)).toEqual(trimmed);
   });
 });
 

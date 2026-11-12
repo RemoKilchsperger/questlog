@@ -1051,7 +1051,9 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "ability":
       return e.echo
         ? `🔮 Echo! ${name(e.heroId)} setzt ${getAbility(e.ability).name} ohne Mana ein – es hallt nach.`
-        : `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
+        : e.free
+          ? `🔁 Nachhall! ${name(e.heroId)} setzt ${getAbility(e.ability).name} ohne Mana ein.`
+          : `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
     case "dodged":
       return `👻 ${name(e.heroId)} weicht ${name(e.attacker)} aus.`;
     case "selfHeal":
@@ -1063,7 +1065,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "counter":
       return `${name(e.heroId)} schlägt zurück: ${bossName} −${e.damage}.`;
     case "hit":
-      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.neck ? " – der gepanzerte Hals fängt ab" : ""}.`;
+      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.neck ? " – der gepanzerte Hals fängt ab" : ""}${e.warded ? ` – der Schild fängt ${e.warded} ab` : ""}.`;
     case "immune":
       return `${name(e.target)} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "thorns":
@@ -1087,6 +1089,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "burn":
       return `Feuer: ${name(e.target)} −${e.damage}.`;
     case "bleed":
+      if (e.stacks) return `🗡️ ${e.stacks} Schnitte: ${name(e.target)} −${e.damage}.`;
       return e.burst ? `💥 Blutsturz! Die Wunde von ${name(e.target)} platzt: −${e.damage}.` : `Bluten: ${name(e.target)} −${e.damage}.`;
     case "bossAbility":
       return `${bossName} setzt ${e.name} ein!`;
@@ -1124,6 +1127,12 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${bossName} heilt sich um ${e.heal} LP.`;
     case "regen":
       return `${name(e.heroId)} regeneriert ${e.heal} LP.`;
+    case "bloodMagic":
+      return `🧛 Blutmagie! ${name(e.heroId)} zahlt ${e.damage} LP statt Mana.`;
+    case "shieldGained":
+      return e.by
+        ? `🔗 Lebensband: Die Heilung von ${name(e.by)} gibt ${name(e.heroId)} einen Schild (+${e.amount}).`
+        : `🔗 Lebensband: ${name(e.heroId)} bekommt einen Schild (+${e.amount}).`;
     case "defend":
       return `${name(e.heroId)} wehrt ab${e.mana > 0 ? ` und sammelt ${e.mana} Mana` : ""}.`;
     case "interrupted":

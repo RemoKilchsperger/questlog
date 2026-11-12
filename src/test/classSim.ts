@@ -44,7 +44,7 @@ import { getPotion } from "../domain/potions";
 import { hash, seededRng } from "../domain/random";
 import type { SkillPath } from "../domain/skills";
 import type { ArmorClass, Character, Equipment, ItemType, Rarity, StatKey } from "../domain/types";
-import { pathOrder, withSkills } from "./skills";
+import { masterPathOrder, pathOrder, withSkills } from "./skills";
 
 /** Ausrüstung einer Klasse – Einhand-Klassen tragen zwei Waffen (Review, „Methode“). */
 export interface ClassBuild {
@@ -71,6 +71,45 @@ export const CLASS_BUILDS: readonly ClassBuild[] = [
 
 export const classBuild = (id: HeroClassId): ClassBuild => CLASS_BUILDS.find((b) => b.id === id)!;
 
+/**
+ * Verteilung „Meisterpfad + Zweitpfad“ (docs/skilltree-ueberarbeitung.md, Abschnitt 8): im Meisterpfad
+ * genau bis zur Schwelle der Meisterschaft, dann die Meisterschaft (`master`: welche der Gabel), der
+ * Rest von oben nach unten in den Zweitpfad. Bei Lv. 60 mit dem neuen Baum 13 + 17 Punkte.
+ */
+export interface SkillPlan {
+  main: SkillPath;
+  /** Gabelung auf Stufe 3 im Meisterpfad */
+  fork: 0 | 1;
+  /** Meisterschaft: 0 die erste, 1 die zweite (gibt es erst mit G2) */
+  master: 0 | 1;
+  second: SkillPath;
+  secondFork: 0 | 1;
+}
+
+/**
+ * Plan pro Klasse: Meisterpfad = bester Pfad aus dem Review (balancing-review-waffen-klassen.md,
+ * Tabelle „Siegquote mit einem Pfad“), Zweitpfad = zweitbester.
+ */
+export const CLASS_SKILL_PLANS: Readonly<Record<HeroClassId, SkillPlan>> = {
+  mage: { main: "arcane", fork: 0, master: 0, second: "plague", secondFork: 1 },
+  warlock: { main: "plague", fork: 0, master: 0, second: "arcane", secondFork: 0 },
+  assassin: { main: "plague", fork: 0, master: 0, second: "blade", secondFork: 1 },
+  ranger: { main: "plague", fork: 1, master: 0, second: "guard", secondFork: 0 },
+  duelist: { main: "plague", fork: 0, master: 0, second: "blade", secondFork: 0 },
+  plunderer: { main: "blade", fork: 1, master: 0, second: "plague", secondFork: 1 },
+  cleric: { main: "guard", fork: 0, master: 0, second: "plague", secondFork: 1 },
+  paladin: { main: "guard", fork: 0, master: 0, second: "blade", secondFork: 0 },
+  berserker: { main: "blade", fork: 1, master: 0, second: "plague", secondFork: 0 },
+  champion: { main: "blade", fork: 0, master: 0, second: "plague", secondFork: 1 },
+  warden: { main: "plague", fork: 1, master: 0, second: "guard", secondFork: 0 },
+};
+
+/** Reihenfolge der Skillpunkte für einen Plan. */
+export const planOrder = (plan: SkillPlan) => [
+  ...masterPathOrder(plan.main, plan.fork, plan.master),
+  ...pathOrder(plan.second, plan.secondFork),
+];
+
 /** Gebietsbosse in der Reihenfolge der Gebiete (Lv. 10 … 60). */
 export const AREA_BOSSES: readonly CreatureDef[] = AREAS.map((a) => a.creatures.at(-1)!);
 
@@ -78,6 +117,8 @@ export interface SimHeroOptions {
   rarity?: Rarity;
   /** Skillpunkte: die Pfade der Reihe nach von oben nach unten (Gabelung 0 oder 1), solange Punkte da sind */
   skills?: readonly (readonly [SkillPath, 0 | 1])[];
+  /** Skillpunkte nach „Meisterpfad + Zweitpfad“ – ersetzt `skills` */
+  plan?: SkillPlan;
   /** Gleiche Ausrüstung, aber ohne Klasse – Vergleichswert für das Budget */
   classless?: boolean;
 }
@@ -96,7 +137,8 @@ export function simHero(build: ClassBuild, level: number, uid: string, options: 
     stats.endurance += points - main;
   }
   let character: Character = { name: "Held", totalXp: totalXpForLevel(level), gold: 0, essence: 0, stats, spentPoints: points, skills: {} };
-  for (const [path, fork] of options.skills ?? []) character = withSkills(character, pathOrder(path, fork));
+  if (options.plan) character = withSkills(character, planOrder(options.plan));
+  else for (const [path, fork] of options.skills ?? []) character = withSkills(character, pathOrder(path, fork));
   const rng = seededRng(hash(uid));
   const rarity = options.rarity ?? "rare";
   const idx = indexForLevel(level);

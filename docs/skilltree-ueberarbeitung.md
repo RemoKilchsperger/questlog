@@ -1,6 +1,7 @@
 # Skilltree-Überarbeitung – Konzept
 
-Stand: 2026-11-12. Konzept, noch nicht umgesetzt (kommt in Etappe G2 des gemeinsamen Plans). Grundlage:
+Stand: 2026-11-12. **Etappen 1–4 umgesetzt (G2, Spielstand v24, Koop-Protokoll 2)**; Etappe 5 (Brücken) und
+6 (Leisten-Knoten) folgen in G4. Entscheidungen bei der Umsetzung: Abschnitt 11. Grundlage:
 docs/balancing-review-waffen-klassen.md (Abschnitte 4 und 5), heutiger Baum in `src/domain/skills.ts` und
 docs/skilltree.md. Alle offenen Fragen sind entschieden (Abschnitt 10); die Krit-Gesamtobergrenze (3.1) und die
 Koop-Protokollversion (6) sind mit G1 schon umgesetzt.
@@ -519,3 +520,28 @@ Alle am 2026-11-12 entschieden (gesammelt in docs/klassen-skilltree-abgleich.md,
 | 3 | Brücken | höchstens eine | 2, 4 |
 | 4 | Hinweis nach der Rückerstattung | **Toast**, kein Dialog | 7.2 |
 | 5 | Erfolge für Meisterschaften | ja, zusammen mit den Signatur-Erfolgen der Klassen in einem Schritt (v25, G4) | – |
+
+---
+
+## 11. Bei der Umsetzung entschieden (G2)
+
+Fragen, die das Konzept offenliess – so umgesetzt:
+
+| # | Frage | Entscheidung | Grund |
+|---|---|---|---|
+| 1 | Was heisst „Mehrfachtreffer“? | Treffer der Fähigkeit in dieser Runde (`abilityHits`, mit Raserei), mindestens 2 (`SKILL.multiHit`). Flächenwirkung allein zählt nicht | Gleiche Regel für Wirbelnde Klingen, Klingentanz und Tausend Schnitte |
+| 2 | Stapelt jedes Bluten des Schnitte-Helden? | **Nein, nur die Stapel des Knotens.** Ein liegendes Bluten ohne Stapel (Axtwurf, Plünderer, Schnitter) bleibt, solange es stärker ist als ein neuer Einzelstapel | Mit „Stärke pro Stapel = max“ hätte Axtwurf + Zerfleischen 5 × 25 % = 125 % D pro Runde ergeben; so bleibt das Maximum bei 40 % D |
+| 3 | Wem gehört ein Stapel am Deckel (Koop)? | Der neue Stapel geht an den legenden Helden, einer vom Helden mit den meisten anderen geht ab | Die Summe von `stacksBy` bleibt gleich der Stapelzahl, die Bedrohung folgt dem, der gerade schneidet |
+| 4 | Schnitter-Verlängerung „einmal pro Runde“ | pro Gegner und Runde, im Koop für alle Helden zusammen | Sonst strecken mehrere Schnitter in der Gruppe das Bluten endlos |
+| 5 | Wo würfelt Nachhall? | Beim Einsatz, vor dem Bezahlen; nur mit Rang > 0 und Kosten > 0 (nicht beim Echo). Die Abklingzeit bleibt | Ereignis `ability` mit `free` |
+| 6 | Kryomant: zählt auch die Chance (+20 %) für Betäubungen? | Nein, nur die Markierung `chilled` (Kryomant +25 %, Schmelzen). Pyromant + Schmelzen ohne Kryomant: Betäubung ist kein Einfrieren | Wortlaut 3.3; sonst würde Wuchtschlag doppelt verstärkt |
+| 7 | Schmelzen +15 % taut auf? | Nein, nur Feuer-Fähigkeiten tauen auf | So bleibt das Eis für Kryomant und Erschütterung liegen |
+| 8 | Deckung: welche Fähigkeiten? | Mit `guard` (Parade, Vergeltung, Konterstellung, Unerschütterlich, Ausweichschuss, Arkaner Schild), `bulwark` (Bollwerk, Schattenschritt) oder weniger erlittenem Schaden (Schildwall). Zuerst auf die Kosten der Klasse, dann Fokus/Eröffnung | Halbes Bollwerk + Deckung 2 = 5 Mana (Untergrenze), wie entschieden |
+| 9 | Konzentration im Koop bei „eingefroren, setzt aus“ | Kein Bonus – nur wer angreift oder abwehrt (auch der automatische Angriff nach Zeitablauf) | Der Knoten belohnt eine Aktion ohne Fähigkeit |
+| 10 | Was schluckt der Schild (Lebensband)? | Treffer von Boss und Begleitern (Feld `warded` am `hit`). Nicht: Explosion, Fluch, Gift/Feuer/Bluten am Helden, Blutmagie | Ein lesbarer Schild gegen Treffer; gegen DoTs gibt es Gegengift |
+| 11 | Wessen Lebensband zählt im Koop? | Bei Fähigkeits-Heilung der Heiler (Arkane Heilung, Heiliges Licht), bei Regeneration (auch einer Arkanen Heilung eines Mitspielers), Tränken und Lebensraub der Geheilte selbst | Regeneration tickt beim Geheilten; die Quelle müsste sonst mitgespeichert werden |
+| 12 | Ort des Schild-Topfs | In den Wirkungen des Kampfs (`heroEffects.ward`, `CoopHero.effects.ward`) | Verfällt so automatisch am Kampfende, auch zwischen Koop-Dungeon-Kämpfen |
+| 13 | Hinweis-Toast bei jedem v23-Stand? | Ja, die Migration setzt `skillTreeNotice` immer; der Toast bleibt bis „Zum Skilltree“ oder „Später“ | Einfach; der Text passt auch zur gemeinsamen Ankündigung mit G3 |
+| 14 | Koop-Server und alte Cloud-Stände | Stände mit `version < 24` zählen ohne Ränge (wie die Rückerstattung im Client), neuere laufen durch `validateSkills` mit dem Level | Ein alter Client kann keine alten Ränge mehr in den Koop tragen |
+| 15 | Protokollversion | Mit G2 auf 2 erhöht. Wird G3 zusammen ausgeliefert, bleibt es bei dieser einen Erhöhung | Neue Ereignisse `bloodMagic`, `shieldGained` |
+| 16 | Golden Master und zweite Meisterschaften | Der Golden Master wählt die Meisterschaft der Gabel nach dem Level (gerade: A, ungerade: B), ohne zusätzlichen Zufall | Sonst wären die neuen Meisterschaften nie abgedeckt |
