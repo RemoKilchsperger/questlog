@@ -9,6 +9,7 @@ import {
   isQuestComplete,
   QUESTS,
   questGoalText,
+  isQuestUnlocked,
   questTarget,
   trackedQuests,
   visibleBoard,
@@ -194,6 +195,8 @@ function QuestBook() {
   const area = areas.find((a) => a.id === areaId)!;
   const quests = QUESTS.filter((q) => q.areaId === area.id);
   const open = isAreaUnlocked(area, level);
+  // Quests ohne Gebiet (Finde deine Klasse) stehen über den Gebieten
+  const general = QUESTS.filter((q) => !q.areaId);
 
   return (
     <section className="panel min-w-0 self-start p-4">
@@ -204,6 +207,27 @@ function QuestBook() {
         </span>{" "}
         Quests abgegeben. Jede Quest gibt es einmal – angenommen, erfüllt im Kampf, hier abgegeben.
       </p>
+      {general.length > 0 && (
+        <ul className="mb-3 flex flex-col gap-2">
+          {general.map((q) => (
+            <QuestRow
+              key={q.id}
+              def={q}
+              progress={questLog.active[q.id] ?? 0}
+              state={
+                questLog.completed.includes(q.id)
+                  ? "done"
+                  : q.id in questLog.active
+                    ? "active"
+                    : isQuestUnlocked(q, level)
+                      ? "available"
+                      : "locked"
+              }
+              compact
+            />
+          ))}
+        </ul>
+      )}
       <div className="mb-3 flex flex-wrap gap-1.5">
         {areas.map((a) => {
           const reachable = isAreaUnlocked(a, level);
@@ -293,7 +317,11 @@ function QuestRow({
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className="text-xp tabular-nums">+{reward.xp} XP</span>
           <Gold amount={reward.gold} sign className="text-gold" />
-          {!visitor && (
+          {def.goal.kind === "classWin" ? (
+            <Hint text="Ein seltenes Rüstungsteil der Rüstungsklasse, die zu deiner angelegten Waffe passt – auf deinem Level, im ersten Platz, der sie noch nicht trägt.">
+              <span className="text-rare">🎁 seltenes Rüstungsteil</span>
+            </Hint>
+          ) : !visitor && (
             <Hint text="Chance auf ein Item beim Abgeben – auf deinem Level.">
               <span className="text-epic tabular-nums">
                 🎁 {reward.dropChance >= 1 ? "garantiert" : `${Math.round(reward.dropChance * 100)} %`}
@@ -374,7 +402,17 @@ function QuestIcon({ def }: { def: QuestDef }) {
   }
   if (goal.kind === "dungeon" || goal.kind === "dungeonStory") return <CreatureSprite sprite={getDungeon(goal.dungeonId).creatures.at(-1)!.sprite} size={40} className="shrink-0" />;
   const symbol =
-    goal.kind === "trade" ? TRADE_ICONS[goal.action] : goal.kind === "dungeons" ? "🏰" : goal.kind === "towerFloor" ? "🗼" : goal.boss ? "👑" : "⚔️";
+    goal.kind === "trade"
+      ? TRADE_ICONS[goal.action]
+      : goal.kind === "dungeons"
+        ? "🏰"
+        : goal.kind === "towerFloor"
+          ? "🗼"
+          : goal.kind === "classWin"
+            ? "🎓"
+            : goal.boss
+              ? "👑"
+              : "⚔️";
   return (
     <span className="flex h-10 w-10 shrink-0 items-center justify-center text-2xl" aria-hidden>
       {symbol}

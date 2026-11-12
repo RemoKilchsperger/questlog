@@ -21,6 +21,7 @@ import {
   abilityDots,
   bandage,
   canEndure,
+  CRIT_CAP_TOTAL,
   damageTakenFactor,
   dodges,
   drainHeal,
@@ -294,6 +295,25 @@ describe("Kampfkern: Treffer des Helden", () => {
     expect(f.critChance).toBeCloseTo(0.1);
   });
 
+  it("Krit-Chance: Item-Effekte und Skills kommen dazu, die Summe ist bei 60 % gedeckelt", () => {
+    expect(strikeFactors(foe(), setup({ itemEffects: ["allSeeing"] }), target).critChance).toBeCloseTo(0.2);
+    expect(strikeFactors(foe(), setup({ critChance: 0.55, itemEffects: ["allSeeing"] }), target).critChance).toBe(CRIT_CAP_TOTAL);
+    // Blutgeruch gegen Blutende und Allsehend gegen Bosse über einer hohen Grundchance (Assassine mit Klinge-Pfad)
+    const bleeding = foe(100, { bleed: { damage: 5, roundsLeft: 2 } });
+    expect(strikeFactors(bleeding, setup({ critChance: 0.5, itemEffects: ["allSeeing"], skills: { bloodScent: 3 } }), target).critChance).toBe(CRIT_CAP_TOTAL);
+  });
+
+  it("Heiliger Hammer zählt als Wucht oder Magie – was gegen das Ziel wirksamer ist", () => {
+    const hammer = { altKind: "magic" } as AbilityDef;
+    const resistsMagic = ids.find((id) => matchupOf(id, "magic") === "resist" && matchupOf(id, "blunt") === null)!;
+    const weakToMagic = ids.find((id) => matchupOf(id, "magic") === "weak" && matchupOf(id, "blunt") === null)!;
+    const on = (creatureId: string) => strikeFactors({ ...foe(), creatureId }, setup({ ability: hammer, heroKind: "blunt" }), target);
+    expect(on(resistsMagic).kind).toBe("blunt");
+    expect(on(resistsMagic).kindFactor).toBe(1);
+    expect(on(weakToMagic).kind).toBe("magic");
+    expect(on(weakToMagic).matchup).toBe("weak");
+  });
+
   it("Henker gegen angeschlagene Gegner, Verwundbarkeit, Echo", () => {
     const low = strikeFactors(foe(5, { vulnerable: { percent: 0.3, roundsLeft: 1 } }), setup({ blessings: ["executioner"], echoShare: 0.5 }), target);
     expect(low.headsman).toBeGreaterThan(1);
@@ -314,7 +334,7 @@ describe("Kampfkern: Treffer des Helden", () => {
   it("nach dem Treffer: Plünderer blutet bei Krit, Manadieb gibt Mana", () => {
     const dots: string[] = [];
     let mana = 0;
-    const on = { dot: (_f: StrikeFoe, kind: string) => dots.push(kind), mana: (n: number) => (mana += n), freeze: () => undefined };
+    const on = { dot: (_f: StrikeFoe, kind: string) => dots.push(kind), mana: (n: number) => (mana += n), freeze: () => undefined, extendBleed: () => undefined };
     const state = strikeFactors(foe(), setup(), target).foeState;
     afterHeroHit(foe(), true, { base: 50, heroClass: "plunderer", itemEffects: ["manaThief"], skills: undefined, fire: false, foeState: state }, () => 0.99, on);
     expect(dots).toEqual(["bleed"]);

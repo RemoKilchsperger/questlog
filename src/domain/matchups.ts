@@ -4,7 +4,8 @@
 // geht. Gilt solo und im Koop.
 //
 // Schadensarten der Waffen – normale Angriffe zählen mit der Hauptwaffe (die
-// erste Waffe, die kein Schild ist), Fähigkeiten mit ihrer eigenen Waffe (Heiliger Hammer: Magie):
+// erste Waffe, die kein Schild ist), Fähigkeiten mit ihrer eigenen Waffe (Mordschlag: Wucht; Heiliger
+// Hammer: Wucht oder Magie, was wirksamer ist):
 //   - Klingen: Schwert, Zweihandschwert, Axt, Grossaxt
 //   - Wucht:   Streitkolben, Grosshammer, Schild
 //   - Stich:   Dolch, Bogen
@@ -38,9 +39,23 @@ export const WEAPON_KIND: Record<SkillWeapon, DamageKind> = {
   scepter: "magic",
 };
 
-/** Schadensart einer Fähigkeit – null, wenn sie nicht trifft (Heilung, Schutz). */
-export function abilityKind(ability: Pick<AbilityDef, "weapon" | "kind" | "hits">): DamageKind | null {
-  return ability.hits === 0 ? null : (ability.kind ?? WEAPON_KIND[ability.weapon]);
+/**
+ * Schadensart einer Fähigkeit – null, wenn sie nicht trifft (Heilung, Schutz). Mit `creatureId` die
+ * wirksamere, falls die Fähigkeit auch anders zählen kann (`altKind`, Heiliger Hammer).
+ */
+export function abilityKind(ability: Pick<AbilityDef, "weapon" | "kind" | "altKind" | "hits">, creatureId?: string): DamageKind | null {
+  if (ability.hits === 0) return null;
+  const kind = ability.kind ?? WEAPON_KIND[ability.weapon];
+  return creatureId === undefined ? kind : bestKind(creatureId, [kind, ability.altKind]);
+}
+
+/** Die wirksamste Schadensart gegen diese Kreatur – bei Gleichstand die erste der Liste. */
+export function bestKind(creatureId: string, kinds: readonly (DamageKind | null | undefined)[]): DamageKind | null {
+  let best: DamageKind | null = null;
+  for (const kind of kinds) {
+    if (kind && (best === null || matchupFactor(creatureId, kind) > matchupFactor(creatureId, best))) best = kind;
+  }
+  return best;
 }
 
 export const MATCHUP_LABELS: Record<Matchup, { name: string; icon: string; detail: string }> = {

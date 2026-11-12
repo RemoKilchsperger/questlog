@@ -9,6 +9,33 @@ import type { BlessingId } from "../domain/tower";
 import type { HeroLooks } from "../domain/looks";
 import type { Equipment } from "../domain/types";
 
+/**
+ * Version des Koop-Protokolls (Kampf, Befehle, Ereignisse). Sie steigt, sobald ein älterer Client einen
+ * Kampf nicht mehr richtig darstellen oder bedienen kann – neue Ereignisse, neue Aktionen, neue Regeln, die
+ * der Client anzeigt. Der Server lehnt Befehle älterer Clients ab, statt dass deren Szene unbekannte
+ * Ereignisse verschluckt oder Knöpfe nach alten Regeln anbietet. Geplante Erhöhungen: Skilltree-Release (G2)
+ * und Klassen-Kern (G3), siehe docs/klassen-skilltree-abgleich.md.
+ *
+ * 1: erste Version (Klassen-Sofortkorrekturen G1) – Clients ohne Versionsangabe gelten als veraltet.
+ * 2: Skilltree-Release (G2) und Klassen-Kern (G3), zusammen ausgeliefert (docs/klassen-skilltree-abgleich.md,
+ *    Auslieferung) – G2: Ereignisse `bloodMagic`, `shieldGained`, Felder `free` (Fähigkeit), `warded` (Treffer),
+ *    `stacks` (Bluten). G3: Aktion `signature`, Feld `charge` am Helden, Ereignisse `signature`, `charge`,
+ *    `harvest`, `marked`, `weakened`, `banner`, `duel`, `revived`, `enrage` (Boss-Raserei).
+ */
+export const COOP_PROTOCOL_VERSION = 2;
+
+/** Meldung an veraltete Clients. */
+export const COOP_OUTDATED_MESSAGE = "Questlog wurde aktualisiert – bitte lade die Seite neu, um im Koop weiterzuspielen.";
+
+/** Inhalt einer Anfrage an die Edge Function "coop". */
+export interface CoopRequest {
+  command: CoopCommand;
+  /** Kampf (ausser bei create/join) */
+  id?: string;
+  /** COOP_PROTOCOL_VERSION des Clients – fehlt bei Clients vor Version 1 */
+  protocol?: number;
+}
+
 export interface CoopMember {
   /** Id des Spielers (Supabase-Konto bzw. Tab im lokalen Testmodus) */
   id: string;

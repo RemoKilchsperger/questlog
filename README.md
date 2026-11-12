@@ -33,7 +33,7 @@ src/
     quests.ts        Questbuch (Jagd-, Boss- und Dungeon-Quests), Tages- und Wochenaufträge, Belohnungen
     stats.ts         Namen der Attribute
     leveling.ts      Level-Kurve, Attributpunkte
-    skills.ts        Skilltree: vier Pfade mit Stufen, Gabelung und Meisterschaft
+    skills.ts        Skilltree: vier Pfade mit Stufen, Gabelungen, zwei Meisterschaften pro Pfad, validateSkills
     abilities.ts     Kampf-Fähigkeiten (Pool von 4 pro Waffentyp, 6 bei Zweihand; jede Waffe trägt die Hälfte), Mana
     items.ts         Item-Katalog, Seltenheit, Boss-Items, Verbesserungsstufen
     armorClasses.ts  Leichte, mittlere und schwere Rüstung
@@ -76,6 +76,9 @@ supabase/            Datenbankschema, Migrationen, Edge Functions
 Das **Questbuch** (`quests.ts`) hat pro Gebiet eine Jagd pro Kreatur (5, 6, 6 und 8 Siege), eine Boss-Quest
 und pro Dungeon eine Quest „bis zum Endboss abschliessen“ (solo oder Koop) – jede Quest gibt es einmal.
 Annehmen ab dem Mindest-Level des Gebiets, nur Siege nach dem Annehmen zählen, abgegeben wird im Quest-Tab.
+Dazu die Story-Quest **„Finde deine Klasse“** (ab Lv. 5, ohne Gebiet): einen Kampf mit aktiver Klasse gewinnen
+(solo oder Koop). Belohnung: XP und Gold wie eine Jagdquest auf Lv. 8 und ein seltenes Rüstungsteil der
+Rüstungsklasse, die zur angelegten Waffe passt (`classQuestArmor`).
 
 | Quest | Einheiten | Item beim Abgeben |
 |---|---|---|
@@ -102,8 +105,12 @@ Bei Händler-Aufträgen zählt jedes Ausrüstungsteil (Waffen und Rüstung).
 - Gegner mehr als 3 Level unter dem Helden geben 15 % weniger XP pro Level, mindestens 10 %.
 - Pro Level-up: 2 Attributpunkte, alle 2 Level 1 Skillpunkt (Level 60: 30).
 - **Skills:** vier Pfade (Klinge, Wehr, Arkan, Plage), die verändern, wie die Kampf-Mechaniken wirken.
-  Stufen öffnen sich mit 3 / 6 / 9 Punkten im Pfad, die Meisterschaft mit 15 – nur eine im ganzen Baum.
-  Auf Stufe 3 gabelt sich jeder Pfad. Details: [docs/skilltree.md](docs/skilltree.md).
+  Stufen öffnen sich mit 3 / 6 / 9 Punkten im Pfad, die Meisterschaft mit 12 (jeder Pfad hat 18–20 Ränge davor).
+  Auf Stufe 3 gabelt sich jeder Pfad, die Meisterschaft ist ebenfalls eine Gabel (zwei pro Pfad) – nur eine im
+  ganzen Baum. Neue Meisterschaften: Tausend Schnitte (Bluten-Stapel, bis 5), Wächterschwur (Abwehren heilt 4 %,
+  im Koop Spott mit 60 %), Blutmagie (2 LP pro fehlendem Mana, nicht unter 25 % LP, −15 % Mana) und Lebensband
+  (Überheilung wird zum Schild, höchstens 15 % der LP). Details: [docs/skilltree.md](docs/skilltree.md).
+  Spielstand v24 hat alle Skillpunkte zurückerstattet.
   Zurücksetzen kostet `12.5 · Level · (1 + Level / 10)` Gold.
 
 ### Items
@@ -114,7 +121,8 @@ Bei Händler-Aufträgen zählt jedes Ausrüstungsteil (Waffen und Rüstung).
 - **Waffen:** Dolch, Schwert, Zweihandschwert, Schild, Axt, Grossaxt, Stab, Zepter, Streitkolben,
   Grosshammer, Bogen
 - **Zweihandwaffen** (Zweihandschwert, Grossaxt, Stab, Grosshammer, Bogen) belegen beide Hände.
-- **Schilde** kommen in eine Waffenhand und geben Angriff und Rüstung. Es darf nur ein Schild getragen werden.
+- **Schilde** kommen in eine Waffenhand und geben Angriff (Grundwert 2,2, Einhandwaffen 2,8–3,1) und Rüstung.
+  Es darf nur ein Schild getragen werden.
 
 | Seltenheit | Rüstung/Angriff | Attributboni | Preis |
 |---|---|---|---|
@@ -131,8 +139,27 @@ Höhe eines Bonus: `Faktor · (1 + Item-Level / 4)` mit Faktor 1 / 1.5 / 2.5 (se
 | Mittel (Leder) | 75 % | +0,4 % Krit |
 | Schwer (Metall) | 100 % | – |
 
-- **Klassen** (`heroClasses.ts`): mindestens 3 Rüstungsteile einer Klasse plus passende Waffe, z. B.
-  leichte Rüstung + Stab → Magier. 11 Klassen, höchstens eine aktiv.
+- **Klassen** (`heroClasses.ts`, `classKit.ts`): mindestens 3 Rüstungsteile einer Klasse plus passende Waffe, z. B.
+  leichte Rüstung + Stab → Magier. 11 Klassen, höchstens eine aktiv; Paladin mit Streitkolben oder Schwert und
+  Schild (als Paladin skaliert das Schwert mit Ausdauer und hat 20 % Lebensraub, „Geweihte Klinge“).
+  Jede Klasse hat Rolle, Passiv, **Klassenleiste** (4 Ladungen, jeder Kampf beginnt leer, eigene Auslöser,
+  höchstens 2 pro Runde, die Signatur-Runde lädt nicht) und **Signatur** (volle Leiste, kein Mana, keine
+  Abklingzeit, waffenunabhängig, für Boss-Mechaniken immer sicher; für den Skilltree keine Fähigkeit).
+  Plan und Werte: docs/klassen-neukonzept.md.
+
+| Klasse | Passiv | Leiste | Signatur |
+|---|---|---|---|
+| Magier | Fähigkeiten −20 % Mana | +2 Fähigkeit, +1 Einfrieren | Arkane Entladung: 1,8 D, ignoriert Rüstung, Feuer oder Magie, bricht Aufladen |
+| Hexer | +5 %, eigene DoTs +40 % und +1 Runde, Gift↔Feuer gegen Immune (60 %) | +1 Runde mit DoT, +2 Zepter-Fähigkeit, +1 vergifteter Gegner fällt | Seelenernte: 0,7 D, DoTs wirken sofort, 25 % Heilung, Koop: Fluch +10 % |
+| Assassine | +10 % Krit, Krit ×2 | +1 Krit, +2 Dolch-Fähigkeit | Halsschnitt: 0,8 D sicher kritisch, ignoriert Rüstung, unter 30 % LP ×1,5 |
+| Waldläufer | +8 %, Pfeilhagel 5 Pfeile | +1 Runde mit Treffer, +1 nicht getroffen, +1 Bogen-Fähigkeit, +1 Krit auf Markierte | Beute markieren: 1,2 D, 3 Runden +15 % erlittener Schaden |
+| Duellant | +10 %, 40 % Zweitschlag | +1 Zweitschlag, +1 Konter, +2 Schwert-Fähigkeit | Duell: 1 D, 2 Gegnerzüge Duellhaltung (×0,7, Konter 0,6 D, Koop: Spott 75 %) |
+| Plünderer | +15 %, 8 % Lebensraub, Krit-Bluten, +25 % Gold | +1 Runde mit Bluten, +1 Krit, +2 Axt-Fähigkeit | Ausweiden: 1,4 D, gegen Blutende ×1,5, 50 % Lebensraub |
+| Kleriker | 2 % Regeneration, Tränke +15 %, Koop-Gruppenheilung 50 % | +1 pro Runde, +1 Heilfähigkeit | Gebet: 8 % Heilung, reinigt, 0,6 D (Wucht/Magie); Koop: alle 15 %, belebt einen Gefallenen (25 %) |
+| Paladin | +10 %, +20 % Rüstung, halbes Bollwerk, Schildstoss, Bedrohung ×2 | +1 Runde getroffen/abgewehrt, +1 Bollwerk-Block | Richtspruch: 1 D + 40 % des abgewehrten Schadens (max. +1,5 D); Koop: Schild 10 % für alle |
+| Berserker | +10 %, unter 50 % LP +20 %, 8 % Lebensraub | +1 Runde getroffen, +1 Krit, unter 50 % doppelt | Entfesseln: −10 % LP, 3 × 0,45 D (unter 50 %: 4), 20 % Lebensraub |
+| Champion | +8 %, +10 % LP | +1 Runde mit Treffer, +1 Krit, +1 Gegner fällt | Kampfbanner: 1,2 D, 3 Runden +15 % (Koop: Mitspieler +10 %) |
+| Wächter | +10 % Rüstung, Schwächungen +1 Runde | +2 Grosshammer-Fähigkeit, +1 Betäubung/Schwächung | Bergbrecher: 0,8 D an alle, Ziel sicher betäubt (immun: 2 Runden −30 % Schaden) |
 - **Boss-Items:** einzigartig und immer legendär, 10 % Chance pro Bosssieg. Mehrere Teile desselben
   Bosses geben Set-Boni (`bossSets.ts`).
 - **Gear Score:** Durchschnitt aus `Item-Level × Seltenheitsfaktor × (1 + 2 % pro Schmied-Stufe)`
@@ -166,7 +193,7 @@ Fähigkeit**, danach Gift/Feuer/Bluten und der Gegenangriff. Jeder Kampf beginnt
 | Lebenspunkte | `80 + 12 · (Level − 1) + 1.5 · Ausdauer` |
 | Schaden | `5 + Angriff + Attributbonus der Waffen`, ±15 % Streuung |
 | Attributbonus | `0.25 · Attribut der Waffe` (Ausdauer 0.15), bei zwei Waffen nach Anteil am Angriff |
-| Kritisch | `5 % + 0.2 % · Charisma` (max. 30 %), ×1.5 Schaden |
+| Kritisch | `5 % + 0.2 % · Charisma` (max. 30 %), ×1.5 Schaden. Klasse, Skilltree, Item-Effekte und Segen kommen dazu, insgesamt höchstens 60 % (`CRIT_CAP_TOTAL`) |
 | Mana | `40 + 2 · (Level − 1) + Intelligenz`, +6 pro Runde |
 | Rüstung | fängt `Rüstung / (Rüstung + 50 + 10 · Angreifer-Level)` des Schadens ab |
 | Gold-Bonus | `+0.5 % · Charisma` (max. +100 %) |
@@ -202,7 +229,13 @@ Endboss schon besiegt haben). Raid-Bosse gibt es nicht heroisch.
 **Koop** (`coopCombat.ts`, Plan in `docs/koop-kampf.md`): 2–4 Spieler gegen Sumpfhydra (20),
 Frostriese (40) oder Weltenverschlinger (60). Der Hydra schlägt die Gruppe bei 75/50/25 % einen Kopf ab,
 der als Begleiter weiterkämpft (`hydra.ts`, docs/raid-bosse.md). Der Boss greift nach Bedrohung an,
-Gefallene lassen sich mit einem Heiltrank wiederbeleben, jeder würfelt eigene Beute (×1.5 XP und Gold).
+Gefallene lassen sich mit einem Heiltrank (oder dem Gebet des Klerikers) wiederbeleben, jeder würfelt eigene Beute (×1.5 XP und Gold).
+Heilfähigkeiten, Gebet und Gruppenschild erzeugen beim Heiler Bedrohung (50 % des Geheilten). Spott: Bollwerk,
+Schildwall und Duellhaltung 75 %, Wächterschwur 60 % – der höchste Anteil gewinnt. **Boss-Raserei:** ab Runde 20
+(heroische Endbosse ab 30) +10 % Schaden pro Runde (additiv), angekündigt ab Runde 17, nicht für Begleiter und
+Hydra-Köpfe (`coopEnrageFactor`). Die Klassenleiste rechnet der Server selbst, der Client schickt nur `signature`.
+Client und Server tragen eine Protokollversion (`COOP_PROTOCOL_VERSION` in `src/coop/protocol.ts`); ältere
+Clients lehnt der Server mit „bitte neu laden“ ab.
 Auch alle Dungeons gehen im Koop (Plan in `docs/koop-dungeons.md`): Gegner mit Lebenspunkten
 `× n × (1 + 0.1 · (n − 1))` und Schaden `× (1 + 0.4 · (n − 1))`, Gefallene stehen zwischen den Kämpfen
 mit 25 % LP auf, der Host entscheidet nach jedem Sieg über Weiter oder Aussteigen, jeder hat seine eigene Truhe.

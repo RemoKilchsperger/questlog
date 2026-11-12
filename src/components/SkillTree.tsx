@@ -58,8 +58,10 @@ export function SkillTree() {
           <p className="text-sm text-muted">
             Alle 2 Level bekommst du einen Skillpunkt (bisher {earnedSkillPoints(level)}). Die vier Pfade verändern, wie
             deine Fähigkeiten wirken – mit jeder Waffe. Eine Stufe öffnet sich erst, wenn du genug Punkte im Pfad hast,
-            viele Knoten brauchen den Knoten darüber. Bei einer Gabelung wählst du einen von zwei Wegen, und von den vier
-            Meisterschaften kannst du nur eine lernen. Tippe auf einen Knoten, um zu sehen, was er kann.
+            viele Knoten brauchen den Knoten darüber. Bei einer Gabelung wählst du einen von zwei Wegen. Jeder Pfad hat
+            zwei Meisterschaften, sie öffnen sich ab {TIER_POINTS[5]} Punkten im Pfad – lernen kannst du im ganzen Baum
+            nur eine. Wer meistert, lässt also einige Ränge des Pfads liegen. Tippe auf einen Knoten, um zu sehen, was er
+            kann.
           </p>
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -223,7 +225,7 @@ function NodeDetails({ node }: { node: SkillNode }) {
   const rank = skillRank(character, node.id);
   const blocker = skillBlocker(character, node.id);
   const color = PATH_COLOR[node.path];
-  const tierLabel = node.tier === 5 ? "Meisterschaft" : node.fork ? `Stufe ${node.tier} · Gabelung` : `Stufe ${node.tier}`;
+  const tierLabel = node.tier === 5 ? "Meisterschaft · Gabelung" : node.fork ? `Stufe ${node.tier} · Gabelung` : `Stufe ${node.tier}`;
 
   return (
     <div className="rounded-md border-2 border-night-700 bg-night-800 p-3">

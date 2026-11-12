@@ -6,6 +6,9 @@ import { localDeadline, useCoopStore } from "../coop/coopStore";
 import { isLobbyCode } from "../coop/protocol";
 import { SpeedControl } from "./SpeedControl";
 import { getAbility } from "../domain/abilities";
+import { classKit } from "../domain/classKit";
+import { SignatureButton } from "./ClassGauge";
+import { roleText } from "./HeroClassInfo";
 import {
   clearedStages,
   COOP_BOSSES,
@@ -15,6 +18,11 @@ import {
   coopBossCreature,
   BOSS,
   coopAbilityBlocker,
+  coopEnrageFactor,
+  coopEnrageStart,
+  coopEnrageWarning,
+  coopSignatureBlocker,
+  COOP_ENRAGE_STEP,
   coopAbilityCost,
   coopAbilityDue,
   coopBossTurn,
@@ -76,7 +84,7 @@ import { getHydraHead, headIntentText, HYDRA_ID } from "../domain/hydra";
 import { describeIntent, type IntentView } from "../domain/bossIntents";
 import { defendEffect } from "../domain/combat";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
-import { classAbility } from "../domain/heroClasses";
+import { classAbility, getHeroClass } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { GameIcon } from "./GameIcon";
 
@@ -385,6 +393,10 @@ function Lobby() {
                 <p className="text-xs text-muted">
                   Lv. {m.level} · {m.profile.maxHp} LP · {Math.round(m.profile.damage)} Schaden · {Math.round(m.profile.armor)} Rüstung
                 </p>
+                {/* Klasse und Rolle – der Server kennt sie aus dem Cloud-Spielstand */}
+                <p className="text-xs text-legendary">
+                  {m.profile.heroClass ? `${getHeroClass(m.profile.heroClass).icon} ${getHeroClass(m.profile.heroClass).name} · ${roleText(m.profile.heroClass)}` : "ohne Klasse"}
+                </p>
               </div>
               <span className={`text-sm ${m.id === hostId || m.ready ? "text-xp" : "text-muted"}`}>
                 {m.id === hostId ? "Host" : m.ready ? "✓ bereit" : "…"}
@@ -637,7 +649,13 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
     );
   }
   if (myAction) {
-    const what = myAction.defend ? "Abwehren" : myAction.ability ? getAbility(myAction.ability).name : "Angriff";
+    const what = myAction.defend
+      ? "Abwehren"
+      : myAction.signature && me.heroClass
+        ? classKit(me.heroClass).signature.name
+        : myAction.ability
+          ? getAbility(myAction.ability).name
+          : "Angriff";
     const on = battle.adds?.find((a) => a.uid === myAction.target)?.combatant.name;
     return (
       <p className="rounded-md bg-night-800 p-3 text-sm">
@@ -653,6 +671,10 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
   const send = (ability?: CoopAction["ability"]) =>
     choose({ ...(potion && { potion }), ...(ability && { ability }), ...(target && { target }) });
   const defend = () => choose({ ...(potion && { potion }), defend: true });
+  // Signatur: der Server prüft die volle Leiste selbst – der Knopf zeigt nur, was er erwartet
+  const signature = () => choose({ ...(potion && { potion }), signature: true, ...(target && { target }) });
+  const enrage = coopEnrageFactor(battle.round, !!battle.heroic);
+  const enrageIn = coopEnrageWarning(battle.round, !!battle.heroic);
   const turn = coopBossTurn(battle);
   const fallen = battle.heroes.filter((h) => h.down && !h.revived);
   const bossIntent = coopIntent(battle, myId, Object.fromEntries((row?.members ?? []).map((m) => [m.id, m.name])));
@@ -684,6 +706,13 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
           ]}
         />
       </div>
+      {(enrage > 1 || enrageIn !== null) && (
+        <Hint text={`Boss-Raserei im Koop: Ab Runde ${coopEnrageStart(!!battle.heroic)} macht der Gegner jede Runde ${Math.round(COOP_ENRAGE_STEP * 100)} % mehr Schaden. Spart eure Signaturen dafür auf, wehrt ab, schwächt ihn – oder beendet den Kampf vorher.`}>
+          <p className={`rounded border px-2 py-1 text-sm ${enrage > 1 ? "border-danger bg-danger/15 text-danger" : "border-gold/60 bg-gold/10 text-gold"}`}>
+            {enrage > 1 ? `😡 Raserei: +${Math.round((enrage - 1) * 100)} % Schaden` : `⚠️ Raserei in ${enrageIn} ${enrageIn === 1 ? "Runde" : "Runden"}`}
+          </p>
+        </Hint>
+      )}
       {(battle.adds?.length ?? 0) > 0 && (
         <TargetPicker
           foes={[
@@ -713,7 +742,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
         />
       )}
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className={`grid gap-2 ${me.heroClass ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"}`}>
         <Hint
           heading="⚔️ Angreifen"
           text={`Normaler Angriff mit deiner Waffe auf dein Ziel. Alle Helden handeln, danach ${battle.adds?.length ? "Boss und Begleiter" : "der Boss"}.`}
@@ -742,6 +771,14 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
             🛡️ Abwehren
           </motion.button>
         </Hint>
+        <SignatureButton
+          heroClass={me.heroClass}
+          charge={me.charge}
+          blocker={coopSignatureBlocker(me)}
+          disabled={locked}
+          onClick={signature}
+          className="col-span-2 sm:col-span-1"
+        />
       </div>
 
       <ActionGroup label="Fähigkeiten">
@@ -753,7 +790,7 @@ function ActionBar({ battle, locked }: { battle: CoopBattleState; locked: boolea
               blocker={coopAbilityBlocker(me, id, turn, battle.round)}
               disabled={locked}
               onClick={() => send(id)}
-              matchup={against(abilityKind(getAbility(id)))}
+              matchup={against(abilityKind(getAbility(id), targetCreature))}
             />
           ))}
         </div>
@@ -1051,7 +1088,9 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "ability":
       return e.echo
         ? `🔮 Echo! ${name(e.heroId)} setzt ${getAbility(e.ability).name} ohne Mana ein – es hallt nach.`
-        : `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
+        : e.free
+          ? `🔁 Nachhall! ${name(e.heroId)} setzt ${getAbility(e.ability).name} ohne Mana ein.`
+          : `${name(e.heroId)} setzt ${getAbility(e.ability).name} ein.`;
     case "dodged":
       return `👻 ${name(e.heroId)} weicht ${name(e.attacker)} aus.`;
     case "selfHeal":
@@ -1063,7 +1102,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "counter":
       return `${name(e.heroId)} schlägt zurück: ${bossName} −${e.damage}.`;
     case "hit":
-      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.neck ? " – der gepanzerte Hals fängt ab" : ""}.`;
+      return `${e.crit ? "Kritisch! " : ""}${name(e.attacker)} trifft ${name(e.target)} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.neck ? " – der gepanzerte Hals fängt ab" : ""}${e.warded ? ` – der Schild fängt ${e.warded} ab` : ""}.`;
     case "immune":
       return `${name(e.target)} ist immun gegen ${MATCHUP_LABELS[e.kind].name}.`;
     case "thorns":
@@ -1087,6 +1126,7 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
     case "burn":
       return `Feuer: ${name(e.target)} −${e.damage}.`;
     case "bleed":
+      if (e.stacks) return `🗡️ ${e.stacks} Schnitte: ${name(e.target)} −${e.damage}.`;
       return e.burst ? `💥 Blutsturz! Die Wunde von ${name(e.target)} platzt: −${e.damage}.` : `Bluten: ${name(e.target)} −${e.damage}.`;
     case "bossAbility":
       return `${bossName} setzt ${e.name} ein!`;
@@ -1124,6 +1164,12 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${bossName} heilt sich um ${e.heal} LP.`;
     case "regen":
       return `${name(e.heroId)} regeneriert ${e.heal} LP.`;
+    case "bloodMagic":
+      return `🧛 Blutmagie! ${name(e.heroId)} zahlt ${e.damage} LP statt Mana.`;
+    case "shieldGained":
+      return e.by
+        ? `🔗 Lebensband: Die Heilung von ${name(e.by)} gibt ${name(e.heroId)} einen Schild (+${e.amount}).`
+        : `🔗 Lebensband: ${name(e.heroId)} bekommt einen Schild (+${e.amount}).`;
     case "defend":
       return `${name(e.heroId)} wehrt ab${e.mana > 0 ? ` und sammelt ${e.mana} Mana` : ""}.`;
     case "interrupted":
@@ -1152,6 +1198,29 @@ function describe(e: CoopEvent, names: Record<string, string>, bossName: string)
       return `${bossName} schlägt mit ${getAbility(e.ability).name} von ${name(e.heroId)} zu!`;
     case "freed":
       return `Die Gruppe entreisst ${bossName} ${getAbility(e.ability).name} von ${name(e.heroId)}!`;
+    case "signature": {
+      const { signature } = classKit(e.classId);
+      const extra = e.hpCost ? ` (${e.hpCost} LP)` : e.absorbed ? ` – ${e.absorbed} abgewehrter Schaden fliesst ein` : "";
+      return `${signature.icon} ${name(e.heroId)}: ${signature.name}!${extra}`;
+    }
+    case "charge":
+      return null;
+    case "harvest":
+      return `${name(e.heroId)} erntet die Flüche an ${name(e.target)}: ${e.damage} Schaden.`;
+    case "marked":
+      return e.curse ? `${name(e.target)} ist verflucht – alle machen mehr Schaden.` : `${name(e.target)} ist markiert – alle machen mehr Schaden.`;
+    case "weakened":
+      return `${name(e.target)} ist gegen Betäubung immun – der Bergbrecher schwächt ihn stattdessen.`;
+    case "banner":
+      return `${name(e.heroId)} stellt ein Kampfbanner auf – ab der nächsten Runde macht die Gruppe mehr Schaden.`;
+    case "duel":
+      return `${name(e.heroId)} geht in Duellhaltung und zieht die Angriffe auf sich.`;
+    case "revived":
+      return `Das Gebet von ${name(e.by)} holt ${name(e.heroId)} zurück (${e.heal} LP)!`;
+    case "enrage":
+      return e.factor > 1
+        ? `😡 ${bossName} rast: +${Math.round((e.factor - 1) * 100)} % Schaden!`
+        : `⚠️ ${bossName} gerät in ${e.roundsLeft} ${e.roundsLeft === 1 ? "Runde" : "Runden"} in Raserei.`;
   }
 }
 

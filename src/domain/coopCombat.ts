@@ -30,12 +30,32 @@
 
 import { freshStunImmunity, MANA_REGEN, type AbilityDef, type AbilityId, type Guard } from "./abilities";
 import {
+  ASSASSIN_CRIT_THREAT,
   classAbility,
   CLERIC_POTION_FACTOR,
   PALADIN_THREAT,
   rageFactor,
   type HeroClassId,
 } from "./heroClasses";
+import {
+  bannerShare,
+  chargeGain,
+  emptyTally,
+  nextCharge,
+  signatureAbility,
+  signatureBlocker,
+  strongerVulnerable,
+  unleashCost,
+  verdictBonus,
+  CHAMPION_BANNER,
+  CLERIC_PRAYER,
+  DUELIST_DUEL,
+  PALADIN_VERDICT,
+  RANGER_MARK,
+  WARDEN_BREAKER_WEAKEN,
+  WARLOCK_HARVEST,
+  type ChargeTally,
+} from "./classKit";
 import {
   addToChest,
   cooldownText,
@@ -118,7 +138,6 @@ import {
   guardedDamage,
   guardRetort,
   healerTurn,
-  healShare,
   heroDotDamage,
   heroRegenShare,
   layDot,
@@ -134,7 +153,9 @@ import {
   weakenFactor,
   absorbShield,
   abilityBuffs,
-  abilityHeal,
+  absorbWard,
+  armorReduction,
+  wardGain,
   cleansed as pureOf,
   debuffFoe,
   defendGain,
@@ -147,7 +168,15 @@ import {
   strikeFactors,
 } from "./combatCore";
 import {
-  cooldownSkipChance,
+  bladeDanceFactor,
+  bloodPrice,
+  chillsOnStun,
+  guardOathHeal,
+  hasLifebond,
+  coverCost,
+  freeCastChance,
+  guardsOrBlocks,
+  isMultiHit,
   echoDue,
   interruptMana,
   manaRegen,
@@ -157,6 +186,7 @@ import {
   skillCostFactor,
   wrathFactor,
   SKILL,
+  WARD_MAX_SHARE,
   type SkillRanks,
   type SkillWeapon,
 } from "./skills";
@@ -175,6 +205,47 @@ export const COOP_REWARD_FACTOR = 1.5;
 export const THREAT_DECAY = 0.3;
 /** Mit Bollwerk zieht der Schildträger diesen Anteil der Boss-Angriffe auf sich – egal wie gross die Gruppe ist. */
 export const BULWARK_SHARE = 0.75;
+/**
+ * Heilung erzeugt Bedrohung (docs/klassen-neukonzept.md 4.5): so viel der geheilten LP bzw. des Schildwerts,
+ * den Heilfähigkeiten, das Gebet und der Gruppenschild geben. So zieht ein Heiler ohne Tank Angriffe auf sich.
+ * Tränke, Regeneration und Lebensraub erzeugen keine.
+ */
+export const HEAL_THREAT = 0.5;
+
+/**
+ * Boss-Raserei im Koop (docs/klassen-neukonzept.md 4.5): Ab Runde COOP_ENRAGE_ROUND macht der Gegner jede
+ * Runde COOP_ENRAGE_STEP mehr Schaden (additiv, ohne Obergrenze), heroische Endbosse erst ab
+ * COOP_ENRAGE_HEROIC_ROUND. Grund: Heiler, Tank, Wächterschwur und Lebensband können Kämpfe sonst endlos
+ * strecken – das kostet nur Zeit. Angekündigt COOP_ENRAGE_WARNING Runden vorher. Gilt nicht für Begleiter
+ * und Hydra-Köpfe; im Koop-Dungeon zählt jeder Kampf für sich. Solo gibt es keine Raserei.
+ */
+export const COOP_ENRAGE_ROUND = 20;
+export const COOP_ENRAGE_HEROIC_ROUND = 30;
+export const COOP_ENRAGE_STEP = 0.1;
+export const COOP_ENRAGE_WARNING = 3;
+
+/** Erste Runde der Raserei – heroische Endbosse (+50 % LP) später. */
+export const coopEnrageStart = (heroic: boolean): number => (heroic ? COOP_ENRAGE_HEROIC_ROUND : COOP_ENRAGE_ROUND);
+
+/** Faktor auf den Schaden des Gegners in Runde `round` (1 = keine Raserei) – rein aus der Runde, kein eigenes Feld. */
+export function coopEnrageFactor(round: number, heroic: boolean): number {
+  const start = coopEnrageStart(heroic);
+  return round >= start ? 1 + COOP_ENRAGE_STEP * (round - start + 1) : 1;
+}
+
+/** Runden bis zur Raserei, solange sie angekündigt wird (1–COOP_ENRAGE_WARNING) – sonst null. */
+export function coopEnrageWarning(round: number, heroic: boolean): number | null {
+  const left = coopEnrageStart(heroic) - round;
+  return left >= 1 && left <= COOP_ENRAGE_WARNING ? left : null;
+}
+
+/** Duellhaltung (Signatur des Duellanten): zieht die Angriffe wie Bollwerk auf sich. */
+export const DUEL_TAUNT_SHARE = BULWARK_SHARE;
+/**
+ * Wächterschwur (Wehr-Meisterschaft): Abwehren zieht die Angriffe auf sich, aber schwächer als Bollwerk –
+ * jeder Held kann aushelfen, der Paladin mit Bollwerk bleibt der bessere Tank (docs/skilltree-ueberarbeitung.md 3.5).
+ */
+export const GUARD_OATH_SHARE = SKILL.guardOath.share;
 
 /** Id des Bosses in Ereignissen – Helden haben die Id ihres Spielers. */
 export const BOSS = "boss";
@@ -467,8 +538,12 @@ export function coopContent(id: string): { name: string; level: number; sprite: 
 
 type OverTimeKind = "poison" | "burn" | "bleed";
 
-/** Gift/Feuer/Bluten an Gegnern merken sich, wer sie verursacht hat (Bedrohung). */
-type SourcedDot = DamageOverTime & { sourceId: string };
+/**
+ * Gift/Feuer/Bluten an Gegnern merken sich, wer sie verursacht hat (Bedrohung). `sourceId`: wer zuletzt gelegt
+ * hat – seine Skills gelten für Blutsturz. Tausend Schnitte: ein gemeinsamer Bluten-Stapel pro Gegner,
+ * `stacksBy` zählt die Stapel pro Held (Bedrohung nach Stapeln). Fehlt bei älteren Kämpfen und ohne Stapel.
+ */
+type SourcedDot = DamageOverTime & { sourceId: string; stacksBy?: Record<string, number> };
 
 /** Wirkungen der Fähigkeiten auf einen Gegner (Boss oder Begleiter) */
 export type CoopEnemyEffects = Partial<Record<OverTimeKind, SourcedDot>> & {
@@ -484,6 +559,8 @@ export type CoopEnemyEffects = Partial<Record<OverTimeKind, SourcedDot>> & {
   chilled?: number;
   /** Erschüttert: in den letzten 2 Runden betäubt – für den Heiligen Hammer */
   shaken?: number;
+  /** Beute markieren (Waldläufer): so viele Runden noch markiert – Krits dagegen laden seine Leiste */
+  marked?: number;
 };
 
 /** Ein Begleiter des Bosses – seine `uid` ist zugleich seine Id in Ereignissen. */
@@ -515,6 +592,8 @@ export interface CoopHero {
   cooldowns?: Partial<Record<AbilityId, number>>;
   /** Aktive Klasse (heroClasses.ts) – fehlt bei älteren Kämpfen */
   heroClass?: HeroClassId | null;
+  /** Klassenleiste: Ladungen (0 bis CHARGE_MAX) – fehlt ohne Klasse und in älteren Kämpfen */
+  charge?: number;
   /** Hauptwaffe – ihre Schadensart zählt bei normalen Angriffen (matchups.ts). Fehlt bei älteren Kämpfen. */
   weapon?: SkillWeapon | null;
   /** Spezialeffekte der angelegten Items (itemEffects.ts) */
@@ -558,6 +637,16 @@ export interface CoopHero {
     corroded?: ActiveBuff;
     /** Eingesetzte Fähigkeiten in diesem Kampf – für das Echo */
     casts?: number;
+    /** Klingentanz: Faktor auf den nächsten normalen Angriff nach einer Mehrfachtreffer-Fähigkeit */
+    bladeDance?: number;
+    /** Schild-Topf (Lebensband): fängt Treffer vor den LP ab, höchstens WARD_MAX_SHARE der max. LP – fehlt bei älteren Kämpfen */
+    ward?: number;
+    /** Duellhaltung (Duellant): so viele Gegnerzüge noch */
+    duel?: number;
+    /** Kampfbanner (Champion): ab der Runde nach dem Aufstellen +15 % für ihn, +10 % für die Mitspieler */
+    banner?: ActiveBuff;
+    /** Paladin: abgewehrter, geblockter und geminderter Schaden seit dem letzten Richtspruch */
+    absorbed?: number;
   };
   threat: number;
   /** Auf 0 LP gefallen – handelt nicht und wird nicht angegriffen */
@@ -575,7 +664,8 @@ export type CoopEvent =
   /** Säure frisst die Rüstung an bzw. Rauch schwächt das Ziel */
   | { type: "corroded"; target: string }
   | { type: "smoked"; target: string }
-  | { type: "ability"; heroId: string; ability: AbilityId; weapon: SkillWeapon; manaCost: number; echo?: boolean }
+  /** `free`: Nachhall – die Fähigkeit kostet kein Mana */
+  | { type: "ability"; heroId: string; ability: AbilityId; weapon: SkillWeapon; manaCost: number; echo?: boolean; free?: boolean }
   /** Skill „Schemen“: Ein Held weicht einem Angriff aus (`attacker`: BOSS oder uid eines Begleiters) */
   | { type: "dodged"; heroId: string; attacker: string }
   /** Ein Held heilt sich durch eine Fähigkeit – `by`: Ein Mitspieler hat geheilt (Arkane Heilung) */
@@ -606,7 +696,13 @@ export type CoopEvent =
       plated?: boolean;
       /** Der gepanzerte Hals der Hydra hat den Treffer gemindert (ein Kopf lebt noch) */
       neck?: boolean;
+      /** Lebensband: So viel hat der Schild des getroffenen Helden geschluckt (zusätzlich zu `damage`) */
+      warded?: number;
     }
+  /** Blutmagie: Das Mana reicht nicht – der Held zahlt den Rest mit `damage` LP */
+  | { type: "bloodMagic"; heroId: string; damage: number }
+  /** Lebensband: Heilung über das Maximum wird zum Schild – `by`: ein Mitspieler hat geheilt */
+  | { type: "shieldGained"; heroId: string; amount: number; by?: string }
   /** Ein Held wehrt ab: kein Angriff, halber Schaden, etwas Mana */
   | { type: "defend"; heroId: string; mana: number }
   /** Das Ritual des Heilers bzw. der Takt des Trommlers ist unterbrochen */
@@ -640,8 +736,8 @@ export type CoopEvent =
   | { type: "enemyRegen"; heal: number }
   /** Elite „Explosiv“: Der Gegner explodiert beim Tod und trifft alle stehenden Helden (Bollwerk blockt) */
   | { type: "explosion"; hits: { heroId: string; damage: number; blocked?: boolean }[] }
-  /** `burst`: Blutsturz bzw. Fäulnis lässt Wunde oder Gift platzen */
-  | { type: OverTimeKind; target: string; damage: number; burst?: boolean }
+  /** `burst`: Blutsturz bzw. Fäulnis lässt Wunde oder Gift platzen; `stacks`: Bluten mit Tausend Schnitte */
+  | { type: OverTimeKind; target: string; damage: number; burst?: boolean; stacks?: number }
   | { type: "bossAbility"; bossId: string; abilityId: string; name: string }
   /** Mit `add`: ein Begleiter statt des Bosses */
   | { type: "stunned"; freeze?: boolean; add?: string }
@@ -672,7 +768,27 @@ export type CoopEvent =
   | { type: "manaBurn"; heroId: string; amount: number }
   | { type: "drain"; heal: number }
   /** Klassen-Regeneration (Kleriker) am Ende der Runde */
-  | { type: "regen"; heroId: string; heal: number };
+  | { type: "regen"; heroId: string; heal: number }
+  /**
+   * Ein Held setzt die Signatur seiner Klasse ein (classKit.ts) – Treffer folgen als "hit".
+   * `hpCost`: Entfesseln, `absorbed`: abgewehrter Schaden im Richtspruch.
+   */
+  | { type: "signature"; heroId: string; classId: HeroClassId; hpCost?: number; absorbed?: number }
+  /** Die Klassenleiste eines Helden füllt sich um `gained` auf `value` */
+  | { type: "charge"; heroId: string; gained: number; value: number }
+  /** Seelenernte: DoTs am Ziel wirken sofort – zusammen `damage` */
+  | { type: "harvest"; heroId: string; target: string; damage: number }
+  /** Beute markieren bzw. Fluch der Seelenernte: Das Ziel erleidet mehr Schaden */
+  | { type: "marked"; heroId: string; target: string; curse?: boolean }
+  /** Bergbrecher am betäubungsimmunen Ziel: Es macht weniger Schaden */
+  | { type: "weakened"; heroId: string; target: string }
+  /** Kampfbanner bzw. Duellhaltung beginnt */
+  | { type: "banner"; heroId: string }
+  | { type: "duel"; heroId: string }
+  /** Gebet: Ein gefallener Mitspieler steht wieder auf */
+  | { type: "revived"; heroId: string; by: string; heal: number }
+  /** Boss-Raserei: `factor` auf den Schaden des Gegners – `roundsLeft`: angekündigt, beginnt in so vielen Runden */
+  | { type: "enrage"; factor: number; roundsLeft?: number };
 
 export type CoopStatus = "active" | "won" | "lost";
 
@@ -787,6 +903,8 @@ export interface CoopAction {
   ability?: AbilityId;
   /** Abwehren statt anzugreifen: halber Schaden in dieser Runde, etwas Mana (geht vor `ability`) */
   defend?: boolean;
+  /** Signatur der Klasse (geht vor `ability`, nach `defend`) – der Server prüft die volle Leiste selbst */
+  signature?: boolean;
   /** Ziel des Angriffs: uid eines Begleiters – fehlt, geht es gegen den Boss */
   target?: string;
 }
@@ -843,6 +961,8 @@ export function startCoopBattle(id: string, contentId: string, players: CoopPlay
       abilities: profile.abilities,
       cooldowns: {},
       heroClass: profile.heroClass,
+      // Die Klassenleiste beginnt jeden Kampf leer
+      ...(profile.heroClass && { charge: 0 }),
       buffs: {},
       potionsUsed: [],
       // „Wachsam“: Der erste gegnerische Angriff wird geblockt
@@ -933,6 +1053,8 @@ export function startDungeonFight(state: CoopBattleState, run: CoopDungeonRun, i
       endured: false,
       threat: 0,
       revived: false,
+      // Jeder Dungeon-Kampf beginnt mit leerer Klassenleiste
+      ...(h.heroClass && { charge: 0 }),
     })),
     boss: foeStats(enemy, state.heroes.length, elite, heroic),
     bossEffects: {},
@@ -1032,11 +1154,26 @@ export function coopPotionBlocker(state: CoopBattleState, heroId: string, potion
   return null;
 }
 
-/** Manakosten einer Fähigkeit im Koop – mit Klasse und Skilltree (Eröffnung in Runde 1, Echo). */
+/** Manakosten einer Fähigkeit im Koop – mit Klasse und Skilltree (Deckung, Eröffnung in den ersten Runden, Echo). */
 export function coopAbilityCost(hero: CoopHero, id: AbilityId, round = 0): number {
   // Segen „Fokus“: billigere Fähigkeiten
   const focus = Math.max(0, 1 - BLESSING.focus * stacks(hero.blessings, "focus"));
-  return Math.round(classAbility(id, hero.heroClass).manaCost * skillCostFactor(hero.skills, round, hero.effects.casts) * focus);
+  const ability = classAbility(id, hero.heroClass);
+  // Deckung zuerst auf die Kosten der Klasse (halbes Bollwerk), mit Untergrenze – dann die Faktoren
+  const cost = coverCost(hero.skills, ability.manaCost, guardsOrBlocks(ability));
+  return Math.round(cost * skillCostFactor(hero.skills, round, hero.effects.casts) * focus);
+}
+
+/** Warum die Signatur nicht geht – oder null. Der Server rechnet die Leiste selbst (resolveRound). */
+export function coopSignatureBlocker(hero: CoopHero): string | null {
+  if (hero.down) return "Du bist gefallen.";
+  return signatureBlocker(hero.heroClass, hero.charge);
+}
+
+/** Kampfbanner im Koop: das eigene (+15 %) oder das eines anderen Champions (+10 %) – der höhere Wert zählt. */
+export function coopBannerShare(hero: CoopHero, heroes: readonly CoopHero[]): number {
+  const others = heroes.some((h) => h !== hero && !h.down && bannerShare(h.effects.banner) > 0) ? CHAMPION_BANNER.group : 0;
+  return Math.max(bannerShare(hero.effects.banner), others);
 }
 
 /** Warum diese Fähigkeit nicht geht – oder null. `turn`: Absicht des Bosses (verschlungene Fähigkeit). */
@@ -1046,7 +1183,12 @@ export function coopAbilityBlocker(hero: CoopHero, id: AbilityId, turn?: BossTur
   const wait = hero.cooldowns?.[id] ?? 0;
   if (wait > 0) return cooldownText(wait);
   const manaCost = coopAbilityCost(hero, id, round);
-  if (hero.mana < manaCost) return `Nicht genug Mana (${manaCost} nötig).`;
+  // Blutmagie: Fehlendes Mana zahlt der Held mit LP – nicht unter 25 % (der Server rechnet selbst nach)
+  if (bloodPrice(hero.skills, hero.mana, manaCost, hero.combatant.hp, hero.combatant.maxHp) === null) {
+    return rankIn(hero.skills, "bloodMagic") > 0
+      ? `Nicht genug Mana (${manaCost} nötig) – Blutmagie würde dich unter ${Math.round(SKILL.bloodMagic.floor * 100)} % LP bringen.`
+      : `Nicht genug Mana (${manaCost} nötig).`;
+  }
   return null;
 }
 
@@ -1081,6 +1223,25 @@ interface Foe {
   grow?: number;
   c: Combatant;
   fx: CoopEnemyEffects;
+}
+
+/**
+ * Tausend Schnitte im Koop: Stapel pro Held, nachdem `heroId` einen Stapel gelegt hat (gesamt `stacks`).
+ * Am Deckel geht ein Stapel vom Held mit den meisten über – so bleibt die Summe gleich der Stapelzahl.
+ */
+function stacksAfter(before: SourcedDot | undefined, stacks: number, heroId: string): Record<string, number> {
+  const by: Record<string, number> = before?.stacks ? { ...(before.stacksBy ?? { [before.sourceId]: before.stacks }) } : {};
+  by[heroId] = (by[heroId] ?? 0) + 1;
+  let total = Object.values(by).reduce((sum, n) => sum + n, 0);
+  while (total > stacks) {
+    const [richest] = Object.entries(by)
+      .filter(([id]) => id !== heroId)
+      .sort((a, b) => b[1] - a[1])[0] ?? [heroId];
+    by[richest] -= 1;
+    if (by[richest] <= 0) delete by[richest];
+    total--;
+  }
+  return by;
 }
 
 /** Die stärkste Schadens-Fähigkeit eines Helden (Multiplikator × Treffer) – die verschlingt Xal'Zar. */
@@ -1150,9 +1311,12 @@ export function resolveRound(
    * Gift, Feuer oder Bluten auf einen Gegner legen – mit Schwäche/Resistenz; bei Immunität wirkt es nicht.
    * Der Skilltree des Verursachers macht es stärker oder länger; sein eigenes Gift stapelt sich und platzt (Fäulnis).
    */
-  const applyDot = (foe: Foe, kind: OverTimeKind, base: number, rounds: number, sourceId: string) => {
-    // Gestapelt wird nur das eigene Gift; ein schwächeres – auch eines Mitspielers – überschreibt kein stärkeres
+  const applyDot = (foe: Foe, kind: OverTimeKind, base: number, rounds: number, sourceId: string, stack = false) => {
+    const before = foe.fx.bleed;
+    // Gestapelt wird nur das eigene Gift; ein schwächeres – auch eines Mitspielers – überschreibt kein stärkeres.
+    // Tausend Schnitte stapelt dagegen auf das gemeinsame Bluten, egal wer es gelegt hat.
     const laid = layDot<SourcedDot, CoopEnemyEffects>(foe.fx, {
+      stackBleed: stack,
       creatureId: foe.creatureId,
       kind,
       base,
@@ -1161,12 +1325,16 @@ export function resolveRound(
       alive: foe.c.hp > 0,
       own: foe.fx.poison?.sourceId === sourceId ? foe.fx.poison : undefined,
       tag: { sourceId },
+      // Hexer „Verderbnis“ und „Wandelbare Flüche“ – nach der Klasse des Verursachers
+      warlock: heroes.find((h) => h.id === sourceId)?.heroClass === "warlock",
     });
     if (laid.immune) {
       events.push({ type: "immune", target: foe.id, kind });
       return;
     }
     foe.fx = laid.fx;
+    const after = laid.fx.bleed;
+    if (stack && after && after !== before && after.stacks) foe.fx = { ...foe.fx, bleed: { ...after, stacksBy: stacksAfter(before, after.stacks, sourceId) } };
     if (laid.burst === undefined) return;
     foe.c.hp = Math.max(0, foe.c.hp - laid.burst);
     events.push({ type: "poison", target: foe.id, damage: laid.burst, burst: true });
@@ -1202,9 +1370,35 @@ export function resolveRound(
   const stunAttempts = new Map<Foe, { ability: AbilityDef; hero: CoopHero }>();
   /** Vom Item-Effekt „Frostbiss“ eingefrorene Gegner – sie setzen diese Runde aus */
   const frozenByItem = new Map<Foe, CoopHero>();
+  /** Schnitter: Gegner, deren Bluten in dieser Runde schon verlängert wurde (höchstens einmal pro Runde) */
+  const reaped = new Set<Foe>();
+  /** Konzentration: Helden, die in dieser Runde angegriffen oder abgewehrt haben, ohne Fähigkeit */
+  const idle = new Set<string>();
   const enemyIsBoss = enemy.boss;
   /** Helden mit Bollwerk – ihre Bedrohung wird nach der Heldenphase hochgesetzt */
-  const taunts: CoopHero[] = [];
+  const taunts: { hero: CoopHero; share: number }[] = [];
+  /**
+   * Lebensband: Heilung `raw` an `target` durch `healer` – der Teil über dem Maximum wird zum Schild, wenn der Heiler
+   * Lebensband hat. `threat`: Heilfähigkeit oder Gebet – erzeugt beim Heiler Bedrohung (HEAL_THREAT).
+   */
+  const mend = (target: CoopHero, healer: CoopHero, raw: number, report: (heal: number) => void, threat = false) => {
+    const heal = Math.min(Math.max(0, target.combatant.maxHp - target.combatant.hp), raw);
+    const shield = wardGain(target.combatant, raw, target.effects.ward, hasLifebond(healer.skills));
+    target.combatant.hp += heal;
+    if (threat) healer.threat += (heal + shield) * HEAL_THREAT;
+    report(heal);
+    if (shield > 0) {
+      target.effects.ward = (target.effects.ward ?? 0) + shield;
+      events.push({ type: "shieldGained", heroId: target.id, amount: shield, ...(healer !== target && { by: healer.id }) });
+    }
+  };
+  /** Ein gegnerischer Treffer auf `target`: zuerst fängt sein Schild (Lebensband) ab. */
+  const wardHit = (target: CoopHero, damage: number): { damage: number; warded?: number } => {
+    if (!target.effects.ward) return { damage };
+    const taken = absorbWard(target.effects.ward, damage);
+    target.effects.ward = taken.ward;
+    return { damage: taken.damage, ...(taken.warded > 0 && { warded: taken.warded }) };
+  };
   const byId = (id: string) => heroes.find((h) => h.id === id)!;
   const knockDown = (hero: CoopHero) => {
     if (hero.combatant.hp > 0 || hero.down) return;
@@ -1227,12 +1421,34 @@ export function resolveRound(
     hero.threat = 0;
     hero.effects = {};
     hero.buffs = {};
+    // Wer fällt, verliert seine Klassenleiste
+    if (hero.charge !== undefined) hero.charge = 0;
     events.push({ type: "down", heroId: hero.id });
+  };
+  /** Klassenleiste: Auslöser dieser Runde pro Held (classKit.ts) – der Server rechnet sie selbst */
+  const tallies = new Map<string, ChargeTally>();
+  const tallyOf = (hero: CoopHero): ChargeTally => {
+    let t = tallies.get(hero.id);
+    if (!t) tallies.set(hero.id, (t = emptyTally()));
+    return t;
+  };
+  /** Bergbrecher: Diese Gegner betäubt die Signatur des Wächters – zählt für Kryomant als Einfrieren */
+  const breakers = new Set<Foe>();
+  /** Paladin: abgewehrter, geblockter und geminderter Schaden dieser Runde */
+  const absorbedBy = new Map<CoopHero, number>();
+  const absorb = (hero: CoopHero, amount: number) => {
+    if (hero.heroClass === "paladin" && amount > 0) absorbedBy.set(hero, (absorbedBy.get(hero) ?? 0) + amount);
   };
   /** Ein Begleiter fällt – der Kampf geht weiter. Skill „Seuche“: Sein Gift springt auf einen anderen über. */
   function addDown(foe: Foe) {
     if (foe === boss || foe.c.hp !== 0) return;
     events.push({ type: "addDown", add: foe.id });
+    // Klassenleiste: Ein Gegner fällt (Champion) – mit eigenem Gift oder Feuer darauf (Hexer)
+    for (const hero of heroes) if (!hero.down) tallyOf(hero).foesDown++;
+    for (const id of new Set([foe.fx.poison?.sourceId, foe.fx.burn?.sourceId])) {
+      const source = heroes.find((h) => h.id === id);
+      if (source) tallyOf(source).dotFoesDown++;
+    }
     const poison = foe.fx.poison;
     if (!poison || rankIn(sourceSkills(poison.sourceId), "plague") === 0) return;
     const next = foes.find((f) => f !== foe && f.c.hp > 0 && !f.fx.poison && matchupFactor(f.creatureId, "poison") > 0);
@@ -1321,9 +1537,9 @@ export function resolveRound(
           (hasEffect(hero.itemEffects, "alchemist") ? 1 + EFFECT.alchemist : 1) *
           (1 + BLESSING.alchemy * stacks(hero.blessings, "alchemy")) *
           potionSkillFactor(hero.skills);
-        const heal = Math.min(Math.round(potionHeal(potion, hero.combatant.maxHp) * factor), hero.combatant.maxHp - hero.combatant.hp);
-        hero.combatant.hp += heal;
-        events.push({ type: "potion", heroId: hero.id, targetId: hero.id, potionId: potion.id, heal });
+        mend(hero, hero, Math.round(potionHeal(potion, hero.combatant.maxHp) * factor), (heal) =>
+          events.push({ type: "potion", heroId: hero.id, targetId: hero.id, potionId: potion.id, heal }),
+        );
       } else {
         const { kind, percent, rounds } = potion.effect as Extract<typeof potion.effect, { kind: BuffKind }>;
         hero.buffs = { ...hero.buffs, [kind]: { percent, roundsLeft: rounds } };
@@ -1335,6 +1551,11 @@ export function resolveRound(
     // Gegenschlag: Die Aktion nach dem Abwehren macht mehr Schaden – wer wieder abwehrt, lädt ihn neu
     const riposte = hero.effects.riposte ?? 1;
     hero.effects.riposte = undefined;
+    // Signatur: geht vor einer Fähigkeit, nach dem Abwehren – die volle Leiste prüft der Server hier selbst
+    const signature = !action.defend && !!action.signature && coopSignatureBlocker(hero) === null;
+    tallyOf(hero).signature = signature;
+    // Duellhaltung: zieht die Angriffe auf sich wie Bollwerk, solange sie steht (auch in der Runde des Duells)
+    if (hero.effects.duel || (signature && hero.heroClass === "duelist")) taunts.push({ hero, share: DUEL_TAUNT_SHARE });
     // Abwehren: kein Angriff, dafür halber Schaden in dieser Runde und etwas Mana
     if (action.defend) {
       const gain = defendGain(hero.mana, hero.maxMana, skills, DEFEND_MANA);
@@ -1342,26 +1563,51 @@ export function resolveRound(
       defending.add(hero.id);
       if (rankIn(skills, "riposte") > 0) hero.effects.riposte = riposteFactor(skills);
       events.push({ type: "defend", heroId: hero.id, mana: gain });
+      tallyOf(hero).guarded = true;
+      // Wächterschwur: Abwehren heilt und zieht die Angriffe auf sich (schwächer als Bollwerk)
+      const oath = guardOathHeal(skills);
+      if (oath > 0) {
+        mend(hero, hero, Math.round(hero.combatant.maxHp * oath), (heal) => heal > 0 && events.push({ type: "selfHeal", heroId: hero.id, heal }));
+        taunts.push({ hero, share: GUARD_OATH_SHARE });
+      }
+      idle.add(hero.id);
       continue;
     }
     const ability =
-      action.ability && !coopAbilityBlocker(hero, action.ability, turn, state.round) ? classAbility(action.ability, hero.heroClass) : null;
-    // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit halbem Schaden
+      !signature && action.ability && !coopAbilityBlocker(hero, action.ability, turn, state.round)
+        ? classAbility(action.ability, hero.heroClass)
+        : null;
+    /** Signatur als Treffer – für alles andere keine Fähigkeit (kein Mana, Echo, Nachhall, Aufladen) */
+    const sig = signature && hero.heroClass ? signatureAbility(hero.heroClass, hero.weapon) : null;
+    /** Was trifft: Fähigkeit oder Signatur – null beim normalen Angriff */
+    const act = ability ?? sig;
+    const tally = tallyOf(hero);
+    /** Richtspruch: Faktor aus dem abgewehrten Schaden */
+    let sigBoost = 1;
+    // Echo: Jede dritte Fähigkeit im Kampf kostet nichts und trifft ein zweites Mal mit 30 % Schaden (SKILL.echo.share)
     const echo = !!ability && echoDue(skills, hero.effects.casts);
     const wrath = wrathFactor(hero.effects.wrath);
     const fire = !!ability?.burn;
-    const aoe = ability?.aoe;
-    // Schadensart: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe (matchups.ts)
+    const aoe = act?.aoe;
+    // Schadensart: die der Fähigkeit bzw. ihrer Waffe, sonst die Hauptwaffe (matchups.ts) – die Signatur hat ihre eigene
     const heroWeapon = ability?.weapon ?? hero.weapon;
-    const heroKind = ability?.kind ?? (heroWeapon ? WEAPON_KIND[heroWeapon] : null);
+    const heroKind = act?.kind ?? (heroWeapon ? WEAPON_KIND[heroWeapon] : null);
     // Titanenschlag: Der nächste normale Angriff nach dem Ausholen macht mehr Schaden – das Ausholen ist damit verbraucht
-    const charge = ability ? 1 : (hero.effects.charged ?? 1);
-    if (!ability) hero.effects.charged = undefined;
+    const charge = act ? 1 : (hero.effects.charged ?? 1);
+    if (!act) hero.effects.charged = undefined;
     // Schattenschritt: Die nächste Aktion trifft sicher kritisch – Finte: der nächste normale Angriff doppelt
     const ambush = !!hero.effects.ambush;
     hero.effects.ambush = undefined;
-    const feint = !ability && !!hero.effects.feint;
+    const feint = !act && !!hero.effects.feint;
     if (feint) hero.effects.feint = undefined;
+    // Konzentration: Runde ohne Fähigkeit – auch wenn die Zeit abläuft (automatischer Angriff); die Signatur zählt nicht
+    if (!act) idle.add(hero.id);
+    // Mehrfachtreffer-Fähigkeit (Wirbelnde Klingen, Klingentanz, Tausend Schnitte) – nie die Signatur
+    const multiHit = !!ability && isMultiHit(abilityHits(ability, hero.combatant.hp, hero.combatant.maxHp));
+    // Klingentanz: Der nächste normale Angriff nach einer Mehrfachtreffer-Fähigkeit trifft stärker
+    const dance = act ? 1 : (hero.effects.bladeDance ?? 1);
+    if (!act) hero.effects.bladeDance = undefined;
+    if (multiHit && bladeDanceFactor(skills) > 0) hero.effects.bladeDance = bladeDanceFactor(skills);
     // Ziel: ein lebender Begleiter – sonst der Boss
     const target = adds.find((f) => f.id === action.target && f.c.hp > 0) ?? boss;
     const plain = buffed(hero);
@@ -1371,19 +1617,36 @@ export function resolveRound(
       damage:
         plain.damage *
         rageFactor(hero.heroClass, hero.combatant.hp, hero.combatant.maxHp) *
-        (1 + (hero.effects.empower?.percent ?? 0)),
+        (1 + (hero.effects.empower?.percent ?? 0)) *
+        // Kampfbanner: eigenes oder das eines Champions in der Gruppe (stapelt nicht, stapelt mit Kriegsschrei)
+        (1 + coopBannerShare(hero, heroes)),
     };
     const threatFactor = hero.heroClass === "paladin" ? PALADIN_THREAT : 1;
     if (ability) {
-      const manaCost = coopAbilityCost(hero, ability.id, state.round);
-      hero.mana -= manaCost;
+      const listed = coopAbilityCost(hero, ability.id, state.round);
+      // Nachhall: Manchmal kostet die Fähigkeit kein Mana – gewürfelt nur, wer den Knoten hat und etwas zahlen müsste
+      const freeChance = freeCastChance(skills);
+      const free = listed > 0 && freeChance > 0 && rng() < freeChance;
+      const manaCost = free ? 0 : listed;
+      // Blutmagie: Reicht das Mana nicht, zahlt der Held den Rest mit LP (coopAbilityBlocker hat die Grenze geprüft)
+      const price = bloodPrice(skills, hero.mana, manaCost, hero.combatant.hp, hero.combatant.maxHp) ?? 0;
+      hero.mana = price > 0 ? 0 : hero.mana - manaCost;
       if (rankIn(skills, "echo") > 0) hero.effects.casts = (hero.effects.casts ?? 0) + 1;
-      // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen – Nachhall: manchmal gar nicht
-      const skip = cooldownSkipChance(skills);
-      if (!(skip > 0 && rng() < skip)) {
-        used.set(hero.id, hasEffect(hero.itemEffects, "quickHands") ? { id: ability.id, cooldown: ability.cooldown - 1 } : ability);
+      // Item-Effekt „Flinke Hand“: eine Runde kürzer abklingen
+      used.set(hero.id, hasEffect(hero.itemEffects, "quickHands") ? { id: ability.id, cooldown: ability.cooldown - 1 } : ability);
+      events.push({
+        type: "ability",
+        heroId: hero.id,
+        ability: ability.id,
+        weapon: ability.weapon,
+        manaCost,
+        ...(echo && { echo }),
+        ...(free && { free }),
+      });
+      if (price > 0) {
+        hero.combatant.hp = Math.max(1, hero.combatant.hp - price);
+        events.push({ type: "bloodMagic", heroId: hero.id, damage: price });
       }
-      events.push({ type: "ability", heroId: hero.id, ability: ability.id, weapon: ability.weapon, manaCost, ...(echo && { echo }) });
       abilitiesUsed++;
       // Kaelthar saugt die Kraft jeder Fähigkeit auf – ausser in der Runde, in der er sich entlädt
       if (turn?.static !== undefined && turn.ability !== "storm-lord-discharge") {
@@ -1396,10 +1659,17 @@ export function resolveRound(
       const healed = ability.groupHeal ? heroes.filter((h) => !h.down) : [hero];
       for (const h of healed) {
         const share = h === hero ? 1 : ability.groupHeal!;
+        // Lebensband des Heilers: Überheilung wird beim Geheilten zum Schild
         if (ability.heal) {
-          const heal = abilityHeal(h.combatant.hp, h.combatant.maxHp, ability.heal, share);
-          h.combatant.hp += heal;
-          if (heal > 0) events.push({ type: "selfHeal", heroId: h.id, heal, ...(h !== hero && { by: hero.id }) });
+          mend(
+            h,
+            hero,
+            Math.round(h.combatant.maxHp * ability.heal * share),
+            (heal) => {
+              if (heal > 0) events.push({ type: "selfHeal", heroId: h.id, heal, ...(h !== hero && { by: hero.id }) });
+            },
+            true,
+          );
         }
         if (ability.renew) h.effects.renew = { percent: ability.renew.percent * share, roundsLeft: ability.renew.rounds };
       }
@@ -1409,7 +1679,7 @@ export function resolveRound(
         events.push({ type: "cleansed", heroId: hero.id });
       }
       if (ability.manaGain) hero.mana = Math.min(hero.maxMana, hero.mana + ability.manaGain);
-      if (ability.taunt) taunts.push(hero);
+      if (ability.taunt) taunts.push({ hero, share: BULWARK_SHARE });
       // Zusatzeffekte wirken aufs Ziel – bei Flächenwirkung "all" auf alle Gegner
       for (const foe of aoe === "all" ? living() : [target]) {
         foe.fx = debuffFoe(foe.fx, ability);
@@ -1420,7 +1690,82 @@ export function resolveRound(
       }
       if (ability.bulwark) {
         hero.effects.bulwark = true;
-        taunts.push(hero);
+        taunts.push({ hero, share: BULWARK_SHARE });
+      }
+      // Klassenleiste: Fähigkeit eingesetzt, Heilfähigkeit, Schwächung
+      tally.ability = ability.weapon;
+      tally.healAbility = !!(ability.heal || ability.renew);
+      if (ability.weaken) tally.weakens++;
+    }
+    // Signatur: was sie vor den Treffern tut – LP-Kosten, Gebet, Haltungen, Richtspruch samt Gruppenschild
+    if (sig && hero.heroClass) {
+      const heroClass = hero.heroClass;
+      const hpCost = heroClass === "berserker" ? unleashCost(hero.combatant.hp) : 0;
+      hero.combatant.hp -= hpCost;
+      const absorbed = heroClass === "paladin" ? Math.round(hero.effects.absorbed ?? 0) : 0;
+      if (heroClass === "paladin") {
+        sigBoost = 1 + verdictBonus(absorbed, strong.damage) / sig.multiplier;
+        hero.effects.absorbed = 0;
+      }
+      events.push({ type: "signature", heroId: hero.id, classId: heroClass, ...(hpCost > 0 && { hpCost }), ...(absorbed > 0 && { absorbed }) });
+      if (heroClass === "cleric") {
+        // Gebet: heilt und reinigt sich und alle lebenden Mitspieler, belebt einen Gefallenen wieder
+        for (const h of heroes.filter((x) => !x.down)) {
+          const share = h === hero ? CLERIC_PRAYER.self : CLERIC_PRAYER.group;
+          mend(
+            h,
+            hero,
+            Math.round(h.combatant.maxHp * share),
+            (heal) => {
+              if (heal > 0) events.push({ type: "selfHeal", heroId: h.id, heal, ...(h !== hero && { by: hero.id }) });
+            },
+            true,
+          );
+          const pure = pureOf(h.effects);
+          if (pure) {
+            h.effects = pure;
+            cleansed.add(h.id);
+            events.push({ type: "cleansed", heroId: h.id });
+          }
+        }
+        // Zählt als seine einmalige Wiederbelebung – ohne Gefallene entfällt es
+        const fallen = heroes.find((h) => h.down && !h.revived);
+        if (fallen) {
+          fallen.down = false;
+          fallen.revived = true;
+          fallen.combatant.hp = Math.max(1, Math.round(fallen.combatant.maxHp * CLERIC_PRAYER.revive));
+          events.push({ type: "revived", heroId: fallen.id, by: hero.id, heal: fallen.combatant.hp });
+        }
+      }
+      if (heroClass === "paladin") {
+        // Gruppenschild: im gemeinsamen Schild-Topf jedes Mitspielers, zusammen höchstens WARD_MAX_SHARE
+        for (const h of heroes.filter((x) => !x.down && x !== hero)) {
+          const room = Math.round(h.combatant.maxHp * WARD_MAX_SHARE) - (h.effects.ward ?? 0);
+          const amount = Math.max(0, Math.min(room, Math.round(h.combatant.maxHp * PALADIN_VERDICT.groupShield)));
+          if (amount <= 0) continue;
+          h.effects.ward = (h.effects.ward ?? 0) + amount;
+          hero.threat += amount * HEAL_THREAT;
+          events.push({ type: "shieldGained", heroId: h.id, amount, by: hero.id });
+        }
+      }
+      if (heroClass === "duelist") {
+        hero.effects.duel = DUELIST_DUEL.rounds;
+        events.push({ type: "duel", heroId: hero.id });
+      }
+      if (heroClass === "champion") {
+        hero.effects.banner = { percent: CHAMPION_BANNER.self, roundsLeft: CHAMPION_BANNER.rounds + 1 };
+        events.push({ type: "banner", heroId: hero.id });
+      }
+      if (heroClass === "warden" && target.c.hp > 0) {
+        // Bergbrecher: Das Ziel ist sicher betäubt – ist es immun, macht es stattdessen weniger Schaden
+        if (target.fx.stunImmunity) {
+          target.fx = { ...target.fx, weaken: { percent: WARDEN_BREAKER_WEAKEN.percent, roundsLeft: WARDEN_BREAKER_WEAKEN.rounds } };
+          events.push({ type: "weakened", heroId: hero.id, target: target.id });
+          tally.weakens++;
+        } else {
+          stunAttempts.set(target, { ability: { ...sig, stun: true }, hero });
+          breakers.add(target);
+        }
       }
     }
     let dealt = 0;
@@ -1432,7 +1777,7 @@ export function resolveRound(
       const f = strikeFactors(
         foe,
         {
-          ability,
+          ability: act,
           heroKind,
           itemEffects: hero.itemEffects,
           skills,
@@ -1443,6 +1788,8 @@ export function resolveRound(
           riposte,
           wrath,
           echoShare,
+          multiHit,
+          dance,
         },
         {
           isBoss: foe === boss,
@@ -1457,12 +1804,12 @@ export function resolveRound(
       const taken = takenBy(foe);
       // Schattenschritt: sicher kritisch
       const sureCrit = ambush;
-      const attacker: Combatant = ability
+      const attacker: Combatant = act
         ? {
             ...strong,
             damage:
-              strong.damage * ability.multiplier * execute * charge * f.charging * vulnerable * share * taken * plate * f.kindFactor * f.itemFactor * f.skillFactor,
-            critChance: ability.guaranteedCrit || sureCrit ? 1 : f.critChance,
+              strong.damage * act.multiplier * sigBoost * execute * charge * f.charging * vulnerable * share * taken * plate * f.kindFactor * f.itemFactor * f.skillFactor,
+            critChance: act.guaranteedCrit || sureCrit ? 1 : f.critChance,
           }
         : {
             ...strong,
@@ -1470,7 +1817,7 @@ export function resolveRound(
             damage: strong.damage * f.headsman * charge * share * vulnerable * taken * plate * f.kindFactor * f.itemFactor * f.skillFactor,
             critChance: sureCrit ? 1 : f.critChance,
           };
-      const rolled = rollHit(attacker, { ...foe.c, armor: foeArmor(foe, ability) }, rng, rankIn(skills, "piercing") > 0);
+      const rolled = rollHit(attacker, { ...foe.c, armor: foeArmor(foe, act) }, rng, rankIn(skills, "piercing") > 0);
       // Der Schild des Schildträgers schluckt direkte Treffer auf den Boss
       const shield = foe === boss ? absorbShield(bossShield, rolled.damage) : { absorbed: 0, damage: rolled.damage, shield: bossShield };
       const absorbed = shield.absorbed;
@@ -1484,7 +1831,14 @@ export function resolveRound(
       dealt += Math.min(foe.c.hp, hit.damage);
       dealtTo.add(foe);
       foe.c.hp = Math.max(0, foe.c.hp - hit.damage);
-      hero.threat += rolled.damage * threatFactor;
+      // Assassine „Schatten“: Krits erzeugen nur halbe Bedrohung
+      hero.threat += rolled.damage * threatFactor * (rolled.crit && hero.heroClass === "assassin" ? ASSASSIN_CRIT_THREAT : 1);
+      // Klassenleiste: Treffer, Krits – Waldläufer auch gegen markierte Ziele
+      if (hit.damage > 0) tally.dealt = true;
+      if (rolled.crit) {
+        tally.crits++;
+        if (foe.fx.marked) tally.markedCrits++;
+      }
       events.push({
         type: "hit",
         attacker: hero.id,
@@ -1501,53 +1855,92 @@ export function resolveRound(
         plates = Math.max(0, plates - (kind === "blunt" ? 2 : 1));
         if (plates === 0) events.push({ type: "platesBroken" });
       }
-      // Plünderer, Adrenalin, Schnitter, Offene Wunde, Schmelzen, Glut, Giftzahn, Frostbiss, Manadieb
+      // Plünderer, Adrenalin, Schnitter, Schmelzen, Glut, Giftzahn, Frostbiss, Manadieb
       afterHeroHit(
         foe,
         hit.crit,
-        { base: strong.damage, heroClass: hero.heroClass, itemEffects: hero.itemEffects, skills, fire, foeState: f.foeState },
+        { base: strong.damage, heroClass: hero.heroClass, itemEffects: hero.itemEffects, skills, fire, foeState: f.foeState, plain: !ability, multiHit },
         rng,
         {
-          dot: (on, kind, base, rounds) => applyDot(on, kind, base, rounds, hero.id),
+          dot: (on, kind, base, rounds, stack) => applyDot(on, kind, base, rounds, hero.id, stack),
           mana: (amount) => (hero.mana = Math.min(hero.maxMana, hero.mana + amount)),
           freeze: (frozen) => frozenByItem.set(frozen, hero),
+          // Schnitter: das stärkere Bluten eine Runde länger – einmal pro Runde und Gegner, egal welcher Held
+          extendBleed: (on) => {
+            const bleed = on.fx.bleed;
+            if (!bleed || reaped.has(on)) return;
+            reaped.add(on);
+            on.fx = { ...on.fx, bleed: { ...bleed, roundsLeft: bleed.roundsLeft + SKILL.reaper.extend } };
+          },
         },
       );
       addDown(foe);
     };
     // Mehrfachtreffer, Flächen, Echo, Finte, Duellant, Kettenblitz
     heroVolley({
-      ability,
-      hits: () => abilityHits(ability, hero.combatant.hp, hero.combatant.maxHp),
+      ability: act,
+      hits: () => abilityHits(act, hero.combatant.hp, hero.combatant.maxHp),
       target,
       living,
       volleyOn: () => boss.c.hp > 0,
       fightOn: () => boss.c.hp > 0,
       echo,
       feint,
-      plain: !ability,
+      plain: !act,
       heroClass: hero.heroClass,
       itemEffects: hero.itemEffects,
       strike,
       rng,
+      onExtraHit: () => tally.extraHits++,
     });
-    // Wuchtiger Schlag hat den Boss getroffen – das bricht sein Aufladen ab
+    // Wuchtiger Schlag, Arkane Entladung und Bergbrecher haben den Boss getroffen – das bricht sein Aufladen ab
     // (Duellant und Kettenblitz gibt es nur bei normalen Angriffen – sie ändern daran nichts)
-    if (ability?.interrupt && dealtTo.has(boss)) interruptHit = true;
-    // Lebensraub: Blutrausch, Plünderer, Item-Effekt „Seelenraub“ und Segen „Blutdurst“
-    const lifesteal = heroLifesteal(hero.heroClass, ability, hero.blessings, hero.itemEffects, skills);
+    if (act?.interrupt && dealtTo.has(boss)) interruptHit = true;
+    // Signatur: was sie nach den Treffern am Ziel tut – Seelenernte (mit Fluch), Markierung
+    if (sig && target.c.hp > 0 && boss.c.hp > 0) {
+      if (hero.heroClass === "warlock") {
+        // Seelenernte: Jedes eigene DoT am Ziel wirkt sofort eine Runde – die Laufzeit bleibt
+        let harvested = 0;
+        for (const kind of DOT_ORDER) {
+          const dot = target.fx[kind];
+          const own = dot && (dot.sourceId === hero.id || (dot.stacksBy?.[hero.id] ?? 0) > 0);
+          if (!dot || !own || target.c.hp <= 0) continue;
+          const damage = Math.max(1, Math.round(dot.damage * WARLOCK_HARVEST.rounds * (1 + (target.fx.vulnerable?.percent ?? 0)) * takenBy(target)));
+          target.c.hp = Math.max(0, target.c.hp - damage);
+          hero.threat += damage * threatFactor;
+          harvested += damage;
+        }
+        if (harvested > 0) {
+          events.push({ type: "harvest", heroId: hero.id, target: target.id, damage: harvested });
+          addDown(target);
+          mend(hero, hero, Math.round(harvested * WARLOCK_HARVEST.selfHeal), (heal) => heal > 0 && events.push({ type: "selfHeal", heroId: hero.id, heal }));
+        }
+        // Fluch: 2 Runden +10 % Schaden von allen – zählt als Verwundbar, der höhere Wert zählt
+        if (target.c.hp > 0) {
+          const curse = { percent: WARLOCK_HARVEST.curse.percent, roundsLeft: WARLOCK_HARVEST.curse.rounds + 1 };
+          target.fx = { ...target.fx, vulnerable: strongerVulnerable(target.fx.vulnerable, curse) };
+          events.push({ type: "marked", heroId: hero.id, target: target.id, curse: true });
+        }
+      } else if (hero.heroClass === "ranger") {
+        // Beute markieren: 3 volle Runden +15 % Schaden von allen – der höhere Wert mit Jägermal zählt
+        const rounds = RANGER_MARK.rounds + 1;
+        target.fx = { ...target.fx, vulnerable: strongerVulnerable(target.fx.vulnerable, { percent: RANGER_MARK.percent, roundsLeft: rounds }), marked: rounds };
+        events.push({ type: "marked", heroId: hero.id, target: target.id });
+      }
+    }
+    // Lebensraub: Blutrausch, Signatur, Plünderer und Berserker, Item-Effekt „Seelenraub“ und Segen „Blutdurst“
+    const lifesteal = heroLifesteal(hero.heroClass, act, hero.blessings, hero.itemEffects, skills, hero.weapon);
     if (lifesteal > 0 && dealt > 0) {
-      const heal = drainHeal(hero.combatant, dealt, lifesteal);
-      hero.combatant.hp += heal;
-      if (heal > 0) events.push({ type: "selfHeal", heroId: hero.id, heal });
+      mend(hero, hero, Math.round(dealt * lifesteal), (heal) => heal > 0 && events.push({ type: "selfHeal", heroId: hero.id, heal }));
     }
   }
 
-  // Bollwerk: erst jetzt, wenn alle Helden gehandelt haben – der Schildträger bekommt so viel
-  // Bedrohung, dass er BULWARK_SHARE der Gruppe hält (bei 75 % das Dreifache aller anderen zusammen)
-  for (const taunter of taunts) {
+  // Spott (Bollwerk, Schildwall, Wächterschwur): erst jetzt, wenn alle Helden gehandelt haben. Jeder bekommt so
+  // viel Bedrohung, dass er seinen Anteil der Gruppe hält (Bollwerk 75 % = das Dreifache aller anderen zusammen).
+  // Mehrere Spötter: nach Anteil aufsteigend verrechnet – der höchste Anteil gewinnt, bei Gleichstand wer zuletzt handelt.
+  for (const { hero: taunter, share } of [...taunts].sort((a, b) => a.share - b.share)) {
     const others = heroes.filter((h) => h !== taunter && !h.down).reduce((sum, h) => sum + h.threat, 0);
-    taunter.threat = Math.max(taunter.threat, 20, Math.round((others * BULWARK_SHARE) / (1 - BULWARK_SHARE)));
+    taunter.threat = Math.max(taunter.threat, 20, Math.round((others * share) / (1 - share)));
   }
 
   // 2. Gift, Feuer, Bluten – erst an den Gegnern, dann an den Helden
@@ -1563,9 +1956,20 @@ export function resolveRound(
           events.push({ type: "bleed", target: foe.id, damage, burst: true });
           return;
         }
-        const source = heroes.find((h) => h.id === effect.sourceId && !h.down);
-        if (source) source.threat += damage * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
-        events.push({ type: kind, target: foe.id, damage });
+        // Bedrohung für den Verursacher – beim gemeinsamen Stapel (Tausend Schnitte) nach Stapeln verteilt
+        const stacksBy = effect.stacksBy ?? { [effect.sourceId]: 1 };
+        const total = Object.values(stacksBy).reduce((sum, n) => sum + n, 0);
+        for (const [id, n] of Object.entries(stacksBy)) {
+          const source = heroes.find((h) => h.id === id && !h.down);
+          if (source && total > 0) source.threat += ((damage * n) / total) * (source.heroClass === "paladin" ? PALADIN_THREAT : 1);
+          // Klassenleiste: Das DoT wirkt – für jeden Helden mit einem Stapel darin (Hexer, Plünderer)
+          if (source) {
+            tallyOf(source).dotTicked = true;
+            if (kind === "bleed") tallyOf(source).bleedTicked = true;
+          }
+        }
+        const stacked = kind === "bleed" && (effect.stacks ?? 1) > 1 ? { stacks: effect.stacks } : {};
+        events.push({ type: kind, target: foe.id, damage, ...stacked });
       },
       down: () => addDown(foe),
     });
@@ -1653,14 +2057,23 @@ export function resolveRound(
         // Erschüttert: zählt in den 2 Runden danach (Heiliger Hammer)
         foe.fx = { ...foe.fx, shaken: 3 };
         if (rankIn(by.skills, "concussion") > 0) foe.fx = { ...foe.fx, dazed: 2 };
+        // Kryomant: Jede Betäubung zählt als Einfrieren – auch der Bergbrecher (docs/skilltree-ueberarbeitung.md 5.1)
         const freezing = frozen || !!attempt?.ability.freeze;
-        if (freezing && (rankIn(by.skills, "cryomancer") > 0 || rankIn(by.skills, "melt") > 0)) foe.fx = { ...foe.fx, chilled: 2 };
+        if (chillsOnStun(by.skills, freezing || breakers.has(foe))) foe.fx = { ...foe.fx, chilled: 2 };
         interrupters.add(by);
+        // Klassenleiste: gelandete Betäubung, Einfrieren (Magier)
+        tallyOf(by).stuns++;
+        if (freezing) tallyOf(by).freezes++;
       }
       const tag = foe === boss ? {} : { add: foe.id };
       events.push({ type: stunned ? "stunned" : "stunResisted", ...(frozen ? { freeze: true as const } : freezeFlag(attempt!.ability)), ...tag });
       return stunned;
     };
+    // Boss-Raserei: ab Runde 20 (heroisch 30) mehr Schaden pro Runde – angekündigt 3 Runden vorher
+    const enrage = coopEnrageFactor(state.round, !!state.heroic);
+    const enrageIn = coopEnrageWarning(state.round, !!state.heroic);
+    if (enrage > 1) events.push({ type: "enrage", factor: enrage });
+    else if (enrageIn !== null) events.push({ type: "enrage", factor: 1, roundsLeft: enrageIn });
     // Zweite Phase: Raserei und/oder Sammelruf – wirkt schon auf die folgende Gegnerphase
     const nextPhase = phaseDue(state.bossId, phase, boss.c);
     if (nextPhase) {
@@ -1715,7 +2128,7 @@ export function resolveRound(
       const { rage, swift, hits } = eliteStrike(elite, boss.c);
       const attacker = {
         ...boss.c,
-        damage: ((boss.c.damage * (special?.multiplier ?? 1)) / groupScale) * weakenFactor(boss.fx) * drums * rage * swift,
+        damage: ((boss.c.damage * (special?.multiplier ?? 1)) / groupScale) * weakenFactor(boss.fx) * drums * rage * swift * enrage,
       };
       const targets = special?.aoe ? heroes.filter((h) => !h.down) : [pickBossTarget(heroes, rng)!];
       /**
@@ -1729,6 +2142,8 @@ export function resolveRound(
           shielded.add(target);
           warded.add(target);
           events.push({ type: "blocked", heroId: target.id });
+          tallyOf(target).guarded = tallyOf(target).bulwarkBlock = true;
+          absorb(target, attacker.damage * (special?.hits ?? hits) * (1 - armorReduction(buffed(target).armor, boss.c.level)));
           continue;
         }
         const defender = special?.ignoreArmor ? { ...buffed(target), armor: 0 } : buffed(target);
@@ -1742,8 +2157,11 @@ export function resolveRound(
         let raw = 0;
         /** Treffer, denen der Held nicht ausgewichen ist (Schemen) */
         let landed = 0;
-        // Parade/Vergeltung mindert alle Treffer dieses Angriffs – Rückwurf und Konter kommen danach einmal
-        const guard = target.effects.guard;
+        // Parade/Vergeltung mindert alle Treffer dieses Angriffs – Rückwurf und Konter kommen danach einmal.
+        // Die Duellhaltung wirkt gegen Angriffe auf ihn allein wie eine Parade, die nicht verbraucht wird.
+        const duel: Guard | undefined =
+          target.effects.duel && !special?.aoe ? { reduce: DUELIST_DUEL.reduce, counter: DUELIST_DUEL.counter } : undefined;
+        const guard = target.effects.guard ?? duel;
         for (let i = 0; i < (special?.hits ?? hits) && target.combatant.hp > 0; i++) {
           if (dodges(target.skills, rng)) {
             events.push({ type: "dodged", heroId: target.id, attacker: BOSS });
@@ -1752,16 +2170,24 @@ export function resolveRound(
           landed++;
           if (defending.has(target.id) || guard) warded.add(target);
           const rolled = rollHit(attackerFor, defender, rng);
-          const hit = guard ? { ...rolled, damage: guardedDamage(rolled.damage, guard) } : rolled;
+          // Parade/Vergeltung mindert – davon fängt der Schild (Lebensband) ab
+          const parried = guard ? guardedDamage(rolled.damage, guard) : rolled.damage;
+          const hit = { ...rolled, ...wardHit(target, parried) };
           target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
           raw += rolled.damage;
           taken += hit.damage;
+          tallyOf(target).hitsTaken++;
+          // Paladin: Was Abwehren und Schildwall gemindert haben
+          const factor = hurt(target);
+          if (factor > 0 && factor < 1) absorb(target, (rolled.damage * (1 - factor)) / factor);
           events.push({ type: "hit", attacker: BOSS, target: target.id, ...hit });
         }
         thorns(target, boss, taken);
         if (guard && landed > 0) {
           target.effects.guard = undefined;
           events.push({ type: "guarded", heroId: target.id, prevented: raw - taken });
+          tallyOf(target).guarded = true;
+          absorb(target, raw - taken);
           const counter = guardRetort(
             guard,
             raw,
@@ -1779,6 +2205,7 @@ export function resolveRound(
             boss.c.hp = Math.max(0, boss.c.hp - counter);
             target.threat += counter * (target.heroClass === "paladin" ? PALADIN_THREAT : 1);
             events.push({ type: "counter", heroId: target.id, damage: counter });
+            tallyOf(target).counters++;
           }
         }
         // Lebensentzug wie im Solo: einmal auf den Schaden aller Treffer an diesem Helden
@@ -1793,9 +2220,9 @@ export function resolveRound(
           continue;
         }
         if (target.combatant.hp > 0) {
-          for (const [kind, dot] of abilityDots(special, (boss.c.damage * drums) / groupScale, target.itemEffects)) target.effects[kind] = dot;
+          for (const [kind, dot] of abilityDots(special, ((boss.c.damage * drums) / groupScale) * enrage, target.itemEffects)) target.effects[kind] = dot;
           // Elite „Giftig“: Wer getroffen wird, ist vergiftet
-          if (elite.includes("poisonous") && taken > 0) target.effects.poison = elitePoison(boss.c.damage, target.itemEffects);
+          if (elite.includes("poisonous") && taken > 0) target.effects.poison = elitePoison(boss.c.damage * enrage, target.itemEffects);
         }
         if (special?.manaBurn && target.combatant.hp > 0) {
           const amount = Math.min(target.mana, special.manaBurn);
@@ -1890,6 +2317,8 @@ export function resolveRound(
         shielded.add(target);
         warded.add(target);
         events.push({ type: "blocked", heroId: target.id, add: add.id });
+        tallyOf(target).guarded = tallyOf(target).bulwarkBlock = true;
+        absorb(target, add.c.damage * weakenFactor(add.fx) * (1 - armorReduction(buffed(target).armor, add.c.level)));
         continue;
       }
       if ("dodged" in strike) {
@@ -1897,7 +2326,10 @@ export function resolveRound(
         continue;
       }
       if (defending.has(target.id)) warded.add(target);
-      const hit = strike.hit;
+      tallyOf(target).hitsTaken++;
+      const addHurt = hurt(target);
+      if (addHurt > 0 && addHurt < 1) absorb(target, (strike.hit.damage * (1 - addHurt)) / addHurt);
+      const hit = { ...strike.hit, ...wardHit(target, strike.hit.damage) };
       target.combatant.hp = Math.max(0, target.combatant.hp - hit.damage);
       events.push({ type: "hit", attacker: add.id, target: target.id, ...hit });
       thorns(target, add, hit.damage);
@@ -1951,11 +2383,8 @@ export function resolveRound(
     for (const hero of heroes) {
       const regen = heroRegenShare(hero.heroClass, hero.itemEffects, hero.effects.renew);
       if (hero.down || regen <= 0) continue;
-      const heal = healShare(hero.combatant.hp, hero.combatant.maxHp, regen);
-      if (heal > 0) {
-        hero.combatant.hp += heal;
-        events.push({ type: "regen", heroId: hero.id, heal });
-      }
+      // Lebensband: zählt beim Helden selbst (auch für Arkane Heilung eines Mitspielers)
+      mend(hero, hero, Math.round(hero.combatant.maxHp * regen), (heal) => heal > 0 && events.push({ type: "regen", heroId: hero.id, heal }));
     }
     // Notverband: Wer zum ersten Mal unter 30 % fällt, heilt sich einmal pro Kampf
     for (const hero of heroes) {
@@ -2002,6 +2431,19 @@ export function resolveRound(
   for (const hero of warded) {
     if (!hero.down && rankIn(hero.skills, "wrath") > 0) hero.effects.wrath = Math.min(SKILL.wrath.max, (hero.effects.wrath ?? 0) + 1);
   }
+  // Paladin: abgewehrter Schaden sammelt sich bis zum nächsten Richtspruch
+  for (const [hero, amount] of absorbedBy) if (!hero.down) hero.effects.absorbed = (hero.effects.absorbed ?? 0) + Math.round(amount);
+  // Klassenleiste: Auslöser dieser Runde – die Signatur verbraucht die volle Leiste, die Runde lädt nicht
+  for (const hero of heroes) {
+    if (hero.charge === undefined) continue;
+    const tally = tallyOf(hero);
+    if (tally.signature) hero.charge = 0;
+    if (hero.down || status !== "active") continue;
+    const gained = chargeGain(hero.heroClass, { ...tally, low: hero.combatant.hp < hero.combatant.maxHp * 0.5 });
+    if (gained <= 0) continue;
+    hero.charge = nextCharge(hero.charge, gained);
+    events.push({ type: "charge", heroId: hero.id, gained, value: hero.charge });
+  }
 
   // 4. Mana, Verstärkungen und abklingende Bedrohung
   const tick = (b: ActiveBuff | undefined) => (b && b.roundsLeft > 1 ? { ...b, roundsLeft: b.roundsLeft - 1 } : undefined);
@@ -2013,10 +2455,13 @@ export function resolveRound(
       damageTaken: tick(h.effects.damageTaken),
       renew: tick(h.effects.renew),
       corroded: tick(h.effects.corroded),
+      ...(h.effects.banner && { banner: tick(h.effects.banner) }),
+      ...(h.effects.duel !== undefined && { duel: h.effects.duel > 1 ? h.effects.duel - 1 : undefined }),
     },
     cooldowns: tickCooldowns(h.cooldowns, used.get(h.id) ?? null),
     threat: Math.round(h.threat * (1 - THREAT_DECAY)),
-    mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + manaRegen(h.skills, MANA_REGEN)),
+    // Konzentration: mehr Mana in einer Runde ohne Fähigkeit (Angriff oder Abwehren)
+    mana: h.down ? h.mana : Math.min(h.maxMana, h.mana + manaRegen(h.skills, MANA_REGEN, idle.has(h.id))),
     buffs: Object.fromEntries(
       Object.entries(h.buffs)
         .filter(([, b]) => b && b.roundsLeft > 1)

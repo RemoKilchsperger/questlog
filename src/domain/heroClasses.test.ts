@@ -4,10 +4,21 @@ import { attackRound, drinkPotion, getHeroCombatProfile, startBattle, type Battl
 import { resolveRound, startCoopBattle } from "./coopCombat";
 import { getCreature } from "./creatures";
 import { EMPTY_EQUIPMENT } from "./equipment";
-import { classAbility, CLERIC_POTION_FACTOR, CLERIC_REGEN, detectHeroClass, HERO_CLASSES, PALADIN_SHIELD_BASH, PLUNDERER_LIFESTEAL } from "./heroClasses";
-import { createItem } from "./items";
+import {
+  classAbility,
+  CLERIC_GROUP_HEAL,
+  CLERIC_POTION_FACTOR,
+  CLERIC_REGEN,
+  ASSASSIN_CRIT_MULTIPLIER,
+  detectHeroClass,
+  HERO_CLASSES,
+  PALADIN_SHIELD_BASH,
+  PLUNDERER_LIFESTEAL,
+} from "./heroClasses";
+import { createItem, ITEM_TYPES } from "./items";
 import { getPotion } from "./potions";
 import type { ArmorClass, Character, Equipment } from "./types";
+import { attributeDamage, DAMAGE_PER_POINT, weaponStat } from "./weaponScaling";
 
 const hero: Character = {
   name: "Held",
@@ -58,10 +69,33 @@ describe("Klassen: Erkennung", () => {
     expect(new Set(cases.map(([id]) => id)).size).toBe(HERO_CLASSES.length);
   });
 
-  it("Duellant nur mit zwei Schwertern, Paladin nur mit Streitkolben und Schild", () => {
+  it("Duellant nur mit zwei Schwertern, Paladin nur mit Schild und Streitkolben oder Schwert", () => {
     expect(detectHeroClass(gear("medium", "sword-90"))).toBeNull();
     expect(detectHeroClass(gear("heavy", "mace-90"))).toBeNull();
-    expect(detectHeroClass(gear("heavy", "sword-90", "shield-90"))).toBeNull();
+    // Paladin mit Schwert und Schild (Klassen-Kern), ohne Schild bleibt schwer + Schwert klassenlos
+    expect(detectHeroClass(gear("heavy", "sword-90", "shield-90"))).toBe("paladin");
+    expect(detectHeroClass(gear("heavy", "shield-90", "sword-90"))).toBe("paladin");
+    expect(detectHeroClass(gear("heavy", "sword-90", "mace-90"))).toBeNull();
+    expect(detectHeroClass(gear("heavy", "sword-90", "sword-91"))).toBeNull();
+    // Mittel + Schwert + Schild ist weder Duellant noch Paladin, mittel + Streitkolben + Schild bleibt Kleriker
+    expect(detectHeroClass(gear("medium", "sword-90", "shield-90"))).toBeNull();
+    expect(detectHeroClass(gear("medium", "mace-90", "shield-90"))).toBe("cleric");
+  });
+
+  it("Geweihte Klinge: Beim Paladin skaliert das Schwert mit Ausdauer, sonst mit Stärke", () => {
+    const tough: Character = { ...hero, stats: { strength: 1, intellect: 1, endurance: 60, charisma: 1 } };
+    const paladin = getHeroCombatProfile(tough, gear("heavy", "sword-90", "shield-90"));
+    const plain = getHeroCombatProfile(tough, gear("heavy", "sword-90", "shield-90", 2));
+    expect(paladin.heroClass).toBe("paladin");
+    expect(plain.heroClass).toBeNull();
+    // Als Paladin zählen Schwert und Schild beide mit Ausdauer (0,15 pro Punkt), ohne Klasse das Schwert mit Stärke
+    const equipment = gear("heavy", "sword-90", "shield-90");
+    expect(attributeDamage(tough.stats, equipment, "paladin")).toBeCloseTo(60 * DAMAGE_PER_POINT.endurance);
+    expect(attributeDamage(tough.stats, equipment)).toBeLessThan(60 * DAMAGE_PER_POINT.endurance * 0.6);
+    expect(paladin.damage).toBeGreaterThan(plain.damage * 1.1);
+    expect(weaponStat("sword", "paladin")).toBe("endurance");
+    expect(weaponStat("sword", "duelist")).toBe("strength");
+    expect(weaponStat("sword")).toBe("strength");
   });
 
   it("passen mehrere, gilt die zuerst gelistete", () => {
@@ -73,44 +107,51 @@ describe("Klassen: Erkennung", () => {
 describe("Klassen: Werte und Fähigkeiten", () => {
   const profile = (equipment: Equipment) => getHeroCombatProfile(hero, equipment);
 
-  it("Champion: +15 % Schaden, +10 % LP; Wächter: +15 % LP; Paladin: mehr Rüstung", () => {
+  it("Champion: +8 % Schaden, +10 % LP; Wächter: mehr Rüstung, keine LP; Paladin: mehr Rüstung", () => {
     const plain = profile(gear("heavy", "greatsword-90", null, 2));
     const champion = profile(gear("heavy", "greatsword-90"));
     expect(champion.heroClass).toBe("champion");
     // Ein Rüstungsteil mehr verändert LP nicht – der Unterschied ist der Klassenbonus
     expect(Math.abs(champion.maxHp - plain.maxHp * 1.1)).toBeLessThanOrEqual(1);
-    expect(champion.damage).toBeCloseTo(plain.damage * 1.15);
-    const warden = profile(gear("heavy", "greathammer-90")).maxHp;
-    expect(Math.abs(warden - profile(gear("heavy", "greathammer-90", null, 2)).maxHp * 1.15)).toBeLessThanOrEqual(1);
+    expect(champion.damage).toBeCloseTo(plain.damage * 1.08);
+    // Wächter „Bergwacht“ (Klassen-Kern): +10 % Rüstung, kein LP-Bonus mehr – die Sicherheit kommt vom Bergbrecher
+    const warden = profile(gear("heavy", "greathammer-90"));
+    expect(warden.maxHp).toBe(profile(gear("heavy", "greathammer-90", null, 2)).maxHp);
+    expect(warden.armor).toBeGreaterThan(profile(gear("heavy", "greathammer-90", null, 2)).armor);
     const paladin = profile(gear("heavy", "mace-90", "shield-90"));
     expect(paladin.heroClass).toBe("paladin");
     expect(paladin.armor).toBeGreaterThan(profile(gear("heavy", "mace-90", "shield-90", 2)).armor);
     expect(paladin.damage).toBeCloseTo(profile(gear("heavy", "mace-90", "shield-90", 2)).damage * 1.1);
   });
 
-  it("Waldläufer: +12 % Schaden", () => {
+  it("Waldläufer: +8 % Schaden; Berserker: +10 % immer; Plünderer: +15 %", () => {
     const ranger = profile(gear("medium", "bow-90"));
     expect(ranger.heroClass).toBe("ranger");
-    expect(ranger.damage).toBeCloseTo(profile(gear("medium", "bow-90", null, 2)).damage * 1.12);
+    expect(ranger.damage).toBeCloseTo(profile(gear("medium", "bow-90", null, 2)).damage * 1.08);
+    expect(profile(gear("heavy", "greataxe-90")).damage).toBeCloseTo(profile(gear("heavy", "greataxe-90", null, 2)).damage * 1.1);
+    expect(profile(gear("medium", "axe-90")).damage).toBeCloseTo(profile(gear("medium", "axe-90", null, 2)).damage * 1.15);
   });
 
-  it("Assassine: +20 % Krit, Krits 2,25-fach; Plünderer: +25 % Gold", () => {
+  it("Assassine: +10 % Krit, Krits 2-fach; Plünderer: +25 % Gold", () => {
     const assassin = profile(gear("light", "dagger-90"));
     const plain = profile(gear("light", "dagger-90", null, 2));
-    expect(assassin.critMultiplier).toBe(2.25);
-    expect(assassin.critChance).toBeGreaterThan(plain.critChance + 0.19);
+    expect(assassin.critMultiplier).toBe(ASSASSIN_CRIT_MULTIPLIER);
+    expect(assassin.critMultiplier).toBe(2);
+    expect(assassin.critChance).toBeGreaterThan(plain.critChance + 0.09);
+    expect(assassin.critChance).toBeLessThan(plain.critChance + 0.11);
     expect(profile(gear("medium", "axe-90")).goldBonus).toBeCloseTo(profile(gear("medium", "axe-90", null, 2)).goldBonus + 0.25);
   });
 
-  it("Fähigkeiten: Magier günstiger und stärker, Waldläufer 5 Pfeile, Paladin halbes Bollwerk, Hexer länger", () => {
+  it("Fähigkeiten: Magier günstiger, Waldläufer 5 Pfeile, Paladin halbes Bollwerk, Wächter längere Schwächung", () => {
     expect(classAbility("staff", "mage").manaCost).toBe(Math.round(getAbility("staff").manaCost * 0.8));
-    expect(classAbility("staff", "mage").multiplier).toBeCloseTo(getAbility("staff").multiplier * 1.05);
+    expect(classAbility("staff", "mage").multiplier).toBe(getAbility("staff").multiplier);
     expect(classAbility("bow", "ranger").hits).toBe(5);
     expect(classAbility("shield", "paladin").manaCost).toBe(10);
     expect(classAbility("greathammer", "warden").stun).toBeUndefined();
     expect(classAbility("greathammer-2", "warden").weaken).toEqual({ percent: 0.3, rounds: 3 });
     expect(classAbility("greathammer-2", null).weaken).toEqual({ percent: 0.3, rounds: 2 });
-    expect(classAbility("scepter", "warlock").poison).toEqual({ percent: expect.closeTo(0.6), rounds: 4 });
+    // Der Hexer verstärkt seine DoTs beim Legen (layDot), nicht über die Fähigkeit
+    expect(classAbility("scepter", "warlock")).toEqual(getAbility("scepter"));
     expect(classAbility("staff", null)).toEqual(getAbility("staff"));
   });
 });
@@ -147,7 +188,7 @@ describe("Klassen: Kampfmechanik", () => {
     expect(state.enemyEffects.bleed?.roundsLeft).toBe(1);
   });
 
-  it("Plünderer heilt sich um 10 % des verursachten Schadens", () => {
+  it("Plünderer heilt sich um 8 % des verursachten Schadens", () => {
     const state = battle(gear("medium", "axe-90"));
     const hurt = { ...state, hero: { ...state.hero, hp: 10 } };
     const { events } = attackRound(hurt, rng(0.5));
@@ -173,6 +214,41 @@ describe("Klassen: Kampfmechanik", () => {
     const low = { ...fresh, hero: { ...fresh.hero, hp: 10 } };
     const damage = (s: BattleState) => attackRound(s, rng(0.5)).events.find((e) => e.type === "hit" && e.attacker === "hero");
     expect((damage(low) as { damage: number }).damage).toBeGreaterThan((damage(fresh) as { damage: number }).damage);
+  });
+
+  it("Schild: 2,2 Basisangriff – der Paladin macht damit spürbar mehr Schaden (Review Nr. 3)", () => {
+    expect(ITEM_TYPES.find((t) => t.type === "shield")!.baseAttack).toBe(2.2);
+    const paladin = getHeroCombatProfile(hero, gear("heavy", "mace-90", "shield-90"));
+    const maceOnly = getHeroCombatProfile(hero, gear("heavy", "mace-90"));
+    // Streitkolben 3,1 + Schild 2,2: Der Schild trägt rund 40 % des Waffenangriffs bei
+    expect(paladin.damage).toBeGreaterThan(maceOnly.damage * 1.3);
+  });
+
+  it("Kleriker: Heiliges Licht und Läuterung heilen im Koop die Mitspieler halb so stark mit – solo ändert sich nichts", () => {
+    expect(classAbility("mace-2", "cleric").groupHeal).toBe(CLERIC_GROUP_HEAL);
+    expect(classAbility("mace-3", "cleric").groupHeal).toBe(CLERIC_GROUP_HEAL);
+    expect(classAbility("mace", "cleric").groupHeal).toBeUndefined();
+    expect(classAbility("mace-2", "paladin").groupHeal).toBeUndefined();
+    const cleric = { ...getHeroCombatProfile(hero, gear("medium", "mace-90")), abilities: ["mace-2", "mace-3"] as AbilityId[] };
+    expect(cleric.heroClass).toBe("cleric");
+    const coop = (healer: typeof cleric) => {
+      const battle = startCoopBattle("k", "swamp-hydra", [
+        { id: "c", name: "C", profile: healer },
+        { id: "x", name: "X", profile: { ...healer, heroClass: null } },
+      ], 0);
+      return {
+        ...battle,
+        heroes: battle.heroes.map((h) => ({ ...h, mana: 999, combatant: { ...h.combatant, hp: 10, maxHp: 10_000 } })),
+        boss: { ...battle.boss, hp: 999_999, maxHp: 999_999, damage: 1 },
+        adds: [],
+      };
+    };
+    const { events } = resolveRound(coop(cleric), { c: { ability: "mace-2" } }, rng(0.5), 0);
+    expect(events).toContainEqual({ type: "selfHeal", heroId: "c", heal: 2_500 });
+    expect(events).toContainEqual({ type: "selfHeal", heroId: "x", heal: 1_250, by: "c" });
+    // Ohne Klasse heilt Heiliges Licht nur den Anwender
+    const plain = resolveRound(coop({ ...cleric, heroClass: null }), { c: { ability: "mace-2" } }, rng(0.5), 0).events;
+    expect(plain.some((e) => e.type === "selfHeal" && e.heroId === "x")).toBe(false);
   });
 
   it("Paladin erzeugt im Koop doppelte Bedrohung", () => {

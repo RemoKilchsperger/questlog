@@ -1,15 +1,17 @@
 // Klassen: Wer mindestens 3 der 5 Rüstungsteile einer Rüstungsklasse trägt und
-// die passende Waffe führt, bekommt einen Klassenbonus (z. B. leichte Rüstung
+// die passende Waffe führt, bekommt eine Klasse (z. B. leichte Rüstung
 // + Stab → Magier). Es ist immer höchstens eine Klasse aktiv; passen mehrere,
 // gilt die zuerst gelistete.
 //
-// Die Boni wirken an drei Stellen:
+// Seit dem Klassen-Kern (Modell C, docs/klassen-neukonzept.md) hat jede Klasse eine Rolle, ein Passiv,
+// eine Klassenleiste und eine Signaturfähigkeit (classKit.ts). Die Passive wirken an drei Stellen:
 // - Kampfwerte (getHeroCombatProfile): Schaden, LP, Rüstung, Krit, Gold
-// - Fähigkeiten (`classAbility`): Manakosten, Schaden, Treffer, Zusatzeffekte
-// - Kampfmechanik (combat.ts, coopCombat.ts): Doppelschlag, Blutung bei Krit,
-//   Regeneration, Raserei, Bedrohung im Koop
+// - Fähigkeiten (`classAbility`): Manakosten, Treffer, Zusatzeffekte
+// - Kampfmechanik (combatCore.ts, combat.ts, coopCombat.ts): Zweitschlag, Blutung bei Krit,
+//   Lebensraub, Regeneration, Blutzorn, Verderbnis, Bedrohung im Koop
 
 import { getAbility, type AbilityDef, type AbilityId } from "./abilities";
+import { CLASS_KITS } from "./classKit";
 import { getArmorClassSummary } from "./equipment";
 import { getItem } from "./items";
 import type { ArmorClass, Equipment, WeaponType } from "./types";
@@ -34,7 +36,7 @@ export interface HeroClassDef {
   armorClass: ArmorClass;
   /** Waffen-Voraussetzung, lesbar */
   weapons: string;
-  /** Bonus, lesbar */
+  /** Passiv, lesbar (aus classKit.ts) */
   bonus: string;
   /** Passen die angelegten Waffen? (Liste der Waffentypen beider Hände) */
   matches: (weapons: WeaponType[]) => boolean;
@@ -47,17 +49,35 @@ const has = (type: WeaponType) => (weapons: WeaponType[]) => weapons.includes(ty
 
 /** Alle Klassen – die Reihenfolge entscheidet, wenn mehrere passen. */
 export const HERO_CLASSES: readonly HeroClassDef[] = [
-  { id: "mage", name: "Magier", icon: "🔮", armorClass: "light", weapons: "Stab", bonus: "Fähigkeiten kosten 20 % weniger Mana und machen 5 % mehr Schaden", matches: has("staff") },
-  { id: "warlock", name: "Hexer", icon: "☠️", armorClass: "light", weapons: "Zepter", bonus: "+5 % Schaden; Gift, Feuer und Bluten machen 50 % mehr Schaden und halten 1 Runde länger", matches: has("scepter") },
-  { id: "assassin", name: "Assassine", icon: "🗡️", armorClass: "light", weapons: "Dolch", bonus: "+20 % Krit-Chance, kritische Treffer machen 2,25-fachen statt 1,5-fachen Schaden", matches: has("dagger") },
-  { id: "ranger", name: "Waldläufer", icon: "🏹", armorClass: "medium", weapons: "Bogen", bonus: "+12 % Schaden, Pfeilhagel schiesst 5 statt 4 Pfeile", matches: has("bow") },
-  { id: "duelist", name: "Duellant", icon: "⚔️", armorClass: "medium", weapons: "zwei Schwerter", bonus: "+10 % Schaden, 35 % Chance auf einen zweiten Schlag bei jedem normalen Angriff", matches: (w) => w.filter((t) => t === "sword").length === 2 },
-  { id: "plunderer", name: "Plünderer", icon: "🪓", armorClass: "medium", weapons: "Axt", bonus: "+20 % Schaden, heilt sich um 10 % des verursachten Schadens, kritische Treffer lassen den Gegner 2 Runden bluten, +25 % Gold", matches: has("axe") },
-  { id: "cleric", name: "Kleriker", icon: "✨", armorClass: "medium", weapons: "Streitkolben", bonus: "Heilt sich jede Runde um 2 % der Lebenspunkte, Heiltränke wirken 15 % stärker", matches: has("mace") },
-  { id: "paladin", name: "Paladin", icon: "🛡️", armorClass: "heavy", weapons: "Streitkolben und Schild", bonus: "+10 % Schaden, +20 % Rüstung, Bollwerk kostet die Hälfte, Bollwerk und Vergeltung schlagen mit halbem Schaden zu (Schildstoss), im Koop doppelte Bedrohung", matches: (w) => w.includes("mace") && w.includes("shield") },
-  { id: "berserker", name: "Berserker", icon: "💢", armorClass: "heavy", weapons: "Grossaxt", bonus: "Unter 50 % Lebenspunkten +30 % Schaden", matches: has("greataxe") },
-  { id: "champion", name: "Champion", icon: "👑", armorClass: "heavy", weapons: "Zweihandschwert", bonus: "+15 % Schaden und +10 % Lebenspunkte", matches: has("greatsword") },
-  { id: "warden", name: "Wächter", icon: "🏔️", armorClass: "heavy", weapons: "Grosshammer", bonus: "+15 % Lebenspunkte und +10 % Rüstung, Schwächungen wie Erdbeben wirken 1 Runde länger", matches: has("greathammer") },
+  { id: "mage", name: "Magier", icon: "🔮", armorClass: "light", weapons: "Stab", bonus: CLASS_KITS.mage.passive.text, matches: has("staff") },
+  { id: "warlock", name: "Hexer", icon: "☠️", armorClass: "light", weapons: "Zepter", bonus: CLASS_KITS.warlock.passive.text, matches: has("scepter") },
+  { id: "assassin", name: "Assassine", icon: "🗡️", armorClass: "light", weapons: "Dolch", bonus: CLASS_KITS.assassin.passive.text, matches: has("dagger") },
+  { id: "ranger", name: "Waldläufer", icon: "🏹", armorClass: "medium", weapons: "Bogen", bonus: CLASS_KITS.ranger.passive.text, matches: has("bow") },
+  {
+    id: "duelist",
+    name: "Duellant",
+    icon: "⚔️",
+    armorClass: "medium",
+    weapons: "zwei Schwerter",
+    bonus: CLASS_KITS.duelist.passive.text,
+    matches: (w) => w.filter((t) => t === "sword").length === 2,
+  },
+  { id: "plunderer", name: "Plünderer", icon: "🪓", armorClass: "medium", weapons: "Axt", bonus: CLASS_KITS.plunderer.passive.text, matches: has("axe") },
+  { id: "cleric", name: "Kleriker", icon: "✨", armorClass: "medium", weapons: "Streitkolben", bonus: CLASS_KITS.cleric.passive.text, matches: has("mace") },
+  // Paladin auch mit Schwert und Schild (docs/klassen-neukonzept.md 4.3): kein Konflikt mit dem Duellanten,
+  // der zwei Schwerter und mittlere Rüstung braucht. Ohne Schild bleibt schwer + Schwert klassenlos.
+  {
+    id: "paladin",
+    name: "Paladin",
+    icon: "🛡️",
+    armorClass: "heavy",
+    weapons: "Streitkolben oder Schwert und Schild",
+    bonus: CLASS_KITS.paladin.passive.text,
+    matches: (w) => w.includes("shield") && (w.includes("mace") || w.includes("sword")),
+  },
+  { id: "berserker", name: "Berserker", icon: "💢", armorClass: "heavy", weapons: "Grossaxt", bonus: CLASS_KITS.berserker.passive.text, matches: has("greataxe") },
+  { id: "champion", name: "Champion", icon: "👑", armorClass: "heavy", weapons: "Zweihandschwert", bonus: CLASS_KITS.champion.passive.text, matches: has("greatsword") },
+  { id: "warden", name: "Wächter", icon: "🏔️", armorClass: "heavy", weapons: "Grosshammer", bonus: CLASS_KITS.warden.passive.text, matches: has("greathammer") },
 ];
 
 export function getHeroClass(id: HeroClassId): HeroClassDef {
@@ -76,6 +96,10 @@ export function detectHeroClass(equipment: Equipment): HeroClassId | null {
 
 /* ───────────── Werte ───────────── */
 
+/** Assassine „Meuchler“: Krit-Chance und Krit-Faktor (Modell C: +10 % statt +20 %, 2,0 statt 2,25). */
+export const ASSASSIN_CRIT = 0.1;
+export const ASSASSIN_CRIT_MULTIPLIER = 2;
+
 /** Boni auf die Kampfwerte – wird in getHeroCombatProfile verrechnet. */
 export interface ClassStatBonus {
   damage: number;
@@ -88,34 +112,34 @@ export interface ClassStatBonus {
 
 export function classStatBonus(id: HeroClassId | null): ClassStatBonus {
   const bonus: ClassStatBonus = { damage: 0, hp: 0, armor: 0, crit: 0, critMultiplier: 1.5, gold: 0 };
-  if (id === "assassin") return { ...bonus, crit: 0.2, critMultiplier: 2.25 };
-  if (id === "ranger") return { ...bonus, damage: 0.12 };
+  if (id === "assassin") return { ...bonus, crit: ASSASSIN_CRIT, critMultiplier: ASSASSIN_CRIT_MULTIPLIER };
+  if (id === "ranger") return { ...bonus, damage: 0.08 };
   if (id === "duelist") return { ...bonus, damage: 0.1 };
-  if (id === "warlock") return { ...bonus, damage: 0.05 };
-  if (id === "plunderer") return { ...bonus, damage: 0.2, gold: 0.25 };
+  if (id === "plunderer") return { ...bonus, damage: 0.15, gold: 0.25 };
   if (id === "paladin") return { ...bonus, armor: 0.2, damage: 0.1 };
-  if (id === "champion") return { ...bonus, damage: 0.15, hp: 0.1 };
-  if (id === "warden") return { ...bonus, hp: 0.15, armor: 0.1 };
+  if (id === "berserker") return { ...bonus, damage: 0.1 };
+  if (id === "champion") return { ...bonus, damage: 0.08, hp: 0.1 };
+  if (id === "warden") return { ...bonus, armor: 0.1 };
+  if (id === "warlock") return { ...bonus, damage: 0.05 };
   return bonus;
 }
 
 /**
- * Fähigkeit so, wie die Klasse sie verändert: Magier (alle Fähigkeiten
- * günstiger und stärker), Hexer (stärkere, längere Zustände), Waldläufer
- * (Pfeilhagel mit 5 Pfeilen), Paladin (halbes Bollwerk, Schildstoss), Wächter (längere Schwächung).
+ * Fähigkeit so, wie die Klasse sie verändert: Magier (günstiger), Waldläufer (Pfeilhagel mit 5 Pfeilen),
+ * Kleriker (Heilung für die Gruppe im Koop), Paladin (halbes Bollwerk, Schildstoss), Wächter (längere
+ * Schwächung). Den Hexer verstärkt jedes eigene Gift, Feuer und Bluten beim Legen (`layDot` mit `warlock`),
+ * nicht nur das seiner Fähigkeiten.
  */
 export function classAbility(id: AbilityId, heroClass: HeroClassId | null | undefined): AbilityDef {
   const base = getAbility(id);
   switch (heroClass) {
     case "mage":
-      return { ...base, manaCost: Math.round(base.manaCost * 0.8), multiplier: base.multiplier * 1.05 };
-    case "warlock": {
-      const boost = (effect?: { percent: number; rounds: number }) =>
-        effect && { percent: effect.percent * 1.5, rounds: effect.rounds + 1 };
-      return { ...base, poison: boost(base.poison), burn: boost(base.burn), bleed: boost(base.bleed) };
-    }
+      return { ...base, manaCost: Math.round(base.manaCost * MAGE_MANA_FACTOR) };
     case "ranger":
       return id === "bow" ? { ...base, hits: 5 } : base;
+    case "cleric":
+      // Solo wirkt `groupHeal` nicht – dort heilt er wie bisher nur sich
+      return CLERIC_GROUP_HEALS.includes(id) ? { ...base, groupHeal: CLERIC_GROUP_HEAL } : base;
     case "paladin":
       if (id === "shield") return { ...base, manaCost: Math.round(base.manaCost / 2), ...SHIELD_BASH };
       return id === "shield-2" ? { ...base, ...SHIELD_BASH } : base;
@@ -128,30 +152,61 @@ export function classAbility(id: AbilityId, heroClass: HeroClassId | null | unde
 
 /* ───────────── Kampfmechanik ───────────── */
 
-/** Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen. */
-export const DUELIST_EXTRA_HIT = 0.35;
+/** Magier „Arkane Effizienz“: Faktor auf die Manakosten (vorher dazu +5 % Schaden). */
+export const MAGE_MANA_FACTOR = 0.8;
+/** Hexer „Verderbnis“: eigenes Gift, Feuer und Bluten stärker und länger (vorher ×1,5 nur auf Fähigkeiten-DoTs) … */
+export const WARLOCK_DOT = { factor: 1.4, rounds: 1 };
+/** … „Wandelbare Flüche“: Gift gegen Gift-Immune wird Feuer mit diesem Anteil (und umgekehrt). */
+export const WARLOCK_SWAP = 0.6;
+/** Duellant „Fechtkunst“: Chance auf einen zweiten Schlag bei normalen Angriffen. */
+export const DUELIST_EXTRA_HIT = 0.4;
 /** Plünderer: Blutung bei kritischen Treffern – Anteil des Heldenschadens pro Runde. */
 export const PLUNDERER_BLEED = { percent: 0.25, rounds: 2 };
 /** Plünderer: heilt sich um diesen Anteil des verursachten Schadens. */
-export const PLUNDERER_LIFESTEAL = 0.1;
+export const PLUNDERER_LIFESTEAL = 0.08;
 /** Kleriker: Heilung pro Runde (Anteil der max. LP) und stärkere Heiltränke. */
 export const CLERIC_REGEN = 0.02;
 export const CLERIC_POTION_FACTOR = 1.15;
-/** Berserker: Schadensbonus unter dieser LP-Schwelle. */
+/**
+ * Kleriker im Koop: Heiliges Licht und Läuterung heilen alle lebenden Mitspieler mit diesem Anteil mit
+ * (Review Nr. 5) – so gibt es neben der Arkanen Heilung des Stabs einen Heiler. Das Reinigen bleibt beim Kleriker.
+ */
+export const CLERIC_GROUP_HEAL = 0.5;
+const CLERIC_GROUP_HEALS: readonly AbilityId[] = ["mace-2", "mace-3"];
+/** Berserker „Blutzorn“: +10 % Schaden immer (classStatBonus), unter dieser LP-Schwelle weitere … */
 export const BERSERKER_THRESHOLD = 0.5;
-export const BERSERKER_RAGE = 0.3;
+export const BERSERKER_RAGE = 0.2;
+/** … und Lebensraub. */
+export const BERSERKER_LIFESTEAL = 0.08;
 /** Paladin: Bollwerk und Vergeltung schlagen zusätzlich einmal mit halbem Schaden zu (Schildstoss). */
 export const PALADIN_SHIELD_BASH = 0.5;
 const SHIELD_BASH = { multiplier: PALADIN_SHIELD_BASH, hits: 1 };
 /** Paladin: Faktor auf die Bedrohung im Koop. */
 export const PALADIN_THREAT = 2;
+/** Assassine im Koop „Schatten“: Bedrohung aus ihren kritischen Treffern zählt nur so viel. */
+export const ASSASSIN_CRIT_THREAT = 0.5;
 
-/** Lebensraub eines Angriffs: von der Fähigkeit (Blutrausch) und vom Plünderer. */
-export function lifestealShare(heroClass: HeroClassId | null | undefined, ability: AbilityDef | null): number {
-  return (ability?.lifesteal ?? 0) + (heroClass === "plunderer" ? PLUNDERER_LIFESTEAL : 0);
+/**
+ * Paladin „Geweihte Klinge“ mit Schwert: Lebensraub. Der Schwert-Pool hat keine Heilung (Heiliges Licht, Läuterung
+ * gibt es nur am Streitkolben) – ohne diesen Ausgleich lag der Schwert-Paladin in der Simulation über 30 Punkte
+ * unter dem Streitkolben-Paladin (Ziel: höchstens 5).
+ */
+export const PALADIN_BLADE_LIFESTEAL = 0.2;
+
+/** Lebensraub eines Angriffs: von der Fähigkeit (Blutrausch, Signatur), von Plünderer, Berserker und Schwert-Paladin. */
+export function lifestealShare(heroClass: HeroClassId | null | undefined, ability: AbilityDef | null, weapon?: WeaponType | null): number {
+  const own =
+    heroClass === "plunderer"
+      ? PLUNDERER_LIFESTEAL
+      : heroClass === "berserker"
+        ? BERSERKER_LIFESTEAL
+        : heroClass === "paladin" && weapon === "sword"
+          ? PALADIN_BLADE_LIFESTEAL
+          : 0;
+  return (ability?.lifesteal ?? 0) + own;
 }
 
-/** Schadensfaktor in dieser Runde – Berserker wird bei wenig LP stärker. */
+/** Schadensfaktor in dieser Runde – Berserker wird bei wenig LP stärker (zusätzlich zu +10 % immer). */
 export function rageFactor(heroClass: HeroClassId | null | undefined, hp: number, maxHp: number): number {
   return heroClass === "berserker" && hp < maxHp * BERSERKER_THRESHOLD ? 1 + BERSERKER_RAGE : 1;
 }

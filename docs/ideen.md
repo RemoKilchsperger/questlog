@@ -63,7 +63,7 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | # | Idee | Status |
 |---|---|---|
 | 32 | **Vier Pfade statt +2 % Schaden:** Klinge, Wehr, Arkan, Plage – aufeinander aufbauend mit Stufen, Gabelung und einer Meisterschaft. Enthält Idee 5 (Schmelzen, Gift platzen lassen) | ✅ `skills.ts`, docs/skilltree.md, solo und Koop |
-| 33 | **Mehr Gabelungen und Erfolge:** Gabelung auch auf Stufe 4, Erfolge für Meisterschaften, Stapel (Zorn, Gift) im Kampfbild sichtbar | 💡 |
+| 33 | **Mehr Gabelungen und Erfolge:** Gabelung auch auf Stufe 4, Erfolge für Meisterschaften, Stapel (Zorn, Gift) im Kampfbild sichtbar | 🚧 Meisterschafts-Gabel ✅ (G2), Stapel im Kampfbild ✅ (Bluten-Stapel, Schild); Erfolge mit v25 (G4) |
 
 ## Tränke (2026-11-02)
 
@@ -161,3 +161,13 @@ Bosskämpfe waren alle gleich: viel Schaden machen, jede 3. Runde kommt die Fäh
 | 83 | **Freundesliste:** Freunde per Benutzername, live sehen, wer in einer Koop-Lobby wartet, und direkt beitreten (mit Level-Prüfung), sonst „zuletzt aktiv“ | ✅ `src/friends/`, docs/freunde.md |
 | 84 | **Freunde zum Tausch einladen:** offenen Tausch eines Freundes in der Liste zeigen und direkt beitreten | 💡 |
 | 85 | **Schnell-Nachrichten unter Freunden:** vorgefertigte Sätze und Emotes statt freiem Chat – keine Moderation nötig | 💡 |
+
+## Klassen und Talente (2026-11-12)
+
+| # | Idee | Status |
+|---|---|---|
+| 86 | **Klassen mit Kern (Modell C):** Rolle, Klassenleiste mit 4 Ladungen, Signaturfähigkeit ohne Mana und ein mechanisches Passiv pro Klasse; Paladin auch mit Schwert + Schild | ✅ G0, G1 und G3 (Klassen-Kern: Leiste, 11 Signaturen, neue Passive, Paladin mit Schwert, Koop-Rollen) umgesetzt; optionale Teile in G4 – docs/klassen-neukonzept.md, docs/klassen-skilltree-abgleich.md |
+| 87 | **Skilltree-Überarbeitung:** Meisterschaft ab 12, zwei Meisterschaften pro Pfad, neue Knoten, Brücken, Leisten-Knoten | 🚧 G2 ✅ (Meisterschaft ab 12, zweite Meisterschaften, neue Knoten, v24) – Brücken und Leisten-Knoten in G4, docs/skilltree-ueberarbeitung.md |
+| 88 | **Boss-Raserei im Koop:** ab Runde 20 +10 % Schaden pro Runde, angekündigt ab Runde 17 – bremst endlose Kämpfe mit Heiler und Tank | ✅ G3 (`coopEnrageFactor`, heroische Endbosse ab Runde 30) – docs/klassen-neukonzept.md 4.5 |
+| 89 | **Quest „Finde deine Klasse“:** frühe Story-Quest, die zur ersten Klasse führt (Sieg mit aktiver Klasse) | ✅ G3 (Questbuch ohne Gebiet, Rüstungsteil passend zur Waffe) – docs/klassen-neukonzept.md 4.7 |
+| 90 | **Druide** (mittel + Stab) als zweiter Heiler | 💡 G4, nach dem Playtest des Klerikers |

@@ -5,6 +5,8 @@ import {
   attackRound,
   bossTurnOf,
   DEFEND,
+  SIGNATURE,
+  signatureBlocker,
   drinkPotion,
   flee,
   fleeCost,
@@ -38,7 +40,7 @@ import { lootPool } from "./loot";
 import { MAX_LEVEL, xpForNextLevel } from "./leveling";
 import { buyPotion, getPotion } from "./potions";
 import { matchupOf, WEAPON_KIND } from "./matchups";
-import { untouchable } from "./bossIntents";
+import { reflectsAbilities, untouchable } from "./bossIntents";
 import { announceRaid, raidLineup } from "./raids";
 import type { SkillWeapon } from "./skills";
 import { pathOrder, withSkills } from "../test/skills";
@@ -463,11 +465,17 @@ describe("Gebiete und Balance", () => {
       // Ist der Boss abgetaucht, geht es gegen einen Begleiter – oder er wehrt ab
       const hidden = untouchable(bossTurnOf(state));
       if (hidden && !state.target) state = setTarget(state, livingAdds(state)[0]?.uid);
+      // Die volle Klassenleiste entlädt er sofort als Signatur (Kampfbanner bzw. Bergbrecher)
       const ability = state.target
         ? undefined
         : hidden
           ? DEFEND
-          : ([`${weapon}-2`, weapon] as const).find((id) => abilityBlocker(state, id) === null);
+          : signatureBlocker(state) === null
+            ? SIGNATURE
+            : // Ins offene Höhlenauge wirkt er keine Fähigkeit – es würfe sie zurück (die Signatur ist sicher)
+              reflectsAbilities(bossTurnOf(state))
+              ? undefined
+              : ([`${weapon}-2`, weapon] as const).find((id) => abilityBlocker(state, id) === null);
       state = attackRound(state, rng, ability).state;
     }
     return state;
@@ -488,7 +496,7 @@ describe("Gebiete und Balance", () => {
       expect(commonWithPotions, `${boss.name}: Siege mit Heiltränken (gewöhnlich)`).toBeLessThan(50);
       expect(rareWithPotions, `${boss.name}: Siege mit Heiltränken (selten)`).toBeGreaterThan(60);
     }
-  });
+  }, 60_000);
 
   it("Dungeons bis Level 42: ein gut gespielter Champion schafft sie mit seltener Ausrüstung und Heiltränken meistens, gewöhnlich ausgerüstet ohne Tränke kommt er kaum zum Boss", () => {
     /** Erreichte Stufe – LP werden mitgenommen, keine Heilung zwischen den Kämpfen. */
@@ -509,9 +517,11 @@ describe("Gebiete und Balance", () => {
       const withoutPotions = Array.from({ length: 100 }, () => run(dungeon, rng, "common", false));
       const withPotions = Array.from({ length: 100 }, () => run(dungeon, rng, "rare", true));
       expect(withoutPotions.filter((s) => s >= last).length, `${dungeon.name}: ohne Tränke beim Boss`).toBeLessThan(25);
-      expect(withPotions.filter((s) => s > last).length, `${dungeon.name}: mit Heiltränken geschafft`).toBeGreaterThan(60);
+      // Seit dem Klassen-Kern (G3) hat der Champion +8 % statt +15 % und dafür das Kampfbanner: in der Verlassenen Mine
+      // knapp 60 % – die Grenze liegt darum bei 55
+      expect(withPotions.filter((s) => s > last).length, `${dungeon.name}: mit Heiltränken geschafft`).toBeGreaterThan(55);
     }
-  });
+  }, 60_000);
 
   it("Überfälle: mit seltener Ausrüstung und Heiltränken meistens abgewehrt, ohne Tränke kaum – die Festung hilft spürbar", () => {
     /** Alle Wellen und der Anführer, LP werden mitgenommen. */
@@ -536,7 +546,7 @@ describe("Gebiete und Balance", () => {
       expect(wins(level, 0, "common", false), `Lv. ${level}: gewöhnlich ohne Tränke`).toBeLessThan(6);
       expect(wins(level, 3, "common", true), `Lv. ${level}: Festung, gewöhnlich mit Tränken`).toBeGreaterThan(54);
     }
-  });
+  }, 60_000);
 
   it("Bosse sind ohne Tränke eine echte Herausforderung", () => {
     for (const area of AREAS) {

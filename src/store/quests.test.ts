@@ -5,7 +5,7 @@ import type { EliteAffix } from "../domain/elites";
 import { AREA_BOSS_RESPAWN_MS, formatRespawn, getCreature, getDungeon, hasRespawn, respawnLeft, startRespawn } from "../domain/creatures";
 import { dateKey, weekKey } from "../domain/calendar";
 import { createItem, getItem } from "../domain/items";
-import { getQuest, rollDailyQuests, rollWeeklyQuests, type TradeAction } from "../domain/quests";
+import { CLASS_QUEST_ID, getQuest, rollDailyQuests, rollWeeklyQuests, type TradeAction } from "../domain/quests";
 import { convertLinearCurveXp } from "../domain/leveling";
 import { migrateSave, newDungeonRun, useGameStore } from "./gameStore";
 
@@ -235,5 +235,32 @@ describe("Respawn der Gebietsbosse", () => {
     expect(startRespawn({}, "goblin-chief", 0)).toEqual({ "goblin-chief": AREA_BOSS_RESPAWN_MS });
     expect(formatRespawn(AREA_BOSS_RESPAWN_MS)).toBe("5:00");
     expect(formatRespawn(65_500)).toBe("1:06");
+  });
+});
+
+describe("Finde deine Klasse im Spielstand", () => {
+  beforeEach(() => {
+    useGameStore.getState().resetGame();
+    useGameStore.setState({ village: CLASSIC_VILLAGE });
+  });
+
+  it("ein Sieg mit Klasse erfüllt sie, die Belohnung ist ein seltenes Rüstungsteil passend zur Waffe", () => {
+    const store = useGameStore.getState;
+    useGameStore.setState({ character: { ...store().character, totalXp: 50_000 } });
+    store().acceptQuest(CLASS_QUEST_ID);
+    expect(store().questLog.active[CLASS_QUEST_ID]).toBe(0);
+    // Ohne Klasse zählt der Sieg nicht
+    win("giant-rat");
+    expect(store().questLog.active[CLASS_QUEST_ID]).toBe(0);
+    useGameStore.setState({ battle: { ...winnable("giant-rat"), heroClass: "mage", charge: 0 }, battleReward: null, dungeon: null });
+    store().battleAttack();
+    expect(store().questLog.active[CLASS_QUEST_ID]).toBe(1);
+    useGameStore.setState({ equipment: { ...store().equipment, weapon1: createItem("staff-3", "common", "st") } });
+    const before = store().inventory.length;
+    store().turnInQuest(CLASS_QUEST_ID);
+    expect(store().questLog.completed).toContain(CLASS_QUEST_ID);
+    const item = store().inventory[before];
+    expect(item.rarity).toBe("rare");
+    expect(getItem(item.itemId).armorClass).toBe("light");
   });
 });

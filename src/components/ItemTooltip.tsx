@@ -4,7 +4,7 @@ import { getActiveSets } from "../domain/bossSets";
 import { bossName, isCoopBoss } from "../domain/bosses";
 import { STAT_LABELS } from "../domain/stats";
 import type { ItemStats, WeaponType } from "../domain/types";
-import { weaponStat } from "../domain/weaponScaling";
+import { PALADIN_SWORD_STAT, weaponStat } from "../domain/weaponScaling";
 import { useGameStore } from "../store/gameStore";
 import { BossSetInfo } from "./BossSetInfo";
 import { HoverCard } from "./HoverCard";
@@ -57,7 +57,11 @@ function ItemCard({ stats, hint }: { stats: ItemStats; hint?: string }) {
         ))}
       </p>
       {def.kind === "weapon" && (
-        <p className="text-xs text-muted">skaliert mit {STAT_LABELS[weaponStat(def.type as WeaponType)]}</p>
+        <p className="text-xs text-muted">
+          skaliert mit {STAT_LABELS[weaponStat(def.type as WeaponType)]}
+          {/* Geweihte Klinge: Als Paladin zählt das Schwert mit Ausdauer */}
+          {def.type === "sword" && ` (als Paladin: ${STAT_LABELS[PALADIN_SWORD_STAT]})`}
+        </p>
       )}
       {bonuses && <p className="text-sm text-xp">{bonuses}</p>}
       {stats.abilities.length > 0 && <WeaponAbilities ids={stats.abilities} />}

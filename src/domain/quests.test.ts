@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { AREAS, DUNGEONS } from "./creatures";
+import { EMPTY_EQUIPMENT } from "./equipment";
+import { createItem, getItem } from "./items";
 import {
   abandonQuest,
   acceptQuest,
   advanceQuest,
   applyBoardEvent,
   applyQuestEvent,
+  classArmorFor,
+  classQuestArmor,
+  CLASS_QUEST_ID,
   DAILY_HUNT_COUNT,
   DAILY_TRADE_COUNTS,
   dailyCandidates,
@@ -13,6 +18,7 @@ import {
   EMPTY_QUEST_LOG,
   getQuest,
   isQuestComplete,
+  isQuestUnlocked,
   QUESTS,
   questGoalText,
   questsForCreature,
@@ -33,8 +39,8 @@ import {
 const sequence = (value: number) => () => value;
 
 describe("Questbuch", () => {
-  it("pro Gebiet eine Jagd pro Kreatur und der Boss, dazu jeder Dungeon – mit eindeutigen Ids", () => {
-    expect(QUESTS).toHaveLength(AREAS.reduce((n, a) => n + a.creatures.length, 0) + DUNGEONS.length);
+  it("„Finde deine Klasse“, pro Gebiet eine Jagd pro Kreatur und der Boss, dazu jeder Dungeon – mit eindeutigen Ids", () => {
+    expect(QUESTS).toHaveLength(1 + AREAS.reduce((n, a) => n + a.creatures.length, 0) + DUNGEONS.length);
     expect(new Set(QUESTS.map((q) => q.id)).size).toBe(QUESTS.length);
     for (const q of QUESTS) {
       expect(q.title, q.id).not.toBe(q.id); // jede Quest hat einen eigenen Titel
@@ -216,5 +222,40 @@ describe("Wochenaufträge", () => {
     expect(new Set(weeks.map((g) => g?.action)).size).toBe(3);
     for (const goal of weeks) expect(goal!.count).toBeGreaterThan(DAILY_TRADE_COUNTS[goal!.action]);
     expect(weeks.map((g) => g!.count).sort()).toEqual(Object.values(WEEKLY_TRADE_COUNTS).sort());
+  });
+});
+
+describe("Finde deine Klasse", () => {
+  const def = getQuest(CLASS_QUEST_ID);
+  const own = (id: string) => createItem(id, "common", id);
+
+  it("ab Lv. 5 im Questbuch, erfüllt durch einen Sieg mit aktiver Klasse", () => {
+    expect(isQuestUnlocked(def, 4)).toBe(false);
+    expect(isQuestUnlocked(def, 5)).toBe(true);
+    expect(() => acceptQuest(EMPTY_QUEST_LOG, CLASS_QUEST_ID, 4)).toThrow(/Level 5/);
+    let log = acceptQuest(EMPTY_QUEST_LOG, CLASS_QUEST_ID, 5);
+    log = applyQuestEvent(log, { kind: "kill", creatureId: "grey-wolf", boss: false });
+    expect(log.active[CLASS_QUEST_ID]).toBe(0);
+    log = applyQuestEvent(log, { kind: "classWin" });
+    expect(isQuestComplete(def, log.active[CLASS_QUEST_ID])).toBe(true);
+    expect(questGoalText(def)).toMatch(/Klasse/);
+    // Die feste Belohnung ersetzt die zufällige Beute
+    expect(def.reward.dropChance).toBe(0);
+  });
+
+  it("Belohnung: ein seltenes Rüstungsteil der Rüstungsklasse, die zur Hauptwaffe passt", () => {
+    expect(classArmorFor(["staff"])).toBe("light");
+    expect(classArmorFor(["bow"])).toBe("medium");
+    expect(classArmorFor(["sword"])).toBe("medium");
+    expect(classArmorFor(["sword", "shield"])).toBe("heavy");
+    expect(classArmorFor(["mace", "shield"])).toBe("heavy");
+    expect(classArmorFor(["greataxe"])).toBe("heavy");
+    const equipment = { ...EMPTY_EQUIPMENT, chest: own("chest-light-3"), weapon1: own("staff-3") };
+    const item = classQuestArmor(equipment, 12, "q", () => 0.5);
+    expect(item.rarity).toBe("rare");
+    // Die Brust trägt schon leicht – das Teil kommt in den nächsten Platz
+    expect(item.itemId).toMatch(/^legs-light-\d+$/);
+    expect(getItem(item.itemId).armorClass).toBe("light");
+    expect(classQuestArmor({ ...EMPTY_EQUIPMENT, weapon1: own("greatsword-3") }, 12, "q").itemId).toMatch(/^chest-\d+$/);
   });
 });

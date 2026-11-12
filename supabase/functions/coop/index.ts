@@ -10,7 +10,7 @@
 // Deploy: `npm run functions:deploy -- --project-ref <ref>`
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { applyCommand, COOP_ROW_TTL_HOURS, CoopError, memberFromSave, newLobbyCode } from "../_shared/coop-server.js";
+import { applyCommand, checkProtocol, COOP_ROW_TTL_HOURS, CoopError, memberFromSave, newLobbyCode } from "../_shared/coop-server.js";
 
 // Schlanke Typen für diese Datei – die vollständigen stehen in src/coop/protocol.ts.
 type CoopCommand =
@@ -88,7 +88,10 @@ Deno.serve(async (req) => {
     const { data: auth, error: authError } = await admin.auth.getUser(token);
     if (authError || !auth.user) return json({ error: "Nicht angemeldet." }, 401);
     const userId = auth.user.id;
-    const { command, id } = (await req.json()) as { command: CoopCommand; id?: string };
+    // `protocol`: Version des Clients – applyCommand lehnt ältere ab („bitte neu laden“, src/coop/protocol.ts)
+    const { command, id, protocol } = (await req.json()) as { command: CoopCommand; id?: string; protocol?: number };
+    // Früh prüfen, damit veraltete Clients keine Datenbank-Arbeit auslösen (applyCommand prüft nochmals)
+    checkProtocol(protocol);
 
     // Alte Kämpfe aufräumen, damit die Tabelle nicht endlos wächst
     if (command.type === "create") {
@@ -113,6 +116,7 @@ Deno.serve(async (req) => {
         members,
         newId: () => crypto.randomUUID(),
         newCode: () => newLobbyCode(),
+        protocol,
       });
 
       if (next === row) return json({ row, serverNow: now });

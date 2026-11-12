@@ -11,6 +11,7 @@ import { HeroNameDialog } from "./components/HeroNameDialog";
 import { Hud } from "./components/Hud";
 import { QuestScreen, useReadyQuestCount } from "./components/QuestScreen";
 import { RewardToast } from "./components/RewardToast";
+import { SkillTreeNotice } from "./components/SkillTreeNotice";
 import { AchievementToast } from "./components/Achievements";
 import { AlchemistScreen } from "./components/AlchemistScreen";
 import { ShopScreen } from "./components/ShopScreen";
@@ -228,6 +229,7 @@ export default function App() {
 
       <RewardToast />
       <AchievementToast />
+      <SkillTreeNotice onOpen={() => setTab("skills")} />
       <CloudDialogs />
       <HeroNameDialog />
     </div>

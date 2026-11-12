@@ -16,9 +16,10 @@ import { DRUM_BONUS, DRUM_MAX, RITUAL_HEAL, RITUAL_ROUNDS, SHIELD_EVERY, SHIELD_
 import { CURSE_DAMAGE, plateFactor } from "./bossIntents";
 import type { ActiveBuff, Combatant, DamageOverTime } from "./combat";
 import { POISON, RAGE_BONUS, REGEN_SHARE, SWIFT_SHARE, type EliteAffix } from "./elites";
-import { CLERIC_REGEN, DUELIST_EXTRA_HIT, lifestealShare, PLUNDERER_BLEED, type HeroClassId } from "./heroClasses";
+import { CLERIC_REGEN, DUELIST_EXTRA_HIT, lifestealShare, PLUNDERER_BLEED, WARLOCK_DOT, WARLOCK_SWAP, type HeroClassId } from "./heroClasses";
 import { critBurns, EFFECT, effectCritBonus, effectDamageFactor, has as hasEffect, heroDotRounds, type ItemEffectId } from "./itemEffects";
-import { matchupFactor, matchupOf, type DamageKind, type DotKind } from "./matchups";
+import { bestKind, matchupFactor, matchupOf, type DamageKind, type DotKind } from "./matchups";
+import type { SkillWeapon } from "./skills";
 import {
   bandageHeal,
   bloodburstDamage,
@@ -31,19 +32,31 @@ import {
   melts,
   ownDotFactor,
   ownDotRounds,
+  poisonedWeaponsChance,
   rankIn,
   rotBurst,
   SKILL,
   skillCritBonus,
   skillDamageFactor,
   skillLifesteal,
+  stackDot,
   stackPoison,
+  WARD_MAX_SHARE,
   type FoeState,
   type SkillRanks,
 } from "./skills";
 import { BLESSING, stacks, type BlessingId } from "./tower";
 
 /* ───────────────────────── Treffer ───────────────────────── */
+
+/** Obergrenze der Krit-Chance aus Grundwert, Charisma und Rüstung (getHeroCombatProfile). */
+export const CRIT_CAP_BASE = 0.3;
+/**
+ * Obergrenze der gesamten Krit-Chance – mit Klasse, Skilltree, Item-Effekten und Segen. Geprüft beim
+ * Würfeln des Treffers (`strikeFactors`), weil Blutgeruch, Allsehend und Präzision erst dort dazukommen.
+ * Sichere Krits (Schattenschritt, Fähigkeiten mit `guaranteedCrit`) gelten unabhängig davon.
+ */
+export const CRIT_CAP_TOTAL = 0.6;
 
 /**
  * Anteil des Schadens, den Rüstung abfängt. Je höher das Level des
@@ -86,6 +99,8 @@ export interface TickingEnemyEffects {
   dazed?: number;
   chilled?: number;
   shaken?: number;
+  /** Beute markieren (Waldläufer): so viele Runden noch markiert */
+  marked?: number;
 }
 
 /** Am Rundenende laufen Schwächung, Verwundbarkeit und Betäubungs-Immunität eine Runde ab. */
@@ -98,6 +113,7 @@ export function tickEnemyEffects<F extends TickingEnemyEffects>(fx: F): F {
     ...(fx.dazed !== undefined && { dazed: tickMark(fx.dazed) }),
     ...(fx.chilled !== undefined && { chilled: tickMark(fx.chilled) }),
     ...(fx.shaken !== undefined && { shaken: tickMark(fx.shaken) }),
+    ...(fx.marked !== undefined && { marked: tickMark(fx.marked) }),
   };
 }
 
@@ -127,6 +143,17 @@ export interface LayDot<D extends DamageOverTime> {
   own: DamageOverTime | undefined;
   /** Zusätzliche Felder der neuen Wirkung (im Koop der Verursacher) */
   tag?: Omit<D, keyof DamageOverTime>;
+  /**
+   * Tausend Schnitte: ein Bluten-Stapel. Er stapelt sich auf ein liegendes gestapeltes Bluten – egal wer es
+   * gelegt hat (im Koop ein gemeinsamer Stapel pro Gegner) – bis SKILL.thousandCuts.max. Ein liegendes
+   * Bluten ohne Stapel (Axtwurf, Schnitter) bleibt, solange es stärker ist als der neue Stapel.
+   */
+  stackBleed?: boolean;
+  /**
+   * Der Verursacher ist Hexer („Verderbnis“): stärker und eine Runde länger – und „Wandelbare Flüche“: Ist das
+   * Ziel gegen Gift immun, wird es Feuer mit WARLOCK_SWAP der Stärke (und umgekehrt).
+   */
+  warlock?: boolean;
 }
 
 export type LayDotResult<F> =
@@ -144,10 +171,20 @@ export type LayDotResult<F> =
  */
 export function layDot<D extends DamageOverTime, F extends DotEffects<D>>(fx: F, o: LayDot<D>): LayDotResult<F> {
   const factor = matchupFactor(o.creatureId, o.kind);
-  if (factor === 0) return { immune: true };
-  const damage = Math.max(1, Math.round(o.base * factor * ownDotFactor(o.skills, o.kind)));
-  const length = ownDotRounds(o.skills, o.kind, o.rounds);
+  if (factor === 0) {
+    const swap = o.warlock && o.kind !== "bleed" ? (o.kind === "poison" ? "burn" : "poison") : null;
+    if (swap && matchupFactor(o.creatureId, swap) > 0) return layDot(fx, { ...o, kind: swap, base: o.base * WARLOCK_SWAP });
+    return { immune: true };
+  }
+  const warlock = o.warlock ? WARLOCK_DOT : { factor: 1, rounds: 0 };
+  const damage = Math.max(1, Math.round(o.base * warlock.factor * factor * ownDotFactor(o.skills, o.kind)));
+  const length = ownDotRounds(o.skills, o.kind, o.rounds + warlock.rounds);
   const tagged = (dot: DamageOverTime) => ({ ...dot, ...o.tag }) as D;
+  if (o.kind === "bleed" && o.stackBleed) {
+    const current = fx.bleed;
+    if (current?.stacks) return { immune: false, fx: { ...fx, bleed: tagged(stackDot(SKILL.thousandCuts.max, current, damage, length)) } };
+    return { immune: false, fx: { ...fx, bleed: strongerDot(current, tagged({ damage, roundsLeft: length, stacks: 1 })) } };
+  }
   if (o.kind !== "poison") {
     return { immune: false, fx: { ...fx, [o.kind]: strongerDot(fx[o.kind], tagged({ damage, roundsLeft: length })) } };
   }
@@ -161,6 +198,26 @@ export function layDot<D extends DamageOverTime, F extends DotEffects<D>>(fx: F,
 }
 
 /* ───────────────────────── Rundenende ───────────────────────── */
+
+/* ───────────────────────── Schild-Topf (Lebensband) ───────────────────────── */
+
+/**
+ * Lebensband: So viel einer Heilung von `raw` LP wird zum Schild – der Teil über dem LP-Maximum, solange
+ * der Schild-Topf unter WARD_MAX_SHARE der max. LP bleibt. Vor dem Heilen aufrufen (mit den LP davor).
+ */
+export function wardGain(c: { hp: number; maxHp: number }, raw: number, ward: number | undefined, lifebond: boolean): number {
+  if (!lifebond || raw <= 0) return 0;
+  const over = raw - Math.max(0, c.maxHp - c.hp);
+  const room = Math.round(c.maxHp * WARD_MAX_SHARE) - (ward ?? 0);
+  return Math.max(0, Math.min(over, room));
+}
+
+/** Der Schild fängt einen Treffer ab, bevor er die LP erreicht. */
+export function absorbWard(ward: number | undefined, damage: number): { damage: number; warded: number; ward: number | undefined } {
+  const warded = Math.min(ward ?? 0, damage);
+  const left = (ward ?? 0) - warded;
+  return { damage: damage - warded, warded, ward: left > 0 ? left : undefined };
+}
 
 /** Heilung um einen Anteil der maximalen LP – nie über das Maximum. */
 export const healShare = (hp: number, maxHp: number, share: number): number =>
@@ -416,7 +473,7 @@ export interface StrikeSetup {
   skills: SkillRanks | undefined;
   blessings: readonly BlessingId[] | undefined;
   round: number;
-  /** Krit-Chance des Helden vor Item- und Skill-Boni */
+  /** Krit-Chance des Helden vor Item- und Skill-Boni (mit Klasse und Segen) */
   critChance: number;
   /** Feuer-Fähigkeit (Pyromant, Schmelzen) */
   fire: boolean;
@@ -424,6 +481,10 @@ export interface StrikeSetup {
   riposte: number;
   wrath: number;
   echoShare: number;
+  /** Fähigkeit mit mindestens 2 Treffern (Wirbelnde Klingen) – fehlt: nein */
+  multiHit?: boolean;
+  /** Klingentanz: Faktor auf diesen normalen Angriff – fehlt: 1 */
+  dance?: number;
 }
 
 export interface StrikeTarget {
@@ -453,15 +514,16 @@ export interface StrikeFactors {
   charging: number;
   /** Verwundbarkeit des Gegners */
   vulnerable: number;
-  /** Schadensart, mit der getroffen wird – „Runenklinge“ zählt auch als Magie, wenn das wirksamer ist */
+  /** Schadensart, mit der getroffen wird – Heiliger Hammer und „Runenklinge“ zählen auch als Magie, wenn das wirksamer ist */
   kind: DamageKind | null;
   matchup: ReturnType<typeof matchupOf> | null;
   /** Schwäche oder Resistenz */
   kindFactor: number;
   /** Item-Effekte: Kriegstrommel, Henkersbeil, Aderlass, Elitejäger, Bossschlächter, Sog */
   itemFactor: number;
-  /** Skilltree samt Gegenschlag, Zorn und Echo */
+  /** Skilltree samt Gegenschlag, Zorn, Echo und Klingentanz */
   skillFactor: number;
+  /** Krit-Chance des Treffers – höchstens CRIT_CAP_TOTAL */
   critChance: number;
   /** Panzerplatten – nur direkte Treffer auf den Boss */
   plate: number;
@@ -473,10 +535,10 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
   const { ability, itemEffects, skills } = s;
   const finisher = ability?.execute && foe.c.hp < foe.c.maxHp * ability.execute.threshold ? ability.execute.factor : 1;
   const headsman = foe.c.hp < foe.c.maxHp * BLESSING.executioner.threshold ? 1 + BLESSING.executioner.bonus * stacks(s.blessings, "executioner") : 1;
-  const kind =
-    s.heroKind && hasEffect(itemEffects, "runeblade") && matchupFactor(foe.creatureId, "magic") > matchupFactor(foe.creatureId, s.heroKind)
-      ? "magic"
-      : s.heroKind;
+  // Heiliger Hammer (`altKind`) und Runenklinge zählen auch als Magie, wenn das wirksamer ist
+  const kind = s.heroKind
+    ? bestKind(foe.creatureId, [s.heroKind, ability?.altKind, hasEffect(itemEffects, "runeblade") ? "magic" : null])
+    : null;
   const foeState: FoeState = {
     hp: foe.c.hp,
     maxHp: foe.c.maxHp,
@@ -485,6 +547,13 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
     dazed: !!foe.fx.dazed,
     chilled: !!foe.fx.chilled,
   };
+  let kindFactor = matchupFactor(foe.creatureId, kind);
+  let matchup = kind ? matchupOf(foe.creatureId, kind) : null;
+  // Arkane Entladung (Magier): zählt als Feuer, wenn das wirksamer ist als Magie
+  if (ability?.fireOrMagic && matchupFactor(foe.creatureId, "burn") > kindFactor) {
+    kindFactor = matchupFactor(foe.creatureId, "burn");
+    matchup = matchupOf(foe.creatureId, "burn");
+  }
   return {
     finisher,
     headsman,
@@ -493,8 +562,8 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
     charging: ability?.chargingBonus && t.isBoss && t.charging ? 1 + ability.chargingBonus : 1,
     vulnerable: 1 + (foe.fx.vulnerable?.percent ?? 0),
     kind,
-    matchup: kind ? matchupOf(foe.creatureId, kind) : null,
-    kindFactor: matchupFactor(foe.creatureId, kind),
+    matchup,
+    kindFactor,
     itemFactor: effectDamageFactor(itemEffects, {
       round: s.round,
       foeHp: foe.c.hp,
@@ -503,8 +572,8 @@ export function strikeFactors(foe: StrikeFoe, s: StrikeSetup, t: StrikeTarget): 
       foeBoss: t.realBoss,
       foeElite: t.elite,
     }),
-    skillFactor: skillDamageFactor(skills, foeState, s.fire) * s.riposte * s.wrath * s.echoShare,
-    critChance: s.critChance + effectCritBonus(itemEffects, t.realBoss) + skillCritBonus(skills, foeState),
+    skillFactor: skillDamageFactor(skills, foeState, s.fire, s.multiHit) * s.riposte * s.wrath * s.echoShare * (s.dance ?? 1),
+    critChance: Math.min(CRIT_CAP_TOTAL, s.critChance + effectCritBonus(itemEffects, t.realBoss) + skillCritBonus(skills, foeState)),
     plate: t.isBoss ? plateFactor(t.plates) : 1,
     foeState,
   };
@@ -522,17 +591,23 @@ export function absorbShield(shield: number, damage: number): { absorbed: number
 
 /** Wie der Treffer weiterwirkt – Solo und Koop melden und verbuchen es auf ihre Art. */
 export interface AfterHit<F> {
-  /** Gift, Feuer oder Bluten legen */
-  dot: (foe: F, kind: DotKind, base: number, rounds: number) => void;
+  /** Gift, Feuer oder Bluten legen – `stack`: ein Stapel von Tausend Schnitte */
+  dot: (foe: F, kind: DotKind, base: number, rounds: number, stack?: boolean) => void;
   /** Mana für den Helden */
   mana: (amount: number) => void;
   /** Frostbiss: der Gegner setzt diese Runde aus */
   freeze: (foe: F) => void;
+  /**
+   * Schnitter: Das liegende, stärkere Bluten hält eine Runde länger – höchstens einmal pro Runde und Gegner
+   * (der Aufrufer merkt sich das), sonst strecken Mehrfachtreffer es endlos.
+   */
+  extendBleed: (foe: F) => void;
 }
 
 /**
- * Was ein Treffer nach sich zieht: Plünderer und Schnitter lassen bluten, Adrenalin gibt Mana,
- * Offene Wunde verlängert das Bluten, Schmelzen taut auf, Glut/Drachenfeuer, Giftzahn, Frostbiss, Manadieb.
+ * Was ein Treffer nach sich zieht: Plünderer und Schnitter lassen bluten (blutet der Gegner schon stärker,
+ * verlängert der Schnitter jenes Bluten), Adrenalin gibt Mana, Schmelzen taut auf, Glut/Drachenfeuer,
+ * Giftzahn, Frostbiss, Manadieb.
  * `base`: Schaden des Helden (für die Stärke von Gift, Feuer, Bluten).
  */
 export function afterHeroHit<F extends StrikeFoe>(
@@ -545,6 +620,10 @@ export function afterHeroHit<F extends StrikeFoe>(
     skills: SkillRanks | undefined;
     fire: boolean;
     foeState: FoeState;
+    /** Treffer eines normalen Angriffs (Vergiftete Waffen) – fehlt: nein */
+    plain?: boolean;
+    /** Treffer einer Fähigkeit mit mindestens 2 Treffern (Tausend Schnitte) – fehlt: nein */
+    multiHit?: boolean;
   },
   rng: () => number,
   on: AfterHit<F>,
@@ -555,16 +634,17 @@ export function afterHeroHit<F extends StrikeFoe>(
     const damage = base * PLUNDERER_BLEED.percent * matchupFactor(foe.creatureId, "bleed");
     if (damage > 0 && (foe.fx.bleed?.damage ?? 0) <= damage) on.dot(foe, "bleed", base * PLUNDERER_BLEED.percent, PLUNDERER_BLEED.rounds);
   }
-  // Skills bei kritischen Treffern: Adrenalin (Mana), Schnitter (Bluten), Offene Wunde (länger bluten)
+  // Skills bei kritischen Treffern: Adrenalin (Mana), Schnitter (Bluten – oder ein stärkeres verlängern)
   if (crit) {
     on.mana(critMana(skills));
-    if (foe.c.hp > 0 && rankIn(skills, "reaper") > 0 && (foe.fx.bleed?.damage ?? 0) <= base * SKILL.reaper.percent) {
-      on.dot(foe, "bleed", base * SKILL.reaper.percent, SKILL.reaper.rounds);
+    if (foe.c.hp > 0 && rankIn(skills, "reaper") > 0) {
+      if ((foe.fx.bleed?.damage ?? 0) <= base * SKILL.reaper.percent) on.dot(foe, "bleed", base * SKILL.reaper.percent, SKILL.reaper.rounds);
+      else on.extendBleed(foe);
     }
-    const bleed = foe.fx.bleed;
-    if (foe.c.hp > 0 && o.foeState.bleeding && bleed && rankIn(skills, "openWound") > 0) {
-      foe.fx = { ...foe.fx, bleed: { ...bleed, roundsLeft: bleed.roundsLeft + 1 } };
-    }
+  }
+  // Tausend Schnitte: Jeder Treffer einer Mehrfachtreffer-Fähigkeit legt einen Bluten-Stapel
+  if (o.multiHit && foe.c.hp > 0 && rankIn(skills, "thousandCuts") > 0) {
+    on.dot(foe, "bleed", base * SKILL.thousandCuts.percent, SKILL.thousandCuts.rounds, true);
   }
   // Schmelzen: Das Feuer taut den eingefrorenen Gegner auf
   if (melts(skills, o.foeState.chilled, o.fire)) foe.fx = { ...foe.fx, chilled: undefined };
@@ -575,13 +655,18 @@ export function afterHeroHit<F extends StrikeFoe>(
       on.dot(foe, "poison", base * EFFECT.venomFang.percent, EFFECT.venomFang.rounds);
     }
     if (hasEffect(itemEffects, "frostBite") && rng() < EFFECT.frostBite) on.freeze(foe);
+    // Vergiftete Waffen: normale Angriffe vergiften manchmal – gewürfelt nur, wer den Knoten hat
+    const venomChance = o.plain ? poisonedWeaponsChance(skills) : 0;
+    if (venomChance > 0 && rng() < venomChance) {
+      on.dot(foe, "poison", base * SKILL.poisonedWeapons.percent, SKILL.poisonedWeapons.rounds);
+    }
   }
   if (hasEffect(itemEffects, "manaThief")) on.mana(EFFECT.manaThief);
 }
 
 /**
  * Alle Treffer einer Aktion: Mehrfachtreffer und Flächenwirkung, Echo (zweiter Durchgang mit
- * halbem Schaden), Finte, Duellant und Kettenblitz. `strike(foe, share, echoShare)` führt einen Treffer aus.
+ * `SKILL.echo.share` = 30 % Schaden), Finte, Duellant und Kettenblitz. `strike(foe, share, echoShare)` führt einen Treffer aus.
  */
 export function heroVolley<F extends { c: { hp: number } }>(o: {
   ability: AbilityDef | null;
@@ -601,6 +686,8 @@ export function heroVolley<F extends { c: { hp: number } }>(o: {
   itemEffects: readonly ItemEffectId[] | undefined;
   strike: (foe: F, share: number, echoShare: number) => void;
   rng: () => number;
+  /** Der Duellant schlägt ein zweites Mal zu (Klassenleiste „Rhythmus“) */
+  onExtraHit?: () => void;
 }): void {
   const { ability, target, living, rng } = o;
   const aoe = ability?.aoe;
@@ -624,7 +711,10 @@ export function heroVolley<F extends { c: { hp: number } }>(o: {
   // Finte: Der normale Angriff trifft ein zweites Mal
   if (o.feint && target.c.hp > 0 && o.fightOn()) o.strike(target, 1, 1);
   // Duellant: Chance auf einen zweiten Schlag bei normalen Angriffen
-  if (o.plain && o.heroClass === "duelist" && target.c.hp > 0 && o.fightOn() && rng() < DUELIST_EXTRA_HIT) o.strike(target, 1, 1);
+  if (o.plain && o.heroClass === "duelist" && target.c.hp > 0 && o.fightOn() && rng() < DUELIST_EXTRA_HIT) {
+    o.strike(target, 1, 1);
+    o.onExtraHit?.();
+  }
   // Item-Effekt „Kettenblitz“: Ein normaler Angriff springt auf einen zweiten Gegner über
   if (o.plain && hasEffect(o.itemEffects, "chainLightning") && o.fightOn() && rng() < EFFECT.chainLightning.chance) {
     const others = living().filter((f) => f !== target);
@@ -710,9 +800,11 @@ export function heroLifesteal(
   blessings: readonly BlessingId[] | undefined,
   itemEffects: readonly ItemEffectId[] | undefined,
   skills: SkillRanks | undefined,
+  /** Hauptwaffe des Helden (Geweihte Klinge des Paladins) */
+  weapon?: SkillWeapon | null,
 ): number {
   return (
-    lifestealShare(heroClass, ability) +
+    lifestealShare(heroClass, ability, weapon) +
     BLESSING.bloodthirst * stacks(blessings, "bloodthirst") +
     (hasEffect(itemEffects, "soulDrain") ? EFFECT.soulDrain : 0) +
     skillLifesteal(skills)

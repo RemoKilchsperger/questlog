@@ -186,6 +186,10 @@ resolveRound(state, actions: Record<playerId, CoopAction>, rng): { state; events
 - **Zeitlimit:** Jede Aktion und ein leichter Client-Ping prüfen die `deadline`.
   Ist sie überschritten, löst der Server die Runde auf.
 - Clients abonnieren Änderungen an ihrer Zeile über Realtime (Postgres Changes).
+- **Protokollversion** (seit 2026-11-12): Jede Anfrage trägt `protocol` (`COOP_PROTOCOL_VERSION` in
+  `src/coop/protocol.ts`). Der Server lehnt ältere oder fehlende Versionen mit „bitte neu laden“ ab
+  (`checkProtocol`), damit kein alter Client Ereignisse oder Aktionen sieht, die er nicht kennt. Erhöhen,
+  sobald sich Ereignisse, Aktionen oder angezeigte Regeln ändern (geplant: Skilltree- und Klassen-Release).
 - **Offen:** Die Beute läuft weiter lokal. Wirklich fälschungssicher wird es erst,
   wenn Belohnungen generell serverseitig vergeben werden. Das ist ein eigenes
   Projekt, siehe Hinweis in `gameStore.ts`.
@@ -276,3 +280,11 @@ Gegenüber dem Plan: Statt drei Functions gibt es eine (`coop`) mit Befehlen
   reichen für Freundesgruppen bei Weitem.
 - **Balance:** Bedrohung, Betäubung und Wiederbeleben brauchen Testspiele. Die Zahlen
   oben sind Startwerte.
+
+## Klassen-Kern und Boss-Raserei (G3)
+
+Seit dem Klassen-Kern (docs/klassen-neukonzept.md 4.5 und 11) gibt es die Aktion `signature` (der Server rechnet die
+Klassenleiste selbst), Gruppenwirkungen (Gebet, Gruppenschild, Kampfbanner, Markierung, Fluch), Spott der
+Duellhaltung (0,75), Bedrohung aus Heilung (50 % des Geheilten, `HEAL_THREAT`) und die **Boss-Raserei**: ab Runde 20
+(heroische Endbosse ab 30) +10 % Schaden pro Runde, additiv, angekündigt ab Runde 17, nicht für Begleiter und
+Hydra-Köpfe (`coopEnrageFactor`, aus `state.round`, kein neues Feld). Protokollversion 2 deckt G2 und G3 zusammen ab.

@@ -11,13 +11,18 @@ import {
   bossTurnOf,
   BUFF_POTION_DROP_CHANCE,
   chestCount,
+  CRIT_CAP_TOTAL,
   DEFEND,
   defendEffect,
   fleeCost,
   getHeroCombatProfile,
   potionBlocker,
+  SIGNATURE,
+  signatureBlocker,
   type BattleState,
 } from "../domain/combat";
+import { classKit } from "../domain/classKit";
+import { SignatureButton, SIGNATURE_KEY } from "./ClassGauge";
 import {
   AREAS,
   DUNGEONS,
@@ -87,7 +92,7 @@ import {
 } from "./BattleStatus";
 import { ADD_SKILLS, addIntentText, getBossPhase } from "../domain/bossMechanics";
 import { abilityKind, MATCHUP_LABELS, matchupOf, WEAPON_KIND, type DamageKind } from "../domain/matchups";
-import { classAbility } from "../domain/heroClasses";
+import { classAbility, getHeroClass } from "../domain/heroClasses";
 import { Hint } from "./HoverCard";
 import { QuestItemFinds } from "./QuestItemFinds";
 import { TreasureMapFind } from "./TreasureMaps";
@@ -506,7 +511,8 @@ function HeroPanel() {
         <Value label="Lebenspunkte" value={hero.maxHp} icon="❤️" accent="text-xp" />
         <Value label="Schaden" value={Math.round(hero.damage)} icon="⚔️" accent="text-strength" />
         <Value label="Rüstung" value={hero.armor} icon="🛡️" accent="text-intellect" />
-        <Value label="Kritisch" value={`${Math.round(hero.critChance * 100)} %`} icon="💥" accent="text-gold" />
+        {/* Klasse und Skilltree dürfen über 60 % kommen, gewürfelt wird höchstens mit der Gesamt-Obergrenze */}
+        <Value label="Kritisch" value={`${Math.round(Math.min(CRIT_CAP_TOTAL, hero.critChance) * 100)} %`} icon="💥" accent="text-gold" />
         <Value label="Mana" value={hero.maxMana} icon="💧" accent="text-intellect" />
         <Value
           label="Fähigkeiten"
@@ -606,7 +612,7 @@ function Battle({ battle }: { battle: BattleState }) {
       ? "Keine mehr im Vorrat – Nachschub beim Händler."
       : potionBlocker(battle, p);
 
-  // Tastenkürzel: A angreifen, D abwehren, 1–9 Fähigkeiten, Q–R Tränke, T Ziel wechseln, S Tempo
+  // Tastenkürzel: A angreifen, D abwehren, F Signatur, 1–9 Fähigkeiten, Q–R Tränke, T Ziel wechseln, S Tempo
   const cycleSpeed = useBattleSpeedStore((s) => s.cycleSpeed);
   const chooseTarget = useGameStore((s) => s.battleTarget);
   useHotkeys((key) => {
@@ -617,7 +623,10 @@ function Battle({ battle }: { battle: BattleState }) {
     if (confirmFlee || busy || !active) return false;
     if (key === "a") act(() => attack());
     else if (key === "d") act(() => attack(DEFEND));
-    else if (ABILITY_KEYS.includes(key)) {
+    else if (key === SIGNATURE_KEY) {
+      if (signatureBlocker(battle) !== null) return false;
+      act(() => attack(SIGNATURE));
+    } else if (ABILITY_KEYS.includes(key)) {
       const id = battle.abilities[ABILITY_KEYS.indexOf(key)];
       if (!id || abilityBlocker(battle, id) !== null) return false;
       act(() => attack(id));
@@ -731,7 +740,7 @@ function Battle({ battle }: { battle: BattleState }) {
           {(battle.adds?.length ?? 0) > 0 && <BattleTargets battle={battle} disabled={!active} />}
           <PhaseWarning bossId={battle.creatureId} phase={battle.phase} boss={battle.enemy} />
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid gap-2 ${battle.heroClass ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"}`}>
             <Hint heading="⚔️ Angreifen" text="Normaler Angriff mit deiner Waffe – danach schlägt der Gegner zurück." className="flex">
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -757,6 +766,14 @@ function Battle({ battle }: { battle: BattleState }) {
                 🛡️ Abwehren <Kbd>D</Kbd>
               </motion.button>
             </Hint>
+            <SignatureButton
+              heroClass={battle.heroClass}
+              charge={battle.charge}
+              blocker={signatureBlocker(battle)}
+              disabled={busy || !active}
+              onClick={() => act(() => attack(SIGNATURE))}
+              className="col-span-2 sm:col-span-1"
+            />
           </div>
 
           <ActionGroup label="Fähigkeiten">
@@ -769,7 +786,7 @@ function Battle({ battle }: { battle: BattleState }) {
                   blocker={abilityBlocker(battle, id)}
                   disabled={busy}
                   onClick={() => act(() => attack(id))}
-                  matchup={matchupAgainst(battle, abilityKind(getAbility(id)))}
+                  matchup={matchupAgainst(battle, abilityKind(getAbility(id), targetCreature(battle)))}
                 />
               ))}
             </div>
@@ -866,11 +883,15 @@ function Battle({ battle }: { battle: BattleState }) {
   );
 }
 
+/** Kreatur des aktuellen Ziels: Boss oder gewählter Begleiter. */
+function targetCreature(battle: BattleState): string {
+  return battle.adds?.find((a) => a.uid === battle.target)?.creatureId ?? battle.creatureId;
+}
+
 /** Wie wirkt eine Schadensart gegen das aktuelle Ziel (Boss oder gewählter Begleiter)? */
 function matchupAgainst(battle: BattleState, kind: DamageKind | null) {
   if (!kind) return null;
-  const target = battle.adds?.find((a) => a.uid === battle.target)?.creatureId ?? battle.creatureId;
-  return matchupOf(target, kind);
+  return matchupOf(targetCreature(battle), kind);
 }
 
 /** Boss und Begleiter: Ziel wählen (auch per Klick in der Szene). */
@@ -1400,7 +1421,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "hit":
       return e.attacker === "hero"
         ? `${e.crit ? "Kritischer Treffer! " : ""}Du triffst ${enemy} für ${e.damage} Schaden${e.matchup === "weak" ? " (Schwachpunkt!)" : e.matchup === "resist" ? " (resistent)" : ""}${e.shielded ? " – der Schildträger schützt ihn" : ""}${e.absorbed ? ` – der Schild schluckt ${e.absorbed}` : ""}${e.plated ? " – eine Panzerplatte fängt ab" : ""}${e.grazed ? " – in der Luft streifst du ihn nur" : ""}.`
-        : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden.`;
+        : `${e.crit ? "Kritischer Treffer! " : ""}${enemy} trifft dich für ${e.damage} Schaden${e.warded ? ` – dein Schild fängt ${e.warded} ab` : ""}.`;
     case "addHeal":
       return `${enemy} heilt ${battle.enemy.name} um ${e.heal} LP.`;
     case "enemyRegen":
@@ -1434,7 +1455,9 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
     case "ability":
       return e.echo
         ? `🔮 Echo! Du setzt ${getAbility(e.ability).name} ein – ohne Mana, und es hallt nach.`
-        : `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
+        : e.free
+          ? `🔁 Nachhall! Du setzt ${getAbility(e.ability).name} ein – ohne Mana.`
+          : `Du setzt ${getAbility(e.ability).name} ein (−${e.manaCost} Mana).`;
     case "dodged":
       return `👻 Du weichst dem Angriff von ${enemy} aus.`;
     case "selfHeal":
@@ -1450,6 +1473,7 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return e.target === "enemy" ? `Gift fügt ${enemy} ${e.damage} Schaden zu.` : `Gift fügt dir ${e.damage} Schaden zu.`;
     case "bleed":
       if (e.burst) return `💥 Blutsturz! Die Wunde von ${enemy} platzt: ${e.damage} Schaden.`;
+      if (e.stacks) return `🗡️ ${enemy} blutet aus ${e.stacks} Schnitten und erleidet ${e.damage} Schaden.`;
       return e.target === "enemy" ? `${enemy} blutet und erleidet ${e.damage} Schaden.` : `Du blutest und erleidest ${e.damage} Schaden.`;
     case "burn":
       return e.target === "enemy" ? `Feuer fügt ${enemy} ${e.damage} Schaden zu.` : `Feuer fügt dir ${e.damage} Schaden zu.`;
@@ -1467,6 +1491,10 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `${enemy} raubt dir ${e.amount} Mana.`;
     case "regen":
       return `Du regenerierst ${e.heal} LP.`;
+    case "bloodMagic":
+      return `🧛 Blutmagie! Dein Mana reicht nicht – du zahlst ${e.damage} LP.`;
+    case "shieldGained":
+      return `🔗 Lebensband: Die überschüssige Heilung wird zu einem Schild (+${e.amount}).`;
     case "defend":
       return `Du wehrst ab${e.mana > 0 ? ` und sammelst ${e.mana} Mana` : ""}.`;
     case "reflected":
@@ -1507,5 +1535,22 @@ function describe(e: BattleState["log"][number], battle: BattleState): string {
       return `${enemy} schlägt mit ${getAbility(e.ability).name} zu!`;
     case "freed":
       return `Du entreisst ${enemy} ${getAbility(e.ability).name}!`;
+    case "signature": {
+      const { signature } = classKit(e.classId);
+      const extra = e.hpCost ? ` – sie kostet dich ${e.hpCost} LP` : e.absorbed ? ` – ${e.absorbed} abgewehrter Schaden fliesst ein` : "";
+      return `${signature.icon} ${getHeroClass(e.classId).name}: ${signature.name}!${extra}`;
+    }
+    case "charge":
+      return `Deine Klassenleiste füllt sich (+${e.gained}, ${e.value}/4).`;
+    case "harvest":
+      return `Seelenernte: Deine Flüche an ${enemy} wirken sofort – ${e.damage} Schaden.`;
+    case "marked":
+      return `${enemy} ist markiert und erleidet mehr Schaden.`;
+    case "weakened":
+      return `${enemy} ist gegen Betäubung immun – der Bergbrecher schwächt ihn stattdessen.`;
+    case "banner":
+      return "Du stellst dein Kampfbanner auf – ab der nächsten Runde machst du mehr Schaden.";
+    case "duel":
+      return "Du gehst in Duellhaltung: Angriffe des Gegners werden gemindert und gekontert.";
   }
 }
